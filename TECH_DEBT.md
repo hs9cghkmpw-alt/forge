@@ -33,7 +33,7 @@
 ## 残課題(継続、PHASE12時点。2026-08-10実ファイル監査により一部更新)
 
 - **TD10**: Python/Dart Mock Generator二重管理(継続、解消済み扱いにしない)。
-- **Provider未実装**: TD15参照。
+- **Provider未実装**: TD15参照。**2026-08-10更新: geminiのみ実装済み**(未検証)。openai/claude/oss/forge_aiは引き続き未実装。
 - ~~**Native AI未接続**: TD16参照。~~ → **解消済み(2026-08-10確認)**。
   TD16本文参照。
 - **Repair Loop Stub**: TD17参照。
@@ -311,11 +311,11 @@ Mock Generatorも生成せず、実用上の必要性が無い。
 
 ---
 
-## TD15. AI Provider(5種)がすべて未実装スタブ
+## TD15. AI Provider(5種)がすべて未実装スタブ → **一部解消(2026-08-10、Geminiのみ)**
 
 FORGE-MILESTONE-002/003。`backend/app/ai/foundation/providers.py`の
 OpenAI/Claude/Gemini/OSS/ForgeAIの5 Providerは、いずれも
-`complete_structured()`を呼ぶと`NotImplementedError`を送出する
+`complete_structured()`を呼ぶと`NotImplementedError`を送出していた
 (`tests/test_ai_runtime.py`の`test_all_foundation_provider_stubs_raise`で
 5件とも確認済み)。
 
@@ -327,9 +327,28 @@ OpenAI/Claude/Gemini/OSS/ForgeAIの5 Providerは、いずれも
 **将来困る条件**: 実際にAI生成機能をユーザーへ提供するには、
 最低1つのProviderを実装する必要がある。
 
-**対応方針**: `docs/spec/NATIVE_AI_ROADMAP.md`参照。CEO承認を得た上で、
+**対応方針(当初)**: `docs/spec/NATIVE_AI_ROADMAP.md`参照。CEO承認を得た上で、
 まず`forge_ai/`(既に世界理解〜設計までは実装済み)を`ForgeAIProvider`へ
 接続することを推奨する。
+
+**2026-08-10 FORGE-AI-CONNECT-001での対応**: CEOから「無料で使える外部AI
+接続を先に」という明示的な指示を受け、`NATIVE_AI_ROADMAP.md`が推奨していた
+`forge_ai/`経由の接続ではなく、**`GeminiProvider`を先に実装した**
+(Google AI Studioの無料枠を想定。理由: forge_aiのCognitive Engineは
+それ自体が決定的なルールベース実装であり実LLMではないため、「本物のAIに
+繋ぐ」という当初の目的に対しては、外部LLM APIを直接繋ぐ方が早い)。
+新規の外部Pythonパッケージは追加せず、既存の`httpx`でGemini REST APIを
+直接呼ぶ実装にした。
+
+現状: `mock`・`gemini`の2つが実際に動作する。`openai`/`claude`/`oss`/
+`forge_ai`(Provider名としての、Engineとの接続)の4つは、依然として
+`NotImplementedError`を送出する未実装スタブのまま。
+
+**未検証**: `GeminiProvider`はUnit Test(`httpx.MockTransport`によるモック)
+でリクエスト構築・レスポンス解析ロジックのみ検証済み。Claudeのサンドボックスに
+実際のAPIキーが無いため、実際のGemini APIへの呼び出しは一度も行っていない。
+CEO環境で`GEMINI_API_KEY`を設定して初めて実証される
+(`backend/.env.example`参照)。
 
 ---
 

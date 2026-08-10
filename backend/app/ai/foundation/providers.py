@@ -1,23 +1,43 @@
-"""LLMAdapter の Provider別スタブ(FORGE-MILESTONE-002 PHASE6)。
+"""LLMAdapter の Provider別実装(FORGE-MILESTONE-002 PHASE6、
+FORGE-AI-CONNECT-001でGeminiのみ実装)。
 
-**Mock以外はすべて未実装。** `complete_structured()` は呼ばれると
+**Gemini・Mock以外はすべて未実装。** `complete_structured()` は呼ばれると
 `NotImplementedError`を投げる。目的は「型としてどのProviderも差し替え
 可能である」ことを示すことであり、実際にAPIキーを使って外部サービスへ
-接続する処理は一切含まない。
+接続する処理は含まない。
 
 FORGE-MILESTONE-005 Task7で、`MockLLMAdapter`のみを実際に動作する
 実装として追加した(指示書「実装するProviderはMockのみ」)。
 
-将来これら(Mock以外)を実装する際に必要になる外部Dependency
-(例: `openai`パッケージ、`google-generativeai`パッケージ等)は、
-指示書「CEO承認が必要: 外部Dependency追加」に該当するため、
-実装着手前に必ずCEO確認を取ること。
+FORGE-AI-CONNECT-001(2026-08-10): CEOから「無料で使える外部AI接続を
+先に実装してほしい」という明示的な承認を得たため、`GeminiProvider`を
+実装した(Google AI Studioの無料枠を想定)。新規の外部Pythonパッケージは
+**追加していない**。`google-genai`等のSDKパッケージはメソッドシグネチャの
+バージョン差異が大きく、動作未確認のまま依存だけ増えるリスクが高いと
+判断し、代わりに既存の`httpx`(既にrequirements.txtにある)でGemini REST
+APIを直接呼ぶ実装にした。REST APIの契約(`generateContent`エンドポイント)
+はSDKのメソッド名より安定していると判断した。
+
+**注記(重要)**: `GeminiProvider`はGoogle公式ドキュメントの契約に基づいて
+実装したが、Claudeのサンドボックスには実際のAPIキーが無いため、実際の
+Gemini APIへの呼び出しは一度も行っていない。`httpx.MockTransport`を使った
+Unit Test(`backend/tests/test_gemini_provider.py`)でリクエスト構築・
+レスポンス解析ロジックは検証したが、これはコンパイラ・実APIの代わりには
+ならない。CEO環境で実際のAPIキーを設定して初めて実証される。
+
+将来Gemini以外(OpenAI/Claude/OSS)を実装する際に必要になる外部Dependency
+(例: `openai`パッケージ等)は、指示書「CEO承認が必要: 外部Dependency追加」
+に該当するため、実装着手前に必ずCEO確認を取ること。
 """
 
 from __future__ import annotations
 
+import json
+import os
 import re
 from typing import Any
+
+import httpx
 
 from .interfaces import LLMAdapter
 
@@ -46,10 +66,82 @@ class ClaudeProvider(_UnimplementedProvider):
     provider_name = "claude"
 
 
-class GeminiProvider(_UnimplementedProvider):
-    """Google Gemini向けAdapterのスタブ。"""
+class GeminiProvider:
+    """Google Gemini向けAdapter(FORGE-AI-CONNECT-001で実装)。
+
+    無料枠での利用を想定している(Google AI Studio:
+    https://aistudio.google.com/apikey でAPIキーを取得)。既定モデルは
+    `gemini-2.0-flash`(2026-08-10時点でGoogleが無料枠を提供している
+    軽量モデルという理解に基づく。無料枠の条件・利用可能なモデル名は
+    Google側の都合で変わりうるため、実際に使う前に公式ドキュメントで
+    確認すること)。
+
+    `api_key`を省略すると環境変数`GEMINI_API_KEY`を読む。どちらも
+    無い場合、コンストラクタでは失敗させず(`ProviderRouter`が
+    `GeminiProvider()`を引数無しで構築しているため)、
+    `complete_structured()`呼び出し時に初めて`RuntimeError`を送出する
+    (ADR「ルーティングの選択自体はキー無しでも失敗しない」という既存の
+    契約を壊さないため)。
+    """
 
     provider_name = "gemini"
+
+    _API_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        model: str = "gemini-2.0-flash",
+        client: httpx.Client | None = None,
+        timeout: float = 30.0,
+    ) -> None:
+        self._api_key = api_key if api_key is not None else os.environ.get("GEMINI_API_KEY")
+        self._model = model
+        self._client = client  # テスト用にhttpx.MockTransportを注入できるようにする
+        self._timeout = timeout
+
+    def complete_structured(self, prompt: str, response_schema: dict[str, Any]) -> dict[str, Any]:
+        if not self._api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY が設定されていません。Google AI Studio "
+                "(https://aistudio.google.com/apikey) で取得した無料APIキーを"
+                "環境変数 GEMINI_API_KEY に設定してください(backend/.env.example参照)。"
+            )
+
+        url = f"{self._API_BASE}/models/{self._model}:generateContent"
+        body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseSchema": response_schema,
+            },
+        }
+
+        client = self._client
+        owns_client = client is None
+        if client is None:
+            client = httpx.Client(timeout=self._timeout)
+        try:
+            response = client.post(url, params={"key": self._api_key}, json=body)
+            response.raise_for_status()
+            payload = response.json()
+        except httpx.HTTPStatusError as exc:
+            raise RuntimeError(
+                f"Gemini APIがエラーを返しました(status={exc.response.status_code}): "
+                f"{exc.response.text[:500]}"
+            ) from exc
+        finally:
+            if owns_client:
+                client.close()
+
+        try:
+            text = payload["candidates"][0]["content"]["parts"][0]["text"]
+            return json.loads(text)
+        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError(
+                f"Gemini APIのレスポンス形式が想定と異なります: {payload!r}"
+            ) from exc
 
 
 class OSSProvider(_UnimplementedProvider):
@@ -89,9 +181,12 @@ _LABELED_VALUE_RE = re.compile(r"'(title|goal|purpose)':\s*'([^']*)'")
 
 
 class MockLLMAdapter:
-    """実際に動作する、唯一のProvider実装(FORGE-MILESTONE-005 Task7)。
+    """実際に動作するProvider実装(FORGE-MILESTONE-005 Task7)。
 
-    実LLMを一切呼ばない、決定的なMock実装。`ForgeAIProviderBridge`から
+    FORGE-AI-CONNECT-001(2026-08-10)で`GeminiProvider`も実際に動作する
+    実装になったため、「唯一の」実装ではなくなった。こちらは実LLMを
+    一切呼ばない、決定的なMock実装であることに変わりはない。
+    `ForgeAIProviderBridge`から
     `complete_structured(prompt: str, response_schema: dict) -> dict`
     として呼ばれることを想定する。
 

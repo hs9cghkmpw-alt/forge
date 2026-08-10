@@ -79,20 +79,34 @@ class TestStubsNeverFakeSuccess(unittest.TestCase):
             StubAIContextBuilder().build_context("s1", "p1", "u1")
 
     def test_all_foundation_provider_stubs_raise(self) -> None:
-        """ProviderRouterが解決する8つの名前のうち、`mock`を除く7つ
-        (5 Provider + 'native'/'local'の2エイリアス)で、実際に呼ぶと
-        NotImplementedErrorになることを確認する(ルーティング自体は動くが、
-        推論は`mock`以外一切動かない)。FORGE-MILESTONE-005 Task7で
-        `mock`のみ実装したため、`mock`はこのテストの対象から除外する
-        (`test_mock_provider_actually_works`で別途検証)。"""
+        """ProviderRouterが解決する8つの名前のうち、`mock`・`gemini`を除く
+        6つで、実際に呼ぶとNotImplementedErrorになることを確認する
+        (ルーティング自体は動くが、推論は`mock`/`gemini`以外一切動かない)。
+        FORGE-MILESTONE-005 Task7で`mock`を、FORGE-AI-CONNECT-001
+        (2026-08-10)で`gemini`を実装したため、両方をこのテストの対象から
+        除外する(`mock`は`test_mock_provider_actually_works`、`gemini`は
+        `test_gemini_provider.py`で別途検証)。"""
         router = ProviderRouter()
         for name in router.available_providers():
-            if name == "mock":
+            if name in ("mock", "gemini"):
                 continue
             with self.subTest(provider=name):
                 provider = router.resolve(name)
                 with self.assertRaises(NotImplementedError):
                     provider.complete_structured("prompt", {"type": "object"})
+
+    def test_gemini_provider_raises_runtime_error_not_not_implemented(self) -> None:
+        """`gemini`はFORGE-AI-CONNECT-001で実装済みのため、APIキー未設定でも
+        `NotImplementedError`(未実装)ではなく`RuntimeError`(設定不足)に
+        なるべきことをProviderRouter経由でも確認する。"""
+        router = ProviderRouter()
+        provider = router.resolve("gemini")
+        # このテストプロセスの環境変数にGEMINI_API_KEYが無い前提
+        # (CI/Claudeサンドボックスには設定されていない)。
+        if os.environ.get("GEMINI_API_KEY"):
+            self.skipTest("GEMINI_API_KEY が実行環境に設定されているため、このテストはスキップする")
+        with self.assertRaises(RuntimeError):
+            provider.complete_structured("prompt", {"type": "object"})
 
     def test_mock_provider_actually_works(self) -> None:
         """FORGE-MILESTONE-005 Task7新規。`mock`は例外を投げず、

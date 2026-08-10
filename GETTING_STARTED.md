@@ -132,6 +132,31 @@ curl http://127.0.0.1:8000/health
 
 `{"status":"ok"}`と返ってくれば、Backendは正常に起動しています。
 
+### 3.6 (任意)本物のAI(Gemini)に繋いでみる
+
+**既定では、AI生成は`mock`(決定的なキーワードマッチング、本物のAIでは
+ない)を使います。** 本物のAI(Google Gemini、無料枠あり)に繋ぎたい場合は、
+以下の手順で設定します。
+
+1. https://aistudio.google.com/apikey にアクセスし(Googleアカウントが
+   必要)、「Get API key」からAPIキーを取得します。
+2. `backend/.env.example`を`backend/.env`という名前でコピーします。
+3. `backend/.env`を開き、`GEMINI_API_KEY=`の後ろに取得したキーを貼り付けます。
+4. Backendを再起動します(3.4に戻って`uvicorn`をCtrl+Cで止めて、
+   もう一度起動)。
+
+**注意**: `GEMINI_API_KEY`を設定しただけでは、既定の動作は変わりません
+(既定は引き続き`mock`)。実際にGeminiを使うには、リクエストで
+`generation_options.provider: "gemini"`を明示的に指定する必要があります
+(6章のcurl例を参照)。**現時点で、Flutterアプリ側にはGeminiを選ぶUIが
+まだ無く**、`curl`等でAPIを直接呼ぶ場合のみGeminiを試せます。
+
+**未検証の注意点**: この`GeminiProvider`の実装は、Claudeの作業環境に
+実際のAPIキーが無いため、一度も本物のGemini APIへ接続できていません
+(モックしたリクエスト/レスポンスでのUnit Testのみ実施済み)。実際に
+動くかどうかは、あなたが最初に確認することになります。うまくいかない
+場合はエラーメッセージを教えてください。
+
 ---
 
 ## 4. Frontendを起動する(Flutter)
@@ -201,6 +226,30 @@ curl -X POST http://127.0.0.1:8000/api/v1/ai/generate \
 
 Forgeの画面設計図(JSON)がそのまま返ってくれば、Backendは正常に動作しています。
 
+### 6.1 本物のAI(Gemini)を試す場合
+
+3.6で`GEMINI_API_KEY`を設定済みなら、`generation_options`で明示的に
+`gemini`を指定すると、実際にGemini APIを呼びます。
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/ai/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version": "1.0",
+    "input": {
+      "natural_language": "買い物リストを作って",
+      "generation_options": {
+        "engine": "forge_ai",
+        "provider": "gemini"
+      }
+    }
+  }'
+```
+
+`GEMINI_API_KEY`が未設定、またはGemini API側でエラーが起きた場合は、
+`status: "error"`とエラー内容が返ります(そのままの内容を教えてもらえれば
+調査します)。
+
 ---
 
 ## 7. うまくいかないときは
@@ -211,6 +260,8 @@ Forgeの画面設計図(JSON)がそのまま返ってくれば、Backendは正�
 | `uvicorn`コマンドが見つからない | 仮想環境(`.venv`)を有効化し忘れている可能性があります。3.1に戻って`source .venv/bin/activate`(またはWindows版)を実行してください。 |
 | Frontendが「接続できませんでした」と表示する | Backend(3章)が起動していない可能性が高いです。Backendのターミナルが動いたままか確認してください。 |
 | `flutter run -d chrome`で`No devices found`と出る | `flutter devices`でChromeが認識されているか確認してください。Chromeがインストールされていない場合はインストールが必要です。 |
+| Gemini呼び出しが`GEMINI_API_KEY`エラーになる | `backend/.env`にキーを書いた後、Backend(uvicorn)を再起動しましたか？環境変数は起動時にしか読まれません。 |
+| Gemini呼び出しが403/429エラーになる | 無料枠の制限(利用回数・レート制限)に達した可能性があります。少し時間を置くか、Google AI Studioでキーの状態を確認してください。 |
 | `flutter pub get`や`flutter run`でエラーが出る | このガイドのFlutter部分はClaude環境で未検証です。エラーメッセージをそのまま教えてもらえれば、次のセッションで調査・修正します。 |
 | Androidエミュレータから繋がらない | `localhost`ではなく`10.0.2.2`を使う必要があります(`app_config.dart`のコメント参照)。`--dart-define=FORGE_API_BASE_URL=http://10.0.2.2:8000`を試してください。 |
 

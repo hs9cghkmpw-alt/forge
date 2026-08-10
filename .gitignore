@@ -7,6 +7,10 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
+# Secrets(.env.exampleは対象外。APIキー等の実値は絶対にコミットしない)
+.env
+backend/.env
+
 # Flutter/Dart
 frontend/.dart_tool/
 frontend/build/

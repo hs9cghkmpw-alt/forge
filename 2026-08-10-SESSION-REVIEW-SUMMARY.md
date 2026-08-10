@@ -7,17 +7,18 @@ CEO+ChatGPTがレビューしやすいように1箇所へまとめたもの。�
 
 ---
 
-## 0. 今回のセッションでやったこと(3つ)
+## 0. 今回のセッションでやったこと(4つ)
 
 1. **リポジトリの復元**(GitHub上が空だった) → 実baselineの監査
 2. **`FORGE-AI-INTELLIGENCE-001` PHASE 0**(baseline再確認)の実施
 3. **`FORGE-UI-REFRESH-002`**: CEO提示の新UIモックアップに基づくFlutter画面の刷新
+4. **`FORGE-AI-CONNECT-001`**: Gemini API(無料枠)への接続を実装
 
 いずれも、MASTER HANDOFF文書の「報告ではなく実ファイル+実行結果を根拠に
 する」という方針に従い、**実際にコマンドを実行した結果**(Pythonの
 `pytest`実行結果・`grep`による全数調査)を根拠にしている。ただし
 **Flutter/Dart側は、この作業環境にSDKが存在しないため一度も実行できていない**
-(3章で詳述)。
+(5章で詳述)。
 
 ---
 
@@ -95,57 +96,101 @@ CEOから共有された2枚のUIモックアップ画像(✦マークのSparkle
 
 ---
 
-## 3. 実際に検証したもの / できていないもの
+## 3. FORGE-AI-CONNECT-001: Gemini APIへの接続(課金なし)
+
+CEOから「自作AIか外部API利用か、課金なしでどちらが可能か」と質問され、
+選択肢を提示した上で`AskUserQuestion`で確認したところ「Gemini無料枠
+(外部API)を先に」との回答を得たため実装した。
+
+### やったこと
+
+- `backend/app/ai/foundation/providers.py`の`GeminiProvider`を、
+  未実装スタブから実装へ変更。Google Gemini REST APIを、新規パッケージを
+  追加せず既存の`httpx`で直接呼び出す(SDKパッケージはバージョン差異の
+  リスクが高いと判断し、より安定したREST契約を選んだ)。
+- APIキーは`GEMINI_API_KEY`環境変数から読む(`backend/.env.example`を
+  新設、`.gitignore`で`.env`を除外)。
+- `backend/tests/test_gemini_provider.py`(新規7件、`httpx.MockTransport`
+  でモック)を実際に`pytest`で実行しPASSを確認。
+- 既存テスト2ファイルを更新(「全Providerは未実装」という前提が
+  Geminiには当てはまらなくなったため)。
+- `GETTING_STARTED.md`・`TECH_DEBT.md`(TD15)を更新。
+
+### 現状できること・できないこと
+
+- **できる**: `backend/.env`にAPIキーを設定し、APIリクエストで
+  `generation_options.provider: "gemini"`を指定すれば、Mockの代わりに
+  実際にGemini APIへ推論を依頼する(配線は成立している)。
+- **まだできない**: 実際のGemini APIへの接続は一度も検証していない
+  (Claude環境にAPIキーが無いため、Unit Testはすべてモック)。Flutter
+  アプリ側にGeminiを選ぶUIも無く、現状は`curl`等でAPIを直接叩く場合
+  のみ試せる。
+
+**詳細レポート:** [`docs/reports/FORGE-AI-CONNECT-001-report.md`](./docs/reports/FORGE-AI-CONNECT-001-report.md)
+
+---
+
+## 4. 実際に検証したもの / できていないもの
 
 ### 実際に実行して確認したもの(Python側)
 
 ```
-$ python -m pytest backend forge_ai -q
+$ cd backend && python -m pytest -q
+526 passed, 12 skipped   (Gemini関連の新規8件を含む)
+
+$ python -m pytest backend forge_ai -q  (UI刷新時点)
 908 passed, 12 skipped
 ```
 
 `ruff check`も実行し、今回の変更に起因する新規エラーが無いことを確認済み
-(既存の軽微なwarning 16件は今回のスコープ外として未対応)。
+(既存の軽微なwarning群は今回のスコープ外として未対応)。
 
 ### 実行できていないもの(Flutter側、CEO環境での実行が必須)
 
 - `flutter analyze`
-- `flutter test`(今回修正した3ファイルを含む)
+- `flutter test`(UI刷新で修正した3ファイルを含む)
 - `flutter build web` / Chromeでの実際の見た目確認
+- **Gemini APIへの実際の接続確認**(APIキーが必要)
 
-理由: この作業環境にFlutter/Dart SDKが存在しない(`which flutter dart`・
-`find / -iname flutter`のいずれも空振りを確認済み)。代わりに、変更した
-全ファイルの括弧の対応関係チェック・全文の手動読み直し・新配色のWCAG
-コントラスト計算を行ったが、これはコンパイラの代わりにはならない。
+理由: この作業環境にFlutter/Dart SDKが存在せず(`which flutter dart`・
+`find / -iname flutter`のいずれも空振りを確認済み)、Gemini用の実際の
+APIキーも無い。代わりに、変更した全ファイルの括弧の対応関係チェック・
+全文の手動読み直し・新配色のWCAGコントラスト計算・Gemini呼び出しの
+モックテストを行ったが、これはコンパイラ・実APIの代わりにはならない。
 
 ---
 
-## 4. CEOに確認・実行してほしいこと(まとめ)
+## 5. CEOに確認・実行してほしいこと(まとめ)
 
 1. **`GETTING_STARTED.md`の手順どおりに、実際に動かしてみてほしい**
-   (特にFrontend部分。うまくいかない箇所があれば、エラーメッセージを
-   そのまま教えてほしい)。
+   (特にFrontend部分とGemini接続部分。うまくいかない箇所があれば、
+   エラーメッセージをそのまま教えてほしい)。
 2. `flutter analyze` / `flutter test` / `flutter build web`を実行し、
-   結果(特に今回修正した3テストファイル)を共有してほしい。
+   結果(特にUI刷新で修正した3テストファイル)を共有してほしい。
 3. 新しい配色(紫→青グラデーション+ダークパレット)が、実際の見た目として
    モックアップの意図と合っているか、Chrome上で確認してほしい。
-4. TD20(Output Safety)・TD21(Injection Guard)・TD22(IR Versioning)の
+4. `backend/.env`に実際のGemini APIキーを設定し、`GETTING_STARTED.md`
+   6.1節の手順で呼び出し、結果を共有してほしい。
+5. Flutterアプリ側にProvider(Gemini等)を選ぶUIを追加するかどうか。
+6. TD20(Output Safety)・TD21(Injection Guard)・TD22(IR Versioning)の
    実コードが、本当にどこか別のセッション・別のexportに存在するか。
    存在する場合は次回共有してほしい。存在しない場合は、ゼロから実装して
    良いか判断してほしい(`docs/reports/FORGE-AI-INTELLIGENCE-001-PHASE0-report.md`
    8章参照)。
-5. 音声入力(マイクボタン)を今後実装するかどうかの方針。
+7. 音声入力(マイクボタン)を今後実装するかどうかの方針。
 
 ---
 
-## 5. 変更ファイル一覧(今回のセッション全体)
+## 6. 変更ファイル一覧(今回のセッション全体、コミット単位)
 
 ```
 chore: restore repository baseline from phase2-step1 (folder domain) snapshot
 docs: correct stale TD16, audit FORGE-AI-INTELLIGENCE-001 PHASE 0 baseline
 chore: add .gitignore for Python venv/pycache and Flutter build artifacts
 feat(frontend): Sparkle brand + dark generating-screen UI refresh (FORGE-UI-REFRESH-002)
+docs: add beginner GETTING_STARTED guide and session review summary
+feat(backend): implement GeminiProvider via httpx REST calls (FORGE-AI-CONNECT-001)
 ```
 
-コミット単位の詳細は`git log`、または上記コミットメッセージ本文
-(各コミットに詳しい説明を書いている)を参照。
+コミット単位の詳細は`git log`、または各コミットメッセージ本文
+(それぞれに詳しい説明を書いている)を参照。

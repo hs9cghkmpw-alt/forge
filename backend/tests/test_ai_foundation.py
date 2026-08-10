@@ -55,10 +55,17 @@ class TestIntermediateRepresentations(unittest.TestCase):
 
 
 class TestProviderStubsAreHonestlyUnimplemented(unittest.TestCase):
-    """全Providerが「実装されたふりをしない」ことを保証する回帰テスト。"""
+    """全Providerが「実装されたふりをしない」ことを保証する回帰テスト。
+
+    FORGE-AI-CONNECT-001(2026-08-10)で`GeminiProvider`を実装したため、
+    このテストの対象から`GeminiProvider`を除外した。`GeminiProvider`
+    自体の「実装したふりをしない」ことの検証(APIキー無し→
+    `NotImplementedError`ではなく`RuntimeError`)は
+    `test_gemini_provider.py`で別途行っている。
+    """
 
     def test_all_providers_raise_not_implemented(self):
-        providers = [OpenAIProvider(), ClaudeProvider(), GeminiProvider(), OSSProvider(), ForgeAIProvider()]
+        providers = [OpenAIProvider(), ClaudeProvider(), OSSProvider(), ForgeAIProvider()]
         for provider in providers:
             with self.subTest(provider=provider.provider_name):
                 with self.assertRaises(NotImplementedError):

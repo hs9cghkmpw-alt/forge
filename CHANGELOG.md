@@ -2,6 +2,59 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task046 — FORGE-AI-CONNECT-001: GeminiProvider実装（2026-08-10）
+
+CEOから「無料で使える外部AI接続を先に実装したい。課金なしで」という
+依頼を受け、`AskUserQuestion`で選択肢(Gemini無料枠 / ローカルLLM /
+共通部分のみ)を確認したところ「Gemini無料枠(外部API)を先に」との
+回答を得たため実装した。TD15(AI Provider 5種すべて未実装スタブ)の
+一部解消でもある。
+
+### 追加
+- `backend/app/ai/foundation/providers.py`の`GeminiProvider`を、
+  `_UnimplementedProvider`継承のスタブから実装へ変更。Google公式の
+  Gemini REST API(`generateContent`エンドポイント、
+  `responseMimeType: "application/json"` + `responseSchema`による
+  Structured Output)を、既存の`httpx`(新規パッケージ追加なし)で
+  直接呼び出す。APIキーは`GEMINI_API_KEY`環境変数から読む。
+- `backend/tests/test_gemini_provider.py`(新規、7テスト、実際に
+  `pytest`で実行しPASS確認済み)。`httpx.MockTransport`でリクエスト
+  構築・レスポンス解析・エラー処理を検証。
+- `backend/.env.example`(新規)。`GEMINI_API_KEY`の取得方法・設定方法を
+  記載。
+- `.gitignore`へ`.env`/`backend/.env`を追加(APIキーを誤ってコミット
+  しないため)。
+
+### 変更
+- `backend/tests/test_ai_foundation.py`・`backend/tests/test_ai_runtime.py`:
+  「Providerは全部NotImplementedErrorを投げる」という既存テストから
+  `gemini`を除外し、代わりに`gemini`が`RuntimeError`(APIキー未設定時)を
+  投げることを確認するテストを追加。
+- `TECH_DEBT.md` TD15: 一部解消(gemini実装済み、他4種は未実装のまま)
+  として更新。
+- `GETTING_STARTED.md`: Gemini APIキーの設定方法(3.6節)・curlでの
+  呼び出し方(6.1節)・トラブルシューティング項目を追加。
+
+### 既知の限界(重要)
+- **実際のGemini APIへの呼び出しは一度も行っていない**。Claudeの
+  サンドボックスにAPIキーが無いため、検証はUnit Test(モックした
+  HTTPレスポンス)のみ。CEO環境で実際のキーを設定して初めて実証される。
+- **Flutterアプリ側にGeminiを選ぶUIはまだ無い**。現状は`curl`等で
+  APIを直接叩く場合のみGeminiを指定できる(`generation_options.
+  provider: "gemini"`)。Flutter側の設定UIは別Taskとして扱う。
+- openai/claude/oss/forge_ai(Provider名としての)は引き続き未実装。
+
+### 実際に実行したテスト・結果
+```
+$ python -m pytest backend -q
+526 passed, 12 skipped(変更前518 passed、新規8件追加)
+$ ruff check backend/app/ai/foundation/providers.py backend/tests/test_gemini_provider.py \
+    backend/tests/test_ai_foundation.py backend/tests/test_ai_runtime.py
+新規ファイル・変更箇所はエラー0件(既存の無関係なwarning 5件のみ、対応済みTask044/045と同じ既存分)
+```
+
+詳細は`docs/reports/FORGE-AI-CONNECT-001-report.md`参照。
+
 ## Task045 — GETTING_STARTED.md新設・README.md Mock/Live Mode既定値の訂正（2026-08-10）
 
 CEOから「レビュー用のまとめ」「GitHubから実行までの初心者向けガイド」を
