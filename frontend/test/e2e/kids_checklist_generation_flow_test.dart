@@ -89,8 +89,8 @@ void main() {
       await tester.pump(); // 画面遷移開始
       await tester.pump(const Duration(milliseconds: 300)); // 画面遷移アニメーション相当
 
-      // この時点で生成中画面(「アプリを作成しています…」)のはず。
-      expect(find.text('アプリを作成しています…'), findsOneWidget);
+      // この時点で生成中画面(FORGE-UI-REFRESH-002で「AIがアプリを設計中…」へ変更)のはず。
+      expect(find.text('AIがアプリを設計中…'), findsOneWidget);
 
       // 4. Mock Modeの人工遅延(650ms)を明示的に進める
       await tester.pump(const Duration(milliseconds: 700));

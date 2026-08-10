@@ -26,6 +26,38 @@ class ForgeTheme {
   static const Color accent = Color(0xFFE0A45C);
   static const Color accentSoft = Color(0xFFF7E9D7);
 
+  // FORGE-UI-REFRESH(2026-08-10): CEO提示の新UIモックアップに基づく
+  // 「AIが考えている最中」向けダークパレット。ホーム画面・生成中画面だけで
+  // 使う専用トークンであり、`MaterialApp.darkTheme`(システム全体の
+  // ダークモード切り替え)ではない。完成画面・Rendererが描画する生成後
+  // アプリは、既存のlightな`background`/`ink`のまま据え置く
+  // (CEO提示モックアップ自体、画面ごとに意図的に配色を切り替えている。
+  // システム全体トグルではなく、「思考中は暗く・完成後は明るく」という
+  // 画面単位の演出)。
+  //
+  // 実測コントラスト比(WCAG、黒背景#0B0F1F・カード#161B2Eに対して):
+  // consoleInk 17.28:1 / 15.48:1、consoleInkSoft 8.47:1 / 7.59:1
+  // (いずれもAA本文基準4.5:1を大きく上回る)。
+  static const Color consoleBackground = Color(0xFF0B0F1F);
+  static const Color consoleSurface = Color(0xFF161B2E);
+  static const Color consoleInk = Color(0xFFF4F3FA);
+  static const Color consoleInkSoft = Color(0xFFA7ACC4);
+  static const Color consoleBorder = Color(0xFF262C46);
+
+  // FORGE-UI-REFRESH(2026-08-10): 「Forge AI」を表す紫→青のブランド
+  // グラデーション(モックアップのSparkleロゴ・生成中オーブ・主要CTAで使用)。
+  // 白文字を乗せる用途があるため、単なる見た目ではなく実測コントラスト比で
+  // 選定した: 白文字/gradientStart 6.67:1、白文字/gradientEnd 5.80:1
+  // (いずれもWCAG AA本文基準4.5:1を満たす。既存`accent`のオレンジは
+  // カード内の小さなアイコン用途に残し、置き換えない)。
+  static const Color gradientStart = Color(0xFF5A3FD9);
+  static const Color gradientEnd = Color(0xFF2E5CD6);
+  static const LinearGradient brandGradient = LinearGradient(
+    colors: [gradientStart, gradientEnd],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
   static ThemeData get theme {
     return ThemeData(
       useMaterial3: true,

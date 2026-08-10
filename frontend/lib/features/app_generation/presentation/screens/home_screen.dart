@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/forge_theme.dart';
-import '../../../../shared_widgets/forge_mark.dart';
+import '../../../../shared_widgets/forge_sparkle_mark.dart';
 import '../../../../shared_widgets/generated_app_host_shell.dart';
 import '../../../../shared_widgets/responsive_app_shell.dart';
 import '../../../app_library/domain/entities/saved_forge_app.dart';
@@ -22,6 +22,20 @@ import 'generation_flow_screen.dart';
 ///   (以前は「準備中」というSnackBarを出すだけだった)。
 /// * ホーム下部へ「最近のアプリ」(最大3件)を追加。
 /// * `ResponsiveAppShell`でChrome中央最大幅に対応。
+///
+/// FORGE-UI-REFRESH(2026-08-10、CEO提示のUIモックアップに基づく):
+/// * ロゴを`ForgeMark`(PNG、ネイビーF)から`ForgeSparkleMark`
+///   (ベクター、紫→青グラデーション)へ変更。
+/// * 画面全体を`ForgeTheme.consoleBackground`ベースのダーク配色にした
+///   (「AIが考えている最中」の演出。完成画面・生成後アプリは既存の
+///   lightな配色のまま据え置き、画面単位で意図的に切り替える設計)。
+/// * 送信ボタンをグラデーション化。
+/// * モックアップにある「クイック候補チップ」を追加(既存の`forgeExampleItems`
+///   を流用。タップすると入力欄に入るだけで送信はしない、既存の
+///   「例を見る」Bottom Sheetと同じ挙動を`_setPromptText()`で共通化)。
+///   音声入力は引き続き未実装のため、モックアップのマイクアイコンは
+///   採用していない(実装していない機能をあるように見せない、
+///   という既存方針をそのまま踏襲する)。
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -41,14 +55,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> _onShowExamples() async {
-    final phrase = await ExamplePickerSheet.show(context);
-    if (phrase == null || !mounted) return;
+  void _setPromptText(String phrase) {
     setState(() => _controller.text = phrase);
     _controller.selection = TextSelection.fromPosition(
       TextPosition(offset: _controller.text.length),
     );
+  }
+
+  Future<void> _onShowExamples() async {
+    final phrase = await ExamplePickerSheet.show(context);
+    if (phrase == null || !mounted) return;
     // Bottom Sheetは文章を入れるだけ。送信はしない(ユーザーが決める)。
+    _setPromptText(phrase);
   }
 
   void _onSubmit() {
@@ -108,6 +126,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return ResponsiveAppShell(
       child: Scaffold(
+        backgroundColor: ForgeTheme.consoleBackground,
         body: SafeArea(
           child: Column(
             children: [
@@ -115,11 +134,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 8, 12, 0),
                 child: Row(
                   children: [
-                    const ForgeMark(size: 28),
+                    const ForgeSparkleMark(size: 26),
                     const SizedBox(width: 8),
                     const Text(
                       'Forge',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: ForgeTheme.ink),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: ForgeTheme.consoleInk),
                     ),
                   ],
                 ),
@@ -129,22 +148,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     children: [
+                      const SizedBox(height: 20),
+                      const ForgeSparkleMark(size: 72),
                       const SizedBox(height: 24),
-                      const ForgeMark(size: 120),
-                      const SizedBox(height: 28),
                       // FORGE v0.2 P5対応: 音声入力を実装していないため、
                       // 「話すだけで」というコピーとマイクアイコンを削除し、
                       // 実態(テキスト入力)に一致させた。
-                      Text(
+                      const Text(
                         'アイデアを入力するだけで、\nあなただけのアプリに。',
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineMedium,
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                          color: ForgeTheme.consoleInk,
+                          letterSpacing: -0.5,
+                          height: 1.3,
+                        ),
                       ),
                       const SizedBox(height: 12),
-                      Text(
+                      const Text(
                         '作りたいものを自由に入力してください。\nForgeが使えるアプリに仕上げます。',
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium,
+                        style: TextStyle(fontSize: 14, color: ForgeTheme.consoleInkSoft, height: 1.4),
                       ),
                       const SizedBox(height: 28),
                       Row(
@@ -157,10 +182,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               onChanged: (_) => setState(() {}),
                               minLines: 1,
                               maxLines: 4,
-                              style: const TextStyle(fontSize: 16),
+                              style: const TextStyle(fontSize: 16, color: ForgeTheme.consoleInk),
+                              cursorColor: ForgeTheme.consoleInk,
                               textInputAction: TextInputAction.done,
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 hintText: 'どんなアプリを作りますか？',
+                                hintStyle: const TextStyle(color: ForgeTheme.consoleInkSoft),
+                                filled: true,
+                                fillColor: ForgeTheme.consoleSurface,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: const BorderSide(color: ForgeTheme.consoleBorder),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: const BorderSide(color: ForgeTheme.consoleBorder),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: const BorderSide(color: ForgeTheme.gradientEnd, width: 1.5),
+                                ),
                               ),
                             ),
                           ),
@@ -168,25 +210,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           _SendButton(enabled: canSubmit, onPressed: _onSubmit),
                         ],
                       ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final item in forgeExampleItems.take(4))
+                            _QuickPickChip(label: item.title, onTap: () => _setPromptText(item.phrase)),
+                        ],
+                      ),
                       const SizedBox(height: 18),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.lock_outline_rounded, size: 14, color: ForgeTheme.inkSoft),
+                          const Icon(Icons.lock_outline_rounded, size: 14, color: ForgeTheme.consoleInkSoft),
                           const SizedBox(width: 6),
-                          Text('会話内容は安全に保護されます', style: Theme.of(context).textTheme.bodyMedium),
+                          const Text(
+                            '会話内容は安全に保護されます',
+                            style: TextStyle(fontSize: 13, color: ForgeTheme.consoleInkSoft),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 22),
-                      Text('例を見てみたいときは', style: Theme.of(context).textTheme.bodyMedium),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 14),
                       OutlinedButton.icon(
                         onPressed: _onShowExamples,
-                        icon: const Icon(Icons.lightbulb_outline_rounded, size: 18, color: ForgeTheme.accent),
-                        label: const Text('例を見る'),
+                        icon: const Icon(Icons.lightbulb_outline_rounded, size: 18, color: ForgeTheme.gradientEnd),
+                        label: const Text('もっと例を見る'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: ForgeTheme.ink,
-                          side: const BorderSide(color: Color(0xFFE8E4DC)),
+                          foregroundColor: ForgeTheme.consoleInk,
+                          side: const BorderSide(color: ForgeTheme.consoleBorder),
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                         ),
@@ -201,7 +254,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('最近のアプリ', style: Theme.of(context).textTheme.bodyMedium),
+                              const Text(
+                                '最近のアプリ',
+                                style: TextStyle(fontSize: 13, color: ForgeTheme.consoleInkSoft),
+                              ),
                               const SizedBox(height: 10),
                               for (final app in recent) ...[
                                 _RecentAppCard(app: app, onTap: () => _openSavedApp(app)),
@@ -223,14 +279,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           currentIndex: _selectedTabIndex,
           onTap: _onTabTapped,
           type: BottomNavigationBarType.fixed,
-          backgroundColor: ForgeTheme.surface,
-          selectedItemColor: ForgeTheme.accent,
-          unselectedItemColor: ForgeTheme.inkSoft,
+          backgroundColor: ForgeTheme.consoleSurface,
+          selectedItemColor: const Color(0xFFB9AFFA),
+          unselectedItemColor: ForgeTheme.consoleInkSoft,
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'ホーム'),
             BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'マイアプリ'),
             BottomNavigationBarItem(icon: Icon(Icons.history_rounded), label: '履歴'),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickPickChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _QuickPickChip({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: ForgeTheme.consoleSurface,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: ForgeTheme.consoleBorder),
+          ),
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 13, color: ForgeTheme.consoleInk, fontWeight: FontWeight.w500),
+          ),
         ),
       ),
     );
@@ -245,7 +331,7 @@ class _RecentAppCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: ForgeTheme.surface,
+      color: ForgeTheme.consoleSurface,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -257,19 +343,19 @@ class _RecentAppCard extends StatelessWidget {
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(color: ForgeTheme.accentSoft, borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.auto_awesome_rounded, color: ForgeTheme.accent, size: 18),
+                decoration: BoxDecoration(gradient: ForgeTheme.brandGradient, borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 18),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   app.title,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: ForgeTheme.ink),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: ForgeTheme.consoleInk),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, color: ForgeTheme.inkSoft, size: 20),
+              const Icon(Icons.chevron_right_rounded, color: ForgeTheme.consoleInkSoft, size: 20),
             ],
           ),
         ),
@@ -288,18 +374,24 @@ class _SendButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: '送信',
-      child: Material(
-        color: enabled ? ForgeTheme.accent : const Color(0xFFEDEAE3),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: enabled ? onPressed : null,
-          child: SizedBox(
-            width: 52,
-            height: 52,
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: enabled ? ForgeTheme.brandGradient : null,
+          color: enabled ? null : ForgeTheme.consoleSurface,
+          border: enabled ? null : Border.all(color: ForgeTheme.consoleBorder),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: enabled ? onPressed : null,
             child: Icon(
               Icons.arrow_upward_rounded,
-              color: enabled ? ForgeTheme.ink : ForgeTheme.inkSoft,
+              color: enabled ? Colors.white : ForgeTheme.consoleInkSoft,
             ),
           ),
         ),

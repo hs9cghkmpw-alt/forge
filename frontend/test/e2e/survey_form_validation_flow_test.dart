@@ -71,7 +71,8 @@ void main() {
       await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.text('アプリを作成しています…'), findsOneWidget);
+      // FORGE-UI-REFRESH-002(2026-08-10)で生成中画面の見出しを変更した。
+      expect(find.text('AIがアプリを設計中…'), findsOneWidget);
 
       await tester.pump(const Duration(milliseconds: 700)); // Mock Modeの人工遅延(650ms)を進める
       await tester.pump();

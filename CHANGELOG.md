@@ -2,6 +2,54 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task044 — FORGE-UI-REFRESH-002: Sparkleブランド・ダーク生成中画面（2026-08-10）
+
+CEOから新しいUIモックアップ画像(✦マークのSparkleロゴ、紫→青グラデーション、
+「AIが考えている最中」向けのダーク画面、チェックリスト形式の生成中演出)が
+共有され、「あなたの最善で選んでよし。エラーは都度解消してくれ」という
+指示を受けたため、確認を挟まず実装した。
+
+### 追加
+- `frontend/lib/shared_widgets/forge_sparkle_mark.dart`(新規)。モックアップの
+  "✦"ロゴを、実際の画像アセットが無いため`CustomPainter`でベクター描画する
+  Widget。新規アセット・新規パッケージ依存は追加していない。
+- `ForgeTheme`(`forge_theme.dart`)へ、ホーム画面・生成中画面専用の
+  ダークパレット(`consoleBackground`等)と、ブランドグラデーション
+  (`gradientStart`/`gradientEnd`/`brandGradient`)を追加。すべての新規配色は
+  WCAG AAコントラスト比を計算した上で選定した(ファイル内コメント参照)。
+  既存の`background`/`ink`/`accent`等は変更・削除していない。
+
+### 変更
+- `home_screen.dart`: ダーク配色化、`ForgeMark`→`ForgeSparkleMark`、
+  送信ボタンのグラデーション化、`forgeExampleItems`を使ったクイック候補
+  チップの追加(「例を見る」→「もっと例を見る」に改名、Bottom Sheet自体は
+  変更なし)。**音声入力は引き続き未実装のため、モックアップにあるマイク
+  アイコンは採用していない**(実装していない機能をあるように見せない、
+  というFORGE v0.2 P5の既存方針を踏襲)。
+- `generation_flow_screen.dart`: 生成中画面(`_GeneratingView`)を、
+  1行だけのメッセージ切り替えから、全段階を並べたチェックリスト表示
+  (完了=チェック、現在=スピナー、未到達=薄いドット)へ変更し、ダーク配色
+  にした。完成画面(`_CompletionView`)はSparkleロゴ・グラデーションボタンに
+  更新したが、配色自体は既存のlightなテーマのまま据え置いた(CEO提示
+  モックアップ自体が画面ごとに意図的に配色を切り替えているため、
+  `MaterialApp`全体のダークモード切り替えとしては実装していない)。
+  確認画面(`_ConfirmationView`)・エラー画面(`_GenerationErrorView`)は
+  未変更。
+- テスト3件(`test/features/.../home_screen_test.dart`・
+  `test/e2e/kids_checklist_generation_flow_test.dart`・
+  `test/e2e/survey_form_validation_flow_test.dart`)を、上記の文言変更・
+  新規チップによる`find.text()`の曖昧化に合わせて更新した(過去の
+  FORGE-UI-REFRESH-report.md 2章と同じ種類の問題を、今回は実装と
+  同じセッション内で先回りして修正した)。
+
+### 既知の未達成事項
+- Claudeのサンドボックスに Flutter/Dart SDK が無いため、`flutter analyze`・
+  `flutter test`・`flutter build`のいずれも実行できていない
+  (実行結果は一度も見ていない)。実装は既存パターン(既存の
+  `RUNTIME-003`ボタン幅バグの回避パターン等)を踏襲し、括弧・波括弧の
+  対応関係やimportの整合性は手動で確認したが、**CEO環境での実行結果
+  待ち**。詳細は`docs/reports/FORGE-UI-REFRESH-002-report.md`参照。
+
 ## Task043 — Confidence Model Review（設計レビューのみ、コード変更なし）（2026-07-22）
 
 Task042をEvaluation Phase Completeとして終了したことを受け、後続の

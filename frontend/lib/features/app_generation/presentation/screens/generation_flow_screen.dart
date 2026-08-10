@@ -5,9 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/forge_theme.dart';
-import '../../../../json_ui/renderer/forge_renderer.dart';
 import '../../../../json_ui/schema/forge_document.dart';
-import '../../../../shared_widgets/forge_mark.dart';
+import '../../../../shared_widgets/forge_sparkle_mark.dart';
 import '../../../../shared_widgets/generated_app_host_shell.dart';
 import '../../../../shared_widgets/responsive_app_shell.dart';
 import '../../../app_library/domain/entities/generation_history_entry.dart';
@@ -160,10 +159,20 @@ class _GenerationFlowScreenState extends ConsumerState<GenerationFlowScreen> {
   }
 }
 
-/// 生成中画面。FORGE v0.2 P5対応: 静止メッセージではなく、3段階の
+/// 生成中画面。FORGE v0.2 P5対応: 静止メッセージではなく、段階的な
 /// メッセージ切り替えへ戻した。**Backendが進捗をStreamingで返さないため、
 /// これらは「厳密なサーバー進捗」ではなく、待機体験のための演出**である
 /// (指示書17章、既に無効化されているMotionは尊重する)。
+///
+/// FORGE-UI-REFRESH(2026-08-10): CEO提示のUIモックアップに基づき、
+/// 1行だけの`AnimatedSwitcher`テキストから、全段階を並べた
+/// チェックリスト表示へ変更した(完了段階はチェック、現在段階は
+/// スピナー、未到達段階は薄いドット)。進捗の意味自体は変えていない
+/// (依然として演出であり、実際のPipeline段階と1対1対応してはいない)。
+/// 最終段階に達したら、それ以上ループさせない(チェックリストが
+/// 一度埋まったあとに巻き戻って見えるのを避けるため。以前の
+/// `% _stages.length`によるループ演出は、1行テキストだからこそ
+/// 自然だったもので、チェックリスト表示とは相性が悪いため変更した)。
 class _GeneratingView extends StatefulWidget {
   const _GeneratingView();
 
@@ -173,10 +182,11 @@ class _GeneratingView extends StatefulWidget {
 
 class _GeneratingViewState extends State<_GeneratingView> with SingleTickerProviderStateMixin {
   static const _stages = [
-    'アイデアを理解しています',
-    '使いやすい構成を考えています',
-    '画面と機能を組み立てています',
-    '最終チェックをしています',
+    '目的を理解しています',
+    '要件を分析しています',
+    '適切なテンプレートを選んでいます',
+    'アプリの構造を設計しています',
+    '安全性をチェックしています',
   ];
 
   AnimationController? _controller;
@@ -190,9 +200,16 @@ class _GeneratingViewState extends State<_GeneratingView> with SingleTickerProvi
     if (!reduceMotion) {
       _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
     }
-    _stageTimer = Timer.periodic(const Duration(milliseconds: 1400), (_) {
-      if (!mounted) return;
-      setState(() => _stageIndex = (_stageIndex + 1) % _stages.length);
+    _stageTimer = Timer.periodic(const Duration(milliseconds: 900), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_stageIndex >= _stages.length - 1) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _stageIndex += 1);
     });
   }
 
@@ -207,6 +224,7 @@ class _GeneratingViewState extends State<_GeneratingView> with SingleTickerProvi
   Widget build(BuildContext context) {
     final controller = _controller;
     return Scaffold(
+      backgroundColor: ForgeTheme.consoleBackground,
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -215,8 +233,8 @@ class _GeneratingViewState extends State<_GeneratingView> with SingleTickerProvi
               mainAxisSize: MainAxisSize.min,
               children: [
                 SizedBox(
-                  width: 160,
-                  height: 160,
+                  width: 148,
+                  height: 148,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
@@ -224,46 +242,102 @@ class _GeneratingViewState extends State<_GeneratingView> with SingleTickerProvi
                         RotationTransition(
                           turns: controller,
                           child: SizedBox(
-                            width: 160,
-                            height: 160,
+                            width: 148,
+                            height: 148,
                             child: CircularProgressIndicator(
                               strokeWidth: 3,
-                              valueColor: const AlwaysStoppedAnimation(ForgeTheme.accent),
-                              backgroundColor: ForgeTheme.accentSoft,
+                              valueColor: const AlwaysStoppedAnimation(ForgeTheme.gradientEnd),
+                              backgroundColor: ForgeTheme.consoleSurface,
                               value: 0.72,
                             ),
                           ),
                         )
                       else
                         const SizedBox(
-                          width: 160,
-                          height: 160,
+                          width: 148,
+                          height: 148,
                           child: CircularProgressIndicator(
                             strokeWidth: 3,
-                            valueColor: AlwaysStoppedAnimation(ForgeTheme.accent),
-                            backgroundColor: ForgeTheme.accentSoft,
+                            valueColor: AlwaysStoppedAnimation(ForgeTheme.gradientEnd),
+                            backgroundColor: ForgeTheme.consoleSurface,
                           ),
                         ),
-                      const ForgeMark(size: 84),
+                      const ForgeSparkleMark(size: 68),
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
-                Text('アプリを作成しています…', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 20)),
-                const SizedBox(height: 12),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: Text(
-                    _stages[_stageIndex],
-                    key: ValueKey(_stageIndex),
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
+                const SizedBox(height: 28),
+                const Text(
+                  'AIがアプリを設計中…',
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w600, color: ForgeTheme.consoleInk),
+                ),
+                const SizedBox(height: 20),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 0; i < _stages.length; i++) _StageRow(label: _stages[i], state: _stageStateOf(i)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  '通常3〜5秒で完了します',
+                  style: TextStyle(fontSize: 12, color: ForgeTheme.consoleInkSoft),
                 ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  _StageState _stageStateOf(int index) {
+    if (index < _stageIndex) return _StageState.done;
+    if (index == _stageIndex) return _StageState.active;
+    return _StageState.pending;
+  }
+}
+
+enum _StageState { done, active, pending }
+
+class _StageRow extends StatelessWidget {
+  final String label;
+  final _StageState state;
+
+  const _StageRow({required this.label, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: switch (state) {
+              _StageState.done => const Icon(Icons.check_circle_rounded, size: 20, color: ForgeTheme.gradientEnd),
+              _StageState.active => const Padding(
+                  padding: EdgeInsets.all(3),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation(ForgeTheme.gradientEnd),
+                  ),
+                ),
+              _StageState.pending => const Icon(Icons.circle_outlined, size: 18, color: ForgeTheme.consoleBorder),
+            },
+          ),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              color: state == _StageState.pending ? ForgeTheme.consoleInkSoft : ForgeTheme.consoleInk,
+              fontWeight: state == _StageState.active ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -396,7 +470,7 @@ class _CompletionView extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const ForgeMark(size: 72),
+                const ForgeSparkleMark(size: 64),
                 const SizedBox(height: 8),
                 Text('✨ アプリが完成しました！', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 20)),
                 const SizedBox(height: 6),
@@ -426,8 +500,8 @@ class _CompletionView extends StatelessWidget {
                             width: 48,
                             height: 48,
                             decoration:
-                                BoxDecoration(color: ForgeTheme.accentSoft, borderRadius: BorderRadius.circular(14)),
-                            child: const Icon(Icons.auto_awesome_rounded, color: ForgeTheme.accent),
+                                BoxDecoration(gradient: ForgeTheme.brandGradient, borderRadius: BorderRadius.circular(14)),
+                            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white),
                           ),
                         ],
                       ),
@@ -453,7 +527,27 @@ class _CompletionView extends StatelessWidget {
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton(onPressed: onOpen, child: const Text('アプリを開く')),
+                  height: 56,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: ForgeTheme.brandGradient,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: onOpen,
+                        child: const Center(
+                          child: Text(
+                            'アプリを開く',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(

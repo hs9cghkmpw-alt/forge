@@ -10,6 +10,13 @@
 //
 // 注記: Claudeのサンドボックスに Dart SDK が無いため、このファイルは
 // 一度も `flutter test` で実行されていない。CEO環境での実行が必須。
+//
+// FORGE-UI-REFRESH-002(2026-08-10): CEO提示の新UIモックアップに合わせ、
+// 「例を見る」ボタンを「もっと例を見る」に改名し、ホーム画面へ
+// クイック候補チップ(先頭4件)を追加したため、該当テストを更新した
+// (詳細は各テスト内のコメント参照)。同じくCEO提示のモックアップに
+// 合わせ、生成中画面の見出しも「アプリを作成しています…」から
+// 「AIがアプリを設計中…」へ変更している。
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,17 +62,22 @@ void main() {
     await tester.pumpWidget(await wrap(const HomeScreen()));
     await tester.pump();
 
-    await tester.tap(find.text('例を見る'));
+    // FORGE-UI-REFRESH-002(2026-08-10): 「例を見る」→「もっと例を見る」に改名。
+    await tester.tap(find.text('もっと例を見る'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('ToDoリストを作りたい'));
+    // FORGE-UI-REFRESH-002: ホーム画面にクイック候補チップ(先頭4件、
+    // 'forgeExampleItems.take(4)')を常時表示するようになったため、
+    // 先頭4件のタイトルはチップとBottom Sheetの両方に存在し、
+    // find.text()が一意に定まらない。5件目(チップに含まれない)を使う。
+    await tester.tap(find.text('子どもの成長記録を作りたい'));
     await tester.pumpAndSettle();
 
     // Bottom Sheetは文章を入れるだけで送信しない、という仕様
     // (Prototype v0.1.3から継承、旧`_onCardTap`と同じ方針)そのものを検証する。
     final textField = tester.widget<TextField>(find.byType(TextField));
-    expect(textField.controller?.text, 'ToDoリストを作りたい');
-    expect(find.text('アプリを作成しています…'), findsNothing); // 生成中画面へ未遷移の確認
+    expect(textField.controller?.text, '子どもの身長や体重、イベントを記録して成長を可視化できるアプリを作りたい');
+    expect(find.text('AIがアプリを設計中…'), findsNothing); // 生成中画面へ未遷移の確認
     expect(tester.takeException(), isNull);
   });
 
@@ -73,9 +85,14 @@ void main() {
     await tester.pumpWidget(await wrap(const HomeScreen()));
     await tester.pump();
 
-    await tester.tap(find.text('例を見る'));
+    await tester.tap(find.text('もっと例を見る'));
     await tester.pumpAndSettle();
 
+    // FORGE-UI-REFRESH-002: 先頭4件はホーム画面のクイック候補チップにも
+    // 表示されているため(Bottom Sheetを開いても裏のホーム画面は
+    // マウントされたまま)、findsOneWidgetではなく「少なくとも1つ」を
+    // 検証する。「Bottom Sheet内に5件とも存在する」という本来の目的は
+    // このゆるい検証でも満たされる。
     for (final title in [
       '家計簿アプリを作りたい',
       'ToDoリストを作りたい',
@@ -83,7 +100,7 @@ void main() {
       '釣果記録アプリを作りたい',
       '子どもの成長記録を作りたい',
     ]) {
-      expect(find.text(title), findsOneWidget, reason: '例 "$title" が見つからない');
+      expect(find.text(title), findsAtLeastNWidgets(1), reason: '例 "$title" が見つからない');
     }
   });
 
