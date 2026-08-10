@@ -2,6 +2,57 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task047 — FORGE-AI-CONNECT-001: Gemini実機確認（Task046の同日追記）（2026-08-10）
+
+Task046完了後、CEOがGoogle AI Studioで取得した実際のAPIキーをこの
+セッション内で共有してくれたため、`backend/.env`へ設定(Gitには
+コミットしていない)し、実際のGemini APIへ接続して動作確認した。
+
+### 分かったこと・直したこと
+- 既定モデルにしていた`gemini-2.0-flash`は実際には**`429`エラー**
+  (無料枠のトークン上限が`0`)で使えなかった。
+- 次に試した`gemini-2.5-flash`・`gemini-2.5-flash-lite`も**`404`エラー**
+  (「新規ユーザーには提供終了」)で使えなかった。
+- `gemini-flash-latest`(常に最新のFlash系モデルを指すエイリアス)で
+  初めて成功した。既定モデルをこれに変更した。
+- `uvicorn`を実際に起動し、`POST /api/v1/ai/generate`へ
+  `generation_options.provider: "gemini"`を指定して2パターン
+  (「買い物リストを作って」「旅行の持ち物チェックリストを作って」)を
+  実行し、いずれも`status: "success"`・`diagnostics.provider_used:
+  "gemini"`・Validator通過のForge Language JSONが返ることを確認した。
+
+### 見つかった別の課題(未着手、記録のみ)
+「旅行の持ち物チェックリスト」への応答で、生成された項目が
+「京都旅行」「沖縄旅行」「温泉旅行」という**旅行先**になっており、
+本来期待される「パスポート」等の**持ち物**になっていなかった。Gemini
+自体は正しく応答しており、forge_aiのCognitive Engine側(travel domainの
+Template解釈)に改善余地があることが、今回初めて実データで見つかった。
+今回はスコープ外として着手していない。
+
+### 変更
+- `backend/app/ai/foundation/providers.py`: 既定モデルを
+  `gemini-2.0-flash`→`gemini-flash-latest`へ変更。docstringに実機確認の
+  経緯を記録。
+- `TECH_DEBT.md` TD15・`GETTING_STARTED.md`・
+  `docs/reports/FORGE-AI-CONNECT-001-report.md`(9章として追記)・
+  `2026-08-10-SESSION-REVIEW-SUMMARY.md`を、実機確認済みの内容へ更新。
+
+### 実際に実行したテスト・結果
+```
+$ cd backend && python -m pytest -q
+526 passed, 12 skipped(モデル名変更後も回帰無し)
+
+$ curl -X POST http://127.0.0.1:8123/api/v1/ai/generate ... (provider: gemini)
+実際に2回成功(内容は本CHANGELOG本文・レポート参照)
+```
+
+**APIキーの取り扱いについて**: CEOがチャット上でAPIキーを共有する際、
+最初の2回はGoogleのOAuth関連コード(`AQ.`から始まるが別物)を誤って
+貼ってしまったため、正しいAPIキーの取得手順(「APIキーの詳細」画面の
+「APIキー」欄からコピー)を案内し直した。実際のキーの値は、このファイル・
+コミットメッセージ・レポートのいずれにも含めていない
+(`backend/.env`のみに存在し、`.gitignore`で除外済み)。
+
 ## Task046 — FORGE-AI-CONNECT-001: GeminiProvider実装（2026-08-10）
 
 CEOから「無料で使える外部AI接続を先に実装したい。課金なしで」という

@@ -311,7 +311,7 @@ Mock Generatorも生成せず、実用上の必要性が無い。
 
 ---
 
-## TD15. AI Provider(5種)がすべて未実装スタブ → **一部解消(2026-08-10、Geminiのみ)**
+## TD15. AI Provider(5種)がすべて未実装スタブ → **一部解消・実機確認済み(2026-08-10、Geminiのみ)**
 
 FORGE-MILESTONE-002/003。`backend/app/ai/foundation/providers.py`の
 OpenAI/Claude/Gemini/OSS/ForgeAIの5 Providerは、いずれも
@@ -344,11 +344,31 @@ OpenAI/Claude/Gemini/OSS/ForgeAIの5 Providerは、いずれも
 `forge_ai`(Provider名としての、Engineとの接続)の4つは、依然として
 `NotImplementedError`を送出する未実装スタブのまま。
 
-**未検証**: `GeminiProvider`はUnit Test(`httpx.MockTransport`によるモック)
-でリクエスト構築・レスポンス解析ロジックのみ検証済み。Claudeのサンドボックスに
-実際のAPIキーが無いため、実際のGemini APIへの呼び出しは一度も行っていない。
-CEO環境で`GEMINI_API_KEY`を設定して初めて実証される
-(`backend/.env.example`参照)。
+**2026-08-10 追記: CEOの実際のAPIキーで実機確認済み。** CEOから
+Google AI Studioで取得した実際のAPIキーを共有してもらい(このセッション内で
+`backend/.env`へ設定、コミットはしていない)、以下を実際に実行して確認した。
+
+- `GeminiProvider`単体で、実際のGemini APIから構造化JSON応答を受け取れる
+  こと(例: `{"title": "買っとこ！買い物メモ"}`)。
+- 既定モデル`gemini-2.0-flash`は`429`(無料枠のトークン上限0)、
+  `gemini-2.5-flash`/`gemini-2.5-flash-lite`は`404`(新規ユーザー提供終了)
+  で失敗することを実際に確認し、`gemini-flash-latest`(常に最新版を指す
+  エイリアス)へ既定モデルを変更したところ成功した。
+- `uvicorn`で実際にBackendを起動し、`POST /api/v1/ai/generate`へ
+  `generation_options.provider: "gemini"`を指定して実際にHTTPリクエストを
+  送り、`status: "success"`・`diagnostics.provider_used: "gemini"`・
+  Forge Language準拠のJSON文書(Validator通過)が返ることを確認した
+  (「買い物リストを作って」→checklistアプリ、「旅行の持ち物チェック
+  リストを作って」→checklistアプリ、いずれも成功)。
+
+**分かった課題(新規、TD番号は付けず記録のみ)**: 「旅行の持ち物チェック
+リスト」という入力に対し、実際に生成されたチェックリストの中身が
+「京都旅行」「沖縄旅行」「温泉旅行」のような**旅行先の候補**になっており、
+本来期待される「パスポート」「着替え」のような**持ち物**にはなっていなかった。
+Gemini自体は正しく応答しているが、forge_aiのCognitive Engine側の
+Domain/Template解釈(travel domainの扱い方)に、今回初めて実データで
+見えた改善余地がある。今回はGemini接続の検証が目的のため、この中身の
+精度改善には着手していない。
 
 ---
 

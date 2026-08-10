@@ -116,17 +116,31 @@ CEOから「自作AIか外部API利用か、課金なしでどちらが可能か
   Geminiには当てはまらなくなったため)。
 - `GETTING_STARTED.md`・`TECH_DEBT.md`(TD15)を更新。
 
-### 現状できること・できないこと
+### 追記: 実機確認済み(同日中)
 
-- **できる**: `backend/.env`にAPIキーを設定し、APIリクエストで
-  `generation_options.provider: "gemini"`を指定すれば、Mockの代わりに
-  実際にGemini APIへ推論を依頼する(配線は成立している)。
-- **まだできない**: 実際のGemini APIへの接続は一度も検証していない
-  (Claude環境にAPIキーが無いため、Unit Testはすべてモック)。Flutter
-  アプリ側にGeminiを選ぶUIも無く、現状は`curl`等でAPIを直接叩く場合
-  のみ試せる。
+CEOが実際のAPIキーをこのセッション内で共有してくれたため
+(`backend/.env`に設定、Gitにはコミットしていない)、その場で実際に
+Gemini APIへ接続して確認した。
 
-**詳細レポート:** [`docs/reports/FORGE-AI-CONNECT-001-report.md`](./docs/reports/FORGE-AI-CONNECT-001-report.md)
+- 既定モデル`gemini-2.0-flash`は`429`エラー、`gemini-2.5-flash`系は
+  `404`エラーで実際には使えなかった。`gemini-flash-latest`で成功した
+  ため、既定モデルをこれに変更した。
+- `uvicorn`を実際に起動し、`POST /api/v1/ai/generate`を
+  `provider: "gemini"`で2回呼び出し、いずれも成功(`買い物リストを
+  作って`→checklistアプリ、`旅行の持ち物チェックリストを作って`→
+  checklistアプリ、Validator通過)。
+- **見つかった課題**: 「旅行の持ち物チェックリスト」の生成結果が
+  「持ち物」ではなく「京都旅行」等の**旅行先**になっていた。Gemini接続
+  自体は正しく動いているが、forge_ai側のtravel domain解釈に改善余地が
+  ある(今回は未着手、次提案に記録)。
+- Flutterアプリ側にGeminiを選ぶUIはまだ無く、現状は`curl`等でAPIを
+  直接叩く場合のみ試せる(この点は変わらず)。
+
+**できる**: `backend/.env`にAPIキーを設定し、APIリクエストで
+`generation_options.provider: "gemini"`を指定すれば、実際にGemini API
+へ推論を依頼し、Forge Language JSONが返ってくることを実測で確認済み。
+
+**詳細レポート:** [`docs/reports/FORGE-AI-CONNECT-001-report.md`](./docs/reports/FORGE-AI-CONNECT-001-report.md)(9章に実機確認の記録)
 
 ---
 
@@ -169,15 +183,17 @@ APIキーも無い。代わりに、変更した全ファイルの括弧の対�
    結果(特にUI刷新で修正した3テストファイル)を共有してほしい。
 3. 新しい配色(紫→青グラデーション+ダークパレット)が、実際の見た目として
    モックアップの意図と合っているか、Chrome上で確認してほしい。
-4. `backend/.env`に実際のGemini APIキーを設定し、`GETTING_STARTED.md`
-   6.1節の手順で呼び出し、結果を共有してほしい。
+4. ~~`backend/.env`に実際のGemini APIキーを設定し...~~ →
+   **完了。実機確認済み(3章追記参照)。**
 5. Flutterアプリ側にProvider(Gemini等)を選ぶUIを追加するかどうか。
-6. TD20(Output Safety)・TD21(Injection Guard)・TD22(IR Versioning)の
+6. (新規)travel domainの生成品質の課題(3章参照、「持ち物」ではなく
+   「旅行先」が生成される)に着手するかどうか。
+7. TD20(Output Safety)・TD21(Injection Guard)・TD22(IR Versioning)の
    実コードが、本当にどこか別のセッション・別のexportに存在するか。
    存在する場合は次回共有してほしい。存在しない場合は、ゼロから実装して
    良いか判断してほしい(`docs/reports/FORGE-AI-INTELLIGENCE-001-PHASE0-report.md`
    8章参照)。
-7. 音声入力(マイクボタン)を今後実装するかどうかの方針。
+8. 音声入力(マイクボタン)を今後実装するかどうかの方針。
 
 ---
 

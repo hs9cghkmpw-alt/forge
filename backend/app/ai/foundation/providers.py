@@ -18,12 +18,15 @@ FORGE-AI-CONNECT-001(2026-08-10): CEOから「無料で使える外部AI接続�
 APIを直接呼ぶ実装にした。REST APIの契約(`generateContent`エンドポイント)
 はSDKのメソッド名より安定していると判断した。
 
-**注記(重要)**: `GeminiProvider`はGoogle公式ドキュメントの契約に基づいて
-実装したが、Claudeのサンドボックスには実際のAPIキーが無いため、実際の
-Gemini APIへの呼び出しは一度も行っていない。`httpx.MockTransport`を使った
-Unit Test(`backend/tests/test_gemini_provider.py`)でリクエスト構築・
-レスポンス解析ロジックは検証したが、これはコンパイラ・実APIの代わりには
-ならない。CEO環境で実際のAPIキーを設定して初めて実証される。
+**注記(2026-08-10追記、実機確認済み)**: 当初はGoogle公式ドキュメントの
+契約に基づいて実装しただけで、`httpx.MockTransport`によるUnit Testでしか
+検証できていなかった。同日中にCEOから実際のAPIキーを共有してもらい、
+このセッション内で`uvicorn`を起動して`POST /api/v1/ai/generate`へ実際に
+リクエストを送り、Gemini経由でForge Language準拠のJSON文書が生成され
+Validatorを通過することを確認した(`TECH_DEBT.md` TD15に詳細記録)。
+既定モデルも、この実機確認の過程で`gemini-2.0-flash`(429エラー)→
+`gemini-2.5-flash`(404エラー)→`gemini-flash-latest`(成功)という
+試行錯誤を経て決定した。
 
 将来Gemini以外(OpenAI/Claude/OSS)を実装する際に必要になる外部Dependency
 (例: `openai`パッケージ等)は、指示書「CEO承認が必要: 外部Dependency追加」
@@ -71,10 +74,19 @@ class GeminiProvider:
 
     無料枠での利用を想定している(Google AI Studio:
     https://aistudio.google.com/apikey でAPIキーを取得)。既定モデルは
-    `gemini-2.0-flash`(2026-08-10時点でGoogleが無料枠を提供している
-    軽量モデルという理解に基づく。無料枠の条件・利用可能なモデル名は
-    Google側の都合で変わりうるため、実際に使う前に公式ドキュメントで
-    確認すること)。
+    `gemini-flash-latest`(常に最新のFlash系モデルを指すエイリアス)。
+
+    **2026-08-10、CEOの実際のAPIキーで実機確認した記録**: 当初
+    `gemini-2.0-flash`を既定にしていたが、実際に呼び出したところ
+    `429`(無料枠のトークン上限が`0`)で失敗した。`gemini-2.5-flash`・
+    `gemini-2.5-flash-lite`は`404`(「新規ユーザーには提供終了」)で
+    失敗した。`gemini-flash-latest`のみ実際に成功し、日本語での
+    構造化JSON応答(`{"title": "買っとこ！買い物メモ"}`等)を正しく
+    受け取れることを確認した。バージョン固定の名前より、
+    `-latest`エイリアスの方がGoogle側のモデル入れ替わりに対して
+    壊れにくいと判断し、既定値をこちらにした。無料枠の条件・利用可能な
+    モデル名は今後もGoogle側の都合で変わりうるため、将来またエラーに
+    なった場合は同じ手順(実際に複数モデル名を試す)で確認すること。
 
     `api_key`を省略すると環境変数`GEMINI_API_KEY`を読む。どちらも
     無い場合、コンストラクタでは失敗させず(`ProviderRouter`が
@@ -92,7 +104,7 @@ class GeminiProvider:
         self,
         *,
         api_key: str | None = None,
-        model: str = "gemini-2.0-flash",
+        model: str = "gemini-flash-latest",
         client: httpx.Client | None = None,
         timeout: float = 30.0,
     ) -> None:
