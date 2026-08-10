@@ -2,6 +2,31 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task045 — GETTING_STARTED.md新設・README.md Mock/Live Mode既定値の訂正（2026-08-10）
+
+CEOから「レビュー用のまとめ」「GitHubから実行までの初心者向けガイド」を
+依頼されたため作成した。ガイドを書く過程で、`README.md`の「Frontend
+セットアップ」section 3が実コードと食い違っていることを発見したため、
+あわせて訂正した。
+
+### 追加
+- `GETTING_STARTED.md`(新規、リポジトリ直下): GitHubからのclone〜Backend
+  起動〜Frontend起動〜動作確認までを1つずつ説明する、前提知識を仮定しない
+  ガイド。Backend部分の手順は実際に実行して確認済み。Frontend部分は
+  Flutter SDKが無いため未実行(その旨を明記)。
+- `2026-08-10-SESSION-REVIEW-SUMMARY.md`(新規、リポジトリ直下):
+  2026-08-10のセッション全体(リポジトリ復元・PHASE0監査・
+  FORGE-UI-REFRESH-002)をレビューしやすいよう1箇所にまとめたもの。
+
+### 修正(README.md)
+- 「Mock Modeが既定」という記述が、実際の`frontend/lib/core/config/
+  app_config.dart`(既定値は`USE_MOCK_GENERATION=false`、**Live Modeが
+  既定**)と食い違っていたため訂正した。
+- 「Live Modeにするには`--dart-define=FORGE_MOCK_MODE=false`」という
+  記述も、実際のフラグ名(`USE_MOCK_GENERATION`)と異なる旧フラグ名を
+  案内していたため訂正した。
+- ドキュメント一覧表へ`GETTING_STARTED.md`を追加。
+
 ## Task044 — FORGE-UI-REFRESH-002: Sparkleブランド・ダーク生成中画面（2026-08-10）
 
 CEOから新しいUIモックアップ画像(✦マークのSparkleロゴ、紫→青グラデーション、

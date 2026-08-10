@@ -53,7 +53,11 @@ Templateは`docs/spec/TEMPLATE_SPEC.md`の通り実装済み（Checklist/Memo/Fo
 
 ## 3. セットアップ方法
 
-### Frontend (Flutter) — Mock Mode(既定・Backend不要)
+**はじめての方へ**: GitHubから取得して実際に動かすところまでを
+1つずつ説明した[`GETTING_STARTED.md`](./GETTING_STARTED.md)を用意しました。
+以下のセクションは前提知識がある人向けの要約です。
+
+### Frontend (Flutter) — Mock Mode(Backend不要)
 
 CEO環境で実測済み(2026-07-11、Flutter 3.44.5 / Dart 3.12.2 / Windows 10)。
 FORGE-MILESTONE-002.2で`frontend/web/`一式を追加したため、**`flutter build web`は
@@ -71,18 +75,30 @@ flutter run -d chrome
 flutter build web --debug
 ```
 
-Mock Modeが既定(`AppConfig.mockMode`の初期値`true`)のため、Backendを
-起動していなくても「これで作る」→確認→生成、まで一通り操作できる
-(実際のAIではなく、決定的なMock Generatorがその場でJSON UI Schemaを
-作る。画面右上に`MOCK`の小さなBadgeが出る)。
+**訂正(2026-08-10、実ファイル監査で発覚)**: 本セクションはMock Modeが
+既定であることを前提に書かれていたが、`frontend/lib/core/config/
+app_config.dart`を実際に確認したところ、既定値は`USE_MOCK_GENERATION`
+(既定`false`、**実Backend接続が既定**)へ既に変更されていた(コメントに
+「以前は`FORGE_MOCK_MODE`(既定`true`)だったが変更した」と明記されている)。
+そのため、通常の`flutter run -d chrome`は**Backendが起動していないと
+「接続できませんでした」というエラーになる**。Mock Modeで動かしたい場合は、
+明示的に以下のフラグを付ける必要がある。
+
+```powershell
+flutter run -d chrome --dart-define=USE_MOCK_GENERATION=true
+```
+
+Mock Modeで起動すると、実際のAIではなく決定的なMock Generatorがその場で
+JSON UI Schemaを作る(画面右上に`MOCK`の小さなBadgeが出る)。Backendに
+接続する手順は[`GETTING_STARTED.md`](./GETTING_STARTED.md)を参照。
 
 ### Frontend (Flutter) — Live(HTTP) Mode
 
-BackendのAPIを実際に呼びたい場合は、Backend起動後に以下で実行する。
-
-```powershell
-flutter run -d chrome --dart-define=FORGE_MOCK_MODE=false
-```
+**訂正(2026-08-10)**: 本セクションは旧フラグ`FORGE_MOCK_MODE=false`を
+案内していたが、実ファイル(`app_config.dart`)を確認したところ、この
+フラグ名は既に`USE_MOCK_GENERATION`へ置き換わっており、かつLive Modeが
+既定になっている。Backendを起動した状態で、追加のフラグ無しで
+`flutter run -d chrome`を実行すればLive Modeで動く(上記セクション参照)。
 
 画面右上のBadgeが`LIVE`になる。Backendが起動していない/接続できない場合は
 「接続できませんでした」という簡潔なエラー画面が表示される
@@ -208,6 +224,7 @@ forge/
 
 | ドキュメント | 内容 |
 |---|---|
+| [GETTING_STARTED.md](./GETTING_STARTED.md) | はじめての人向け、GitHub取得から実行までのセットアップガイド |
 | [docs/README.md](./docs/README.md) | ドキュメント全体の入口・読む順番 |
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | アーキテクチャ全体設計 |
 | [docs/spec/LANGUAGE_SPEC.md](./docs/spec/LANGUAGE_SPEC.md) | Forge Language(v1.0/v1.1)の全Widget/Action/State一覧 |

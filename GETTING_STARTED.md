@@ -1,0 +1,225 @@
+# はじめての人向け セットアップガイド
+
+このガイドは、**このリポジトリを一度も触ったことがない人**が、
+GitHubからコードを取得して、実際にForgeを動かすところまでを
+1つずつ説明します。
+
+**先に知っておいてほしいこと**: このガイドのBackend(Python)の手順は、
+Claude(このガイドを書いたAI)が実際にこの環境で実行し、動くことを
+確認しています。一方、Frontend(Flutter)の手順は、Claudeの作業環境に
+Flutter SDKが無いため、**一度も実行できていません**(内容は既存コードの
+コメント・READMEの記述をもとに書いていますが、実際にコマンドを打って
+確認したのはあなたが最初になります)。うまくいかない箇所があれば、
+その内容を教えてもらえれば修正します。
+
+---
+
+## 0. 全体像
+
+Forgeは2つの部分でできています。
+
+- **Backend**(Python / FastAPI): 「アプリを作って」という文章を受け取り、
+  画面の設計図(JSON)を作って返すサーバー。
+- **Frontend**(Flutter): その設計図(JSON)を実際の画面として描画する
+  アプリ本体。ブラウザ(Chrome)上でも動かせます。
+
+**Frontendは、既定でBackendに接続しようとします**(後述)。そのため、
+先にBackendを起動してから、Frontendを起動する順番がおすすめです。
+
+---
+
+## 1. 事前に準備するもの
+
+| 必要なもの | バージョン目安 | 確認コマンド |
+|---|---|---|
+| Git | 何でも可 | `git --version` |
+| Python | 3.11以上 | `python3 --version` |
+| Flutter SDK | 3.3以上(`pubspec.yaml`の`environment.sdk`参照) | `flutter --version` |
+| GitHubへのアクセス権 | このリポジトリ(`hs9cghkmpw-alt/forge`)を読める権限 | - |
+
+Flutterがまだ入っていない場合は、公式サイトの手順に従ってインストール
+してください: https://docs.flutter.dev/get-started/install
+
+---
+
+## 2. リポジトリを取得する(GitHubから)
+
+ターミナル(Windowsの場合はPowerShellでも可)を開いて、作業したい
+フォルダで以下を実行します。
+
+```bash
+git clone https://github.com/hs9cghkmpw-alt/forge.git
+cd forge
+git checkout claude/forge-master-handoff-k46jns
+```
+
+**なぜ`git checkout`が必要か**: 2026-08-10時点で、このリポジトリには
+`claude/forge-master-handoff-k46jns`というブランチしか存在しません
+(まだ`main`ブランチが作られていません)。`git clone`した直後は
+このブランチに自動的にいる場合もありますが、念のため上記コマンドで
+明示的に切り替えておくと安全です。
+
+---
+
+## 3. Backendを起動する(Python / FastAPI)
+
+### 3.1 仮想環境を作る
+
+```bash
+cd backend
+python3 -m venv .venv
+```
+
+仮想環境を有効化します(OSによってコマンドが違います)。
+
+```bash
+# macOS / Linux
+source .venv/bin/activate
+
+# Windows(PowerShell)
+.venv\Scripts\Activate.ps1
+
+# Windows(コマンドプロンプト)
+.venv\Scripts\activate.bat
+```
+
+ターミナルの行頭に`(.venv)`と表示されれば成功です。
+
+### 3.2 必要なパッケージをインストールする
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 3.3 テストを実行して、正しくインストールできたか確認する
+
+```bash
+python -m pytest -q
+```
+
+`518 passed, 12 skipped`(2026-08-10時点でClaudeが実際に確認した数値)の
+ように、`passed`件数が多数出て、`failed`が無ければ成功です。
+
+### 3.4 サーバーを起動する
+
+```bash
+uvicorn app.main:app --reload
+```
+
+以下のような表示が出れば起動成功です。
+
+```
+INFO:     Uvicorn running on http://127.0.0.1:8000
+```
+
+**このターミナルは閉じずに、起動したままにしておいてください。**
+Frontendを動かす間、Backendはずっと起動している必要があります。
+
+### 3.5 起動確認(ブラウザ or 別ターミナルから)
+
+ブラウザで以下のURLを開くか、
+
+```
+http://127.0.0.1:8000/health
+```
+
+別のターミナルで以下を実行します。
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+`{"status":"ok"}`と返ってくれば、Backendは正常に起動しています。
+
+---
+
+## 4. Frontendを起動する(Flutter)
+
+**ここから先は、Claude環境では実行できていません**(1章参照)。
+
+Backendを起動したまま、**別のターミナル**を新しく開きます。
+
+```bash
+cd forge/frontend       # リポジトリのfrontendフォルダへ
+flutter pub get
+flutter run -d chrome
+```
+
+数十秒〜数分待つと、Chromeが自動的に開き、Forgeのホーム画面が
+表示されます。
+
+**接続モードについて(重要)**: このアプリは既定で「Live Mode」
+(実際にBackendのAPIを呼ぶモード)で起動します(以前は既定で
+Mock Modeでしたが、`frontend/lib/core/config/app_config.dart`の
+コメントにあるとおり、既定値が変更されています)。そのため、
+**Backend(3章)を先に起動していないと、アプリを使おうとしたときに
+「接続できませんでした」というエラーになります。**
+
+もしBackend無しで、AIを使わない決定的なMockだけで動作を見たい場合は、
+以下のように起動します。
+
+```bash
+flutter run -d chrome --dart-define=USE_MOCK_GENERATION=true
+```
+
+Backendの接続先を変えたい場合(例: 別のポートで起動した場合)は、
+以下のように指定します。
+
+```bash
+flutter run -d chrome --dart-define=FORGE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+---
+
+## 5. 実際に使ってみる
+
+1. ホーム画面の入力欄に、作りたいアプリを日本語で入力します。
+   例:「買い物リストを作って」
+2. 送信ボタン(円形の矢印アイコン)を押します。
+3. 数秒待つと、生成中画面(チェックリスト形式の演出)を経て、
+   完成画面が表示されます。
+4. 「アプリを開く」を押すと、実際に生成されたアプリを操作できます。
+
+---
+
+## 6. (任意)APIだけを直接試す
+
+Flutterを使わず、Backendが正しく動いているかだけを確認したい場合は、
+`curl`で直接APIを呼び出せます(Backendを起動した状態で、別ターミナルから)。
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/ai/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version": "1.0",
+    "input": {
+      "natural_language": "買い物リストを作って"
+    }
+  }'
+```
+
+Forgeの画面設計図(JSON)がそのまま返ってくれば、Backendは正常に動作しています。
+
+---
+
+## 7. うまくいかないときは
+
+| 症状 | 考えられる原因と対処 |
+|---|---|
+| `pip install -r requirements.txt`が失敗する | Pythonのバージョンを確認してください(3.11推奨)。それでも失敗する場合は、エラーメッセージを教えてください。 |
+| `uvicorn`コマンドが見つからない | 仮想環境(`.venv`)を有効化し忘れている可能性があります。3.1に戻って`source .venv/bin/activate`(またはWindows版)を実行してください。 |
+| Frontendが「接続できませんでした」と表示する | Backend(3章)が起動していない可能性が高いです。Backendのターミナルが動いたままか確認してください。 |
+| `flutter run -d chrome`で`No devices found`と出る | `flutter devices`でChromeが認識されているか確認してください。Chromeがインストールされていない場合はインストールが必要です。 |
+| `flutter pub get`や`flutter run`でエラーが出る | このガイドのFlutter部分はClaude環境で未検証です。エラーメッセージをそのまま教えてもらえれば、次のセッションで調査・修正します。 |
+| Androidエミュレータから繋がらない | `localhost`ではなく`10.0.2.2`を使う必要があります(`app_config.dart`のコメント参照)。`--dart-define=FORGE_API_BASE_URL=http://10.0.2.2:8000`を試してください。 |
+
+---
+
+## 8. もっと詳しく知りたくなったら
+
+- [README.md](./README.md): プロジェクト全体の概要・技術構成・ディレクトリ構造
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md): アーキテクチャ全体設計
+- [CHANGELOG.md](./CHANGELOG.md): これまでの変更履歴(Taskごと)
+- [TECH_DEBT.md](./TECH_DEBT.md): 既知の技術的負債
+- [docs/reports/](./docs/reports/): 各作業の実施レポート
