@@ -1,0 +1,18 @@
+{
+  "critic_release_ready": true,
+  "data_entities": [
+    "answer",
+    "choice",
+    "question",
+    "respondent"
+  ],
+  "domain": "survey",
+  "domain_confidence": 1.0,
+  "has_empty_state": true,
+  "has_validation": true,
+  "input": "簡単なアンケートを作りたい",
+  "ir_valid_screens": 1,
+  "revision_attempt": 0,
+  "screen_count": 1,
+  "template": "form"
+}

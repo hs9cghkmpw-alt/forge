@@ -1,0 +1,18 @@
+{
+  "critic_release_ready": true,
+  "data_entities": [
+    "item",
+    "price",
+    "quantity",
+    "store"
+  ],
+  "domain": "shopping",
+  "domain_confidence": 1.0,
+  "has_empty_state": true,
+  "has_validation": true,
+  "input": "買い物リストを作りたい",
+  "ir_valid_screens": 1,
+  "revision_attempt": 0,
+  "screen_count": 1,
+  "template": "checklist"
+}

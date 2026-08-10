@@ -1,0 +1,41 @@
+{
+  "critic_release_ready": true,
+  "data_entities": [
+    "date",
+    "entry",
+    "mood",
+    "photo"
+  ],
+  "decision_trace_stages": [
+    "cognitive_intent_recognition",
+    "domain_classification",
+    "overall_confidence_observation",
+    "meaning_extraction",
+    "preliminary_template_selection",
+    "final_template_selection",
+    "design_critic"
+  ],
+  "domain": "diary",
+  "input": "写真と気分を記録できる日記がほしい",
+  "mandatory_unassigned_count": 0,
+  "meaning_actions": [
+    "record"
+  ],
+  "meaning_actors": [],
+  "meaning_constraints": [],
+  "meaning_entities": [
+    "date",
+    "entry",
+    "mood",
+    "photo"
+  ],
+  "meaning_state_conditions": [],
+  "meaning_temporal_conditions": [],
+  "required_actions": [
+    "add_entry",
+    "edit_entry",
+    "record",
+    "tag_entry"
+  ],
+  "template": "memo"
+}

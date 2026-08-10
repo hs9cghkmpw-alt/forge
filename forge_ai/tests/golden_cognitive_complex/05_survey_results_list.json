@@ -1,0 +1,45 @@
+{
+  "critic_release_ready": true,
+  "data_entities": [
+    "answer",
+    "choice",
+    "question",
+    "respondent"
+  ],
+  "decision_trace_stages": [
+    "cognitive_intent_recognition",
+    "domain_classification",
+    "overall_confidence_observation",
+    "meaning_extraction",
+    "preliminary_template_selection",
+    "final_template_selection",
+    "design_critic"
+  ],
+  "domain": "survey",
+  "input": "回答後に結果を一覧で確認できるアンケート",
+  "mandatory_unassigned_count": 0,
+  "meaning_actions": [
+    "list_view",
+    "view"
+  ],
+  "meaning_actors": [],
+  "meaning_constraints": [],
+  "meaning_entities": [
+    "answer",
+    "choice",
+    "question",
+    "respondent"
+  ],
+  "meaning_state_conditions": [],
+  "meaning_temporal_conditions": [
+    "回答後"
+  ],
+  "required_actions": [
+    "add_question",
+    "list_view",
+    "submit_response",
+    "view",
+    "view_results"
+  ],
+  "template": "form"
+}

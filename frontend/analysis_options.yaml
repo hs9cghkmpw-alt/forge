@@ -1,0 +1,27 @@
+# Forge frontend の静的解析ルール。
+#
+# FORGE-MERGE-003 Task 1 で新設。pubspec.yaml には以前から flutter_lints が
+# dev_dependency として指定されていたが、この analysis_options.yaml 自体が
+# 存在しなかったため、実際には一度も有効になっていなかった
+# (`flutter_lints` を指定しても、この include が無ければ何も起きない)。
+#
+# 注記(事実と推測の区別): この設定の追加が、CEO環境で報告された
+# `flutter analyze` の FormatException / Analysis Server crash そのものを
+# 解消するとは断定していない。原因候補は MERGE-003-report.md Task 1 に
+# 優先順位付きで記載している。本ファイルはそれとは独立に「flutter_lints を
+# 導入した意図を実際に有効化する」という、それ自体で正当な修正である。
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+  language:
+    strict-casts: true
+    strict-inference: true
+
+linter:
+  rules:
+    # プロジェクト全体で意図的に上書きしているルールがあればここに追記し、
+    # 必ず理由をコメントで残すこと。現時点ではflutter_lints標準セットのみ。

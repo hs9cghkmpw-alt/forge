@@ -1,0 +1,37 @@
+{
+  "app": {
+    "title": "メモ"
+  },
+  "initial_screen_id": "generated_screen",
+  "screens": [
+    {
+      "body": {
+        "children": [
+          {
+            "id": "heading1",
+            "level": 1,
+            "type": "heading",
+            "value": "メモ"
+          },
+          {
+            "id": "note_field",
+            "placeholder": "ここに書く",
+            "state_ref": "note",
+            "type": "text_field"
+          }
+        ],
+        "id": "root_column",
+        "type": "column"
+      },
+      "id": "generated_screen",
+      "state": {
+        "note": {
+          "type": "string",
+          "value": ""
+        }
+      },
+      "title": "メモ"
+    }
+  ],
+  "version": "1.1"
+}

@@ -1,0 +1,33 @@
+name: forge_app
+description: Forge - JSONだけで動くAIアプリビルダーのFlutterクライアント
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  go_router: ^14.0.0        # 画面遷移（動的画面ともRiverpodと相性が良い）
+  dio: ^5.4.0               # HTTP通信
+  freezed_annotation: ^2.4.1 # イミュータブルなモデル定義（JSON Schema対応と相性良）
+  json_annotation: ^4.9.0
+  # FORGE v0.2 P5対応: マイアプリ・履歴のローカル永続化に使用する。
+  # 指示書16章で明示的に承認された追加(他のFlutter Dependencyは追加していない)。
+  shared_preferences: ^2.2.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  build_runner: ^2.4.9
+  freezed: ^2.5.2
+  json_serializable: ^6.8.0
+  riverpod_generator: ^2.4.0
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/forge_f_mark.png

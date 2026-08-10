@@ -1,0 +1,45 @@
+{
+  "critic_release_ready": true,
+  "data_entities": [
+    "event",
+    "participant",
+    "reminder",
+    "time"
+  ],
+  "decision_trace_stages": [
+    "cognitive_intent_recognition",
+    "domain_classification",
+    "overall_confidence_observation",
+    "meaning_extraction",
+    "preliminary_template_selection",
+    "final_template_selection",
+    "design_critic"
+  ],
+  "domain": "schedule",
+  "input": "毎週月曜日の予定を管理したい",
+  "mandatory_unassigned_count": 0,
+  "meaning_actions": [
+    "manage"
+  ],
+  "meaning_actors": [],
+  "meaning_constraints": [],
+  "meaning_entities": [
+    "event",
+    "participant",
+    "reminder",
+    "time"
+  ],
+  "meaning_state_conditions": [],
+  "meaning_temporal_conditions": [
+    "毎週",
+    "毎週月曜日"
+  ],
+  "required_actions": [
+    "add_event",
+    "delete_event",
+    "edit_event",
+    "manage",
+    "set_reminder"
+  ],
+  "template": "calendar"
+}

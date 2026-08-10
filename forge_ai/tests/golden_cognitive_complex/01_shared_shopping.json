@@ -1,0 +1,46 @@
+{
+  "critic_release_ready": true,
+  "data_entities": [
+    "item",
+    "price",
+    "quantity",
+    "store"
+  ],
+  "decision_trace_stages": [
+    "cognitive_intent_recognition",
+    "domain_classification",
+    "overall_confidence_observation",
+    "meaning_extraction",
+    "preliminary_template_selection",
+    "final_template_selection",
+    "design_critic"
+  ],
+  "domain": "shopping",
+  "input": "家族で共有できる買い物リストを作りたい",
+  "mandatory_unassigned_count": 0,
+  "meaning_actions": [
+    "share"
+  ],
+  "meaning_actors": [
+    "家族"
+  ],
+  "meaning_constraints": [
+    "複数利用者による共有アクセスが必要"
+  ],
+  "meaning_entities": [
+    "item",
+    "price",
+    "quantity",
+    "store"
+  ],
+  "meaning_state_conditions": [],
+  "meaning_temporal_conditions": [],
+  "required_actions": [
+    "add_item",
+    "mark_purchased",
+    "remove_item",
+    "set_budget",
+    "share"
+  ],
+  "template": "checklist"
+}

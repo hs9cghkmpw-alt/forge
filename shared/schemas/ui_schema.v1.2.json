@@ -1,0 +1,301 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "forge://schemas/ui_schema.v1.2.json",
+  "title": "Forge JSON UI Schema (v1.2)",
+  "description": "FORGE-MILESTONE-003。v1.1(12 Widget)を全て含み、Runtime契約を拡張する: (1) numberというState型を追加、(2) set_state/toggle_state/reset_state/submit_form/compositeの5 Action種別を追加(navigate/go_back/set_value/add_itemは維持、set_valueはv1.0/v1.1互換のため残す)、(3) text_field/checkboxへ任意のvalidationプロパティを追加。既存v1.0/v1.1文書はそのまま合格し続ける(Minorバンプ)。v1.0/v1.1のファイルはFreeze対象として変更していない。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "initial_screen_id", "screens"],
+  "properties": {
+    "version": { "type": "string", "const": "1.2" },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 }
+      }
+    },
+    "initial_screen_id": { "type": "string", "minLength": 1 },
+    "screens": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/screen" }
+    }
+  },
+
+  "$defs": {
+
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+
+    "screen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "body"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "state": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/state_value" },
+          "maxProperties": 30
+        },
+        "body": { "$ref": "#/$defs/widget" }
+      }
+    },
+
+    "state_value": {
+      "oneOf": [
+        { "$ref": "#/$defs/state_string" },
+        { "$ref": "#/$defs/state_boolean" },
+        { "$ref": "#/$defs/state_number" },
+        { "$ref": "#/$defs/state_string_list" },
+        { "$ref": "#/$defs/state_checklist" }
+      ]
+    },
+    "state_string": {
+      "type": "object", "additionalProperties": false, "required": ["type", "value"],
+      "properties": { "type": { "const": "string" }, "value": { "type": "string", "maxLength": 2000 } }
+    },
+    "state_boolean": {
+      "type": "object", "additionalProperties": false, "required": ["type", "value"],
+      "properties": { "type": { "const": "boolean" }, "value": { "type": "boolean" } }
+    },
+    "state_number": {
+      "description": "v1.2新規。",
+      "type": "object", "additionalProperties": false, "required": ["type", "value"],
+      "properties": { "type": { "const": "number" }, "value": { "type": "number" } }
+    },
+    "state_string_list": {
+      "type": "object", "additionalProperties": false, "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "string_list" },
+        "value": { "type": "array", "items": { "type": "string", "maxLength": 500 }, "maxItems": 500 }
+      }
+    },
+    "state_checklist": {
+      "type": "object", "additionalProperties": false, "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "checklist" },
+        "value": {
+          "type": "array", "maxItems": 500,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "text", "done"],
+            "properties": {
+              "id": { "$ref": "#/$defs/identifier" },
+              "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "done": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+
+    "validation_rule": {
+      "description": "v1.2新規。text_field/checkboxへ付与できる検証ルール1件。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "message"],
+      "properties": {
+        "type": { "enum": ["required", "min_length", "max_length", "min", "max", "pattern"] },
+        "value": {},
+        "message": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rules"],
+      "properties": {
+        "rules": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/$defs/validation_rule" } }
+      }
+    },
+
+    "widget": {
+      "description": "v1.0の6種+v1.1の6種、計12種類(v1.2でWidget種別の追加は無し。text_field/checkboxにvalidationが追加された)。",
+      "oneOf": [
+        { "$ref": "#/$defs/widget_text" },
+        { "$ref": "#/$defs/widget_text_field" },
+        { "$ref": "#/$defs/widget_button" },
+        { "$ref": "#/$defs/widget_column" },
+        { "$ref": "#/$defs/widget_row" },
+        { "$ref": "#/$defs/widget_checklist" },
+        { "$ref": "#/$defs/widget_heading" },
+        { "$ref": "#/$defs/widget_checkbox" },
+        { "$ref": "#/$defs/widget_card" },
+        { "$ref": "#/$defs/widget_list" },
+        { "$ref": "#/$defs/widget_divider" },
+        { "$ref": "#/$defs/widget_form" }
+      ]
+    },
+
+    "widget_text": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "value"],
+      "properties": {
+        "type": { "const": "text" }, "id": { "$ref": "#/$defs/identifier" },
+        "value": { "type": "string", "maxLength": 500 },
+        "state_ref": { "$ref": "#/$defs/identifier" },
+        "style": { "enum": ["title", "body", "caption"] }
+      }
+    },
+    "widget_text_field": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "state_ref"],
+      "properties": {
+        "type": { "const": "text_field" }, "id": { "$ref": "#/$defs/identifier" },
+        "placeholder": { "type": "string", "maxLength": 80 },
+        "state_ref": { "$ref": "#/$defs/identifier" },
+        "validation": { "$ref": "#/$defs/validation" }
+      }
+    },
+    "widget_button": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "label", "action"],
+      "properties": {
+        "type": { "const": "button" }, "id": { "$ref": "#/$defs/identifier" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "action": { "$ref": "#/$defs/action" }
+      }
+    },
+    "widget_column": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "children"],
+      "properties": {
+        "type": { "const": "column" }, "id": { "$ref": "#/$defs/identifier" },
+        "children": { "type": "array", "minItems": 0, "maxItems": 60, "items": { "$ref": "#/$defs/widget" } }
+      }
+    },
+    "widget_row": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "children"],
+      "properties": {
+        "type": { "const": "row" }, "id": { "$ref": "#/$defs/identifier" },
+        "children": { "type": "array", "minItems": 0, "maxItems": 20, "items": { "$ref": "#/$defs/widget" } }
+      }
+    },
+    "widget_checklist": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "state_ref"],
+      "properties": {
+        "type": { "const": "checklist" }, "id": { "$ref": "#/$defs/identifier" },
+        "state_ref": { "$ref": "#/$defs/identifier" },
+        "empty_state_text": { "type": "string", "maxLength": 80 }
+      }
+    },
+    "widget_heading": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "value"],
+      "properties": {
+        "type": { "const": "heading" }, "id": { "$ref": "#/$defs/identifier" },
+        "value": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "level": { "enum": [1, 2] }
+      }
+    },
+    "widget_checkbox": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "label", "state_ref"],
+      "properties": {
+        "type": { "const": "checkbox" }, "id": { "$ref": "#/$defs/identifier" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "state_ref": { "$ref": "#/$defs/identifier" },
+        "validation": { "$ref": "#/$defs/validation" }
+      }
+    },
+    "widget_card": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "children"],
+      "properties": {
+        "type": { "const": "card" }, "id": { "$ref": "#/$defs/identifier" },
+        "children": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/widget" } }
+      }
+    },
+    "widget_list": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "state_ref"],
+      "properties": {
+        "type": { "const": "list" }, "id": { "$ref": "#/$defs/identifier" },
+        "state_ref": { "$ref": "#/$defs/identifier" },
+        "empty_state_text": { "type": "string", "maxLength": 80 }
+      }
+    },
+    "widget_divider": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id"],
+      "properties": { "type": { "const": "divider" }, "id": { "$ref": "#/$defs/identifier" } }
+    },
+    "widget_form": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "id", "children", "submit_label", "submit_action"],
+      "properties": {
+        "type": { "const": "form" }, "id": { "$ref": "#/$defs/identifier" },
+        "children": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/$defs/widget" } },
+        "submit_label": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "submit_action": { "$ref": "#/$defs/action" }
+      }
+    },
+
+    "action": {
+      "description": "v1.0/v1.1の4種(navigate/go_back/set_value/add_item)を維持しつつ、v1.2で5種(set_state/toggle_state/reset_state/submit_form/composite)を追加した、計9種。",
+      "oneOf": [
+        { "$ref": "#/$defs/action_navigate" },
+        { "$ref": "#/$defs/action_go_back" },
+        { "$ref": "#/$defs/action_set_value" },
+        { "$ref": "#/$defs/action_add_item" },
+        { "$ref": "#/$defs/action_set_state" },
+        { "$ref": "#/$defs/action_toggle_state" },
+        { "$ref": "#/$defs/action_reset_state" },
+        { "$ref": "#/$defs/action_submit_form" },
+        { "$ref": "#/$defs/action_composite" }
+      ]
+    },
+    "action_navigate": {
+      "type": "object", "additionalProperties": false, "required": ["type", "target_screen_id"],
+      "properties": { "type": { "const": "navigate" }, "target_screen_id": { "type": "string", "minLength": 1 } }
+    },
+    "action_go_back": {
+      "type": "object", "additionalProperties": false, "required": ["type"],
+      "properties": { "type": { "const": "go_back" } }
+    },
+    "action_set_value": {
+      "description": "v1.0/v1.1互換のため維持。v1.2以降の新規生成では action_set_state を推奨するが、廃止はしない。",
+      "type": "object", "additionalProperties": false, "required": ["type", "state_ref", "value"],
+      "properties": { "type": { "const": "set_value" }, "state_ref": { "$ref": "#/$defs/identifier" }, "value": {} }
+    },
+    "action_add_item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "target_state_ref", "source_state_ref"],
+      "properties": {
+        "type": { "const": "add_item" },
+        "target_state_ref": { "$ref": "#/$defs/identifier" },
+        "source_state_ref": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "action_set_state": {
+      "description": "v1.2新規。action_set_valueと同じ意味論(状態を明示的な値へ設定する)。今後はこちらを正式名称として案内する。",
+      "type": "object", "additionalProperties": false, "required": ["type", "state_ref", "value"],
+      "properties": { "type": { "const": "set_state" }, "state_ref": { "$ref": "#/$defs/identifier" }, "value": {} }
+    },
+    "action_toggle_state": {
+      "description": "v1.2新規。boolean型のstateを反転する。",
+      "type": "object", "additionalProperties": false, "required": ["type", "state_ref"],
+      "properties": { "type": { "const": "toggle_state" }, "state_ref": { "$ref": "#/$defs/identifier" } }
+    },
+    "action_reset_state": {
+      "description": "v1.2新規。指定したstateを、画面初期化時点の値へ戻す(全stateの一括resetとは明確に区別する。一括resetは今回導入しない)。",
+      "type": "object", "additionalProperties": false, "required": ["type", "state_ref"],
+      "properties": { "type": { "const": "reset_state" }, "state_ref": { "$ref": "#/$defs/identifier" } }
+    },
+    "action_submit_form": {
+      "description": "v1.2新規。form_refが指すformの子widgetをvalidationし、全て合格した場合のみsuccess_actionを実行する。",
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "form_ref", "success_action"],
+      "properties": {
+        "type": { "const": "submit_form" },
+        "form_ref": { "$ref": "#/$defs/identifier" },
+        "success_action": { "$ref": "#/$defs/action" }
+      }
+    },
+    "action_composite": {
+      "description": "v1.2新規。複数Actionを順番に実行する。ネストは3段まで(循環・過剰なネストを防ぐ)。",
+      "type": "object", "additionalProperties": false, "required": ["type", "actions"],
+      "properties": {
+        "type": { "const": "composite" },
+        "actions": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/$defs/action" } }
+      }
+    }
+  }
+}

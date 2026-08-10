@@ -1,0 +1,41 @@
+{
+  "critic_release_ready": true,
+  "data_entities": [
+    "location",
+    "stock",
+    "threshold"
+  ],
+  "decision_trace_stages": [
+    "cognitive_intent_recognition",
+    "domain_classification",
+    "overall_confidence_observation",
+    "meaning_extraction",
+    "preliminary_template_selection",
+    "final_template_selection",
+    "design_critic"
+  ],
+  "domain": "inventory",
+  "input": "在庫が少なくなったら分かるようにしたい",
+  "mandatory_unassigned_count": 0,
+  "meaning_actions": [
+    "notify"
+  ],
+  "meaning_actors": [],
+  "meaning_constraints": [],
+  "meaning_entities": [
+    "location",
+    "stock",
+    "threshold"
+  ],
+  "meaning_state_conditions": [
+    "在庫が少ない状態"
+  ],
+  "meaning_temporal_conditions": [],
+  "required_actions": [
+    "adjust_stock",
+    "notify",
+    "record_shipment",
+    "set_threshold"
+  ],
+  "template": "tracker"
+}

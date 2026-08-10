@@ -1,0 +1,73 @@
+{
+  "app": {
+    "title": "プレゼントのアイデア"
+  },
+  "initial_screen_id": "generated_screen",
+  "screens": [
+    {
+      "body": {
+        "children": [
+          {
+            "empty_state_text": "アイテムはまだないよ",
+            "id": "list_view",
+            "state_ref": "items",
+            "type": "checklist"
+          },
+          {
+            "children": [
+              {
+                "id": "add_field",
+                "placeholder": "アイテムを追加",
+                "state_ref": "new_item_text",
+                "type": "text_field"
+              },
+              {
+                "action": {
+                  "source_state_ref": "new_item_text",
+                  "target_state_ref": "items",
+                  "type": "add_item"
+                },
+                "id": "add_button",
+                "label": "追加",
+                "type": "button"
+              }
+            ],
+            "id": "add_row",
+            "type": "row"
+          }
+        ],
+        "id": "root_column",
+        "type": "column"
+      },
+      "id": "generated_screen",
+      "state": {
+        "items": {
+          "type": "checklist",
+          "value": [
+            {
+              "done": false,
+              "id": "item_1",
+              "text": "予算を決める"
+            },
+            {
+              "done": false,
+              "id": "item_2",
+              "text": "候補を3つ挙げる"
+            },
+            {
+              "done": false,
+              "id": "item_3",
+              "text": "相手の好みを思い出す"
+            }
+          ]
+        },
+        "new_item_text": {
+          "type": "string",
+          "value": ""
+        }
+      },
+      "title": "プレゼントのアイデア"
+    }
+  ],
+  "version": "1.0"
+}

@@ -1,0 +1,48 @@
+{
+  "critic_release_ready": true,
+  "data_entities": [
+    "deadline",
+    "priority",
+    "status",
+    "task"
+  ],
+  "decision_trace_stages": [
+    "cognitive_intent_recognition",
+    "domain_classification",
+    "overall_confidence_observation",
+    "meaning_extraction",
+    "preliminary_template_selection",
+    "final_template_selection",
+    "design_critic"
+  ],
+  "domain": "task_management",
+  "input": "期限と優先度を設定できるタスク管理アプリ",
+  "mandatory_unassigned_count": 0,
+  "meaning_actions": [
+    "manage",
+    "set"
+  ],
+  "meaning_actors": [],
+  "meaning_constraints": [],
+  "meaning_entities": [
+    "deadline",
+    "priority",
+    "status",
+    "task"
+  ],
+  "meaning_state_conditions": [
+    "優先度による状態区分"
+  ],
+  "meaning_temporal_conditions": [
+    "期限あり"
+  ],
+  "required_actions": [
+    "add_task",
+    "complete_task",
+    "delete_task",
+    "manage",
+    "set",
+    "set_priority"
+  ],
+  "template": "checklist"
+}

@@ -1,0 +1,17 @@
+{
+  "critic_release_ready": true,
+  "data_entities": [
+    "location",
+    "stock",
+    "threshold"
+  ],
+  "domain": "inventory",
+  "domain_confidence": 1.0,
+  "has_empty_state": true,
+  "has_validation": true,
+  "input": "在庫を管理したい",
+  "ir_valid_screens": 1,
+  "revision_attempt": 0,
+  "screen_count": 1,
+  "template": "tracker"
+}

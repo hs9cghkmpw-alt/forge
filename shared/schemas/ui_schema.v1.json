@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "forge://schemas/ui_schema.v1.json",
+  "title": "Forge JSON UI Schema (v1)",
+  "description": "AIが生成するJSON UI定義の正式な最小文法。FORGE-MERGE-001 9章のスコープに基づく。docs/tasks/task003.md で draft から v1 へ確定。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "initial_screen_id", "screens"],
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 }
+      }
+    },
+    "initial_screen_id": { "type": "string", "minLength": 1 },
+    "screens": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/screen" }
+    }
+  },
+
+  "$defs": {
+
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "description": "安定ID。配列indexを永続参照に使わないためのルール(FORGE-MERGE-001 9章)。"
+    },
+
+    "screen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "body"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "state": {
+          "type": "object",
+          "description": "state名 -> StateValue。screenローカルの状態のみ(v1にグローバル状態は無い)。",
+          "additionalProperties": { "$ref": "#/$defs/state_value" },
+          "maxProperties": 30
+        },
+        "body": { "$ref": "#/$defs/widget" }
+      }
+    },
+
+    "state_value": {
+      "oneOf": [
+        { "$ref": "#/$defs/state_string" },
+        { "$ref": "#/$defs/state_boolean" },
+        { "$ref": "#/$defs/state_string_list" },
+        { "$ref": "#/$defs/state_checklist" }
+      ]
+    },
+    "state_string": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "string" },
+        "value": { "type": "string", "maxLength": 2000 }
+      }
+    },
+    "state_boolean": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "boolean" },
+        "value": { "type": "boolean" }
+      }
+    },
+    "state_string_list": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "string_list" },
+        "value": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 500 },
+          "maxItems": 500
+        }
+      }
+    },
+    "state_checklist": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "checklist" },
+        "value": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text", "done"],
+            "properties": {
+              "id": { "$ref": "#/$defs/identifier" },
+              "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "done": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+
+    "widget": {
+      "description": "6タイプのみ(v1)。checklist_itemは独立Widgetにしない(理由: 本レポート 5.4節)。",
+      "oneOf": [
+        { "$ref": "#/$defs/widget_text" },
+        { "$ref": "#/$defs/widget_text_field" },
+        { "$ref": "#/$defs/widget_button" },
+        { "$ref": "#/$defs/widget_column" },
+        { "$ref": "#/$defs/widget_row" },
+        { "$ref": "#/$defs/widget_checklist" }
+      ]
+    },
+    "widget_text": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "id", "value"],
+      "properties": {
+        "type": { "const": "text" },
+        "id": { "$ref": "#/$defs/identifier" },
+        "value": { "type": "string", "maxLength": 500 },
+        "state_ref": { "$ref": "#/$defs/identifier" },
+        "style": { "enum": ["title", "body", "caption"] }
+      }
+    },
+    "widget_text_field": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "id", "state_ref"],
+      "properties": {
+        "type": { "const": "text_field" },
+        "id": { "$ref": "#/$defs/identifier" },
+        "placeholder": { "type": "string", "maxLength": 80 },
+        "state_ref": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "widget_button": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "id", "label", "action"],
+      "properties": {
+        "type": { "const": "button" },
+        "id": { "$ref": "#/$defs/identifier" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "action": { "$ref": "#/$defs/action" }
+      }
+    },
+    "widget_column": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "id", "children"],
+      "properties": {
+        "type": { "const": "column" },
+        "id": { "$ref": "#/$defs/identifier" },
+        "children": {
+          "type": "array", "minItems": 0, "maxItems": 60,
+          "items": { "$ref": "#/$defs/widget" }
+        }
+      }
+    },
+    "widget_row": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "id", "children"],
+      "properties": {
+        "type": { "const": "row" },
+        "id": { "$ref": "#/$defs/identifier" },
+        "children": {
+          "type": "array", "minItems": 0, "maxItems": 20,
+          "items": { "$ref": "#/$defs/widget" }
+        }
+      }
+    },
+    "widget_checklist": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "id", "state_ref"],
+      "properties": {
+        "type": { "const": "checklist" },
+        "id": { "$ref": "#/$defs/identifier" },
+        "state_ref": { "$ref": "#/$defs/identifier" },
+        "empty_state_text": { "type": "string", "maxLength": 80 }
+      },
+      "description": "toggle/deleteはWidget組み込みの振る舞い(Actionとして個別定義しない)。理由: 本レポート 5.4節。"
+    },
+
+    "action": {
+      "oneOf": [
+        { "$ref": "#/$defs/action_navigate" },
+        { "$ref": "#/$defs/action_go_back" },
+        { "$ref": "#/$defs/action_set_value" },
+        { "$ref": "#/$defs/action_add_item" }
+      ]
+    },
+    "action_navigate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "target_screen_id"],
+      "properties": {
+        "type": { "const": "navigate" },
+        "target_screen_id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "action_go_back": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "go_back" }
+      }
+    },
+    "action_set_value": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "state_ref", "value"],
+      "properties": {
+        "type": { "const": "set_value" },
+        "state_ref": { "$ref": "#/$defs/identifier" },
+        "value": {}
+      }
+    },
+    "action_add_item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "target_state_ref", "source_state_ref"],
+      "properties": {
+        "type": { "const": "add_item" },
+        "target_state_ref": { "$ref": "#/$defs/identifier" },
+        "source_state_ref": { "$ref": "#/$defs/identifier" }
+      }
+    }
+  }
+}

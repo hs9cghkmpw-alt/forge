@@ -1,0 +1,113 @@
+{
+  "app": {
+    "title": "満足度アンケート"
+  },
+  "initial_screen_id": "generated_screen",
+  "screens": [
+    {
+      "body": {
+        "children": [
+          {
+            "id": "heading1",
+            "level": 1,
+            "type": "heading",
+            "value": "満足度アンケート"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "id": "q_satisfied_input",
+                    "label": "今回のサービスに満足しましたか",
+                    "state_ref": "q_satisfied",
+                    "type": "checkbox"
+                  },
+                  {
+                    "id": "q_recommend_input",
+                    "label": "友人に勧めたいと思いますか",
+                    "state_ref": "q_recommend",
+                    "type": "checkbox"
+                  },
+                  {
+                    "id": "q_comment_input",
+                    "placeholder": "ご意見・ご感想（任意）",
+                    "state_ref": "q_comment",
+                    "type": "text_field",
+                    "validation": {
+                      "rules": [
+                        {
+                          "message": "200文字以内でお願いします",
+                          "type": "max_length",
+                          "value": 200
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "id": "main_form",
+                "submit_action": {
+                  "target_screen_id": "thanks_screen",
+                  "type": "navigate"
+                },
+                "submit_label": "送信する",
+                "type": "form"
+              }
+            ],
+            "id": "form_card",
+            "type": "card"
+          }
+        ],
+        "id": "root_column",
+        "type": "column"
+      },
+      "id": "generated_screen",
+      "state": {
+        "q_comment": {
+          "type": "string",
+          "value": ""
+        },
+        "q_recommend": {
+          "type": "boolean",
+          "value": false
+        },
+        "q_satisfied": {
+          "type": "boolean",
+          "value": false
+        }
+      },
+      "title": "満足度アンケート"
+    },
+    {
+      "body": {
+        "children": [
+          {
+            "id": "thanks_heading",
+            "level": 1,
+            "type": "heading",
+            "value": "送信完了"
+          },
+          {
+            "id": "thanks_text",
+            "type": "text",
+            "value": "ご協力ありがとうございました。"
+          },
+          {
+            "action": {
+              "type": "go_back"
+            },
+            "id": "back_button",
+            "label": "戻る",
+            "type": "button"
+          }
+        ],
+        "id": "thanks_root",
+        "type": "column"
+      },
+      "id": "thanks_screen",
+      "state": {},
+      "title": "送信完了"
+    }
+  ],
+  "version": "1.2"
+}

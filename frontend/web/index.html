@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    FORGE-MILESTONE-002.2で新設。flutter create . --platforms web は実行していない
+    (Claude環境にFlutter SDKが無いため)。Flutter公式ドキュメント
+    (docs.flutter.dev/platform-integration/web/initialization、2026年7月時点、
+    Flutter 3.44.0向け記述として確認)に基づき、標準テンプレートを手書きした。
+    flutter_bootstrap.js はこのファイルには含めていない — flutter build web が
+    ビルド時に自動生成する仕組みであることを公式ドキュメントで確認済み。
+
+    base hrefはflutter buildの--base-href引数で置換されるプレースホルダー。
+    詳細: https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Forge - JSONだけで動くAIアプリビルダーのFlutterクライアント">
+  <!--
+    FORGE-MILESTONE-003.1 PHASE8で削除: <meta name="viewport">をここで
+    明示すると、Chrome Consoleに
+    "Found an existing <meta name="viewport"> tag. Flutter Web uses its
+    own viewport configuration... This tag will be replaced."という警告が
+    出る。Flutter Web(flutter_bootstrap.js)がビルド実行時に独自の
+    viewportタグを自動挿入する仕様であり、ここで書いたタグは実際には
+    無視されて上書きされる(実害は無いが、警告を消せるので削除した。
+    Web検索で複数の実例を確認: github.com/jonbhanson/flutter_native_splash
+    Issue #526, #359, #397)。
+  -->
+
+  <!-- iOS/Android meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <!-- apple-mobile-web-app-capable はSafari/iOSの独自解釈のため残す
+       (mobile-web-app-capable だけでは iOS Safari のPWA化に対応しない)。
+       Chrome DevToolsの非推奨警告は、標準名(上の行)を併記することで解消する。 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="forge_app">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>forge_app</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

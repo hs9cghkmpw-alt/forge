@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "forge://schemas/ui_schema.v1.1.json",
+  "title": "Forge JSON UI Schema (v1.1)",
+  "description": "FORGE-MILESTONE-002 PHASE1。v1.0(screen/text/text_field/button/column/row/checklist)を全て含み、6つのWidgetを追加する(heading/checkbox/card/list/divider/form)。既存v1.0文書はそのまま合格し続ける(docs/spec/LANGUAGE_FREEZE.md のMinor定義に合致)。v1.0側のファイル(ui_schema.v1.json)はFreeze対象として変更していない。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "initial_screen_id", "screens"],
+  "properties": {
+    "version": { "type": "string", "const": "1.1" },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 }
+      }
+    },
+    "initial_screen_id": { "type": "string", "minLength": 1 },
+    "screens": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/screen" }
+    }
+  },
+
+  "$defs": {
+
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+    },
+
+    "screen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "body"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "state": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/state_value" },
+          "maxProperties": 30
+        },
+        "body": { "$ref": "#/$defs/widget" }
+      }
+    },
+
+    "state_value": {
+      "oneOf": [
+        { "$ref": "#/$defs/state_string" },
+        { "$ref": "#/$defs/state_boolean" },
+        { "$ref": "#/$defs/state_string_list" },
+        { "$ref": "#/$defs/state_checklist" }
+      ]
+    },
+    "state_string": {
+      "type": "object", "additionalProperties": false, "required": ["type", "value"],
+      "properties": { "type": { "const": "string" }, "value": { "type": "string", "maxLength": 2000 } }
+    },
+    "state_boolean": {
+      "type": "object", "additionalProperties": false, "required": ["type", "value"],
+      "properties": { "type": { "const": "boolean" }, "value": { "type": "boolean" } }
+    },
+    "state_string_list": {
+      "type": "object", "additionalProperties": false, "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "string_list" },
+        "value": { "type": "array", "items": { "type": "string", "maxLength": 500 }, "maxItems": 500 }
+      }
+    },
+    "state_checklist": {
+      "type": "object", "additionalProperties": false, "required": ["type", "value"],
+      "properties": {
+        "type": { "const": "checklist" },
+        "value": {
+          "type": "array", "maxItems": 500,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "text", "done"],
+            "properties": {
+              "id": { "$ref": "#/$defs/identifier" },
+              "text": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "done": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+
+    "widget": {
+      "description": "v1.0の6種(text/text_field/button/column/row/checklist)+ v1.1新規6種(heading/checkbox/card/list/divider/form)= 計12種。",
+      "oneOf": [
+        { "$ref": "#/$defs/widget_text" },
+        { "$ref": "#/$defs/widget_text_field" },
+        { "$ref": "#/$defs/widget_button" },
+        { "$ref": "#/$defs/widget_column" },
+        { "$ref": "#/$defs/widget_row" },
+        { "$ref": "#/$defs/widget_checklist" },
+        { "$ref": "#/$defs/widget_heading" },
+        { "$ref": "#/$defs/widget_checkbox" },
+        { "$ref": "#/$defs/widget_card" },
+        { "$ref": "#/$defs/widget_list" },
+        { "$ref": "#/$defs/widget_divider" },
+        { "$ref": "#/$defs/widget_form" }
+      ]
+    },
+
+    "widget_text": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "value"],
+      "properties": {
+        "type": { "const": "text" }, "id": { "$ref": "#/$defs/identifier" },
+        "value": { "type": "string", "maxLength": 500 },
+        "state_ref": { "$ref": "#/$defs/identifier" },
+        "style": { "enum": ["title", "body", "caption"] }
+      }
+    },
+    "widget_text_field": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "state_ref"],
+      "properties": {
+        "type": { "const": "text_field" }, "id": { "$ref": "#/$defs/identifier" },
+        "placeholder": { "type": "string", "maxLength": 80 },
+        "state_ref": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "widget_button": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "label", "action"],
+      "properties": {
+        "type": { "const": "button" }, "id": { "$ref": "#/$defs/identifier" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "action": { "$ref": "#/$defs/action" }
+      }
+    },
+    "widget_column": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "children"],
+      "properties": {
+        "type": { "const": "column" }, "id": { "$ref": "#/$defs/identifier" },
+        "children": { "type": "array", "minItems": 0, "maxItems": 60, "items": { "$ref": "#/$defs/widget" } }
+      }
+    },
+    "widget_row": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "children"],
+      "properties": {
+        "type": { "const": "row" }, "id": { "$ref": "#/$defs/identifier" },
+        "children": { "type": "array", "minItems": 0, "maxItems": 20, "items": { "$ref": "#/$defs/widget" } }
+      }
+    },
+    "widget_checklist": {
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "state_ref"],
+      "properties": {
+        "type": { "const": "checklist" }, "id": { "$ref": "#/$defs/identifier" },
+        "state_ref": { "$ref": "#/$defs/identifier" },
+        "empty_state_text": { "type": "string", "maxLength": 80 }
+      }
+    },
+
+    "widget_heading": {
+      "description": "v1.1新規。text(style=title)と役割は近いが、画面内の構造的な見出し(セクション区切り)を明示する用途に使う。CardやFormの内部で複数セクションを分ける場合を想定。",
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "value"],
+      "properties": {
+        "type": { "const": "heading" }, "id": { "$ref": "#/$defs/identifier" },
+        "value": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "level": { "enum": [1, 2], "description": "1=画面タイトル相当、2=セクション見出し相当。既定は1。" }
+      }
+    },
+    "widget_checkbox": {
+      "description": "v1.1新規。checklistとは異なり単一の真偽値(boolean state)に対する1個のON/OFF。タップで自身のstateを反転する組み込み挙動を持つ(checklistのtoggleと同じ設計方針。DECISIONS.md D3参照)。",
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "label", "state_ref"],
+      "properties": {
+        "type": { "const": "checkbox" }, "id": { "$ref": "#/$defs/identifier" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "state_ref": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "widget_card": {
+      "description": "v1.1新規。columnと構造は同じ(childrenを持つコンテナ)だが、視覚的に区切られた1つの塊であることを示す意味論を持つ。",
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "children"],
+      "properties": {
+        "type": { "const": "card" }, "id": { "$ref": "#/$defs/identifier" },
+        "children": { "type": "array", "minItems": 1, "maxItems": 20, "items": { "$ref": "#/$defs/widget" } }
+      }
+    },
+    "widget_list": {
+      "description": "v1.1新規。string_list型のstateを表示する(チェック状態を持たない、読み取り専用の単純な箇条書き)。TECH_DEBT.md TD7で指摘されていた「string_list型を消費するWidgetが無い」を解消する。",
+      "type": "object", "additionalProperties": false, "required": ["type", "id", "state_ref"],
+      "properties": {
+        "type": { "const": "list" }, "id": { "$ref": "#/$defs/identifier" },
+        "state_ref": { "$ref": "#/$defs/identifier" },
+        "empty_state_text": { "type": "string", "maxLength": 80 }
+      }
+    },
+    "widget_divider": {
+      "description": "v1.1新規。区切り線。状態・アクションを持たない、最も単純なWidget。",
+      "type": "object", "additionalProperties": false, "required": ["type", "id"],
+      "properties": {
+        "type": { "const": "divider" }, "id": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "widget_form": {
+      "description": "v1.1新規。入力系Widget(text_field/checkbox等)をまとめ、1つの送信操作(submit_action)に束ねるコンテナ。",
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "id", "children", "submit_label", "submit_action"],
+      "properties": {
+        "type": { "const": "form" }, "id": { "$ref": "#/$defs/identifier" },
+        "children": { "type": "array", "minItems": 1, "maxItems": 30, "items": { "$ref": "#/$defs/widget" } },
+        "submit_label": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "submit_action": { "$ref": "#/$defs/action" }
+      }
+    },
+
+    "action": {
+      "description": "v1.1でもAction種別は追加していない(v1.0の4種のまま)。既存4種の組み合わせでform submit等も表現する。",
+      "oneOf": [
+        { "$ref": "#/$defs/action_navigate" },
+        { "$ref": "#/$defs/action_go_back" },
+        { "$ref": "#/$defs/action_set_value" },
+        { "$ref": "#/$defs/action_add_item" }
+      ]
+    },
+    "action_navigate": {
+      "type": "object", "additionalProperties": false, "required": ["type", "target_screen_id"],
+      "properties": { "type": { "const": "navigate" }, "target_screen_id": { "type": "string", "minLength": 1 } }
+    },
+    "action_go_back": {
+      "type": "object", "additionalProperties": false, "required": ["type"],
+      "properties": { "type": { "const": "go_back" } }
+    },
+    "action_set_value": {
+      "type": "object", "additionalProperties": false, "required": ["type", "state_ref", "value"],
+      "properties": { "type": { "const": "set_value" }, "state_ref": { "$ref": "#/$defs/identifier" }, "value": {} }
+    },
+    "action_add_item": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "target_state_ref", "source_state_ref"],
+      "properties": {
+        "type": { "const": "add_item" },
+        "target_state_ref": { "$ref": "#/$defs/identifier" },
+        "source_state_ref": { "$ref": "#/$defs/identifier" }
+      }
+    }
+  }
+}
