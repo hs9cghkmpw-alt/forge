@@ -22,13 +22,20 @@
   追加した。CEO環境での`flutter analyze`実行結果待ち(未検証、
   FORGE-MILESTONE-003-report.md参照)。
 
+- **TD16(Native AI未接続)**: `docs/spec/ADAPTER_CONTRACT_V1.md`(v1.1、
+  CEO実コード監査済み)のADRに基づき実装済みであることを2026-08-10の
+  実ファイル監査(pytest実行含む)で確認した。詳細はTD16本文(下記)へ
+  移動した記録を参照。本項目はこの時点で本CHANGELOGへ記録されていなかった
+  (TECH_DEBT.mdの記述が実コードより古いままだった)ため、ここに追記する。
+
 ---
 
-## 残課題(継続、PHASE12時点)
+## 残課題(継続、PHASE12時点。2026-08-10実ファイル監査により一部更新)
 
 - **TD10**: Python/Dart Mock Generator二重管理(継続、解消済み扱いにしない)。
 - **Provider未実装**: TD15参照。
-- **Native AI未接続**: TD16参照。
+- ~~**Native AI未接続**: TD16参照。~~ → **解消済み(2026-08-10確認)**。
+  TD16本文参照。
 - **Repair Loop Stub**: TD17参照。
 
 ---
@@ -326,7 +333,9 @@ OpenAI/Claude/Gemini/OSS/ForgeAIの5 Providerは、いずれも
 
 ---
 
-## TD16. Native AI(forge_ai/)とbackend/app/ai/runtime/が未接続
+## TD16. Native AI(forge_ai/)とbackend/app/ai/runtime/が未接続 → **解消済み(2026-08-10確認)**
+
+**解消済み。** 以下は当初(未接続だった時点)の記述をそのまま残す。
 
 `forge_ai/`(FORGE PROJECT AI実装チーム キックオフ指示書で構築)と
 `backend/app/ai/runtime/`(今回構築)は、概念的に対応する型を持ちながら
@@ -340,8 +349,40 @@ OpenAI/Claude/Gemini/OSS/ForgeAIの5 Providerは、いずれも
 決めないまま進めると、`backend/app/ai/runtime/`が`forge_ai/`を
 importするための変換コード(アダプタ)が場当たり的に増えていく可能性がある。
 
-**対応方針**: `docs/spec/NATIVE_AI_ROADMAP.md` 2章に移行ステップを記録した。
+**対応方針(当初)**: `docs/spec/NATIVE_AI_ROADMAP.md` 2章に移行ステップを記録した。
 型統合の具体的な方法はCEO承認が必要な設計変更と位置づけ、今回は決定していない。
+
+**2026-08-10 実ファイル監査による解消確認**:
+`docs/spec/ADAPTER_CONTRACT_V1.md`(v1.1、「CEO実コード監査済み」と明記)の
+ADRに基づき、型統合ではなく**Facade方式のAdapter層**(ADR 1.1節)として
+実装済みであることを、実ファイル読み取りと`pytest`実行の両方で確認した。
+
+- `backend/app/ai/runtime/forge_ai_adapter.py`: `forge_ai.Intent`/
+  `ApplicationPlan`/`RepairResult`/`QualityScore`を`IntentIR`/`PlanIR`/
+  `CriticResult`等へ変換する関数群(診断・ログ用途、ADR 1.1節「粗粒度
+  Facade」の原則により`forge_ai/`内部処理を駆動しない設計)。
+- `backend/app/ai/runtime/forge_ai_provider_bridge.py`: `forge_ai.
+  AIProvider` Protocolを満たしつつ内部で`LLMAdapter`へ委譲する
+  `ForgeAIProviderBridge`。
+- `backend/app/ai/runtime/prompt_pipeline.py`: `forge_ai.core.pipeline.
+  run_cognitive_pipeline()`を1回呼ぶ形で、本番生成経路として実際に
+  接続されている(ADR 7.2節のFacade方式Sequenceどおり)。
+- `backend/app/routers/ai.py`: 上記`PromptPipeline`をHTTPエンドポイントから
+  呼び出しており、型統合ではなくAdapter経由で末端まで配線されている。
+- テスト: `backend/tests/test_forge_ai_adapter.py`ほか、`forge_ai`関連の
+  Adapter/Bridge/PromptPipelineテスト18件が実際に`pytest`でPASS
+  (2026-08-10実行確認)。`backend`+`forge_ai`合算で908 passed, 12 skipped。
+
+型システム自体の統合(2つの`Intent`型を1つにする等)は行っていない
+(ADR 2.1〜2.3節「決定: Adapter変換、統合不要」のとおり、意図的にFacade方式を
+選び、型統合はしない設計判断)。これはギャップではなく、ADRで明示的に
+却下された代替案(ADR 8.2節)であるため、TD16としては解消済みとする。
+
+**ADR 8.3節に記載された、今回もまだ設計していない将来拡張点(TD16とは別、
+現時点でも未着手)**: Streaming応答、Cost/Token計測、Multi-provider
+fallback、Caching、`CriticResult.issues`の実質化、`forge_ai.Planner`の
+`navigation_edges`計算。これらは新規のTD項目として管理する価値があるが、
+今回のセッションでは追跡番号を割り当てず、本節に記録するに留める。
 
 ---
 
