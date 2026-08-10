@@ -83,6 +83,14 @@ CONCEPT_KEYWORDS: tuple[tuple[str, str], ...] = (
     # FORGE v0.3 Task1対応: 旅行記録(travel)。
     ("旅行", "destination"), ("ホテル", "accommodation"), ("観光", "itinerary"),
     ("温泉", "destination"), ("飛行機", "itinerary"), ("旅程", "itinerary"),
+    # FORGE-AI-CONNECT-001 実機確認(2026-08-10)で発見: 「旅行の持ち物
+    # チェックリストを作って」という実際の入力に対し、"belongings"
+    # (持ち物)がtravel domainのconceptに存在しなかったため、
+    # required_conceptsに一切反映されず、結果としてWorld/Meaning/Plan
+    # すべてにdestination/accommodation/itinerary/expenseしか伝播せず、
+    # (実際にGemini APIで確認したところ)「京都旅行」等の旅行先が
+    # 生成され、期待される「パスポート」等の持ち物が生成されなかった。
+    ("持ち物", "belongings"), ("荷物", "belongings"),
 )
 
 # (日本語キーワード, 対応する操作名) — domain_model.pyのtypical_actionsと対応させる。

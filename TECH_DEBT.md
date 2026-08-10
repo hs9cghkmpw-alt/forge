@@ -594,7 +594,19 @@ Forge LanguageのFreeze方針を参考に、IntentIR/PlanIR/Templateへも
 
 ---
 
-## TD23. HTTP層(FastAPI/Pydantic)がClaude環境で一度も実行できていない
+## TD23. HTTP層(FastAPI/Pydantic)がClaude環境で一度も実行できていない → **解消済み(2026-08-10)**
+
+**2026-08-10追記**: `pip install -r requirements.txt`が実際にこの
+環境で成功するようになり(TECH_DEBT.md記載当時と異なりネットワークが
+使えた)、`uvicorn app.main:app`を実際に複数回起動し、
+`POST /api/v1/ai/generate`・`GET /health`等へ実際にHTTPリクエストを
+送って動作確認した(FORGE-AI-CONNECT-001、`docs/reports/
+FORGE-AI-CONNECT-001-report.md` 9章参照)。`_is_json_syntax_error()`を
+含むexception_handlers.pyも実際に例外パス込みで動作している
+(Geminiの`429`/`404`エラーが正しく`RuntimeError`経由でエラーレスポンスに
+変換されることを確認済み)。以下は解消前の記述として残す。
+
+---
 
 FORGE-MILESTONE-005実装。`backend/app/schemas/ai.py`・
 `backend/app/routers/ai.py`・`backend/app/exception_handlers.py`・
@@ -622,3 +634,52 @@ Pydantic v2の一般的な既知の挙動に基づく推測であり、実際の
 ことを確認する。もし`_is_json_syntax_error()`の判定が外れていた場合、
 その関数だけを修正すればよいよう、判定ロジックを1箇所に切り出してある
 (`backend/app/exception_handlers.py`)。
+
+---
+
+## TD24. Domain内の複数Conceptに「意味的な重要度」の区別が無い
+
+FORGE-AI-CONNECT-001の実機確認(2026-08-10、実際のGemini APIで
+「旅行の持ち物チェックリストを作って」を試して発見)。
+
+`forge_ai/core/planning/application_planner.py`の
+`primary_concept = data_entities[0] if data_entities else "item"`は、
+`data_entities`の**先頭要素**を無条件に「主概念」として扱う。
+`data_entities`(`base_data_entities`)は
+`forge_ai/core/understanding/world_builder.py`で
+`domain.typical_concepts`の**定義順そのまま**から作られる
+(`CognitiveWorldBuilder.build()`)。
+
+「旅行の持ち物チェックリストを作って」という入力では、`intent.
+required_concepts`に`destination`(「旅行」由来)と`belongings`
+(「持ち物」由来、2026-08-10に追加)の両方が正しく含まれるにも
+関わらず、`data_entities[0]`は常に`destination`になる(TRAVEL domainの
+`typical_concepts`定義順で`destination`が先頭のため)。この結果、
+Compile段階のPrompt(`build_compile_prompt`)が「destinationの具体例」を
+求める形になり、実際にGemini APIで生成させたところ「京都旅行」
+「沖縄旅行」「温泉旅行」という**旅行先**が生成され、期待される
+「パスポート」等の**持ち物**にはならなかった(実際に確認した実例)。
+
+**今は困っていない理由**: 影響はtravel domainの「持ち物」系リクエストに
+限定される(他13 Domainでは同種の問題を確認していない、確認もしていない)。
+Gemini接続自体・Validator・Repair等のパイプラインは正しく動作しており、
+「生成される中身の妥当性」という品質面の課題である。
+
+**将来困る条件**: 他のDomainでも、同一Domain内に複数のConceptがあり、
+かつユーザーの入力がそのうち特定の1つだけを強く意図している場合
+(例: 「家計簿の固定費だけ管理したい」等)、同様に「関係ない方の
+Conceptが主役として選ばれる」問題が起こりうる。
+
+**対応方針(未着手)**: `data_entities`の先頭を、Domain定義順ではなく
+`intent.required_concepts`の中で「より具体的・特徴的な一致」を
+した順(例: 汎用的すぎる一致(destinationの元キーワード「旅行」は
+Domain判定そのものに使われる語であり、Concept固有性が低い)より、
+Domain判定に使われた語とは別の語で一致したConcept(例:
+「持ち物」→belongings)を優先する、等)へ並べ替えることを検討する。
+ただし、この並べ替えロジックは`application_planner.py`の
+`base_data_entities`という、**全15 Domain共通の基盤ロジック**であり、
+変更するとtravel以外のDomainの挙動にも影響しうる。今回は
+`forge_ai`の既存Golden Test(390件)への影響を確認する余裕が
+無かったため、着手を見送った。着手する場合は、既存Golden Test全件と
+新規のtravel/belongings向けGolden Testの両方が通ることを確認してから
+マージすること。

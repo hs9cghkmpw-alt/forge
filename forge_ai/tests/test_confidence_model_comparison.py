@@ -6,7 +6,7 @@ CEO指示に基づき、以下2種類のテストを実装する。
    confidenceの閾値(0.5・0.8)付近、および各信号の高低の組み合わせを
    個別に構築し、`ShadowJudgment`の計算結果(`comparison_category`・
    `risk_classification`)を検証する。
-2. Golden Test全42件(v0.3の36件+複雑入力6件)を実際に`run_cognitive_
+2. Golden Test全43件(v0.3の37件+複雑入力6件)を実際に`run_cognitive_
    pipeline()`へ通し、現行モデルとShadowモデルを比較するレポートを
    生成する(`TestShadowJudgmentGoldenComparisonReport`)。
 
@@ -144,17 +144,17 @@ class TestShadowJudgmentBoundaryValues(unittest.TestCase):
 
 
 class TestShadowJudgmentGoldenComparisonReport(unittest.TestCase):
-    """Golden Test全42件(v0.3の36件+複雑入力6件)を実際にPipelineへ通し、
+    """Golden Test全43件(v0.3の37件+複雑入力6件)を実際にPipelineへ通し、
     現行モデルとShadowモデルを比較するレポートを生成する。
 
     **このテストは、不一致が0件であることを要求しない**(CEO指示
     「Golden Testの期待値は、Shadow結果だけを理由に変更しない」の
-    裏付け)。比較レポートの生成自体が成功し、全42件が確実に4分類の
+    裏付け)。比較レポートの生成自体が成功し、全43件が確実に4分類の
     いずれかへ分類されることのみを検証する。
     """
 
     def _all_golden_prompts(self) -> list[tuple[str, str]]:
-        """`(text, expected_domain)`のタプルを42件返す。
+        """`(text, expected_domain)`のタプルを43件返す。
 
         **2026-07-22に発見・修正したバグの記録**: `complex_golden.
         CASES`は`{case_name: text}`という辞書であり、`.items()`は
@@ -182,12 +182,13 @@ class TestShadowJudgmentGoldenComparisonReport(unittest.TestCase):
             prompts.append((text, golden["domain"]))
         return prompts
 
-    def test_all_42_golden_cases_are_classified_and_report_is_generated(self) -> None:
+    def test_all_43_golden_cases_are_classified_and_report_is_generated(self) -> None:
         from forge_ai.core.orchestration.outcomes import CognitivePipelineSuccess
         from forge_ai.core.pipeline import run_cognitive_pipeline
 
         prompts = self._all_golden_prompts()
-        self.assertEqual(len(prompts), 42, "Golden Testの総数が42件であることの前提確認")
+        # FORGE-AI-CONNECT-001(2026-08-10)でtravel golden caseを1件追加(36->37)。
+        self.assertEqual(len(prompts), 43, "Golden Testの総数が43件であることの前提確認")
 
         category_counts: dict[str, int] = {}
         risk_counts: dict[str, int] = {}

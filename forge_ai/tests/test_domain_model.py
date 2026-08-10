@@ -75,6 +75,21 @@ class TestDomainRegistry(unittest.TestCase):
         self.assertGreater(len(domain.typical_concepts), 0)
         self.assertGreater(len(domain.typical_actions), 0)
 
+    def test_travel_domain_includes_belongings_concept(self) -> None:
+        """FORGE-AI-CONNECT-001実機確認(2026-08-10)で発見した回帰テスト。
+
+        「旅行の持ち物チェックリスト」が"destination"(旅行先)のみを
+        概念として持ち、"belongings"(持ち物)を持っていなかったため、
+        実際にGemini APIで生成させたところ「京都旅行」等の旅行先が
+        生成され、期待される「パスポート」等の持ち物にならなかった
+        (`TECH_DEBT.md` TD24参照)。この概念自体が存在することは
+        今回のTaskで解消したが、Plannerが「どのConceptを主役にするか」
+        を正しく選べるかどうかは別課題として残っている(TD24)。
+        """
+        domain = self.registry.get(DomainCategory.TRAVEL)
+        concept_names = [c.name for c in domain.typical_concepts]
+        self.assertIn("belongings", concept_names)
+
     def test_get_returns_requested_domain(self) -> None:
         domain = self.registry.get(DomainCategory.HOSPITAL)
         self.assertEqual(domain.category, DomainCategory.HOSPITAL)

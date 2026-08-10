@@ -252,8 +252,13 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
             DomainConcept("accommodation", "宿泊先"),
             DomainConcept("itinerary", "旅程"),
             DomainConcept("expense", "旅行にかかる費用"),
+            # FORGE-AI-CONNECT-001実機確認(2026-08-10)で追加。「旅行の
+            # 持ち物チェックリスト」という、旅行計画(destination等)とは
+            # 別の一般的な要望が、この概念が無かったために正しく
+            # 反映されなかった不具合への対応(`lexicon.py`のコメント参照)。
+            DomainConcept("belongings", "旅行に持っていく物・持ち物"),
         ),
-        typical_actions=("add_destination", "plan_itinerary"),
+        typical_actions=("add_destination", "plan_itinerary", "pack_belongings"),
     ),
     Domain(
         category=DomainCategory.GENERIC,

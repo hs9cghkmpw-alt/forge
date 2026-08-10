@@ -98,6 +98,10 @@ SUCCESS_CASES: tuple[tuple[str, str], ...] = (
     ("旅行の計画を立てたい", "travel"),
     ("ホテルと観光地を管理したい", "travel"),
     ("旅程を記録したい", "travel"),
+    # FORGE-AI-CONNECT-001実機確認(2026-08-10)で追加。「持ち物」
+    # (belongings concept)を追加した後もtravel domainとして正しく
+    # 分類され続けることの回帰テスト(TECH_DEBT.md TD24参照)。
+    ("旅行の持ち物チェックリストを作って", "travel"),
 )
 
 # (プロンプト, 期待reason) — 正当にneeds_confirmationになるべきケース。
