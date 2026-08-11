@@ -98,7 +98,7 @@ pip install -r requirements.txt
 python -m pytest -q
 ```
 
-`962 passed, 12 skipped`(2026-08-11時点でClaudeが実際に確認した数値。
+`995 passed, 12 skipped`(2026-08-11時点でClaudeが実際に確認した数値。
 作業が進むたびに件数は増えます)のように、`passed`件数が多数出て、
 `failed`が無ければ成功です。
 

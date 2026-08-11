@@ -2,6 +2,48 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task054 — Widget Vocabulary Expansion(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「凍結宣言をすべて解除します。ひきつづきすすめて。」)
+
+CEOから「いまの生成できるアプリはテキストとチェックボックスぐらいの
+機能しか持たせられないってこと?ゴールはわかってる?」という直接的な
+問いを受け、Widget Registryが14種のままであること、`docs/spec/
+LANGUAGE_FREEZE.md`が実は一度も正式に凍結宣言されていなかったこと
+(2章のFreeze条件が未達成のまま)、それにより製品自身の例文
+(「収支をグラフで見たい」)すら実現不可能な約束になっていたことを
+報告。CEOから凍結解除の明示的な承認を得て着手した。
+
+### TD34: `choice_field`/`bar_chart`の2 Widget追加(v1.6)
+新規パッケージ依存を追加せず、Flutter標準Widgetのみで実現できる2種を
+追加した。
+
+* `choice_field`: ドロップダウン選択(`DropdownButtonFormField`)。
+  TD33のplaceholder応急処置を置き換える。
+* `bar_chart`: `record_list`の数値Fieldを棒グラフ表示(1 Record =
+  1本の棒、集計は行わないPhase1最小実装)。
+
+Python側(`schema_validator.py`のVersion "1.6"新設、
+`forge_language_compiler.py`のWidget出力ロジック)は、新規テスト33件
+(schema_validator側21件+compiler側12件)を追加した上で全テスト995件
+(回帰なし)を確認し、さらに`uvicorn`+実Gemini APIで
+`household_budget`(「収入や支出を記録して、月ごとの収支をグラフで
+見たい」という例文そのもの)・`fishing_log`・`inventory`を再生成、
+実際に`choice_field`(有効なoptions付き)・`bar_chart`(正しい
+value_field/label_field)がJSONへ反映されていることを実機確認した。
+
+Dart側(`forge_document.dart`へのWidget Node追加、新規
+`widget_registry_v1_6.dart`)は、既存Widget実装と同じパターンを踏襲して
+実装したが、このセッションを通じて一貫している既知の制限
+(Flutter SDK不在)により未検証。詳細はTECH_DEBT.md TD34参照。
+
+### TD35(新規発見、未解決): 実`uvicorn`経由の一部リクエストが誤った「APIキー未設定」エラーで失敗する
+TD34の実機検証中に偶然発見。実際にはキーが設定・機能している状態でも、
+「やることリストを作って」等の一部プロンプトが実`uvicorn`プロセス
+経由でのみ、常に`GEMINI_API_KEY が設定されていません`という誤った
+エラーで失敗する。同じ入力を直接呼び出し・`TestClient`経由で試すと
+正常に成功するため、実HTTPソケット経由のリクエスト処理に特有の
+問題と見られるが、根本原因は未特定。widget vocabulary拡張の作業とは
+無関係な既存バグ。詳細・切り分け結果はTECH_DEBT.md TD35参照。
+
 ## Task053 — バグハント(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「がっつしバグ全部探して潰していってよ」)
 
 指示を受け、Backend/forge_ai側で実際に検証できる範囲を体系的に洗い直した。

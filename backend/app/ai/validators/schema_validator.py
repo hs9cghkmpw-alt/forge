@@ -75,7 +75,7 @@ MAX_RECORD_LIST_ITEMS = 500  # checklist/string_listと同じ上限に揃える
 MAX_RECORD_FIELDS = 20  # 1Recordが持てるFieldの上限(既存state.maxProperties: 30より保守的)
 MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)
 
-SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5"}
+SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6"}
 
 # バージョン文字列同士を数値として比較するための順序付きタプル。
 # **設計上の注記(このセッションで実際に発見・修正した再発バグへの
@@ -87,7 +87,7 @@ SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5"}
 # 自身で発見・修正した)。今回、`_version_at_least()`という「以上」
 # 比較のヘルパーへ置き換え、将来のVersion追加(v1.5等)で
 # 同種の見落としが起きないようにした。
-_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5")
+_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6")
 
 
 def _version_at_least(version: str, minimum: str) -> bool:
@@ -113,6 +113,26 @@ WIDGET_TYPES_V1_3_ADDITIONS = {"record_list_view"}
 # "grid"を追加しただけ(下記`_check_widget_schema`参照、v1.3提案時から
 # 予定されていた拡張)。
 WIDGET_TYPES_V1_5_ADDITIONS = {"section_header"}
+# v1.6で追加された2種(FORGE-AI-QUALITY-001、2026-08-11、CEO承認によりForge
+# Language Freeze運用を解除して追加)。
+#
+# `docs/spec/LANGUAGE_FREEZE.md`は「今後数年変更しない土台」を目指す運用
+# 方針だったが、2章のFreeze条件(実Runtimeでの`flutter analyze`確認等)を
+# そもそも一度も満たしておらず、正式に凍結宣言されたことは無かった
+# (同ドキュメント1章に明記済み)。CEOへ「今のWidget語彙(14種)では
+# テキスト入力とチェックボックス相当の表現力しか無く、'家計簿の収支を
+# グラフで見たい'という既存の例文(`example_picker_sheet.dart`)自体が
+# 実現不可能な約束になっている」ことを報告し、Widget追加の凍結解除の
+# 承認を得た上で着手した。
+#
+# * `choice_field`: 決まった選択肢から1つ選ぶ入力(例: 家計簿の
+#   カテゴリ)。TD33で「text_fieldのplaceholderに選択肢を埋め込む」
+#   という応急処置をしたが、根本的にはドロップダウンで選ばせるべき
+#   だった(誤入力自体を構造的に防げる)。
+# * `bar_chart`: record_listの数値Fieldを棒グラフで可視化する(例:
+#   家計簿の支出内訳)。集計(月ごとの合計等)は行わない、Phase1の
+#   最小実装(1 Record = 1本の棒)。
+WIDGET_TYPES_V1_6_ADDITIONS = {"choice_field", "bar_chart"}
 
 WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.0": WIDGET_TYPES_V1_0,
@@ -123,9 +143,14 @@ WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
     # 型情報の追加のみで、新しいWidget型は追加しない(指示書の制約)。
     "1.4": WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS,
     "1.5": WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS | WIDGET_TYPES_V1_5_ADDITIONS,
+    "1.6": (
+        WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
+        | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS
+    ),
 }
 WIDGET_TYPES_ALL = (
-    WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS | WIDGET_TYPES_V1_5_ADDITIONS
+    WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
+    | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS
 )  # 未知Widget判定用
 
 CONTAINER_WIDGET_TYPES = {"column", "row", "card", "form"}
@@ -149,6 +174,9 @@ ACTION_TYPES_BY_VERSION: dict[str, set[str]] = {
     # FORGE v1.0 Product Quality Sprint1。design_tokens/section_header
     # 導入は新しいAction型を追加しない。
     "1.5": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
+    # v1.6。choice_field/bar_chart追加は新しいAction型を追加しない
+    # (choice_fieldはtext_fieldと同様set_value等の既存Actionで操作する)。
+    "1.6": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
 }
 ACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS  # 全バージョン合計(未知typeの判定用)
 
@@ -171,6 +199,9 @@ STATE_TYPES_BY_VERSION: dict[str, set[str]] = {
     # FORGE v1.0 Product Quality Sprint1。design_tokens/section_header
     # 導入は新しいState型を追加しない。
     "1.5": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
+    # v1.6。choice_field/bar_chart追加は新しいState型を追加しない
+    # (choice_fieldは既存の"string"、bar_chartは既存の"record_list"を参照する)。
+    "1.6": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
 }
 STATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS
 
@@ -851,6 +882,49 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
         else:
             errors.extend(_check_action_schema(widget["submit_action"], f"{path}/submit_action", version, depth=0))
 
+    elif t == "choice_field":
+        # v1.6新規(CEO承認によりForge Language Freeze運用解除、詳細は
+        # WIDGET_TYPES_V1_6_ADDITIONSのコメント参照)。決まった選択肢から
+        # 1つを選ばせる入力。TD33で`text_field`のplaceholderへ選択肢を
+        # 埋め込む応急処置をしていたが、本来必要なのはユーザーが自由文字列を
+        # 打鍵できない(=誤入力自体が構造的に起こらない)入力手段であり、
+        # `text_field`の亜種ではなく独立したWidget型として追加する。
+        errors.extend(_check_additional_properties(
+            widget, {"type", "id", "label", "state_ref", "options", "placeholder"}, path
+        ))
+        if not _is_nonempty_str(widget.get("label"), 80):
+            errors.append(_err(f"{path}/label", Category.SCHEMA, "string_length", "choice_field.labelが不正です。"))
+        if not _is_identifier(widget.get("state_ref")):
+            errors.append(_err(f"{path}/state_ref", Category.SCHEMA, "required", "choice_field.state_refは必須です。"))
+        options = widget.get("options")
+        if not isinstance(options, list) or not (1 <= len(options) <= 20) or not all(
+            _is_nonempty_str(o, 40) for o in options
+        ):
+            errors.append(_err(f"{path}/options", Category.SCHEMA, "array_bounds",
+                                "choice_field.optionsは要素数1〜20の、各要素が1〜40文字の文字列である配列です。"))
+        elif len(set(options)) != len(options):
+            errors.append(_err(f"{path}/options", Category.SCHEMA, "array_uniqueness",
+                                "choice_field.optionsに重複した選択肢があります。"))
+        if "placeholder" in widget and (not isinstance(widget["placeholder"], str) or len(widget["placeholder"]) > 80):
+            errors.append(_err(f"{path}/placeholder", Category.SCHEMA, "string_length", "placeholderが不正です。"))
+
+    elif t == "bar_chart":
+        # v1.6新規。record_listの数値Fieldを棒グラフで可視化する
+        # (指示書の制約により、月ごとの合計等の集計は行わないPhase1の
+        # 最小実装: 1 Record = 1本の棒)。household_budget等の「収支を
+        # グラフで見たい」という既存の例文を実現するための追加。
+        errors.extend(_check_additional_properties(
+            widget, {"type", "id", "state_ref", "value_field", "label_field", "title"}, path
+        ))
+        if not _is_identifier(widget.get("state_ref")):
+            errors.append(_err(f"{path}/state_ref", Category.SCHEMA, "required", "bar_chart.state_refは必須です。"))
+        if not _is_identifier(widget.get("value_field")):
+            errors.append(_err(f"{path}/value_field", Category.SCHEMA, "required", "bar_chart.value_fieldは必須です。"))
+        if not _is_identifier(widget.get("label_field")):
+            errors.append(_err(f"{path}/label_field", Category.SCHEMA, "required", "bar_chart.label_fieldは必須です。"))
+        if "title" in widget and (not isinstance(widget["title"], str) or len(widget["title"]) > 80):
+            errors.append(_err(f"{path}/title", Category.SCHEMA, "string_length", "titleが不正です。"))
+
     return errors
 
 
@@ -1065,7 +1139,7 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
 
             wtype = widget["type"]
 
-            if wtype in {"text", "text_field", "checklist", "list", "record_list_view"} and (
+            if wtype in {"text", "text_field", "checklist", "list", "record_list_view", "choice_field", "bar_chart"} and (
                 wtype != "text" or "state_ref" in widget
             ):
                 ref = widget.get("state_ref")
@@ -1087,6 +1161,40 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
             if wtype == "checkbox":
                 errors.extend(_check_state_ref(widget["state_ref"], "checkbox", state, w_path))
 
+            if wtype == "bar_chart":
+                # v1.6新規。value_field/label_fieldが、state_refが指す
+                # record_listのschema_ref先(record_schemas)に実在するFieldを
+                # 指しているか検査する(record_list_view.display_fieldsは
+                # identifier形式のみ検査して実在確認まではしていないが、
+                # bar_chartは「存在しないFieldでグラフが描けたつもりになる」
+                # 実害が大きいため、record_list_viewより踏み込んだ検査を行う)。
+                ref = widget.get("state_ref")
+                state_value = state.get(ref) if isinstance(ref, str) else None
+                schema_ref = state_value.get("schema_ref") if isinstance(state_value, dict) else None
+                schema_def = doc.get("record_schemas", {}).get(schema_ref) if schema_ref else None
+                if isinstance(schema_def, dict):
+                    fields_by_name = {
+                        f.get("name"): f for f in schema_def.get("fields", []) if isinstance(f, dict)
+                    }
+                    value_field = widget.get("value_field")
+                    label_field = widget.get("label_field")
+                    if value_field not in fields_by_name:
+                        errors.append(_err(
+                            f"{w_path}/value_field", Category.SEMANTIC, "field_reference_exists",
+                            f"value_field '{value_field}' に一致するFieldがrecord_schemas['{schema_ref}']にありません。",
+                        ))
+                    elif fields_by_name[value_field].get("type") != "number":
+                        errors.append(_err(
+                            f"{w_path}/value_field", Category.SEMANTIC, "field_type_mismatch",
+                            f"value_field '{value_field}' はtype=numberのFieldである必要があります"
+                            f"(実際: {fields_by_name[value_field].get('type')!r})。",
+                        ))
+                    if label_field not in fields_by_name:
+                        errors.append(_err(
+                            f"{w_path}/label_field", Category.SEMANTIC, "field_reference_exists",
+                            f"label_field '{label_field}' に一致するFieldがrecord_schemas['{schema_ref}']にありません。",
+                        ))
+
             if wtype in {"text_field", "checkbox"} and "validation" in widget:
                 warnings.extend(_check_validation_applicability(widget, state, w_path))
 
@@ -1097,7 +1205,7 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
                 errors.extend(_check_action_refs(
                     widget["submit_action"], screen_ids, state, form_ids_in_screen, f"{w_path}/submit_action"
                 ))
-                input_types = {"text_field", "checkbox"}
+                input_types = {"text_field", "checkbox", "choice_field"}
                 has_input = any(
                     c["type"] in input_types for _, c in _walk_widgets(widget, w_path)
                     if c["id"] != widget["id"]
@@ -1255,6 +1363,7 @@ def _check_state_ref(ref: str, expected_kind: str, state: dict, path: str, ref_f
         "string": "string", "checkbox": "boolean", "list": "string_list",
         "record_list_view": "record_list", "record_list": "record_list",
         "selected_record": "selected_record",
+        "choice_field": "string", "bar_chart": "record_list",
     }
     expected_type = expected_type_map.get(expected_kind)
     if expected_type and actual_type != expected_type:

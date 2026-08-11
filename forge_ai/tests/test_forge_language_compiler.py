@@ -71,7 +71,7 @@ class TestForgeLanguageCompiler(unittest.TestCase):
                 self.assertIn("form", widget_types)
                 self.assertIn("record_list_view", widget_types)
                 self.assertNotIn("checklist", widget_types)
-                self.assertEqual(document.version, "1.5")
+                self.assertEqual(document.version, "1.6")
 
     def test_non_target_domains_are_not_handled_by_this_compiler(self) -> None:
         """対象外Domainのcompile()は、`IRGenerator.generate()`が`None`
@@ -390,11 +390,12 @@ class TestForgeLanguageCompilerRecordSchema(unittest.TestCase):
         assert ir is not None
         return self.compiler.compile(ir, domain_category=domain_category, title="テスト")
 
-    def test_version_is_1_5(self) -> None:
-        """FORGE v1.0(Product Quality Sprint1)でv1.4から1.5へ更新した
-        (design_tokens/section_header/layout:"grid"がv1.5専用のため)。"""
+    def test_version_is_1_6(self) -> None:
+        """FORGE v1.0(Product Quality Sprint1)でv1.4から1.5へ、v1.6
+        (Widget Vocabulary Expansion、2026-08-11)でさらに1.5から1.6へ
+        更新した(choice_field/bar_chartがv1.6専用のため)。"""
         document = self._compile("fishing_log")
-        self.assertEqual(document.version, "1.5")
+        self.assertEqual(document.version, "1.6")
 
     def test_record_schemas_is_generated_for_all_three_domains(self) -> None:
         for domain_category in SUPPORTED_DOMAIN_CATEGORIES:
@@ -459,12 +460,17 @@ class TestForgeLanguageCompilerRecordSchema(unittest.TestCase):
         (FORGE v0.9まで)は`record_schema`導入がWidget構成を変えない
         ことを確認するテストだったが、今回の変更は「Widget構成を変える
         こと自体」が目的であるため、新しい構成を検証する内容へ更新した
-        (削除ではなく、意図した設計変更への追従)。"""
+        (削除ではなく、意図した設計変更への追従)。
+
+        v1.6(2026-08-11)追記: fishing_logは数値Field(size/weight)を
+        持つため、`record_list_view`の直後に`bar_chart`が追加される
+        (`test_bar_chart_present_only_for_domains_with_a_numeric_field`
+        参照)。"""
         document = self._compile("fishing_log")
         widget_types = [c.type for c in document.screens[0].body.children]
         self.assertEqual(widget_types, [
             "section_header", "form", "divider",
-            "section_header", "record_list_view",
+            "section_header", "record_list_view", "bar_chart",
             "divider", "section_header", "form", "button",
         ])
 
@@ -539,31 +545,29 @@ class TestForgeLanguageCompilerTypedFields(unittest.TestCase):
         pattern_rule = next(r for r in rules if r["type"] == "pattern")
         self.assertEqual(pattern_rule["value"], r"^\d{4}-\d{2}-\d{2}$")
 
-    def test_choice_field_uses_text_field_not_a_new_widget_type(self) -> None:
-        """指示書の制約: 新しいWidget型をForge Languageへ追加しない。
-        choiceは既存text_fieldのまま(options自体はrecord_schemas経由で
-        Runtimeが検証する、Workstream C参照)。"""
+    def test_choice_field_uses_the_dedicated_choice_field_widget(self) -> None:
+        """v1.6(2026-08-11)で置き換え: 以前は「新しいWidget型を
+        Forge Languageへ追加しない」という指示書の制約により、choiceも
+        既存`text_field`のまま(placeholderへ選択肢を埋め込むTD33の
+        応急処置つき)だった。CEO承認によりFreeze運用を解除し、
+        `choice_field`(ドロップダウン)専用Widgetを追加した——ユーザーが
+        自由文字列を打鍵できないため、誤入力自体が構造的に起こらない。"""
         document = self._compile("household_budget")
         create_form = next(c for c in document.screens[0].body.children if c.id == "record_form")
         category_field = next(c for c in create_form.children if c.id == "field_category_input")
-        self.assertEqual(category_field.type, "text_field")
+        self.assertEqual(category_field.type, "choice_field")
 
-    def test_choice_field_placeholder_lists_the_valid_options(self) -> None:
-        """FORGE-AI-QUALITY-001(2026-08-11)回帰テスト: choice型Fieldは
-        text_fieldのplaceholderがFieldラベルのみ(例: "カテゴリ")で、
-        有効な選択肢がどこにも示されていなかった。実際にDart Runtime側の
-        `ForgeFieldValueParser._parseChoice()`を確認したところ、選択肢と
-        完全一致しない入力は送信時に`invalidChoice`として拒否される
-        設計であり、UIに何のヒントも無いまま素直な入力が高確率で
-        弾かれる実バグだった。placeholderへ選択肢を含めるよう修正した。"""
+    def test_choice_field_options_list_the_valid_choices(self) -> None:
+        """FORGE-AI-QUALITY-001 TD33/TD34回帰テスト: v1.6で
+        `choice_field`Widgetへ置き換わった後も、有効な選択肢が
+        Widgetのプロパティ(`options`)として明示されていること
+        (以前はtext_fieldのplaceholder文字列への埋め込みだったが、
+        今回`options`という構造化されたプロパティへ格上げされた)。"""
         document = self._compile("household_budget")
         create_form = next(c for c in document.screens[0].body.children if c.id == "record_form")
         category_field = next(c for c in create_form.children if c.id == "field_category_input")
-        placeholder = category_field.properties["placeholder"]
-        self.assertIn("食費", placeholder)
-        self.assertIn("交通費", placeholder)
-        self.assertIn("娯楽", placeholder)
-        self.assertIn("その他", placeholder)
+        self.assertEqual(category_field.properties["options"], ["食費", "交通費", "娯楽", "その他"])
+        self.assertEqual(category_field.properties["label"], "カテゴリ")
 
     def test_date_field_placeholder_shows_the_expected_format(self) -> None:
         """TD33と同じ理由: `_parseDate()`もISO 8601(YYYY-MM-DD)の厳密
@@ -586,16 +590,22 @@ class TestForgeLanguageCompilerTypedFields(unittest.TestCase):
         レベルのWidget構成は3 Domainで一貫していること(指示書「Widget
         構成を不要に変更しない」)。FORGE v1.0(Sprint1)で
         `section_header`が追加された新しい構成を基準とする(削除では
-        なく、意図した設計変更への追従)。"""
-        for domain_category in ("fishing_log", "household_budget", "habit_tracking"):
-            with self.subTest(domain_category=domain_category):
-                document = self._compile(domain_category)
-                widget_types = [c.type for c in document.screens[0].body.children]
-                self.assertEqual(widget_types, [
-                    "section_header", "form", "divider",
-                    "section_header", "record_list_view",
-                    "divider", "section_header", "form", "button",
-                ])
+        なく、意図した設計変更への追従)。
+
+        v1.6(2026-08-11)追記: この前提は崩れた——数値Fieldを持つか
+        どうかでWidget構成が意図的に分岐するようになった
+        (`bar_chart`の追加、モジュールdocstring参照)。fishing_log/
+        household_budgetは数値Fieldを持つため`bar_chart`が入り、
+        habit_trackingは持たないため入らない。「3 Domainで一貫」を
+        検証する趣旨は、`test_bar_chart_present_only_for_domains_
+        with_a_numeric_field`が正確な形で引き継いでいる。"""
+        document = self._compile("habit_tracking")
+        widget_types = [c.type for c in document.screens[0].body.children]
+        self.assertEqual(widget_types, [
+            "section_header", "form", "divider",
+            "section_header", "record_list_view",
+            "divider", "section_header", "form", "button",
+        ], "数値Fieldを持たないhabit_trackingにはbar_chartが入らないはず")
 
     def test_output_with_typed_fields_passes_the_real_backend_schema_validator(self) -> None:
         try:
@@ -738,6 +748,125 @@ class TestForgeLanguageCompilerProductQualitySprint1(unittest.TestCase):
         submit_action = create_form.properties["submit_action"]
         add_action = next(a for a in submit_action["actions"] if a["type"] == "add_record")
         self.assertEqual(set(add_action.keys()), {"type", "target_state_ref", "field_bindings"})
+
+
+class TestForgeLanguageCompilerWidgetVocabularyExpansion(unittest.TestCase):
+    """v1.6(Widget Vocabulary Expansion、2026-08-11)。`choice_field`・
+    `bar_chart`の回帰テスト。CEO承認により`docs/spec/LANGUAGE_FREEZE.md`
+    のWidget追加凍結を解除して着手した(TD34参照)。"""
+
+    def setUp(self) -> None:
+        self.ir_generator = IRGenerator()
+        self.compiler = ForgeLanguageCompiler()
+        self.plan = ApplicationPlan(title="test", screens=(), data_entities=(), primary_flow=())
+
+    def _compile(self, domain_category: str):
+        ir = self.ir_generator.generate(self.plan, domain_category=domain_category)
+        assert ir is not None
+        return self.compiler.compile(ir, domain_category=domain_category, title="テスト")
+
+    def test_bar_chart_present_only_for_domains_with_a_numeric_field(self) -> None:
+        """7 Domain中、数値Fieldを持つのはfishing_log(size/weight)・
+        household_budget(amount)・reading_log(rating)・inventory
+        (quantity)の4つ。habit_tracking/todo/diaryは持たないため、
+        「描くものが無ければWidgetを増やさない」方針によりbar_chartは
+        追加されない。"""
+        with_numeric_field = {"fishing_log", "household_budget", "reading_log", "inventory"}
+        for domain_category in SUPPORTED_DOMAIN_CATEGORIES:
+            with self.subTest(domain_category=domain_category):
+                document = self._compile(domain_category)
+                widget_types = [c.type for c in document.screens[0].body.children]
+                has_bar_chart = "bar_chart" in widget_types
+                self.assertEqual(has_bar_chart, domain_category in with_numeric_field)
+
+    def test_household_budget_bar_chart_visualizes_amount_by_category(self) -> None:
+        """「収入や支出を記録して、月ごとの収支をグラフで見たい」という
+        既存の例文(`example_picker_sheet.dart`)に対する回帰テスト:
+        household_budgetのbar_chartは、金額(数値Field)を、カテゴリ
+        (CHOICE Field)ごとの棒として描く構成になっていること。"""
+        document = self._compile("household_budget")
+        bar_chart = next(c for c in document.screens[0].body.children if c.type == "bar_chart")
+        self.assertEqual(bar_chart.properties["state_ref"], "records")
+        self.assertEqual(bar_chart.properties["value_field"], "amount")
+        self.assertEqual(bar_chart.properties["label_field"], "category")
+        self.assertIn("家計簿記録", bar_chart.properties["title"])
+
+    def test_bar_chart_prefers_choice_field_over_string_field_as_label(self) -> None:
+        """label_fieldの優先順位(CHOICE > STRING > その他)の確認:
+        inventoryはcategory(CHOICE)とitem_name/location(STRING)の
+        両方を持つが、CHOICEを優先してlabel_fieldに選ぶ。"""
+        document = self._compile("inventory")
+        bar_chart = next(c for c in document.screens[0].body.children if c.type == "bar_chart")
+        self.assertEqual(bar_chart.properties["value_field"], "quantity")
+        self.assertEqual(bar_chart.properties["label_field"], "category")
+
+    def test_bar_chart_falls_back_to_string_field_when_no_choice_field_exists(self) -> None:
+        """fishing_logはCHOICE Fieldを持たないため、STRING Field
+        (species、最初に定義されたField)へfallbackする。"""
+        document = self._compile("fishing_log")
+        bar_chart = next(c for c in document.screens[0].body.children if c.type == "bar_chart")
+        self.assertIn(bar_chart.properties["value_field"], {"size", "weight"})
+        self.assertEqual(bar_chart.properties["label_field"], "species")
+
+    def test_bar_chart_references_the_records_state(self) -> None:
+        """bar_chart.state_refは、record_list_viewと同じ`records`
+        state(record_list型)を指す——専用のstateを新設しない。"""
+        for domain_category in ("fishing_log", "household_budget", "reading_log", "inventory"):
+            with self.subTest(domain_category=domain_category):
+                document = self._compile(domain_category)
+                bar_chart = next(c for c in document.screens[0].body.children if c.type == "bar_chart")
+                self.assertEqual(bar_chart.properties["state_ref"], "records")
+                self.assertEqual(document.screens[0].state["records"].type, "record_list")
+
+    def test_choice_field_widget_carries_all_declared_choices(self) -> None:
+        """choice_fieldのoptionsは、Curated Domain Libraryが定義した
+        choicesとそのまま一致する(順序も含めて、AIが実行時に選択肢を
+        発明しているわけではないことの確認)。"""
+        cases = {
+            "household_budget": ("category", ("食費", "交通費", "娯楽", "その他")),
+            "todo": ("priority", ("高", "中", "低")),
+            "reading_log": ("status", ("読みたい", "読書中", "読了")),
+            "inventory": ("category", ("食品", "日用品", "衣類", "その他")),
+            "diary": ("mood", ("嬉しい", "普通", "悲しい", "怒り", "疲れた")),
+        }
+        for domain_category, (field_name, expected_options) in cases.items():
+            with self.subTest(domain_category=domain_category):
+                document = self._compile(domain_category)
+                create_form = next(c for c in document.screens[0].body.children if c.id == "record_form")
+                choice_field = next(c for c in create_form.children if c.id == f"field_{field_name}_input")
+                self.assertEqual(choice_field.type, "choice_field")
+                self.assertEqual(tuple(choice_field.properties["options"]), expected_options)
+
+    def test_choice_field_state_is_string_type_not_a_new_state_type(self) -> None:
+        """choice_fieldは既存の"string"型stateをそのまま使う(新しい
+        State型を追加しない、schema_validator.pyのACTION_TYPES_BY_
+        VERSION/STATE_TYPES_BY_VERSIONにv1.6用の新エントリが要らない
+        ことの裏付け)。"""
+        document = self._compile("household_budget")
+        self.assertEqual(document.screens[0].state["field_category"].type, "string")
+        self.assertEqual(document.screens[0].state["field_category"].value, "")
+
+    def test_edit_form_choice_field_also_uses_the_dedicated_widget(self) -> None:
+        document = self._compile("household_budget")
+        edit_form = next(c for c in document.screens[0].body.children if c.id == "record_edit_form")
+        choice_field = next(c for c in edit_form.children if c.id == "edit_field_category_edit_input")
+        self.assertEqual(choice_field.type, "choice_field")
+        self.assertEqual(choice_field.properties["state_ref"], "edit_field_category")
+
+    def test_output_with_new_widgets_passes_the_real_backend_schema_validator(self) -> None:
+        try:
+            _here = os.path.dirname(__file__)
+            sys.path.insert(0, os.path.join(_here, "..", "..", "backend"))
+            from app.ai.validators.schema_validator import validate_forge_document
+        except ImportError:
+            self.skipTest("backend/appをimportできない環境")
+            return
+
+        for domain_category in SUPPORTED_DOMAIN_CATEGORIES:
+            with self.subTest(domain_category=domain_category):
+                document = self._compile(domain_category)
+                result = validate_forge_document(document.to_json_dict())
+                self.assertTrue(result.valid, msg=result.to_dict())
 
 
 if __name__ == "__main__":

@@ -40,6 +40,14 @@
   ただし実際に修正できるのは限定的なパターンのみ(2026-08-11確認)**。
   TD17・TD32参照(以前は本番でも一度も修正できていなかった実バグを
   発見・修正した)。
+- **Widget Registry(2026-08-11更新)**: CEO承認によりForge Language
+  Freeze運用を解除し、`choice_field`/`bar_chart`を追加(TD34)。
+  Widget型は14種→16種。Python側は全ドメインで実機検証済み、Dart側は
+  引き続き未検証(Flutter SDK不在、KNOWN_ISSUES.md参照)。
+- **新規発見(2026-08-11、未解決)**: TD35。実`uvicorn`経由の一部
+  リクエストが、実際にはキーが設定されているにも関わらず
+  「GEMINI_API_KEYが設定されていません」という誤ったエラーで失敗する
+  現象を発見。根本原因は未特定。
 
 ---
 
@@ -1291,3 +1299,171 @@ _parseDate()`が要求する厳密なISO 8601形式(YYYY-MM-DD)がどこにも
 自体は広く知られた書式のため)が、同じ理由・同じ修正方針で
 placeholderへ「日付(YYYY-MM-DD)」のように形式を含めるよう修正した。
 回帰テストを追加し、全テスト(965件)が通ることを確認した。
+
+**さらに追記(2026-08-11、TD34でこの「残る限界」自体を解消)**: 上記の
+「専用Widget追加はスコープ超過」という制約は、`docs/spec/
+LANGUAGE_FREEZE.md`のWidget追加凍結運用に基づくものだった。CEOへ
+この制約の実態(正式な凍結宣言は一度も無かったこと)と、それにより
+生じている具体的な実害(household_budgetの「収支をグラフで見たい」
+という既存の例文が実現不可能な約束になっていること)を報告し、
+凍結解除の承認を得た。TD34で`choice_field`(本物のドロップダウン)を
+実装し、このplaceholder応急処置を置き換えた。
+
+---
+
+## TD34. Widget Registryが14種のまま(text/checkboxレベルの表現力しか無く、製品自身の例文すら実現不可能)だった → **choice_field/bar_chartの2種を追加(2026-08-11)**
+
+FORGE-AI-QUALITY-001(2026-08-11)。CEOから「いまの生成できるアプリは
+テキストとチェックボックスぐらいの機能しか持たせられないってこと?
+これはツールをそれぐらいしかもってないから?ゴールはわかってる?」
+という直接的な問いを受け、正直に調査・報告した内容が発端。
+
+**発見**: Forge Language全体でWidget型はv1.0〜v1.5を通じて14種類
+(`text`/`text_field`/`button`/`column`/`row`/`checklist`/`heading`/
+`checkbox`/`card`/`list`/`divider`/`form`/`record_list_view`/
+`section_header`)のみで、画像・グラフ・カレンダー・地図・スライダー・
+ドロップダウン・アニメーションのいずれも存在しなかった。決定的だった
+のは、`frontend/lib/features/app_generation/presentation/widgets/
+example_picker_sheet.dart`が提示するオンボーディング例文そのものに
+「収入や支出を記録して、月ごとの収支をグラフで見たい」という一文が
+含まれていたこと——**製品自身が謳う例が、製品自身のWidget語彙では
+文字通り実現不可能だった**(グラフに相当するWidgetが1つも無い)。
+
+**根本原因**: `docs/spec/LANGUAGE_FREEZE.md`の「Widgetは追加しない」
+という運用方針。ただし実際に同ドキュメントを読み直すと、2章の
+Freeze条件(実RuntimeでのFlutter `flutter analyze`確認・全Widget
+セットの実描画確認・`string_list`設計課題の解消)がいずれも未達成の
+まま、1章に明記された通り**一度も正式に凍結宣言されていなかった**。
+つまり「変更してはいけない確定ルール」ではなく、「まだ検証していない
+という理由で、これまで誰も踏み込まなかった未確定の状態」だった。
+
+**CEOの判断**: この事実確認を報告した上でWidget追加を提案したところ、
+「凍結宣言をすべて解除します。ひきつづきすすめて。」と明示的な承認を
+得た。
+
+**対応**: 新規パッケージ依存を追加せず、Flutter標準Widgetのみで
+実現できる2種を追加した(`backend/app/ai/validators/schema_validator.py`
+にVersion "1.6"として新設、`WIDGET_TYPES_V1_6_ADDITIONS`)。
+
+* `choice_field`: 決まった選択肢から1つを選ぶ入力
+  (`DropdownButtonFormField`で実装)。TD33のplaceholder応急処置
+  (`text_field`に選択肢の文字列を埋め込むだけ)を置き換える、本来
+  あるべき専用Widget。ユーザーが自由文字列を打鍵できない構造その
+  ものにより、`ForgeFieldValueParser._parseChoice()`が要求する
+  完全一致を保証する(誤入力自体が起こりえない)。
+* `bar_chart`: `record_list`の数値Fieldを棒グラフで可視化する
+  (1 Record = 1本の棒)。月ごとの合計等の**集計は行わない**、
+  Phase1の最小実装(指示書の制約と同じ精神: 需要が実証されていない
+  機能の先行実装を避ける)。
+
+**変更ファイル(Python側、テスト・実機検証まで完了)**:
+
+* `backend/app/ai/validators/schema_validator.py` — Version "1.6"を
+  新設。`choice_field`(`options`: 1〜20件・重複禁止の文字列配列、
+  `state_ref`必須)・`bar_chart`(`state_ref`は`record_list`型必須、
+  `value_field`/`label_field`は`state_ref`が指す`record_schemas`の
+  実在するFieldであること、`value_field`はtype=numberであることまで
+  検査する——`record_list_view.display_fields`より踏み込んだ検査)の
+  Schema検証・意味検証を追加。`input_types`(form_without_input警告
+  用)へ`choice_field`を追加。
+* `backend/tests/test_schema_validator_v1_6.py`(新規、21件)。
+* `forge_ai/core/ir/forge_language_compiler.py` — `_build_field_inputs()`
+  でCHOICE型Fieldを`choice_field`Widgetとして出力するよう変更(TD33の
+  placeholder応急処置を削除)。新設`_build_bar_chart_widget()`で、
+  数値Fieldを持つEntity(fishing_log/household_budget/reading_log/
+  inventoryの4 Domain。habit_tracking/todo/diaryは数値Fieldを持たない
+  ため対象外)の一覧直後に`bar_chart`を追加。`label_field`は
+  CHOICE型Fieldを優先(無ければSTRING型)。出力Versionを"1.5"から
+  "1.6"へ更新。
+* `forge_ai/tests/test_forge_language_compiler.py` — 既存の
+  Widget構成アサーション6件を新しい構成へ更新(削除ではなく、意図した
+  設計変更への追従。特に「3 Domainで一貫した構成」という前提自体が
+  崩れた——数値Fieldの有無でWidget構成が意図的に分岐するようになった
+  ため、その旨をテストのdocstringに明記した)。新規テストクラス
+  `TestForgeLanguageCompilerWidgetVocabularyExpansion`(12件、
+  bar_chartの対象Domain判定・value_field/label_field選定・
+  household_budgetの「グラフで見たい」要求への回帰テストを含む)。
+
+**検証**: 全Pythonテスト995件(985既存+新規、TD34分のみで33件追加)が
+回帰なしで通ることを確認。さらに`uvicorn`+実Gemini APIで
+`household_budget`(「収入や支出を記録して、月ごとの収支をグラフで
+見たい」という、まさに例文そのもののプロンプト)・`fishing_log`・
+`inventory`を再生成し、いずれも`version: "1.6"`・`choice_field`
+(有効なoptions付き)・`bar_chart`(正しいvalue_field/label_field)が
+実際にGemini経由で生成されたJSONへ反映されていることを確認した
+(`habit_tracking`は数値Fieldを持たないため`bar_chart`が付かないことも
+確認済み、意図通り)。
+
+**未検証(正直な申告)**: Flutter/Dart側
+(`frontend/lib/json_ui/schema/forge_document.dart`への
+`ForgeChoiceFieldWidgetNode`/`ForgeBarChartWidgetNode`追加、新規
+`frontend/lib/json_ui/widget_registry/widget_registry_v1_6.dart`の
+`buildChoiceField`/`buildBarChart`)は、このセッションを通じて
+一貫している既知の制限の通り、Flutter SDKがサンドボックスに存在せず
+`flutter analyze`・実機/実ブラウザでの描画確認が一切できていない。
+既存Widget実装(`widget_registry_v1_1.dart`等)と同じパターン
+(`AnimatedBuilder`+`ForgeRuntimeState`の`getString`/`setString`/
+`getRecordList`)を踏襲し、コードレビューレベルでの整合性は確認したが、
+実際にFlutterでコンパイル・描画されることは未確認。
+`DropdownButtonFormField`は`value`パラメータ(新しい`initialValue`
+ではなく)を使い、`pubspec.yaml`のDart SDK下限('>=3.3.0')に対して
+より広いFlutterバージョンで動くよう配慮した。`bar_chart`は
+`CustomPainter`ではなく素のLayout Widget(`Row`/`FractionallySizedBox`)
+で組んだ(検証できない環境では、実績のある標準Widgetの組み合わせの
+方がレビューで正しさを判断しやすいという判断)。
+
+**残る限界(意図的にスコープ外)**:
+
+* `bar_chart`は集計を行わない(1 Record = 1本の棒のまま)。
+  「月ごとの収支」のような期間集計は、なお実現していない
+  (Phase1の最小実装、需要が実証されていない機能の先行実装を避ける
+  という指示書の一貫した方針)。
+* 画像Widget(`image`)は追加していない。ストレージ戦略
+  (ローカルbase64 vs クラウド)の製品判断が必要な上、新規パッケージ
+  依存(`image_picker`相当)が要るため、CEOと未協議のまま独断で
+  スコープに含めることは避けた。
+
+---
+
+## TD35. 実Gemini APIとの通信中、ローカル`uvicorn`プロセス経由の一部リクエストが「GEMINI_API_KEYが設定されていません」という誤ったエラーで失敗する(未解決、2026-08-11発見)
+
+TD34の実機検証中に偶然発見。widget vocabulary拡張(choice_field/
+bar_chart)の作業とは無関係(この調査中に一切変更していないコード
+パスで再現するため)。
+
+**症状**: 実際に`GEMINI_API_KEY`が正しく設定・機能している状態
+(同じ`uvicorn`プロセスで他のプロンプトは実際に成功している)にも
+関わらず、「やることリストを作って」「TODOを管理するアプリ」等の
+一部プロンプトが、HTTP `/api/v1/ai/generate`経由では常に
+`GEMINI_API_KEY が設定されていません`というエラー(実際にはキーは
+設定されている、誤ったエラーメッセージ)で失敗する。
+
+**切り分け済みの事実**:
+
+* 同一の入力文字列を`forge_ai.core.pipeline.run_cognitive_pipeline()`
+  へ直接(Pythonプロセス内で、実際にGeminiへのHTTPリクエストを含めて)
+  呼び出すと、正常に成功する(実際にGeminiの実データで生成できることを
+  確認済み)。
+* `fastapi.testclient.TestClient`経由(アプリを直接ASGIとして呼ぶ、
+  実ネットワークソケットを介さない)でも、同じ入力で正常に成功する。
+* 実際に起動した`uvicorn`プロセス(実HTTPソケット経由)に対してのみ、
+  再現性100%で失敗する。同じプロセスに対する別のプロンプト
+  (household_budget等)は正常に成功するため、プロセス全体が
+  設定不備という単純な原因ではない。
+* サーバー再起動直後の最初のリクエストとして送っても再現するため、
+  「何回かリクエストした後に何かが壊れる」という蓄積的な原因でもない。
+* `GeminiProvider`のコード(`backend/app/ai/foundation/providers.py`)
+  を確認した限り、このエラーメッセージは`self._api_key`が空の場合
+  のみ送出される、単純な事前チェックであり、429レート制限等の別の
+  失敗とは明確に異なるコードパスを通る。
+
+**未解決(正直な申告)**: 「実`uvicorn`プロセス経由のHTTPリクエストで
+のみ」「特定の入力(今回は`GENERIC`/`checklist`テンプレートへ分類
+される、低確信度の入力)でのみ」再現するという組み合わせから、
+直接呼び出し・TestClientでは再現しない何か(実ソケット越しの並行処理・
+ASGIワーカーの挙動等)が疑われるが、根本原因の特定には至っていない。
+影響範囲・頻度も未調査(他の低確信度プロンプトでも同様に起きるかは
+未確認)。次にこの問題を調査する際は、`uvicorn`起動時に
+`--log-level debug`を付ける、または`GeminiProvider.complete_structured()`
+の冒頭に一時的なログ出力を挿入し、実際に`self._api_key`がどの時点で
+空になっているのかを直接観測することを推奨する。

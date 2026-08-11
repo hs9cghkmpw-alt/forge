@@ -78,6 +78,26 @@ Language v1.2の制約(`add_item`はchecklist型state専用・複数値の動的
 Navigation・集計/グラフ・LLM-assisted Design Reasoningは、いずれも
 今回のスコープ外(`FORGE-PRODUCT-DESIGN-LAYER-PROPOSAL.md`のロード
 マップにおけるPhase 3・4・7に相当し、別途のマイルストーンで扱う)。
+
+**v1.6(2026-08-11、Widget Vocabulary Expansion)での変更**: CEO承認に
+より`docs/spec/LANGUAGE_FREEZE.md`のWidget追加凍結を解除して着手
+(同ドキュメント自体は、実際には一度も正式に凍結宣言されていな
+かったことを確認済み、詳細はTD34参照)。
+
+* CHOICE型Fieldは、TD33のplaceholderへ選択肢を埋め込む応急処置を
+  やめ、専用の`choice_field`Widget(ドロップダウン)を使うように
+  なった。
+* 数値Fieldを持つEntity(fishing_log/household_budget/reading_log/
+  inventoryの4 Domain)は、一覧の直後に`bar_chart`が追加される
+  (1 Record = 1本の棒、月ごとの合計等の集計は行わないPhase1の
+  最小実装)。数値Fieldを持たないEntity(habit_tracking/todo/diary)
+  には追加しない。
+* これにより、household_budgetの「収入や支出を記録して、月ごとの
+  収支をグラフで見たい」という既存の例文(`example_picker_sheet.
+  dart`)が、ようやく字義通りに実現可能になった(以前は棒グラフに
+  相当するWidgetが存在せず、実現不可能な約束だった)。
+* 「月ごとの」集計自体(この例文が本来求めている水準)は、なお
+  今回のスコープ外(1 Record = 1本の棒というPhase1の制約)。
 """
 
 from __future__ import annotations
@@ -273,6 +293,14 @@ class ForgeLanguageCompiler:
             ForgeIRWidget(type="record_list_view", id="records_list_view", properties=record_list_view_properties),
         ])
 
+        # v1.6新規: 数値Fieldを持つEntityは、一覧の直後にbar_chartを
+        # 追加する(household_budgetの「収支をグラフで見たい」という
+        # 既存の例文——`example_picker_sheet.dart`——を実現するための
+        # 追加。数値Fieldを持たないEntityには何も追加しない)。
+        bar_chart_widget = self._build_bar_chart_widget(entity, records_state_id)
+        if bar_chart_widget is not None:
+            body_children.append(bar_chart_widget)
+
         if include_crud:
             edit_form_children, edit_field_states = self._build_field_inputs(
                 entity, edit_field_state_ids, id_suffix="_edit_input"
@@ -325,11 +353,12 @@ class ForgeLanguageCompiler:
         screen = ForgeIRScreen(id="generated_screen", title=title, state=state, body=body)
 
         return ForgeIRDocument(
-            # design_tokens/section_header/layout:"grid"はv1.5専用の
-            # ため(指示書「Product Quality Sprint1」)。record_schemas/
-            # schema_refはv1.4で追加済みのものをそのまま使う(v1.5は
-            # v1.4の上位互換、無変更)。
-            version="1.5",
+            # v1.6(2026-08-11、Widget Vocabulary Expansion): choice_field/
+            # bar_chartはv1.6専用のため(design_tokens/section_header/
+            # layout:"grid"は既にv1.5で追加済み、record_schemas/
+            # schema_refはv1.4で追加済み。v1.6はいずれの上位互換、
+            # 無変更)。
+            version="1.6",
             initial_screen_id=screen.id,
             screens=(screen,),
             app_title=title,
@@ -414,31 +443,69 @@ class ForgeLanguageCompiler:
                 for rule in f.validations
             ]
 
-            placeholder = f.label
             if f.type == FieldType.CHOICE and f.choices:
-                # FORGE-AI-QUALITY-001(2026-08-11)で発見・修正した実バグ:
-                # choice型Fieldも(Widget Registryが凍結されておりドロップ
-                # ダウンWidgetを追加できないため)text_fieldで受け付ける
-                # 設計だが、以前はplaceholderが単にFieldラベル(例:
-                # "カテゴリ")のみで、有効な選択肢(例: 食費/交通費/娯楽/
-                # その他)がどこにも示されていなかった。実際に
-                # `ForgeFieldValueParser._parseChoice()`(Dart Runtime側)
-                # を確認したところ、選択肢と完全一致しない入力は
-                # `invalidChoice`として送信時に拒否される(エラー
-                # メッセージ自体には選択肢が含まれるが、それは**送信して
-                # 失敗した後**にしか分からない)。素直に入力した大半の
-                # ユーザーが初回submitで弾かれる設計になっていたため、
-                # placeholderへ選択肢をあらかじめ含めるよう修正した。
-                placeholder = f"{f.label}({'・'.join(f.choices)})"
-            elif f.type == FieldType.DATE:
-                # 同じ理由(TD33参照)で、日付形式も送信前に示しておく。
-                # `ForgeFieldValueParser._parseDate()`はISO 8601
-                # (YYYY-MM-DD)の厳密一致を要求するため。
+                # FORGE-AI-QUALITY-001(2026-08-11、v1.6): TD33で
+                # `text_field`のplaceholderへ選択肢を埋め込む応急処置を
+                # していた(当時はForge Language Widget追加が凍結されて
+                # いたため)。CEO承認によりFreeze運用を解除し、本来
+                # 必要だった「決まった選択肢から選ばせる」ための専用
+                # Widget(`choice_field`、Flutterの`DropdownButtonFormField`
+                # で実装)を追加した。ユーザーが自由文字列を打鍵できない
+                # ため、`ForgeFieldValueParser._parseChoice()`が要求する
+                # 完全一致を、UIの構造そのもので保証できる(placeholderの
+                # 文言に頼った応急処置より根本的)。
+                field_properties: dict[str, Any] = {
+                    "state_ref": state_id, "label": f.label, "options": list(f.choices),
+                }
+                children.append(
+                    ForgeIRWidget(type="choice_field", id=f"{state_id}{id_suffix}", properties=field_properties)
+                )
+                continue
+
+            placeholder = f.label
+            if f.type == FieldType.DATE:
+                # TD33参照: `ForgeFieldValueParser._parseDate()`はISO 8601
+                # (YYYY-MM-DD)の厳密一致を要求するため、送信前に形式を
+                # 示す(dateはchoice_fieldのような専用Widgetをまだ持たない
+                # ため、この応急処置は維持する)。
                 placeholder = f"{f.label}(YYYY-MM-DD)"
 
-            field_properties: dict[str, Any] = {"state_ref": state_id, "placeholder": placeholder}
+            field_properties = {"state_ref": state_id, "placeholder": placeholder}
             if validation_rules:
                 field_properties["validation"] = {"rules": validation_rules}
 
             children.append(ForgeIRWidget(type="text_field", id=f"{state_id}{id_suffix}", properties=field_properties))
         return children, field_states
+
+    def _build_bar_chart_widget(self, entity: Entity, records_state_id: str) -> ForgeIRWidget | None:
+        """v1.6新規。Entityが数値Fieldを持つ場合のみ、一覧の直後に
+        `bar_chart`(1 Record = 1本の棒、集計は行わないPhase1最小実装)を
+        追加する。数値Fieldを持たないEntity(habit/todo/diary)は対象外
+        (指示書「根拠のない集計を発明しない」と同じ精神: 描くものが
+        無ければWidgetを増やさない)。
+
+        `label_field`は、CHOICE型Field(例: household_budgetの
+        `category`)があればそれを優先する(棒同士を区別する軸として
+        最も自然)。無ければSTRING型、それも無ければ数値Field以外の
+        最初のFieldを使う。
+        """
+        value_field = next((f for f in entity.fields if f.type == FieldType.NUMBER), None)
+        if value_field is None:
+            return None
+
+        candidates = [f for f in entity.fields if f.name != value_field.name]
+        label_field = (
+            next((f for f in candidates if f.type == FieldType.CHOICE), None)
+            or next((f for f in candidates if f.type == FieldType.STRING), None)
+            or (candidates[0] if candidates else value_field)
+        )
+
+        return ForgeIRWidget(
+            type="bar_chart", id="records_bar_chart",
+            properties={
+                "state_ref": records_state_id,
+                "value_field": value_field.name,
+                "label_field": label_field.name,
+                "title": f"{entity.label}の{value_field.label}",
+            },
+        )

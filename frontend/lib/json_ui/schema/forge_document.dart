@@ -731,6 +731,48 @@ sealed class ForgeWidgetNode {
           submitLabel: json['submit_label'] as String? ?? '',
           submitAction: ForgeAction.fromJson(submitActionJson, '$path/submit_action'),
         );
+      case 'choice_field':
+        // v1.6新規(Widget Vocabulary Expansion、2026-08-11、CEO承認により
+        // Forge Language Freeze運用を解除)。TD33の応急処置
+        // (text_fieldのplaceholderへ選択肢を埋め込む)を置き換える、
+        // 専用のドロップダウンWidget。
+        final choiceStateRef = json['state_ref'];
+        if (choiceStateRef is! String || choiceStateRef.isEmpty) {
+          throw ForgeParseException('$path/state_ref', 'choice_field.state_ref is required');
+        }
+        final rawOptions = json['options'];
+        if (rawOptions is! List || rawOptions.isEmpty) {
+          throw ForgeParseException('$path/options', 'choice_field.options must be a non-empty array');
+        }
+        return ForgeChoiceFieldWidgetNode(
+          id,
+          stateRef: choiceStateRef,
+          label: json['label'] as String? ?? '',
+          options: rawOptions.cast<String>(),
+          placeholder: json['placeholder'] as String?,
+        );
+      case 'bar_chart':
+        // v1.6新規。record_listの数値Fieldを棒グラフで可視化する
+        // (1 Record = 1本の棒、集計は行わないPhase1最小実装)。
+        final chartStateRef = json['state_ref'];
+        if (chartStateRef is! String || chartStateRef.isEmpty) {
+          throw ForgeParseException('$path/state_ref', 'bar_chart.state_ref is required');
+        }
+        final valueField = json['value_field'];
+        if (valueField is! String || valueField.isEmpty) {
+          throw ForgeParseException('$path/value_field', 'bar_chart.value_field is required');
+        }
+        final labelField = json['label_field'];
+        if (labelField is! String || labelField.isEmpty) {
+          throw ForgeParseException('$path/label_field', 'bar_chart.label_field is required');
+        }
+        return ForgeBarChartWidgetNode(
+          id,
+          stateRef: chartStateRef,
+          valueField: valueField,
+          labelField: labelField,
+          title: json['title'] as String?,
+        );
       default:
         // 未知Widget: 例外を投げず、専用のFallbackノードとして扱う。
         // (Validatorが既に弾いているはずだが、クライアント側も多重防御する)
@@ -880,6 +922,43 @@ class ForgeFormWidgetNode extends ForgeWidgetNode {
     required this.children,
     required this.submitLabel,
     required this.submitAction,
+  });
+}
+
+/// v1.6新規(Widget Vocabulary Expansion、2026-08-11)。決まった選択肢
+/// から1つを選ばせる入力(Flutterの`DropdownButtonFormField`で実装、
+/// `widget_registry_v1_6.dart`参照)。`options`と一致しない値を
+/// 構造的に入力できないため、`ForgeFieldValueParser._parseChoice()`が
+/// 要求する完全一致を、UIの構造そのもので保証する(TD33の
+/// placeholder応急処置より根本的)。
+class ForgeChoiceFieldWidgetNode extends ForgeWidgetNode {
+  final String stateRef;
+  final String label;
+  final List<String> options;
+  final String? placeholder;
+  const ForgeChoiceFieldWidgetNode(
+    super.id, {
+    required this.stateRef,
+    required this.label,
+    required this.options,
+    this.placeholder,
+  });
+}
+
+/// v1.6新規。`record_list`型stateの数値Field(`valueField`)を、
+/// `labelField`ごとの棒として可視化する(1 Record = 1本の棒、集計は
+/// 行わないPhase1最小実装)。
+class ForgeBarChartWidgetNode extends ForgeWidgetNode {
+  final String stateRef;
+  final String valueField;
+  final String labelField;
+  final String? title;
+  const ForgeBarChartWidgetNode(
+    super.id, {
+    required this.stateRef,
+    required this.valueField,
+    required this.labelField,
+    this.title,
   });
 }
 
