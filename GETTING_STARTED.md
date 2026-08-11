@@ -166,6 +166,11 @@ curl http://127.0.0.1:8000/health
 
 **ここから先は、Claude環境では実行できていません**(1章参照)。
 
+**iPhoneで動かしたい場合**: このリポジトリには、まだiOS向けの設定
+(`frontend/ios/`)が存在しません。手順は
+[docs/IPHONE_SETUP.md](./docs/IPHONE_SETUP.md)を参照してください
+(Macが必須、こちらも未検証)。以下はまずWeb(Chrome)で試す手順です。
+
 Backendを起動したまま、**別のターミナル**を新しく開きます。
 
 ```bash
@@ -309,6 +314,8 @@ curl -X POST http://127.0.0.1:8000/api/v1/ai/generate \
 
 ## 8. もっと詳しく知りたくなったら
 
+- [docs/IPHONE_SETUP.md](./docs/IPHONE_SETUP.md): iPhoneで動かすための
+  手順(未検証、Mac環境での実施が必須)
 - [README.md](./README.md): プロジェクト全体の概要・技術構成・ディレクトリ構造
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md): アーキテクチャ全体設計
 - [CHANGELOG.md](./CHANGELOG.md): これまでの変更履歴(Taskごと)
