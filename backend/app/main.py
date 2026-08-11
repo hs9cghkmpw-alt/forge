@@ -1,8 +1,12 @@
 """Forge Backend APIのエントリポイント。
 
-**注記(重要、未検証)**: このファイルはfastapiに依存し、Claudeの
-サンドボックスには無い(ネットワーク不可のため導入不可)。一度も
-実際にuvicornで起動できていない。CEO環境での起動確認が必要。
+**注記(2026-08-11更新)**: このセッションを通じて実際に何十回も
+`uvicorn`を起動し、`POST /api/v1/ai/generate`への実リクエストで動作
+確認している(TD15・TD31〜TD35等、TECH_DEBT.md参照)。かつては
+「Claudeのサンドボックスにfastapiが無いため一度も起動できていない」
+という記述だったが、その後fastapi等がインストール可能な環境が整い、
+この記述は事実と異なるまま放置されていた(2026-08-11のドキュメント
+棚卸しで発見・訂正)。
 
 **起動方法(FORGE v1.0 Candidate Patch3で確定)**:
 
@@ -58,6 +62,33 @@ _REPO_ROOT = os.path.dirname(_BACKEND_DIR)  # リポジトリルート
 for _path in (_BACKEND_DIR, _REPO_ROOT):
     if _path not in sys.path:
         sys.path.insert(0, _path)
+
+# TD35(2026-08-11、FORGE-AI-QUALITY-001)で発見・修正した実バグ:
+# `backend/.env`・`backend/.env.example`はGEMINI_API_KEYの設定場所として
+# 案内していた(GETTING_STARTED.md・providers.pyのdocコメント等)。
+# `requirements.txt`にも`python-dotenv`が依存として入っていたが、
+# **実際にこのファイルを読み込むコードがどこにも存在しなかった**。
+# そのためGEMINI_API_KEYは、利用者が`.env`に書くだけでは一切反映されず、
+# 別途OSの環境変数として明示的にexportした場合のみ動作する、という
+# 実質的に無意味な状態になっていた。
+#
+# 発見の経緯: `choice_field`/`bar_chart`(TD34)の実機検証中、
+# 「あるDomainのプロンプトは成功するのに、別のプロンプトだけ
+# 『GEMINI_API_KEYが設定されていません』という(実際にはキーが.envに
+# 存在するのに)エラーで失敗する」という現象を発見した。調査の結果、
+# household_budget等7 Domain(`forge_ai/core/ir/`経由)は
+# `ForgeLanguageCompiler`が完全に決定的(Provider呼び出し無し)である
+# ため、キーの有無に関わらず「成功」していただけで、実際にGeminiへ
+# 到達していたのは`Compiler.compile()`(Legacy Domain・
+# `forge_ai/core/compiler.py`)を経由するリクエストだけだった——そして
+# そちらは`.env`が読み込まれないため常に失敗していた。
+#
+# `os.environ`に既存の値がある場合は上書きしない(`load_dotenv()`の
+# 既定動作、`override=False`)ため、本番デプロイ環境で実際の環境変数
+# として設定されているケースには影響しない。
+from dotenv import load_dotenv  # noqa: E402
+
+load_dotenv(os.path.join(_BACKEND_DIR, ".env"))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

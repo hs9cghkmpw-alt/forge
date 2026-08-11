@@ -44,10 +44,12 @@
   Freeze運用を解除し、`choice_field`/`bar_chart`を追加(TD34)。
   Widget型は14種→16種。Python側は全ドメインで実機検証済み、Dart側は
   引き続き未検証(Flutter SDK不在、KNOWN_ISSUES.md参照)。
-- **新規発見(2026-08-11、未解決)**: TD35。実`uvicorn`経由の一部
-  リクエストが、実際にはキーが設定されているにも関わらず
-  「GEMINI_API_KEYが設定されていません」という誤ったエラーで失敗する
-  現象を発見。根本原因は未特定。
+- ~~**新規発見(2026-08-11)**: TD35。~~ → **解消済み(2026-08-11)**。
+  `backend/.env`を実際に読み込むコードがどこにも無く、Gemini接続が
+  必要なDomain(Legacy/checklist系)は常に失敗していた
+  (household_budget等IR系Domainはそもそも決定的でGeminiを呼ばない
+  ため、たまたま「動いているように」見えていた)。`main.py`へ
+  `load_dotenv()`を追加して解消。TD35本文参照。
 
 ---
 
@@ -1385,14 +1387,23 @@ Freeze条件(実RuntimeでのFlutter `flutter analyze`確認・全Widget
   household_budgetの「グラフで見たい」要求への回帰テストを含む)。
 
 **検証**: 全Pythonテスト995件(985既存+新規、TD34分のみで33件追加)が
-回帰なしで通ることを確認。さらに`uvicorn`+実Gemini APIで
+回帰なしで通ることを確認。さらに`uvicorn`起動+HTTP経由で
 `household_budget`(「収入や支出を記録して、月ごとの収支をグラフで
 見たい」という、まさに例文そのもののプロンプト)・`fishing_log`・
 `inventory`を再生成し、いずれも`version: "1.6"`・`choice_field`
 (有効なoptions付き)・`bar_chart`(正しいvalue_field/label_field)が
-実際にGemini経由で生成されたJSONへ反映されていることを確認した
-(`habit_tracking`は数値Fieldを持たないため`bar_chart`が付かないことも
-確認済み、意図通り)。
+生成されたJSONへ反映されていること、HTTP/Validatorレイヤーが正しく
+配線されていることを確認した(`habit_tracking`は数値Fieldを持たない
+ため`bar_chart`が付かないことも確認済み、意図通り)。
+
+**訂正(2026-08-11、TD35調査で判明)**: 上記の検証は当初「実際に
+Gemini APIで生成した」と記録していたが、これは不正確だった。
+household_budget等IR経由のDomainは`ForgeLanguageCompiler`が完全に
+決定的(`domain_category`文字列のみから、Gemini呼び出し無しで
+Forge Document全体を組み立てる)であるため、この検証は
+**HTTP/Validatorレイヤーの配線確認としては有効だが、Gemini接続
+そのものの確認にはなっていなかった**。詳細・真のGemini接続確認は
+TD35参照。
 
 **未検証(正直な申告)**: Flutter/Dart側
 (`frontend/lib/json_ui/schema/forge_document.dart`への
@@ -1425,45 +1436,78 @@ Freeze条件(実RuntimeでのFlutter `flutter analyze`確認・全Widget
 
 ---
 
-## TD35. 実Gemini APIとの通信中、ローカル`uvicorn`プロセス経由の一部リクエストが「GEMINI_API_KEYが設定されていません」という誤ったエラーで失敗する(未解決、2026-08-11発見)
+## TD35. `backend/.env`のGEMINI_API_KEYが、実`uvicorn`プロセスでは一度も読み込まれていなかった(2026-08-11発見・解消)
 
-TD34の実機検証中に偶然発見。widget vocabulary拡張(choice_field/
-bar_chart)の作業とは無関係(この調査中に一切変更していないコード
-パスで再現するため)。
+TD34の実機検証中に偶然発見。当初「一部プロンプトだけHTTP経由で謎の
+エラーになる」という現象として記録したが(下記「発見時の記録」)、
+CEOから「バグは徹底的に無くして」という指示を受けて再調査し、
+根本原因を特定・修正した。
 
-**症状**: 実際に`GEMINI_API_KEY`が正しく設定・機能している状態
-(同じ`uvicorn`プロセスで他のプロンプトは実際に成功している)にも
-関わらず、「やることリストを作って」「TODOを管理するアプリ」等の
-一部プロンプトが、HTTP `/api/v1/ai/generate`経由では常に
-`GEMINI_API_KEY が設定されていません`というエラー(実際にはキーは
-設定されている、誤ったエラーメッセージ)で失敗する。
+**発見時の記録(当初の症状)**: 「やることリストを作って」「TODOを
+管理するアプリ」等の一部プロンプトが、HTTP `/api/v1/ai/generate`
+経由では常に`GEMINI_API_KEY が設定されていません`というエラーで
+失敗する一方、同じ`uvicorn`プロセスでhousehold_budget等の別の
+プロンプトは正常に成功していた。直接呼び出し・`TestClient`経由では
+再現しなかった。
 
-**切り分け済みの事実**:
+**真の根本原因**: 2つの独立した事実の組み合わせだった。
 
-* 同一の入力文字列を`forge_ai.core.pipeline.run_cognitive_pipeline()`
-  へ直接(Pythonプロセス内で、実際にGeminiへのHTTPリクエストを含めて)
-  呼び出すと、正常に成功する(実際にGeminiの実データで生成できることを
-  確認済み)。
-* `fastapi.testclient.TestClient`経由(アプリを直接ASGIとして呼ぶ、
-  実ネットワークソケットを介さない)でも、同じ入力で正常に成功する。
-* 実際に起動した`uvicorn`プロセス(実HTTPソケット経由)に対してのみ、
-  再現性100%で失敗する。同じプロセスに対する別のプロンプト
-  (household_budget等)は正常に成功するため、プロセス全体が
-  設定不備という単純な原因ではない。
-* サーバー再起動直後の最初のリクエストとして送っても再現するため、
-  「何回かリクエストした後に何かが壊れる」という蓄積的な原因でもない。
-* `GeminiProvider`のコード(`backend/app/ai/foundation/providers.py`)
-  を確認した限り、このエラーメッセージは`self._api_key`が空の場合
-  のみ送出される、単純な事前チェックであり、429レート制限等の別の
-  失敗とは明確に異なるコードパスを通る。
+1. **`backend/.env`を実際に読み込むコードがどこにも存在しなかった**。
+   `GETTING_STARTED.md`・`backend/.env.example`・
+   `providers.py`のdocコメントはいずれも「`GEMINI_API_KEY`は
+   `backend/.env`に書く」と案内しており、`requirements.txt`にも
+   `python-dotenv`が依存として入っていたが、**`load_dotenv()`を
+   呼び出す箇所が実装のどこにも無かった**。つまり`.env`ファイルへの
+   記述は、実際のアプリ起動時には一切反映されておらず、利用者が
+   別途OSの環境変数として明示的に`export`した場合のみ動作する、
+   ドキュメントの案内と実態が食い違った状態になっていた。
+2. **household_budget等IR経由の7 Domainは、そもそもGeminiを一切
+   呼び出さない設計だった**。`pipeline_orchestrator.py`は対象
+   Domain(`SUPPORTED_DOMAIN_CATEGORIES`)を`IRGenerator`→
+   `ForgeLanguageCompiler`という経路へ通すが、この経路は
+   `domain_category`文字列だけから完全に決定的にForge Document
+   全体を組み立てる、純粋関数の連なりであり(`forge_language_
+   compiler.py`にProvider/bridge参照は一切無いことをソース確認
+   済み)、Gemini呼び出しは1回も発生しない。一方「やることリスト」
+   は`GENERIC`Domainへ分類され、Legacy `Compiler.compile()`
+   (`forge_ai/core/compiler.py`)を経由するため、こちらは実際に
+   `provider.complete()`を呼ぶ(`forge_ai/core/pipeline.py`の
+   `_default_cognitive_dependencies()`が明記: 「`compiler`のみ、
+   実際に`provider.complete()`を呼び出す」)。
 
-**未解決(正直な申告)**: 「実`uvicorn`プロセス経由のHTTPリクエストで
-のみ」「特定の入力(今回は`GENERIC`/`checklist`テンプレートへ分類
-される、低確信度の入力)でのみ」再現するという組み合わせから、
-直接呼び出し・TestClientでは再現しない何か(実ソケット越しの並行処理・
-ASGIワーカーの挙動等)が疑われるが、根本原因の特定には至っていない。
-影響範囲・頻度も未調査(他の低確信度プロンプトでも同様に起きるかは
-未確認)。次にこの問題を調査する際は、`uvicorn`起動時に
-`--log-level debug`を付ける、または`GeminiProvider.complete_structured()`
-の冒頭に一時的なログ出力を挿入し、実際に`self._api_key`がどの時点で
-空になっているのかを直接観測することを推奨する。
+つまり「household_budget等が成功していた」のは、Gemini接続が
+正しく機能していたからではなく、**それらのDomainがそもそもGemini
+を必要としない決定的な経路だったから**であり、`.env`が読み込まれて
+いない状態でも「成功」して見えていた。「やることリスト」だけが
+実際にGeminiを呼ぼうとして、読み込まれていないキーの不在に
+初めて突き当たっていた、というのが真相だった。
+
+**この発見が意味すること(正直な訂正)**: TD34の「実際に`uvicorn`+
+実Gemini APIで`household_budget`・`fishing_log`・`inventory`を
+再生成し確認した」という検証記述は、HTTP/Validatorレイヤーが
+正しく配線されていることの確認としては有効だが、**Gemini接続そのものの
+確認にはなっていなかった**(そもそも呼んでいないため)。TD34で
+実際にGemini接続まで検証できていたのは、pytest内の
+`httpx.MockTransport`による単体テストと、このTD35調査で独立して
+確認した`TestClient`経由の実接続確認のみである。
+
+**修正**: `backend/app/main.py`の先頭(他のimportより前)へ
+`load_dotenv(os.path.join(_BACKEND_DIR, ".env"))`を追加した
+(`_BACKEND_DIR`は同ファイルが既存のsys.path解決ロジックで使っている
+絶対パスをそのまま再利用、cwdに依存しない)。`load_dotenv()`は既定で
+既存のOS環境変数を上書きしない(`override=False`)ため、本番デプロイ
+環境で実際の環境変数として`GEMINI_API_KEY`が設定されているケースには
+影響しない。
+
+**検証**: 新規テスト2件(`backend/tests/test_main_env_loading.py`)
+を追加。1件はサブプロセスで`GEMINI_API_KEY`をOS環境変数からは明示的に
+除去した状態から`app.main`をimportし、実際に`.env`の内容が
+`os.environ`へ反映されることを確認する(pytestの既存モジュール
+キャッシュに影響しないよう、独立したサブプロセスで検証している)。
+もう1件は`.env`の中身に依存しない、ソースコードレベルの軽量な回帰
+テスト。全996件(回帰なし)を確認した上で、実際に`uvicorn`を
+**手動でのexport無しの、まっさらなシェルから**起動し、以前は
+確実に失敗していた「やることリストを作って」「TODOを管理するアプリ」
+の両方が、実際にGemini経由の(毎回異なる)バラエティのある文言
+(例:「牛乳とパンを買う」「明日の会議資料を準備する」)で成功する
+ことを実機確認した。

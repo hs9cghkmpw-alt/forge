@@ -2,6 +2,36 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task055 — TD35根本原因の特定・修正(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「バグは今後見つかったら徹底的に無くして」)
+
+Task054で「未解決」として記録したTD35(実`uvicorn`経由の一部
+リクエストが誤った「APIキー未設定」エラーで失敗する)を、CEOの
+指示を受けて再調査し、根本原因を特定・修正した。
+
+**真の原因は2つの独立した事実の組み合わせだった**:
+
+1. `backend/.env`を実際に読み込むコードがどこにも存在しなかった
+   (`python-dotenv`は`requirements.txt`の依存にあったが、呼び出し
+   箇所が無かった)。
+2. household_budget等IR経由の7 Domainは`ForgeLanguageCompiler`が
+   完全に決定的で、Geminiを一切呼び出さない設計だった。そのため
+   `.env`が読み込まれていない状態でも「成功」して見えており、
+   実際にGeminiを呼ぼうとする`GENERIC`/Legacy Domain(「やること
+   リスト」等)だけが、読み込まれていないキーの不在に突き当たって
+   いた。
+
+**訂正**: この発見に伴い、Task054で「実際にGemini APIで生成した」と
+記録していたTD34の検証記述を訂正した——household_budget等の検証は
+HTTP/Validatorレイヤーの配線確認としては有効だったが、Gemini接続
+そのものの確認にはなっていなかった。
+
+**修正**: `backend/app/main.py`の先頭へ`load_dotenv()`を追加。新規
+テスト2件(サブプロセスでの実接続確認+ソースレベルの軽量回帰)を
+追加し、全996件(回帰なし)を確認。手動でのexport無しの、まっさらな
+シェルから`uvicorn`を起動し、以前は確実に失敗していた「やること
+リストを作って」等が、実際にGemini経由のバラエティのある文言で
+成功することを実機確認した。詳細はTECH_DEBT.md TD35参照。
+
 ## Task054 — Widget Vocabulary Expansion(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「凍結宣言をすべて解除します。ひきつづきすすめて。」)
 
 CEOから「いまの生成できるアプリはテキストとチェックボックスぐらいの
@@ -24,25 +54,24 @@ LANGUAGE_FREEZE.md`が実は一度も正式に凍結宣言されていなかっ�
 Python側(`schema_validator.py`のVersion "1.6"新設、
 `forge_language_compiler.py`のWidget出力ロジック)は、新規テスト33件
 (schema_validator側21件+compiler側12件)を追加した上で全テスト995件
-(回帰なし)を確認し、さらに`uvicorn`+実Gemini APIで
+(回帰なし)を確認し、さらに`uvicorn`起動+HTTP経由で
 `household_budget`(「収入や支出を記録して、月ごとの収支をグラフで
 見たい」という例文そのもの)・`fishing_log`・`inventory`を再生成、
 実際に`choice_field`(有効なoptions付き)・`bar_chart`(正しい
-value_field/label_field)がJSONへ反映されていることを実機確認した。
+value_field/label_field)がJSONへ反映されていることを確認した。
+**訂正(Task055)**: この検証は当初「実際にGemini APIで生成した」と
+記録していたが、これは不正確だった——household_budget等の検証は
+HTTP/Validatorレイヤーの配線確認としては有効だが、Gemini接続そのものの
+確認にはなっていなかった。詳細はTask055・TECH_DEBT.md TD35参照。
 
 Dart側(`forge_document.dart`へのWidget Node追加、新規
 `widget_registry_v1_6.dart`)は、既存Widget実装と同じパターンを踏襲して
 実装したが、このセッションを通じて一貫している既知の制限
 (Flutter SDK不在)により未検証。詳細はTECH_DEBT.md TD34参照。
 
-### TD35(新規発見、未解決): 実`uvicorn`経由の一部リクエストが誤った「APIキー未設定」エラーで失敗する
-TD34の実機検証中に偶然発見。実際にはキーが設定・機能している状態でも、
-「やることリストを作って」等の一部プロンプトが実`uvicorn`プロセス
-経由でのみ、常に`GEMINI_API_KEY が設定されていません`という誤った
-エラーで失敗する。同じ入力を直接呼び出し・`TestClient`経由で試すと
-正常に成功するため、実HTTPソケット経由のリクエスト処理に特有の
-問題と見られるが、根本原因は未特定。widget vocabulary拡張の作業とは
-無関係な既存バグ。詳細・切り分け結果はTECH_DEBT.md TD35参照。
+### TD35(新規発見): 実`uvicorn`経由の一部リクエストが誤った「APIキー未設定」エラーで失敗する → **Task055で根本原因を特定・解消**
+TD34の実機検証中に偶然発見。当初は根本原因未特定として記録したが、
+Task055で解消した(詳細はTask055参照)。
 
 ## Task053 — バグハント(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「がっつしバグ全部探して潰していってよ」)
 
