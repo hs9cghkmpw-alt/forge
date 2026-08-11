@@ -75,7 +75,7 @@ MAX_RECORD_LIST_ITEMS = 500  # checklist/string_listと同じ上限に揃える
 MAX_RECORD_FIELDS = 20  # 1Recordが持てるFieldの上限(既存state.maxProperties: 30より保守的)
 MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)
 
-SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"}
+SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"}
 
 # バージョン文字列同士を数値として比較するための順序付きタプル。
 # **設計上の注記(このセッションで実際に発見・修正した再発バグへの
@@ -87,7 +87,7 @@ SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"}
 # 自身で発見・修正した)。今回、`_version_at_least()`という「以上」
 # 比較のヘルパーへ置き換え、将来のVersion追加(v1.5等)で
 # 同種の見落としが起きないようにした。
-_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7")
+_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8")
 
 
 def _version_at_least(version: str, minimum: str) -> bool:
@@ -164,6 +164,16 @@ WIDGET_TYPES_V1_6_ADDITIONS = {"choice_field", "bar_chart"}
 #   (同一画面・同一Stateのまま、表示を切り替えるだけ)を選んだ。
 WIDGET_TYPES_V1_7_ADDITIONS = {"date_field", "tab_view"}
 
+# v1.8で追加された1種(FORGE-AI-QUALITY-001、2026-08-11、CEO「壊れてる?
+# って機能でもどんどん追加してくれ。あとでなおす。」)。
+#
+# * `slider`: 上限・下限が決まっている数値Field(例: reading_logの
+#   「評価(5段階)」)向けの入力(Flutter標準の`Slider`で実装、新規
+#   パッケージ依存なし)。`state_ref`は既存の"number"型state
+#   (v1.2で追加済み)を直接使う——choice_field/date_fieldと違って
+#   新しいstate型は不要。範囲外の値を構造的に入力できない。
+WIDGET_TYPES_V1_8_ADDITIONS = {"slider"}
+
 WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.0": WIDGET_TYPES_V1_0,
     "1.1": WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS,
@@ -181,10 +191,16 @@ WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
         WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
         | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
     ),
+    "1.8": (
+        WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
+        | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
+        | WIDGET_TYPES_V1_8_ADDITIONS
+    ),
 }
 WIDGET_TYPES_ALL = (
     WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
     | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
+    | WIDGET_TYPES_V1_8_ADDITIONS
 )  # 未知Widget判定用
 
 # `tab_view`はchildren[i]が「1タブ分の中身」に対応する、column/row/card/
@@ -219,6 +235,8 @@ ACTION_TYPES_BY_VERSION: dict[str, set[str]] = {
     # (date_fieldは既存の"string"型state、tab_viewはAction自体を持たない
     # 表示専用コンテナ)。
     "1.7": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
+    # v1.8。slider追加は新しいAction型を追加しない。
+    "1.8": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
 }
 ACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS  # 全バージョン合計(未知typeの判定用)
 
@@ -246,6 +264,9 @@ STATE_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.6": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
     # v1.7。date_field/tab_view追加は新しいState型を追加しない。
     "1.7": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
+    # v1.8。sliderは既存の"number"型state(v1.2で追加済み)をそのまま
+    # 使うため、新しいState型を追加しない。
+    "1.8": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
 }
 STATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS
 
@@ -1013,6 +1034,27 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
             errors.append(_err(f"{path}/children", Category.SCHEMA, "array_length_mismatch",
                                 "tab_titlesとchildrenは同じ要素数である必要があります。"))
 
+    elif t == "slider":
+        # v1.8新規。上限・下限が決まっている数値Field専用の入力
+        # (例: reading_logの「評価(5段階)」)。既存の"number"型state
+        # (v1.2で追加済み)を直接使い、新しいstate型は追加しない。
+        errors.extend(_check_additional_properties(widget, {"type", "id", "label", "state_ref", "min", "max"}, path))
+        if not _is_nonempty_str(widget.get("label"), 80):
+            errors.append(_err(f"{path}/label", Category.SCHEMA, "string_length", "slider.labelが不正です。"))
+        if not _is_identifier(widget.get("state_ref")):
+            errors.append(_err(f"{path}/state_ref", Category.SCHEMA, "required", "slider.state_refは必須です。"))
+        min_v = widget.get("min")
+        max_v = widget.get("max")
+        min_valid = isinstance(min_v, (int, float)) and not isinstance(min_v, bool)
+        max_valid = isinstance(max_v, (int, float)) and not isinstance(max_v, bool)
+        if not min_valid:
+            errors.append(_err(f"{path}/min", Category.SCHEMA, "required", "slider.minは数値である必要があります。"))
+        if not max_valid:
+            errors.append(_err(f"{path}/max", Category.SCHEMA, "required", "slider.maxは数値である必要があります。"))
+        if min_valid and max_valid and min_v >= max_v:
+            errors.append(_err(f"{path}/max", Category.SCHEMA, "range",
+                                "slider.maxはslider.minより大きい必要があります。"))
+
     return errors
 
 
@@ -1229,7 +1271,7 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
 
             if wtype in {
                 "text", "text_field", "checklist", "list", "record_list_view",
-                "choice_field", "bar_chart", "date_field",
+                "choice_field", "bar_chart", "date_field", "slider",
             } and (
                 wtype != "text" or "state_ref" in widget
             ):
@@ -1296,7 +1338,7 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
                 errors.extend(_check_action_refs(
                     widget["submit_action"], screen_ids, state, form_ids_in_screen, f"{w_path}/submit_action"
                 ))
-                input_types = {"text_field", "checkbox", "choice_field", "date_field"}
+                input_types = {"text_field", "checkbox", "choice_field", "date_field", "slider"}
                 has_input = any(
                     c["type"] in input_types for _, c in _walk_widgets(widget, w_path)
                     if c["id"] != widget["id"]
@@ -1454,7 +1496,7 @@ def _check_state_ref(ref: str, expected_kind: str, state: dict, path: str, ref_f
         "string": "string", "checkbox": "boolean", "list": "string_list",
         "record_list_view": "record_list", "record_list": "record_list",
         "selected_record": "selected_record",
-        "choice_field": "string", "bar_chart": "record_list", "date_field": "string",
+        "choice_field": "string", "bar_chart": "record_list", "date_field": "string", "slider": "number",
     }
     expected_type = expected_type_map.get(expected_kind)
     if expected_type and actual_type != expected_type:

@@ -804,6 +804,28 @@ sealed class ForgeWidgetNode {
           );
         }
         return ForgeTabViewWidgetNode(id, tabTitles: rawTabTitles.cast<String>(), children: tabChildren);
+      case 'slider':
+        // v1.8新規(Widget Vocabulary Expansion第3弾、2026-08-11、CEO
+        // 「壊れてる?って機能でもどんどん追加してくれ。あとでなおす。」)。
+        // 範囲指定の数値入力(Flutterの`Slider`で実装、
+        // `widget_registry_v1_8.dart`参照)。既存の"number"型state
+        // (v1.2で導入済み)をそのまま使い、新しいstate型は追加しない。
+        final sliderStateRef = json['state_ref'];
+        if (sliderStateRef is! String || sliderStateRef.isEmpty) {
+          throw ForgeParseException('$path/state_ref', 'slider.state_ref is required');
+        }
+        final rawMin = json['min'];
+        final rawMax = json['max'];
+        if (rawMin is! num || rawMax is! num) {
+          throw ForgeParseException('$path/min', 'slider.min and slider.max must be numbers');
+        }
+        return ForgeSliderWidgetNode(
+          id,
+          stateRef: sliderStateRef,
+          label: json['label'] as String? ?? '',
+          min: rawMin.toDouble(),
+          max: rawMax.toDouble(),
+        );
       default:
         // 未知Widget: 例外を投げず、専用のFallbackノードとして扱う。
         // (Validatorが既に弾いているはずだが、クライアント側も多重防御する)
@@ -1020,6 +1042,18 @@ class ForgeTabViewWidgetNode extends ForgeWidgetNode {
   final List<String> tabTitles;
   final List<ForgeWidgetNode> children;
   const ForgeTabViewWidgetNode(super.id, {required this.tabTitles, required this.children});
+}
+
+/// v1.8新規(Widget Vocabulary Expansion第3弾)。範囲(`min`〜`max`)を
+/// 指定した数値入力(Flutterの`Slider`、`widget_registry_v1_8.dart`
+/// 参照)。既存の"number"型state(v1.2で導入済み)をそのまま使う
+/// (choice_field/date_fieldと同じ設計方針、新しいstate型は追加しない)。
+class ForgeSliderWidgetNode extends ForgeWidgetNode {
+  final String stateRef;
+  final String label;
+  final double min;
+  final double max;
+  const ForgeSliderWidgetNode(super.id, {required this.stateRef, required this.label, required this.min, required this.max});
 }
 
 /// Validatorをすり抜けた未知typeに対する、クライアント側の最終防衛線。

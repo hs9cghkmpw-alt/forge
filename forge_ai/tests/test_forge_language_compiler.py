@@ -103,7 +103,7 @@ class TestForgeLanguageCompiler(unittest.TestCase):
                 self.assertIn("form", widget_types)
                 self.assertIn("record_list_view", widget_types)
                 self.assertNotIn("checklist", widget_types)
-                self.assertEqual(document.version, "1.7")
+                self.assertEqual(document.version, "1.8")
 
     def test_non_target_domains_are_not_handled_by_this_compiler(self) -> None:
         """対象外Domainのcompile()は、`IRGenerator.generate()`が`None`
@@ -422,12 +422,13 @@ class TestForgeLanguageCompilerRecordSchema(unittest.TestCase):
         assert ir is not None
         return self.compiler.compile(ir, domain_category=domain_category, title="テスト")
 
-    def test_version_is_1_7(self) -> None:
+    def test_version_is_1_8(self) -> None:
         """FORGE v1.0(Product Quality Sprint1)でv1.4から1.5へ、v1.6
         (Widget Vocabulary Expansion第1弾)で1.6へ、v1.7(第2弾、
-        date_field/tab_view)でさらに1.7へ更新した。"""
+        date_field/tab_view)で1.7へ、v1.8(第3弾、slider)でさらに
+        1.8へ更新した。"""
         document = self._compile("fishing_log")
-        self.assertEqual(document.version, "1.7")
+        self.assertEqual(document.version, "1.8")
 
     def test_record_schemas_is_generated_for_all_three_domains(self) -> None:
         for domain_category in SUPPORTED_DOMAIN_CATEGORIES:
@@ -950,9 +951,13 @@ class TestForgeLanguageCompilerV1_7WidgetVocabularyExpansion(unittest.TestCase):
         assert ir is not None
         return self.compiler.compile(ir, domain_category=domain_category, title="テスト")
 
-    def test_document_version_is_1_7(self) -> None:
+    def test_document_version_is_at_least_1_7(self) -> None:
+        """v1.8(slider)追加後もv1.7の機能(date_field/tab_view)は
+        引き続き上位互換で含まれる。正確なバージョン番号自体は
+        `TestForgeLanguageCompilerV1_8WidgetVocabularyExpansion.
+        test_document_version_is_1_8`が検証する。"""
         document = self._compile("fishing_log")
-        self.assertEqual(document.version, "1.7")
+        self.assertIn(document.version, {"1.7", "1.8"})
 
     def test_date_fields_use_the_dedicated_widget_across_all_domains(self) -> None:
         """DATE型Fieldを持つ全Domain(diary以外の6つ、diaryの
@@ -1016,6 +1021,78 @@ class TestForgeLanguageCompilerV1_7WidgetVocabularyExpansion(unittest.TestCase):
         self.assertNotIn("section_header", [c.type for c in list_tab.children])
 
     def test_tab_view_output_passes_the_real_backend_schema_validator(self) -> None:
+        try:
+            _here = os.path.dirname(__file__)
+            sys.path.insert(0, os.path.join(_here, "..", "..", "backend"))
+            from app.ai.validators.schema_validator import validate_forge_document
+        except ImportError:
+            self.skipTest("backend/appをimportできない環境")
+            return
+
+        for domain_category in SUPPORTED_DOMAIN_CATEGORIES:
+            with self.subTest(domain_category=domain_category):
+                document = self._compile(domain_category)
+                result = validate_forge_document(document.to_json_dict())
+                self.assertTrue(result.valid, msg=result.to_dict())
+
+
+class TestForgeLanguageCompilerV1_8WidgetVocabularyExpansion(unittest.TestCase):
+    """v1.8(Widget Vocabulary Expansion第3弾、2026-08-11)。`slider`の
+    回帰テスト。CEO「壊れてる?って機能でもどんどん追加してくれ。
+    あとでなおす。」への対応。"""
+
+    def setUp(self) -> None:
+        self.ir_generator = IRGenerator()
+        self.compiler = ForgeLanguageCompiler()
+        self.plan = ApplicationPlan(title="test", screens=(), data_entities=(), primary_flow=())
+
+    def _compile(self, domain_category: str):
+        ir = self.ir_generator.generate(self.plan, domain_category=domain_category)
+        assert ir is not None
+        return self.compiler.compile(ir, domain_category=domain_category, title="テスト")
+
+    def test_document_version_is_1_8(self) -> None:
+        document = self._compile("fishing_log")
+        self.assertEqual(document.version, "1.8")
+
+    def test_reading_log_rating_field_uses_slider(self) -> None:
+        document = self._compile("reading_log")
+        create_form = _find_by_id(document.screens[0].body, "record_form")
+        slider = _find_by_id(create_form, "field_rating_input")
+        self.assertEqual(slider.type, "slider")
+        self.assertEqual(slider.properties["state_ref"], "field_rating")
+        self.assertEqual(slider.properties["label"], "評価(5段階)")
+        self.assertEqual(slider.properties["min"], 1)
+        self.assertEqual(slider.properties["max"], 5)
+
+    def test_slider_state_is_number_type_with_min_as_initial_value(self) -> None:
+        document = self._compile("reading_log")
+        state = document.screens[0].state["field_rating"]
+        self.assertEqual(state.type, "number")
+        self.assertEqual(state.value, 1)
+
+    def test_edit_form_rating_field_also_uses_slider(self) -> None:
+        document = self._compile("reading_log")
+        edit_form = _find_by_id(document.screens[0].body, "record_edit_form")
+        slider = _find_by_id(edit_form, "edit_field_rating_edit_input")
+        self.assertEqual(slider.type, "slider")
+        self.assertEqual(slider.properties["state_ref"], "edit_field_rating")
+        self.assertEqual(slider.properties["min"], 1)
+        self.assertEqual(slider.properties["max"], 5)
+
+    def test_non_slider_number_fields_still_use_text_field(self) -> None:
+        """fishing_logの`size`/`weight`はmin_value/max_valueを持たない
+        NUMBER型Fieldのため、sliderへ拡大解釈せずtext_fieldのまま
+        (string State)であることを確認する回帰テスト。"""
+        document = self._compile("fishing_log")
+        create_form = _find_by_id(document.screens[0].body, "record_form")
+        for field_name in ("size", "weight"):
+            with self.subTest(field_name=field_name):
+                widget = _find_by_id(create_form, f"field_{field_name}_input")
+                self.assertEqual(widget.type, "text_field")
+                self.assertEqual(document.screens[0].state[f"field_{field_name}"].type, "string")
+
+    def test_slider_output_passes_the_real_backend_schema_validator(self) -> None:
         try:
             _here = os.path.dirname(__file__)
             sys.path.insert(0, os.path.join(_here, "..", "..", "backend"))

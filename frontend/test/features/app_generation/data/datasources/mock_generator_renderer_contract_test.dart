@@ -35,7 +35,7 @@ const Set<String> kRegisteredWidgetTypes = {
   'heading', 'checkbox', 'card', 'list', 'divider', 'form',
   'record_list_view',
   'section_header',
-  'choice_field', 'bar_chart', 'date_field', 'tab_view',
+  'choice_field', 'bar_chart', 'date_field', 'tab_view', 'slider',
 };
 
 /// sealed ForgeWidgetNode の全14派生型(13 Widget種 + Unknown)を網羅する。
@@ -74,6 +74,10 @@ String _typeNameOf(ForgeWidgetNode node) => switch (node) {
       ForgeBarChartWidgetNode() => 'bar_chart',
       ForgeDateFieldWidgetNode() => 'date_field',
       ForgeTabViewWidgetNode() => 'tab_view',
+      // v1.8新規(2026-08-11、Widget Vocabulary Expansion第3弾)。
+      // 同じくMock Generatorの12レガシーカテゴリは生成しないが、
+      // `widget_registry_core.dart`の`typeNameOf()`との同期のため追加。
+      ForgeSliderWidgetNode() => 'slider',
       ForgeUnknownWidgetNode() => 'unknown',
     };
 

@@ -394,11 +394,10 @@ class ForgeLanguageCompiler:
         screen = ForgeIRScreen(id="generated_screen", title=title, state=state, body=body)
 
         return ForgeIRDocument(
-            # v1.7(2026-08-11、Widget Vocabulary Expansion第2弾):
-            # date_field/tab_viewはv1.7専用のため(choice_field/bar_chartは
-            # 既にv1.6で追加済み、それ以前も同様。v1.7はいずれの上位互換、
-            # 無変更)。
-            version="1.7",
+            # v1.8(2026-08-11、Widget Vocabulary Expansion第3弾):
+            # sliderはv1.8専用のため(それ以前のWidgetは既に追加済み。
+            # v1.8はいずれの上位互換、無変更)。
+            version="1.8",
             initial_screen_id=screen.id,
             screens=(screen,),
             app_title=title,
@@ -475,6 +474,28 @@ class ForgeLanguageCompiler:
                     ForgeIRWidget(
                         type="checkbox", id=f"{state_id}{id_suffix}",
                         properties={"state_ref": state_id, "label": f.label},
+                    )
+                )
+                continue
+
+            if f.type == FieldType.NUMBER and f.min_value is not None and f.max_value is not None:
+                # v1.8新規(2026-08-11、CEO「壊れてる?って機能でもどんどん
+                # 追加してくれ。あとでなおす。」対応)。上限・下限が
+                # 決まっているNUMBER Field(例: reading_logの
+                # 「評価(5段階)」)は、`slider`Widget(Flutter標準の
+                # `Slider`)を使う。既存の"string"型stateではなく、
+                # 既存の"number"型state(v1.2で追加済み)を直接使う——
+                # `ForgeStateStore.addRecord()`は既にnumber型stateからの
+                # 生の値読み取りに対応済みであることをRuntimeコード
+                # (`forge_state_store.dart`)で確認済み。範囲外の値を
+                # 構造的に入力できないため、他のNUMBER Fieldと違い
+                # patternバリデーションのヒントは不要(`_build_field()`
+                # 参照)。
+                field_states[state_id] = ForgeIRStateValue(type="number", value=f.min_value)
+                children.append(
+                    ForgeIRWidget(
+                        type="slider", id=f"{state_id}{id_suffix}",
+                        properties={"state_ref": state_id, "label": f.label, "min": f.min_value, "max": f.max_value},
                     )
                 )
                 continue

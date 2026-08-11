@@ -90,7 +90,7 @@ class _FieldSpec:
     `field_type: FieldType`を直接持つように変更した。
     """
 
-    __slots__ = ("name", "label", "field_type", "required", "choices")
+    __slots__ = ("name", "label", "field_type", "required", "choices", "min_value", "max_value")
 
     def __init__(
         self,
@@ -100,12 +100,18 @@ class _FieldSpec:
         field_type: FieldType = FieldType.STRING,
         required: bool = True,
         choices: tuple[str, ...] = (),
+        min_value: float | None = None,
+        max_value: float | None = None,
     ) -> None:
         self.name = name
         self.label = label
         self.field_type = field_type
         self.required = required
         self.choices = choices
+        # v1.8新規。両方指定された場合のみForge Language Compilerが
+        # `slider`Widgetを選ぶ(`ir_types.Field`のdocコメント参照)。
+        self.min_value = min_value
+        self.max_value = max_value
 
 
 class _EntitySpec:
@@ -233,7 +239,13 @@ _ENTITY_DEFINITIONS: dict[str, _EntitySpec] = {
                 "status", "状況", field_type=FieldType.CHOICE,
                 choices=("読みたい", "読書中", "読了"), required=False,
             ),
-            _FieldSpec("rating", "評価(5段階)", field_type=FieldType.NUMBER, required=False),
+            _FieldSpec(
+                "rating", "評価(5段階)", field_type=FieldType.NUMBER, required=False,
+                # v1.8新規: 「5段階」という既存のlabelそのものが根拠と
+                # なる、具体的な範囲(1〜5)。Compilerがこれを見て
+                # `slider`Widgetを選ぶ(構造的に範囲外の値を入力できない)。
+                min_value=1, max_value=5,
+            ),
             _FieldSpec("finished_date", "読了日", field_type=FieldType.DATE, required=False),
         ),
     ),
@@ -376,10 +388,15 @@ class IRGenerator:
         return ir
 
     def _build_field(self, spec: _FieldSpec) -> Field:
+        has_slider_bounds = spec.field_type == FieldType.NUMBER and spec.min_value is not None and spec.max_value is not None
         validations: list[FieldValidationRule] = []
         if spec.required:
             validations.append(FieldValidationRule(type="required", message=f"{spec.label}を入力してください"))
-        if spec.field_type == FieldType.NUMBER:
+        if spec.field_type == FieldType.NUMBER and not has_slider_bounds:
+            # v1.8新規: min_value/max_valueが両方揃っているFieldは
+            # `slider`Widgetになる(構造的に範囲外の値を入力できない
+            # ため、choice_field/date_fieldと同じ理由でこのヒントが
+            # 不要になる)。それ以外のNUMBER Fieldは従来通り。
             validations.append(
                 FieldValidationRule(
                     type="pattern", value=_NUMERIC_PATTERN, message=f"{spec.label}は数字で入力してください"
@@ -399,6 +416,8 @@ class IRGenerator:
             required=spec.required,
             choices=spec.choices,
             validations=tuple(validations),
+            min_value=spec.min_value,
+            max_value=spec.max_value,
         )
 
 

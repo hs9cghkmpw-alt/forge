@@ -1732,3 +1732,131 @@ Python側は全1024件、Dart側は全435件、合計1459件のテストが通�
 報告され続けていた可能性が高い。今後、「サンドボックスでは検証
 できない」という判断を下す前に、実際に到達性を確認すること
 (`curl`で疎通確認する等)を徹底する。
+
+## TD38. Widget Registryが18種のまま(範囲指定の数値入力が無く、`text_field`へ数字を手打ちさせるしかなかった) → **sliderの1種を追加、v1.8(2026-08-11)**
+
+CEO「要は、一気に検証を進めたい。なので、壊れてる?って機能でもどんどん
+追加してくれ。あとでなおす。」という明示的な指示を受けて着手した。
+TD34(v1.6)・TD36(v1.7)と同じWidget Vocabulary Expansionの第3弾。
+
+reading_logの「評価(5段階)」のような、上限・下限が決まった数値入力を
+これまで`text_field`(自由入力+`pattern`バリデーション)で表現していた
+——CEOの実機での入力体験としては、キーボードで"3"と打つより
+スライダーを操作する方が明らかに自然な操作感である。
+
+**実装内容**:
+
+* `Field`(`ir_types.py`)へ`min_value`/`max_value`(両方`None`でない
+  場合のみ意味を持つ)を追加。`ir_generator.py`の`_build_field()`が、
+  両方設定されたNUMBER型Fieldに対しては数値パターンバリデーション
+  ヒントを付けない(sliderの構造そのものが範囲外入力を防ぐため、
+  choice_field/date_fieldと同じ設計方針)。
+* reading_logの`rating`Fieldへ`min_value=1, max_value=5`を設定
+  (Curated Domain Libraryが最初から持っていた「評価(5段階)」という
+  ラベルと矛盾しない、根拠のある具体値)。
+* `schema_validator.py`: `slider`Widget用のスキーマ検証を追加
+  (`label`必須、`state_ref`が"number"型stateを指すこと、`min`/`max`が
+  数値であること、`min < max`であること——bool値がPythonでは`int`の
+  サブクラスであるため`min`/`max`に混入しないよう`isinstance(v, bool)`
+  で明示的に弾く回帰テストも追加)。`backend/tests/
+  test_schema_validator_v1_8.py`(14件)。
+* `forge_language_compiler.py`の`_build_field_inputs()`へ、
+  「NUMBER型かつmin_value/max_valueが両方設定されている」場合の
+  分岐を追加。既存の`"number"`型state(v1.2で導入済みだが、これまで
+  消費するWidgetが1つも無かった)をそのまま使い、新しいstate型は
+  追加しない。`forge_ai/tests/test_forge_language_compiler.py`へ
+  `TestForgeLanguageCompilerV1_8WidgetVocabularyExpansion`(6件)を追加。
+* Dart側: `ForgeSliderWidgetNode`(`forge_document.dart`)、
+  `buildSlider()`(`widget_registry_v1_8.dart`、Flutter標準の`Slider`、
+  新規パッケージ依存なし)、`ForgeRuntimeState.setNumber()`
+  (既存の`setString`/`setBoolean`と対称的な新規API)。
+
+**TD37の教訓を踏まえた確認**: `widget_registry_core.dart`の
+`typeNameOf()`(sealed classの網羅的switch式)へ、`ForgeSliderWidgetNode`
+のクラス定義を書いた**直後**に対応するcaseを追加し、同じ理由で
+複製を持つ`test/features/app_generation/data/datasources/
+mock_generator_renderer_contract_test.dart`の`_typeNameOf()`・
+`kRegisteredWidgetTypes`も同時に更新した。`flutter analyze`で
+0エラーであることを確認済み(TD37のような「4種類とも一度も描画
+できない」の再発が無いことの直接確認)。
+
+新規Widget Test(`test/json_ui/widget_registry/
+v1_8_widget_vocabulary_expansion_test.dart`、4件)で、実際に
+`ForgeDocumentView`経由でsliderを描画し、ドラッグ操作でstateが
+更新されること・フォーム送信でRecordへ反映されることを確認した。
+Python側(`forge_ai/tests/test_forge_language_compiler.py`の
+`test_slider_output_passes_the_real_backend_schema_validator`)でも、
+実バックエンドの`validate_forge_document()`が生成物を受理することを
+確認済み。
+
+**既知の未解決課題(CEOから明示的に「あとでなおす」の許可を得ている軽微な見た目上の課題)**:
+`ForgeRecordValidator.validate()`(`forge_record_validator.dart`)が、
+Record保存時に値を必ず一度`.toString()`してから
+`ForgeFieldValueParser.parse()`で再解析する実装になっているため、
+sliderのdouble値(例: `5.0`)が文字列`"5.0"`を経由して再びdoubleへ
+戻る(値そのものは正しくラウンドトリップするが、整数値であっても
+`record_list_view`/`bar_chart`の表示が常に「5.0」のように末尾へ
+".0"が付く)。機能的な破損ではなく表示上の見た目の課題のため、
+このセッションでは修正を見送った。
+
+## TD39. Curated Domain Library 7 Domainのうち、`todo`・`reading_log`の2つは、実機の分類パイプラインからは構造的に到達不可能だった(2026-08-11発見、未解消)
+
+sliderのライブ検証(実際に`uvicorn`+実Gemini経由で`reading_log`
+アプリを生成し、生成物にsliderが含まれることを確認する)を行おうと
+した際に発見した、TD37と同種の「Python側テストでは検出できない、
+層をまたいだ実バグ」。
+
+`forge_ai/core/orchestration/pipeline_orchestrator.py`は、以下の1行で
+IR経路(`IRGenerator`/`ForgeLanguageCompiler`、決定的生成)を使うかどうかを
+判定する:
+
+```python
+domain_category_value = context.domain_classification.primary_domain.category.value
+if domain_category_value in SUPPORTED_DOMAIN_CATEGORIES:
+```
+
+`SUPPORTED_DOMAIN_CATEGORIES`(`ir_generator.py`)は
+`{"fishing_log", "household_budget", "habit_tracking", "todo",
+"reading_log", "inventory", "diary"}`という7つの文字列だが、
+`domain_category_value`の実体は`DomainCategory`(`domain_model.py`)
+というEnumの`.value`であり、そのEnumには**`"todo"`にも
+`"reading_log"`にも一致するメンバーが1つも存在しない**
+(近い名前の`TASK_MANAGEMENT = "task_management"`はあるが、
+"task_management" != "todo")。
+
+つまり、`todo`/`reading_log`は、`IRGenerator`(`_ENTITY_DEFINITIONS`)
+・`ForgeLanguageCompiler`・専用のPythonテスト群一式が存在し、
+「Domain定義としては完成している」のに、**実際のプロンプト分類が
+これらのカテゴリ値を返すことは構造的にあり得ない**ため、実機の
+`/api/v1/ai/generate`を通じて生成されることが原理的に無い
+(`domain_category`を明示的に渡すテスト・スクリプトからしか到達
+できない)。
+
+**実機確認**:
+* 「読んだ本を記録して評価をつけたい」→ `diary`ドメインへ分類され、
+  reading_log固有の`book_record`ではなく`diary_entry`スキーマが
+  使われた(sliderも生成されない)。
+* 「やることリストを管理したい」→ `record_schemas`を持たない
+  (IR経路を通っていない=レガシー`Compiler`経路にフォールバック
+  している)出力になった。
+
+**影響**: v1.8で追加したslider Widgetの、Curated Domain Library内での
+唯一のトリガー(reading_logの`rating`Field)が、この`reading_log`
+Domain自体に実機到達できないため、**現状sliderは実機の生成パイプライン
+からは一度も出力され得ない**(直接`IRGenerator().generate(plan,
+domain_category="reading_log")`のようにDomain名を明示すれば、
+Python側・Dart側とも正しく動作することは確認済み——TD38参照)。
+
+**未解消の理由**: sliderの実装自体は指示された範囲(Widget Vocabulary
+Expansion第3弾)であり、`todo`/`reading_log`を実機到達可能にするには
+`DomainCategory`Enumへの新規メンバー追加+分類器(`core/understanding/`
+配下のキーワード辞書等)への語彙追加という、別の作業範囲の変更が
+必要になる。CEOの「あとでなおす」という許可の範囲内と判断し、この
+セッションでは発見・記録のみに留めた。
+
+**推奨される次の一手**: `DomainCategory`へ`READING_LOG = "reading_log"`・
+`TODO = "todo"`(または`TASK_MANAGEMENT`を`SUPPORTED_DOMAIN_CATEGORIES`
+側で`"todo"`に正規化する)を追加し、対応する分類キーワード
+(「読書」「読了」「積読」/「やること」「タスク」等)を分類器へ
+追加する。分類器の構造次第では影響範囲が広くなる可能性があるため、
+着手前に`core/understanding/`配下の分類ロジックを読み込むこと。

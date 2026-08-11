@@ -158,6 +158,12 @@ class ForgeRuntimeState extends ChangeNotifier {
     if (notify) notifyListeners();
   }
 
+  /// v1.8新規(Widget Vocabulary Expansion第3弾)。sliderが使う。
+  void setNumber(String key, double value, {bool notify = true}) {
+    _store.writeTyped(key, ForgeNumberState(value));
+    if (notify) notifyListeners();
+  }
+
   void toggleChecklistItem(String checklistKey, String itemId) {
     if (_store.toggleChecklistItem(checklistKey, itemId)) {
       notifyListeners();

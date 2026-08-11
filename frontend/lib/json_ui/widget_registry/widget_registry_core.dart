@@ -55,6 +55,7 @@ String typeNameOf(ForgeWidgetNode node) => switch (node) {
       ForgeBarChartWidgetNode() => 'bar_chart',
       ForgeDateFieldWidgetNode() => 'date_field',
       ForgeTabViewWidgetNode() => 'tab_view',
+      ForgeSliderWidgetNode() => 'slider',
       ForgeUnknownWidgetNode() => 'unknown',
     };
 

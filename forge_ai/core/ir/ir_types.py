@@ -62,6 +62,14 @@ class Field:
     required: bool = True
     choices: tuple[str, ...] = ()  # type=CHOICEの場合のみ使用
     validations: tuple[FieldValidationRule, ...] = ()
+    # v1.8新規(FORGE-AI-QUALITY-001、2026-08-11)。type=NUMBERのFieldが
+    # 両方とも指定している場合のみ、Forge Language Compilerが
+    # `slider`Widget(構造的に範囲外の値を入力できない)を選ぶ判断材料と
+    # して使う。どちらか一方でも`None`の場合は、従来通り`text_field`+
+    # 数値patternのバリデーションのままにする(スライダーには
+    # 「有限の範囲」が必須であり、根拠なく上限/下限を発明しないため)。
+    min_value: float | None = None
+    max_value: float | None = None
 
 
 @dataclass(frozen=True)

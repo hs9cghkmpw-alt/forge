@@ -2,6 +2,55 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task058 — Widget Vocabulary Expansion 第3弾: slider(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「要は、一気に検証を進めたい。なので、壊れてる?って機能でもどんどん追加してくれ。あとでなおす。」)
+
+TD34(v1.6)・TD36(v1.7)に続く、Widget Vocabulary Expansion第3弾。
+上限・下限が決まった数値入力(reading_logの「評価(5段階)」等)を、
+`text_field`への自由入力ではなく専用の`slider`Widget(Flutter標準の
+`Slider`)で表現できるようにした。既存の"number"型state(v1.2で導入
+済みだが、これまで消費するWidgetが1つも無かった)をそのまま使い、
+新しいstate型は追加していない。
+
+### 実装
+`Field`(`ir_types.py`)へ`min_value`/`max_value`を追加、reading_logの
+`rating`Fieldへ`min_value=1, max_value=5`を設定。`schema_validator.py`
+へv1.8のスキーマ検証を追加(`backend/tests/test_schema_validator_v1_8.py`
+14件)。`forge_language_compiler.py`の`_build_field_inputs()`へslider
+分岐を追加、ドキュメントversionを"1.8"へ(`test_forge_language_compiler.py`
+へ`TestForgeLanguageCompilerV1_8WidgetVocabularyExpansion`6件を追加)。
+Dart側は`ForgeSliderWidgetNode`・`buildSlider()`
+(`widget_registry_v1_8.dart`)・`ForgeRuntimeState.setNumber()`を新設。
+
+### TD37の教訓の適用
+`widget_registry_core.dart`の`typeNameOf()`(sealed classの網羅的
+switch式)へ、`ForgeSliderWidgetNode`のクラス定義を書いた直後に
+対応するcaseを追加した(TD37で発見した「Widgetノードは追加したのに
+描画の入口へケースを足し忘れ、一度も描画できない」という再発防止)。
+同じ理由で複製switchを持つテスト専用ファイル
+(`mock_generator_renderer_contract_test.dart`)も同時に更新した。
+`flutter analyze`で0エラーを確認。
+
+### 検証結果
+新規Widget Test(`v1_8_widget_vocabulary_expansion_test.dart`、4件)で、
+sliderを実際に`ForgeDocumentView`経由で描画・ドラッグ操作・Recordへの
+反映まで確認した。Dart側は全439件(既存435件+新規4件)、Python側は
+backend 606件・forge_ai 451件が通ることを確認した。
+
+### TD39: sliderのライブ検証で発見した、無関係の重大な既存バグ
+`uvicorn`+実Geminiで`reading_log`ドメインのアプリ生成を試みたところ、
+「読んだ本を記録して評価をつけたい」が`diary`ドメインへ分類され、
+reading_log固有のスキーマが一度も使われないことが判明した。調査の結果、
+`SUPPORTED_DOMAIN_CATEGORIES`に含まれる7 Domainのうち`todo`・
+`reading_log`の2つは、実際の分類結果である`DomainCategory` Enumに
+対応するメンバーが存在せず、**実機の生成パイプラインからは構造的に
+到達不可能**であることが分かった(直接`domain_category`を指定する
+テスト・スクリプトからしか到達できない)。sliderの唯一のトリガーが
+reading_logの`rating`Fieldであるため、現状sliderは実機生成では
+一度も出力され得ない。修正には`DomainCategory`Enumと分類器の語彙
+拡張という別範囲の作業が必要なため、このセッションでは発見・記録に
+留めた(CEOの「あとでなおす」の範囲内と判断)。詳細はTECH_DEBT.md
+TD38・TD39参照。
+
 ## Task057 — Flutter SDKを実際に取得し、Dart側を初めて実機検証(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「出し惜しみせず、完璧を求めてくれ」)
 
 これまで数セッションにわたり「ClaudeのサンドボックスにFlutter SDKが
