@@ -8,6 +8,12 @@ pydantic・fastapiがインストールされておらず、ネットワーク�
 (構文は目視で確認したが、Pydantic v2の実際の挙動での検証はできていない)。
 CEO環境で`pip install -r requirements.txt`実行後、`pytest`または
 `uvicorn app.main:app --reload`で初めて動作確認できる。
+
+**2026-08-11追記**: 上記は執筆当時の制約であり、現在は解消している。
+このセッション以降、`.venv`にpydantic/fastapi/httpx等が実際にインストール
+された状態で`uvicorn app.main:app`を起動し、`POST /api/v1/ai/generate`
+経由の実Gemini呼び出しを含め、このファイルは実際にimport・実行・検証
+済みである(TECH_DEBT.md TD37前後の記録参照)。
 """
 
 from __future__ import annotations
@@ -202,3 +208,56 @@ class ErrorEnvelope(BaseModel):
     version: Literal["1.0"] = "1.0"
     status: Literal["error"] = "error"
     error: ErrorDetailDTO
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/ai/converse(FORGE-PRODUCT-VISION-002、2026-08-11)
+#
+# `docs/spec/FORGE_PRODUCT_VISION_002_CONVERSATIONAL_ARCHITECTURE.md`・
+# ADR-014参照。既存の`/generate`系とは独立した、追加のみのエンドポイント
+# (既存Frontendの動作に影響しない)。
+# ---------------------------------------------------------------------------
+
+
+class ConverseRequest(BaseModel):
+    """会話の最新のユーザー発話を送る。1ターン目は`session_id`を省略する
+    (新しいConversationSessionが作られ、レスポンスの`session_id`を
+    次ターン以降で送り返す——`ConfirmationAnswerRequest.request_id`と
+    同じ往復パターン)。"""
+
+    version: Literal["1.0"] = "1.0"
+    session_id: str | None = Field(default=None, description="2ターン目以降、直前のレスポンスのsession_idをそのまま送る")
+    message: str = Field(..., min_length=1, max_length=2000)
+    provider: Literal["mock", "gemini"] | None = Field(
+        default=None, description="ConversationEngineが使うLLM Provider。既定は'mock'。"
+    )
+
+
+class NeedModelDTO(BaseModel):
+    problem: str
+    known: list[str] = Field(default_factory=list)
+    unknown_important: list[str] = Field(default_factory=list)
+    safe_assumptions: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
+
+
+class ConverseAskResponse(BaseModel):
+    version: Literal["1.0"] = "1.0"
+    status: Literal["ask"] = "ask"
+    session_id: str
+    question: str
+    need_model: NeedModelDTO
+
+
+class ConverseBuildResponse(BaseModel):
+    """BUILDと判定された場合、既存の`PromptPipeline.run()`をそのまま
+    通した結果(`GenerateResultDTO`)を、会話の文脈と一緒に返す
+    (ADR-014: Conversation EngineはForge Language知識を持たず、既存の
+    `/generate`と全く同じ生成結果をそのまま横流しする)。"""
+
+    version: Literal["1.0"] = "1.0"
+    status: Literal["build"] = "build"
+    session_id: str
+    need_model: NeedModelDTO
+    build_brief: str
+    result: GenerateResultDTO

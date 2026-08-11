@@ -37,12 +37,19 @@ from app.ai.runtime.confirmation_store import (
     ConfirmationRoundExceededError,
     default_confirmation_store,
 )
+from app.ai.runtime.conversation_engine import ConversationEngine
+from app.ai.runtime.conversation_store import ConversationNotFoundError, default_conversation_store
+from app.ai.runtime.conversation_types import ConversationAction, ConversationTurn
 from app.ai.runtime.injection_scan import scan_for_injection
-from app.ai.runtime.pipeline_errors import ConfirmationSessionError
+from app.ai.runtime.pipeline_errors import ConfirmationSessionError, ConversationSessionError
 from app.ai.runtime.prompt_pipeline import PipelineNeedsConfirmationResult, PromptPipeline
+from app.ai.runtime.provider_router import ProviderRouter
 from app.schemas.ai import (
     ConfirmationAnswerRequest,
     ConfirmationDTO,
+    ConverseAskResponse,
+    ConverseBuildResponse,
+    ConverseRequest,
     CriticResultDTO,
     DiagnosticsDTO,
     ErrorEnvelope,
@@ -50,6 +57,7 @@ from app.schemas.ai import (
     GenerateRequest,
     GenerateResultDTO,
     GenerateSuccessResponse,
+    NeedModelDTO,
     ValidationIssueDTO,
     ValidationResultDTO,
 )
@@ -86,28 +94,30 @@ def _diagnostics_dto(diagnostics) -> DiagnosticsDTO:  # noqa: ANN001 — app.ai.
     )
 
 
-def _success_response(result) -> GenerateSuccessResponse:  # noqa: ANN001 — PipelineRunResult
-    return GenerateSuccessResponse(
-        result=GenerateResultDTO(
-            forge_document=result.forge_document,
-            validation=ValidationResultDTO(
-                valid=result.validation.valid,
-                errors=[ValidationIssueDTO(**e.to_dict()) for e in result.validation.errors],
-                warnings=[ValidationIssueDTO(**w.to_dict()) for w in result.validation.warnings],
-            ),
-            quality=(
-                CriticResultDTO(
-                    score=result.quality.score,
-                    release_ready=result.quality.release_ready,
-                    issues=[dict(i) for i in result.quality.issues],
-                    required_fixes=list(result.quality.required_fixes),
-                )
-                if result.quality is not None
-                else None
-            ),
-            diagnostics=_diagnostics_dto(result.diagnostics),
-        )
+def _result_dto(result) -> GenerateResultDTO:  # noqa: ANN001 — PipelineRunResult
+    return GenerateResultDTO(
+        forge_document=result.forge_document,
+        validation=ValidationResultDTO(
+            valid=result.validation.valid,
+            errors=[ValidationIssueDTO(**e.to_dict()) for e in result.validation.errors],
+            warnings=[ValidationIssueDTO(**w.to_dict()) for w in result.validation.warnings],
+        ),
+        quality=(
+            CriticResultDTO(
+                score=result.quality.score,
+                release_ready=result.quality.release_ready,
+                issues=[dict(i) for i in result.quality.issues],
+                required_fixes=list(result.quality.required_fixes),
+            )
+            if result.quality is not None
+            else None
+        ),
+        diagnostics=_diagnostics_dto(result.diagnostics),
     )
+
+
+def _success_response(result) -> GenerateSuccessResponse:  # noqa: ANN001 — PipelineRunResult
+    return GenerateSuccessResponse(result=_result_dto(result))
 
 
 def _run_pipeline_and_build_response(
@@ -270,4 +280,74 @@ def confirm(request: ConfirmationAnswerRequest):
         round_count=record.round_count + 1,
         clarification_answer=answer,
         previous_answers=record.previous_answers,
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/ai/converse(FORGE-PRODUCT-VISION-002、2026-08-11)
+#
+# `docs/spec/FORGE_PRODUCT_VISION_002_CONVERSATIONAL_ARCHITECTURE.md`・
+# ADR-014参照。既存の`/generate`・`/generate/confirm`は無変更のまま
+# 併存する(このエンドポイントは追加のみ、後方互換)。
+# ---------------------------------------------------------------------------
+
+_CONVERSE_RESPONSE_MODEL = ConverseAskResponse | ConverseBuildResponse | GenerateNeedsConfirmationResponse
+
+
+@router.post("/converse", response_model=_CONVERSE_RESPONSE_MODEL, responses=_GENERATE_ERROR_RESPONSES)
+def converse(request: ConverseRequest):
+    """1ターン進める。`session_id`が無ければ新規セッションを作る
+    (`ConfirmationAnswerRequest.request_id`と同じ往復パターン)。
+
+    ConversationEngineが`ask`と判定すればそのまま質問を返す。`build`と
+    判定すれば、会話全体を要約した`build_brief`を既存の
+    `PromptPipeline.run()`へそのまま渡し、Forge Documentを生成する
+    (ADR-014: Conversation EngineはForge Language・Validator・Domain
+    知識を一切持たず、既存資産を完全に再利用する)。既存Cognitive
+    Pipeline側がさらに`needs_confirmation`を返した場合は、既存の
+    `/generate/confirm`の契約へそのまま委ねる。
+    """
+    if request.session_id is None:
+        session = default_conversation_store.create()
+    else:
+        try:
+            session = default_conversation_store.get(request.session_id)
+        except ConversationNotFoundError as exc:
+            raise ConversationSessionError(
+                f"session_id '{request.session_id}' に対応する会話セッションが見つかりません(存在しないか、期限切れです)。",
+                sub_reason="conversation_session_not_found",
+                stage="conversation",
+            ) from exc
+
+    session = default_conversation_store.add_turn(
+        session.session_id, ConversationTurn(role="user", text=request.message)
+    )
+
+    provider_name = request.provider or "mock"
+    provider = ProviderRouter().resolve(provider_name)
+    step_result = ConversationEngine(provider).step(session)
+    need_model_dto = NeedModelDTO(**step_result.need_model.to_dict())
+
+    if step_result.action == ConversationAction.ASK:
+        default_conversation_store.add_turn(
+            session.session_id, ConversationTurn(role="forge", text=step_result.question or "")
+        )
+        return ConverseAskResponse(
+            session_id=session.session_id, question=step_result.question or "", need_model=need_model_dto,
+        )
+
+    assert step_result.action == ConversationAction.BUILD  # noqa: S101 — ASK/BUILD以外はPhase Eでは発火しない(design doc B.2)
+    build_brief = step_result.build_brief or ""
+    injection_report = scan_for_injection(build_brief)
+    result = PromptPipeline().run(
+        build_brief, engine="forge_ai", provider=provider_name, injection_report=injection_report,
+    )
+    default_conversation_store.discard(session.session_id)
+
+    if isinstance(result, PipelineNeedsConfirmationResult):
+        return _needs_confirmation_response_with_input(result, build_brief, round_count=1)
+
+    return ConverseBuildResponse(
+        session_id=session.session_id, need_model=need_model_dto, build_brief=build_brief,
+        result=_result_dto(result),
     )

@@ -114,3 +114,14 @@ class ConfirmationSessionError(ForgeAIPipelineError):
     """
 
     category = "request_error"
+
+
+class ConversationSessionError(ForgeAIPipelineError):
+    """FORGE-PRODUCT-VISION-002(2026-08-11): `POST /api/v1/ai/converse`で、
+    `session_id`に対応する会話セッションが見つからない
+    (`sub_reason="conversation_session_not_found"`、未発行・期限切れの
+    いずれか)場合。`ConfirmationSessionError`と同じ理由で
+    `category="request_error"`を使う。
+    """
+
+    category = "request_error"

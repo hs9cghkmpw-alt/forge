@@ -858,3 +858,26 @@ FORGE-MILESTONE-005実物監査(2回目)。`ProviderRouter`は後方互換のた
 "claude", "gemini", "oss"]`という、より狭い許可リストに制限した。
 Router内部の柔軟性(エイリアス解決等)と、外部公開契約の厳格さ
 (Engine/Providerの混同を防ぐ)を、あえて別の層で扱う設計とした。
+
+---
+
+## D65. Conversation Engineは既存Cognitive Pipelineの「外」に立つ、薄い意思決定層とした
+
+FORGE-PRODUCT-VISION-002(2026-08-11、CEO「『アプリを作るAI』から
+『困りごとを話すと道具が生まれるAI』への製品思想更新」)。詳細な
+Context/Alternatives/ConsequencesはADR-014に記録した。ここでは要旨のみ:
+複数ターンの会話から「聞くか作るか」を判断する新機能を、既存の
+Cognitive Pipeline(`forge_ai/core/orchestration/pipeline_
+orchestrator.py`)自体には一切追加せず、`backend/app/ai/runtime/
+conversation_engine.py`という新規の薄い層として実装した。BUILDと
+判定した場合は、会話全体を要約した1つの自然文を既存の`PromptPipeline.
+run()`へそのまま渡す。理由: Cognitive Pipelineは「1回の自然文入力→
+1回のIR」というステートレスな契約の上に複数のADR(005/007/009)が
+積み上がっており、この契約自体を会話向けに拡張すると影響範囲が広すぎる
+(指示書26章「既存実装を大量に壊して一気に全面改修しない」)。新規
+エンドポイント`POST /api/v1/ai/converse`は追加のみで、既存の`/generate`・
+`/generate/confirm`は無変更(後方互換)。
+
+反転する条件: `build_brief`という1本の自然文への要約だけでは、
+Cognitive Pipeline側のDomain分類・Ambiguity Detectionの精度が実運用で
+不足すると判明した場合(ADR-014のRevisit Conditions参照)。

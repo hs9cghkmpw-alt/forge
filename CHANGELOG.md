@@ -2,6 +2,47 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task059 — FORGE-PRODUCT-VISION-002: Conversation Engine(2026-08-11、CEO「『アプリを作るAI』から『困りごとを話すと道具が生まれるAI』への製品思想更新」)
+
+CEOより、Forgeの製品思想を「アプリ生成AI」から「困りごとを話すと道具が
+生まれるAI」へ更新する指示書を受けた。現物監査(Phase A)・設計
+(Phase B〜D、`docs/spec/FORGE_PRODUCT_VISION_002_CONVERSATIONAL_
+ARCHITECTURE.md`・ADR-014)・実装(Phase E)まで一気通貫で対応した。
+
+### 監査結果
+「Space/Forming/Held」は新規語彙(既存に無し)。既存の`needs_
+confirmation`は「ASK」の原型として既に存在するが単発の脇道。
+Confidence計算基盤(ADR-007)は既に成熟。「UPDATE」(生成後に会話で
+育てる)はバックエンドに一切存在しない、最大のギャップと確認した。
+
+### 実装(ADR-014: Cognitive Pipelineを一切変更せず、外側に薄い意思決定層を追加)
+新規`ConversationEngine`(`backend/app/ai/runtime/conversation_
+engine.py`)が、1ターンにつき1回の`complete_structured()`呼び出しで
+ASK/BUILDを判定する。LLMの自己申告を鵜呑みにせず、`unknown_important`
+が空・ターン数上限到達の場合は決定的にBUILDへ倒す。BUILDと判定した
+場合、会話全体を要約した`build_brief`を既存の`PromptPipeline.run()`へ
+そのまま渡す(Forge Language・Validator知識は持たない、既存資産の
+完全再利用)。新規`POST /api/v1/ai/converse`エンドポイント追加、既存
+`/generate`・`/generate/confirm`は無変更(後方互換)。
+
+### テスト・実機確認
+新規Python 21件(`test_conversation_store.py`12件・
+`test_conversation_engine.py`9件)、既存backend全624件・forge_ai全451件
+が引き続きgreen。`uvicorn`+実Geminiで3つの会話を実際に流し、
+「買い物で忘れる」→1ターンでBUILD、「薬を飲むのを忘れる」→既存
+Pipeline側のプライバシー検出が発火(ConversationEngine自身の質問より
+先に安全側で止まった、正直な評価は報告書参照)、「忘れっぽくて
+困ってる」→2ターンでASK→BUILDといういずれも指示書の理想例に近い
+形で動作することを確認した。
+
+### 未実装・CEO確認事項
+UPDATE(Forming Operation、生成後に会話で育てる)は、Gemini
+`responseSchema`の再帰制約が未検証というリスクを正直に申告し、設計のみに
+留めた(TD40)。フロントエンドの主要導入体験(Home画面文言・
+Inspiration Cardsの遷移先)の変更は、指示書28章「製品思想そのものを
+変更する判断」に該当するため実装せず、CEO確認事項として明示した。
+詳細は`docs/reports/FORGE-PRODUCT-VISION-002-report.md`参照。
+
 ## Task058 — Widget Vocabulary Expansion 第3弾: slider(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「要は、一気に検証を進めたい。なので、壊れてる?って機能でもどんどん追加してくれ。あとでなおす。」)
 
 TD34(v1.6)・TD36(v1.7)に続く、Widget Vocabulary Expansion第3弾。

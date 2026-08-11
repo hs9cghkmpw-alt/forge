@@ -1860,3 +1860,46 @@ Expansion第3弾)であり、`todo`/`reading_log`を実機到達可能にする�
 (「読書」「読了」「積読」/「やること」「タスク」等)を分類器へ
 追加する。分類器の構造次第では影響範囲が広くなる可能性があるため、
 着手前に`core/understanding/`配下の分類ロジックを読み込むこと。
+
+## TD40. Forming Operation(UPDATE、生成後に会話で「育てる」)は設計のみで未実装(2026-08-11新設)
+
+FORGE-PRODUCT-VISION-002(製品思想更新)対応。CEO指示書が要求する
+「Held状態から会話に戻り、既存の道具を更新する」体験の中核だが、
+バックエンドに一切存在しない(監査で確認、詳細は`docs/spec/
+FORGE_PRODUCT_VISION_002_CONVERSATIONAL_ARCHITECTURE.md` A.4)。
+
+**未実装の理由(技術的リスクの正直な申告)**: UPDATE操作は「既存の
+Forge Document全体+変更要求」を入力に、更新済みのForge Document全体を
+出力する必要がある。Forge DocumentのWidget木は`children`を持つ再帰的な
+構造(`ForgeWidgetNode`のsealed class)であり、`GeminiProvider.
+complete_structured()`が使う`responseSchema`(OpenAPI Schemaのサブセット、
+`$ref`による自己参照未対応)で、無制限に再帰するWidget木を直接構造化
+出力させられるかは**未検証**である。検証を経ずに実装だけ進めると、
+TD37(4種のWidgetが一度も描画できていなかった)と同種の「実は一度も
+動いていない機能」を生む危険が高いと判断し、実装を見送った。
+
+設計候補2案(詳細はdesign doc B.4):
+1. (推奨)Forge Document全体を書き換えさせず、`add_field`・
+   `reorder_records`・`add_widget`・`change_property`という小さな
+   Operationの集合(DSL)をLLMに選ばせる。DSLは非再帰的なフラット
+   構造なので`responseSchema`との相性がよい。
+2. `responseSchema`を使わず、Document全体を自由出力(JSON文字列+
+   `json.loads()`)させる。Schema制約を失う代わりに再帰の制約から
+   解放される。
+
+いずれも「LLMに既存の構造化データを渡し、修正済みデータを受け取る」
+という、このリポジトリに前例のない往復(`repair_engine.py`の`_try_fix()`
+はLLMの応答を実際には使っていない決定的修正のみ、A.6参照)を新規実装
+することになるため、次のセッションで小さく検証しながら進めることを
+推奨する。
+
+## TD41. ConversationStoreはプロセス内メモリのみ(`ConfirmationStore`と同じ既知の制限、2026-08-11新設)
+
+FORGE-PRODUCT-VISION-002対応で新設した`backend/app/ai/runtime/
+conversation_store.py`は、`confirmation_store.py`と全く同じ設計
+(プロセス内メモリ・TTL 30分・最大3ターン)を踏襲した。サーバー
+再起動やマルチプロセス/マルチワーカー構成では会話セッションが失われる。
+`confirmation_store.py`が既に同じ制限をTECH_DEBTとして記録済みであり、
+新規の問題ではなく既存の設計方針をそのまま継承しただけである。将来
+複数ワーカーで運用する場合、両Storeをまとめて Redis等の外部ストアへ
+置き換えることを検討する。
