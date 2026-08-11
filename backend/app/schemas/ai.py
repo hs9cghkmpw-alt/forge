@@ -109,6 +109,10 @@ class DiagnosticsDTO(BaseModel):
     # FORGE-AI-CONNECT-001 TD21対応(2026-08-11)。検出のみ、ブロックはしない
     # (`app/ai/runtime/injection_scan.py`参照)。
     injection_report: dict[str, Any] | None = None
+    # FORGE-AI-CONNECT-001 TD20対応(2026-08-11)。検出のみ、ブロックはしない
+    # (`app/ai/runtime/output_safety.py`参照)。needs_confirmation時は
+    # 最終Documentがまだ存在しないため常にNone。
+    safety_report: dict[str, Any] | None = None
 
 
 class GenerateResultDTO(BaseModel):

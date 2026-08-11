@@ -57,6 +57,7 @@ from app.ai.runtime.forge_ai_adapter import (
     to_repair_issues,
 )
 from app.ai.runtime.forge_ai_provider_bridge import ForgeAIProviderBridge
+from app.ai.runtime.output_safety import OutputSafetyChecker
 from app.ai.runtime.pipeline_errors import (
     ForgeValidationError,
     PlanningError,
@@ -112,6 +113,12 @@ class Diagnostics:
     (`PromptPipeline`自体はforge_ai/のInjection Guardを直接呼ばない、
     既存の「このファイルはforge_ai/を3つに限り直接importしてよい」という
     制約を守るため)。検出のみで、ブロックはしない。"""
+
+    safety_report: dict[str, Any] | None = None
+    """FORGE-AI-CONNECT-001 TD20対応(2026-08-11)。最終Forge Documentに
+    対する`OutputSafetyChecker`(`app/ai/runtime/output_safety.py`、
+    backend内で完結しforge_ai/には依存しない)の検査結果。検出のみで、
+    生成そのものはブロックしない(TD21と同じ設計方針)。"""
 
 
 @dataclass(frozen=True)
@@ -381,6 +388,22 @@ class PromptPipeline:
         # 10. Diagnostics作成(2.1・2.2節の変換は診断・ログ用途のみ、M004内部は駆動しない)
         intent_ir = intent_ir_from_forge_ai_intent(context.intent)
         plan_conversion = plan_ir_from_application_plan(context.plan, context.intent)
+        # FORGE-AI-CONNECT-001 TD20対応(2026-08-11): 最終Forge Document
+        # (Repair後の確定版)に対して実行する。検出のみ、ブロックはしない。
+        safety_result = OutputSafetyChecker().check(forge_document)
+        safety_report = {
+            "safe": safety_result.safe,
+            "issues": [
+                {
+                    "path": i.path,
+                    "category": i.category,
+                    "severity": i.severity,
+                    "matched_phrase": i.matched_phrase,
+                    "message": i.message,
+                }
+                for i in safety_result.issues
+            ],
+        }
         diagnostics = Diagnostics(
             engine_used=engine,
             provider_used=provider_name,
@@ -393,6 +416,7 @@ class PromptPipeline:
             domain_classification=_domain_classification_to_dict(context.domain_classification),
             decision_trace=_decision_trace_to_dicts(context.decision_trace),
             injection_report=injection_report,
+            safety_report=safety_report,
         )
 
         # 11. 結果返却

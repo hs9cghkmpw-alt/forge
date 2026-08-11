@@ -82,6 +82,7 @@ def _diagnostics_dto(diagnostics) -> DiagnosticsDTO:  # noqa: ANN001 — app.ai.
         domain_classification=diagnostics.domain_classification,
         decision_trace=list(diagnostics.decision_trace),
         injection_report=diagnostics.injection_report,
+        safety_report=diagnostics.safety_report,
     )
 
 
