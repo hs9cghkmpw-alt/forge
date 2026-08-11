@@ -37,6 +37,7 @@ from app.ai.runtime.confirmation_store import (
     ConfirmationRoundExceededError,
     default_confirmation_store,
 )
+from app.ai.runtime.injection_scan import scan_for_injection
 from app.ai.runtime.pipeline_errors import ConfirmationSessionError
 from app.ai.runtime.prompt_pipeline import PipelineNeedsConfirmationResult, PromptPipeline
 from app.schemas.ai import (
@@ -80,6 +81,7 @@ def _diagnostics_dto(diagnostics) -> DiagnosticsDTO:  # noqa: ANN001 — app.ai.
         ambiguity_report=diagnostics.ambiguity_report,
         domain_classification=diagnostics.domain_classification,
         decision_trace=list(diagnostics.decision_trace),
+        injection_report=diagnostics.injection_report,
     )
 
 
@@ -131,8 +133,15 @@ def _run_pipeline_and_build_response(
     # `previous_answers`(過去の回答履歴)と今回の回答を結合した
     # **全件**を`clarification_answers`として渡すよう修正した。
     all_answers = previous_answers + ((clarification_answer,) if clarification_answer else ())
+    # FORGE-AI-CONNECT-001 TD21対応(2026-08-11): 検出のみ、ブロックはしない
+    # (`app/ai/runtime/injection_scan.py`参照)。
+    injection_report = scan_for_injection(natural_language)
     result = pipeline.run(
-        natural_language, engine=engine, provider=provider, clarification_answers=all_answers
+        natural_language,
+        engine=engine,
+        provider=provider,
+        clarification_answers=all_answers,
+        injection_report=injection_report,
     )
 
     if isinstance(result, PipelineNeedsConfirmationResult):
@@ -184,6 +193,7 @@ def _needs_confirmation_response_with_input(
             ambiguity_report=result.ambiguity_report,
             domain_classification=result.domain_classification,
             decision_trace=list(result.decision_trace),
+            injection_report=result.injection_report,
         ),
     )
 

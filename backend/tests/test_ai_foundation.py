@@ -48,6 +48,17 @@ class TestIntermediateRepresentations(unittest.TestCase):
         self.assertEqual(len(plan.screens), 1)
         self.assertEqual(plan.template_hint, "checklist")
 
+    def test_intent_ir_schema_version_defaults_to_1_0_and_is_backward_compatible(self):
+        """FORGE-AI-CONNECT-001 TD22対応(2026-08-11)。既存の呼び出し方
+        (`schema_version`を渡さない)が引き続き動作し、既定値"1.0"に
+        なることの回帰テスト。"""
+        intent = IntentIR(purpose="x")
+        self.assertEqual(intent.schema_version, "1.0")
+
+    def test_plan_ir_schema_version_defaults_to_1_0_and_is_backward_compatible(self):
+        plan = PlanIR(screens=(ScreenPlan(screen_id="main", purpose="x"),))
+        self.assertEqual(plan.schema_version, "1.0")
+
     def test_critic_result_construction(self):
         result = CriticResult(score=82, release_ready=False, required_fixes=("add_back_navigation",))
         self.assertEqual(result.score, 82)

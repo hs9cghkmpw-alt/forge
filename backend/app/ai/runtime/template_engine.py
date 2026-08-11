@@ -38,6 +38,12 @@ class Template:
     description: str = ""
     builder: Callable[..., dict] | None = field(default=None, repr=False, compare=False)
 
+    schema_version: str = "1.0"
+    """FORGE-AI-CONNECT-001 TD22対応(2026-08-11)。このTemplateメタデータ
+    構造自体のバージョン(`IntentIR.schema_version`・`PlanIR.
+    schema_version`と同じ考え方)。既存3種のTemplate(checklist/memo/
+    form)は全てこの既定値のまま。"""
+
 
 class TemplateRegistry:
     """既知のTemplate一覧を保持する。新しいTemplateを追加する際は、

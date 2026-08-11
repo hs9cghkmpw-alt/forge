@@ -105,6 +105,14 @@ class Diagnostics:
     domain_classification: dict[str, Any] | None = None
     decision_trace: tuple[dict[str, Any], ...] = ()
 
+    injection_report: dict[str, Any] | None = None
+    """FORGE-AI-CONNECT-001 TD21対応(2026-08-11)。呼び出し側
+    (`routers/ai.py`)が`app.ai.runtime.injection_scan.scan_for_injection()`
+    で事前に計算した結果をそのまま受け取り、診断として記録するだけ
+    (`PromptPipeline`自体はforge_ai/のInjection Guardを直接呼ばない、
+    既存の「このファイルはforge_ai/を3つに限り直接importしてよい」という
+    制約を守るため)。検出のみで、ブロックはしない。"""
+
 
 @dataclass(frozen=True)
 class PipelineRunResult:
@@ -140,6 +148,10 @@ class PipelineNeedsConfirmationResult:
     decision_trace: tuple[dict[str, Any], ...] = ()
     ambiguity_report: dict[str, Any] | None = None
     domain_classification: dict[str, Any] | None = None
+    injection_report: dict[str, Any] | None = None
+    """FORGE-AI-CONNECT-001 TD21対応(2026-08-11)。`Diagnostics.
+    injection_report`と同じ(呼び出し側が事前計算した結果をそのまま
+    保持するだけ)。"""
 
 
 PromptPipelineOutcome = PipelineRunResult | PipelineNeedsConfirmationResult
@@ -217,8 +229,16 @@ class PromptPipeline:
         engine: str = "forge_ai",
         provider: str | None = None,
         clarification_answers: tuple[str, ...] = (),
+        injection_report: dict[str, Any] | None = None,
     ) -> PromptPipelineOutcome:
         """フロー全体を1回実行する。
+
+        `injection_report`(FORGE-AI-CONNECT-001 TD21対応、2026-08-11):
+        呼び出し側が`app.ai.runtime.injection_scan.scan_for_injection()`で
+        事前に計算した結果。このメソッド自身は計算せず、そのまま
+        Diagnostics/PipelineNeedsConfirmationResultへ記録するだけ
+        (このファイルがforge_ai/を直接importしてよい3つに限る制約を
+        守るため)。
 
         `clarification_answers`(FORGE v0.2 Final Gate P0.1で新設、
         最終調整で複数累積対応へ変更): `needs_confirmation`への回答が
@@ -294,6 +314,7 @@ class PromptPipeline:
                 domain_classification=(
                     _domain_classification_to_dict(partial.domain_classification) if partial is not None else None
                 ),
+                injection_report=injection_report,
             )
 
         if isinstance(outcome, CognitivePipelineFailed):
@@ -371,6 +392,7 @@ class PromptPipeline:
             ambiguity_report=_ambiguity_report_to_dict(context.ambiguity_report),
             domain_classification=_domain_classification_to_dict(context.domain_classification),
             decision_trace=_decision_trace_to_dicts(context.decision_trace),
+            injection_report=injection_report,
         )
 
         # 11. 結果返却
@@ -398,4 +420,6 @@ def _plan_ir_to_dict(plan_ir: Any) -> dict[str, Any]:
         "navigation_edges": list(plan_ir.navigation_edges),
         "template_hint": plan_ir.template_hint,
         "unassigned_actions": list(plan_ir.unassigned_actions),
+        # FORGE-AI-CONNECT-001 TD22対応(2026-08-11)。
+        "schema_version": plan_ir.schema_version,
     }

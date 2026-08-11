@@ -106,6 +106,9 @@ class DiagnosticsDTO(BaseModel):
     ambiguity_report: dict[str, Any] | None = None
     domain_classification: dict[str, Any] | None = None
     decision_trace: list[dict[str, Any]] = Field(default_factory=list)
+    # FORGE-AI-CONNECT-001 TD21対応(2026-08-11)。検出のみ、ブロックはしない
+    # (`app/ai/runtime/injection_scan.py`参照)。
+    injection_report: dict[str, Any] | None = None
 
 
 class GenerateResultDTO(BaseModel):

@@ -59,6 +59,12 @@ class IntentIR:
     output_typeの5フィールドを追加した。全て既定値を持たせており、
     既存の`IntentIR(purpose="x")`という呼び出し方(test_ai_foundation.py・
     test_ai_runtime.py等)は変更せずそのまま動く(後方互換性を維持)。
+
+    FORGE-AI-CONNECT-001 TD22対応(2026-08-11)。`schema_version`を追加。
+    現時点で存在するIntentIRのVersionは"1.0"のみであり、Migration機構は
+    意図的に実装していない(「存在しないMigrationを実装済みのように
+    見せる」ことを避けるため、TECH_DEBT.md TD22の対応方針どおり)。
+    将来2つ目のバージョンが実際に必要になった時点でMigrationを追加する。
     """
 
     purpose: str
@@ -98,6 +104,12 @@ class IntentIR:
     Template Selector(PHASE5)がPlanを経由せずIntentIRだけからも
     大まかな絞り込みができるようにしている。"""
 
+    schema_version: str = "1.0"
+    """FORGE-AI-CONNECT-001 TD22対応(2026-08-11)。このIntentIR構造自体の
+    バージョン。Forge Language(JSON)のv1.0/v1.1/v1.2バージョニング方針
+    (`docs/spec/LANGUAGE_FREEZE.md`)とは別概念(こちらはAI Runtime内部の
+    中間表現のバージョン)。"""
+
 
 @dataclass(frozen=True)
 class ScreenPlan:
@@ -132,6 +144,11 @@ class PlanIR:
     Intentが持つ`required_actions`のうち、どの画面(ScreenPlan)にも
     割り当てられなかったものを、捨てずにここへ保持する
     (`actions_needed=()`で単純に破棄しない)。"""
+
+    schema_version: str = "1.0"
+    """FORGE-AI-CONNECT-001 TD22対応(2026-08-11)。`IntentIR.schema_version`
+    と同じ考え方(このPlanIR構造自体のバージョン、Migration機構は
+    2つ目のバージョンが実際に必要になるまで意図的に未実装)。"""
 
 
 @dataclass(frozen=True)
