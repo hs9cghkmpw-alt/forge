@@ -1,12 +1,31 @@
 """Design Critic(M007 Phase 1 Minimal Cognitive Slice、M006 14章)。
 
 Validatorとは別に、設計としての良し悪しを評価する。**最小実装**として、
-M006 14章の14評価軸のうち、決定的に判定しやすい8軸を実装する
+M006 14章の14評価軸のうち、決定的に判定しやすい10軸を実装する
 (Completeness/Simplicity/Empty State Quality/Validation Coverage/
-Navigation Coherence/Privacy/Accessibility/Intent Meaning Fidelity)。
-残り6軸(Domain Consistency/State Completeness/Action Completeness/
+Navigation Coherence/Privacy/Accessibility/Intent Meaning Fidelity/
+Action Completeness/State Completeness)。残り4軸(Domain Consistency/
 Error Recovery/Explainability/Runtime Safety)は未実装であり、
 `CriticReport.unevaluated_axes`に明示する。
+
+**FORGE-AI-QUALITY-001(2026-08-11)で8軸→10軸へ拡張**: 追加した
+Action Completeness・State Completenessの選定基準は、既存6軸(未実装)の
+うち「`ApplicationPlan`・`RequirementSet`・`TemplateSelection`という
+既存の3引数だけで、決定的に判定できるもの」のみに絞った。残り4軸
+(Domain Consistency・Error Recovery・Explainability・Runtime Safety)は、
+Domain定義・実際のエラーハンドリング文言の意味理解・Runtime実行結果
+など、この3引数だけでは機械的に判定できない情報を要するため、今回も
+見送った(`evaluate()`のシグネチャを広げる設計変更は、呼び出し元
+(`pipeline_orchestrator.py`)・既存テストへの影響範囲を確認しきれて
+いないため、このセッションでは着手しない)。
+
+**正直な申告**: 現在の`CognitiveApplicationPlanner`の実装では、
+`required_actions`が空になることは実質無い(`base_required_actions`が
+`or ("add_item",)`で必ずfallbackするため)。そのため
+Action Completenessは現時点では**ほぼ常に満点**になる、
+Navigation Coherence(単一画面時に常に満点)と同種の「将来の拡張
+(複数画面Plan・Actionが実際に0件になりうる経路)に備える防御的な
+評価軸」という位置づけである。
 
 **CEO実物監査(Phase 1.1)対応**: 以前は実装済み4軸だけで
 `score=1.00`となり、「アプリ全体の品質が完璧」であるかのように
@@ -43,6 +62,7 @@ _RELEASE_READY_THRESHOLD = 0.6
 _EVALUATED_AXES: tuple[str, ...] = (
     "completeness", "simplicity", "empty_state_quality", "validation_coverage",
     "navigation_coherence", "privacy", "accessibility", "intent_meaning_fidelity",
+    "action_completeness", "state_completeness",
 )
 _ALL_M006_AXES: tuple[str, ...] = (
     "completeness", "simplicity", "intent_meaning_fidelity", "domain_consistency",
@@ -211,6 +231,51 @@ class DesignCritic:
                 affected_component="application_plan", auto_fixable=False,
             ))
             has_blocking_issue = True
+
+        # Action Completeness(FORGE-AI-QUALITY-001新設): データ
+        # (key_elements)を持つ画面が、そのデータを操作するための
+        # required_actionsを1つも持たない場合、「見るだけで何もできない
+        # 画面」という設計上の欠落として指摘する。
+        screens_with_data_but_no_actions = [
+            s for s in plan.screens if s.key_elements and not s.required_actions
+        ]
+        action_completeness = 1.0 if not screens_with_data_but_no_actions else 0.3
+        axis_scores.append(action_completeness)
+        if screens_with_data_but_no_actions:
+            issues.append(CriticIssue(
+                category="action_completeness", severity="high",
+                evidence=f"{[s.name for s in screens_with_data_but_no_actions]}にデータ"
+                         "(key_elements)はあるが、操作可能なActionが1つもありません。",
+                recommended_fix="最低限、対象データを追加できるActionを割り当てる",
+                affected_component="application_plan", auto_fixable=False,
+            ))
+            has_blocking_issue = True
+
+        # State Completeness(FORGE-AI-QUALITY-001新設): アプリ全体として
+        # 管理するデータ(data_entities)が1件も無い場合、また各画面の
+        # key_elementsがdata_entitiesに含まれない(=Planの他の部分から
+        # 参照できない孤立したデータ)場合を、State設計の欠落として指摘する。
+        screens_with_orphan_elements = [
+            s for s in plan.screens if any(e not in plan.data_entities for e in s.key_elements)
+        ]
+        state_completeness = 1.0 if plan.data_entities and not screens_with_orphan_elements else 0.3
+        axis_scores.append(state_completeness)
+        if not plan.data_entities:
+            issues.append(CriticIssue(
+                category="state_completeness", severity="high",
+                evidence="ApplicationPlan全体でdata_entitiesが1件もありません。",
+                recommended_fix="アプリが扱うデータ実体を最低1つ定義する",
+                affected_component="application_plan", auto_fixable=False,
+            ))
+            has_blocking_issue = True
+        elif screens_with_orphan_elements:
+            issues.append(CriticIssue(
+                category="state_completeness", severity="medium",
+                evidence=f"{[s.name for s in screens_with_orphan_elements]}のkey_elementsに、"
+                         "plan.data_entitiesへ含まれないデータが存在します。",
+                recommended_fix="画面のkey_elementsを、アプリ全体のdata_entitiesと一致させる",
+                affected_component="application_plan", auto_fixable=False,
+            ))
 
         implemented_checks_score = sum(axis_scores) / len(axis_scores) if axis_scores else 0.0
         coverage_ratio = len(_EVALUATED_AXES) / len(_ALL_M006_AXES)

@@ -902,3 +902,46 @@ primary_domainがhospital/attendanceになっていること自体を直接検�
 というケースを見逃しうるため)。既存の全テスト(forge_ai 408件)が回帰
 なしで通ることを確認した上で、実際に`uvicorn`+実Gemini APIで再実行し、
 上記の挙動を確認した。
+
+---
+
+## TD28. Design Criticの評価軸がM006 14軸中8軸のみだった → **10軸へ拡張(2026-08-11)**
+
+FORGE-AI-QUALITY-001(2026-08-11)、CEOが選んだ4方向のうち
+「Design Criticの評価範囲を広げる」に対応した。
+
+**追加した2軸**:
+* **Action Completeness**: `key_elements`(データ)を持つ画面が、
+  `required_actions`を1つも持たない(=見るだけで何も操作できない)
+  場合、high/blockingとして指摘する。
+* **State Completeness**: (1) `ApplicationPlan`全体で`data_entities`が
+  1件も無い場合はhigh/blocking、(2) 画面の`key_elements`に、
+  `plan.data_entities`へ含まれない値(孤立したデータ)がある場合は
+  medium/non-blockingとして指摘する。
+
+**選定基準(正直な申告)**: 残り4軸(Domain Consistency・Error
+Recovery・Explainability・Runtime Safety)は見送った。`DesignCritic.
+evaluate()`は`plan`・`template_selection`・`requirements`の3引数しか
+受け取らず、これらはDomain定義・実際のエラーハンドリング文言の意味・
+Runtime実行結果といった、この3引数だけでは機械的に判定できない情報を
+要するため。シグネチャを広げる設計変更(呼び出し元
+`pipeline_orchestrator.py`・既存テストへの影響範囲)は今回のスコープ
+外とした。
+
+**正直な申告その2**: `CognitiveApplicationPlanner`の現在の実装では、
+`required_actions`が空になることは実質無く(必ず`("add_item",)`等へ
+fallbackする)、単一画面Planでは`screen.key_elements`と
+`plan.data_entities`は常に一致する(`data_entities`がそのまま
+`key_elements`に代入されるため)。そのため、追加した2軸は現時点では
+**ほぼ常に満点**になる——既存のNavigation Coherence軸(単一画面時は
+常に満点)と同種の、将来の拡張(複数画面Plan・Action 0件になりうる
+経路)に備える防御的な評価軸という位置づけである。
+
+**検証**: `forge_ai/tests/test_planning_and_critic.py`へ4件の回帰テスト
+(データありでAction無し→blocking/データ無しでAction無し→非該当/
+data_entities空→blocking/孤立したkey_element→medium非blocking)を
+追加。forge_ai全411件・backend込み全951件が回帰なしで通ることを確認
+した上で、実際に`uvicorn`+実Gemini APIで「買い物リストを作って」を
+再実行し、Design Criticの評価軸追加後もSuccess経路が正常に動作する
+ことを確認した(意図しない副作用でrelease_readyが崩れていないことの
+裏付け)。

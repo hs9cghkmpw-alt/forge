@@ -58,9 +58,22 @@ Concept名の直書き許可リスト(`_PREFER_AS_PRIMARY_WHEN_MENTIONED`)を、
 管理したい」)が解消し、実機で確認した。詳細は`TECH_DEBT.md` TD24
 「2026-08-11(2回目)追記」参照。
 
+### Design Critic評価範囲の拡大(8軸→10軸)
+CEOが選んだ4方向のうち「Design Criticの評価範囲を広げる」に対応した。
+Action Completeness(データを持つ画面に操作可能なActionが無い場合を
+検出)・State Completeness(data_entitiesが空、または画面のkey_elements
+がdata_entitiesに含まれない孤立データを検出)の2軸を追加した。残り4軸
+(Domain Consistency/Error Recovery/Explainability/Runtime Safety)は、
+`DesignCritic.evaluate()`の既存3引数(plan/template_selection/
+requirements)だけでは機械的に判定できない情報を要するため見送った
+(シグネチャ拡張は呼び出し元への影響範囲を確認できておらずスコープ外)。
+現在の実装では新2軸ともほぼ常に満点になる(既存のNavigation Coherence
+軸と同種の、将来の複数画面Plan拡張に備える防御的な評価軸)ことを
+正直に記録した上で、回帰テスト4件を追加。詳細は`TECH_DEBT.md` TD28参照。
+
 ### 残タスク(このTaskでは未着手)
-CEOが選んだ残り2方向(Design Critic評価範囲の拡大/Widget・Templateの
-種類拡充)は、次のTaskで着手する。
+CEOが選んだ残り1方向(Widget・Templateの種類拡充)は、次のTaskで
+着手する。
 
 ## Task049 — TD24深掘り修正・TD22/TD21/TD20実装・音声入力（2026-08-11、CEO「すべてお願い」）
 

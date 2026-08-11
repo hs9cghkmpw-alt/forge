@@ -560,6 +560,80 @@ class TestDesignCritic(unittest.TestCase):
         self.assertTrue(any(i.category == "navigation_coherence" for i in report.issues))
         self.assertFalse(report.release_ready)
 
+    def test_screen_with_data_but_no_actions_fails_action_completeness(self) -> None:
+        """FORGE-AI-QUALITY-001新設(Action Completeness): key_elements
+        (データ)はあるがrequired_actionsが1つも無い画面は、「見るだけで
+        何もできない画面」としてhigh/blockingになる。"""
+        from forge_ai.core.orchestration.cognitive_types import TemplateSelection
+
+        plan = ApplicationPlan(
+            title="x",
+            screens=(ScreenPlan(
+                name="main", purpose="x", key_elements=("item",), required_actions=(),
+                empty_state_message="empty", validation_rules=("rule",),
+            ),),
+            data_entities=("item",), primary_flow=(),
+        )
+        selection = TemplateSelection(template="checklist", score_by_template=(), differs_from_preliminary=False, rationale="x")
+        report = self.critic.evaluate(plan, selection, RequirementSet())
+        self.assertTrue(any(i.category == "action_completeness" and i.severity == "high" for i in report.issues))
+        self.assertFalse(report.release_ready)
+
+    def test_screen_without_data_does_not_trigger_action_completeness(self) -> None:
+        """key_elementsが空の画面(データを持たない画面)は、
+        required_actionsが空でもAction Completeness違反にはしない
+        (「データがあるのに操作できない」ことだけを問題にする)。"""
+        from forge_ai.core.orchestration.cognitive_types import TemplateSelection
+
+        plan = ApplicationPlan(
+            title="x",
+            screens=(ScreenPlan(
+                name="main", purpose="x", key_elements=(), required_actions=(),
+                empty_state_message="empty", validation_rules=("rule",),
+            ),),
+            data_entities=(), primary_flow=(),
+        )
+        selection = TemplateSelection(template="checklist", score_by_template=(), differs_from_preliminary=False, rationale="x")
+        report = self.critic.evaluate(plan, selection, RequirementSet())
+        self.assertFalse(any(i.category == "action_completeness" for i in report.issues))
+
+    def test_empty_data_entities_fails_state_completeness(self) -> None:
+        """FORGE-AI-QUALITY-001新設(State Completeness): アプリ全体で
+        data_entitiesが1件も無い場合、high/blockingになる。"""
+        from forge_ai.core.orchestration.cognitive_types import TemplateSelection
+
+        plan = ApplicationPlan(
+            title="x",
+            screens=(ScreenPlan(
+                name="main", purpose="x", key_elements=(), required_actions=(),
+                empty_state_message="empty", validation_rules=("rule",),
+            ),),
+            data_entities=(), primary_flow=(),
+        )
+        selection = TemplateSelection(template="checklist", score_by_template=(), differs_from_preliminary=False, rationale="x")
+        report = self.critic.evaluate(plan, selection, RequirementSet())
+        self.assertTrue(any(i.category == "state_completeness" and i.severity == "high" for i in report.issues))
+        self.assertFalse(report.release_ready)
+
+    def test_screen_element_not_in_data_entities_fails_state_completeness_as_medium(self) -> None:
+        """画面のkey_elementsに、plan.data_entitiesへ含まれない値がある
+        (孤立したデータ)場合、medium(non-blocking)として指摘する。"""
+        from forge_ai.core.orchestration.cognitive_types import TemplateSelection
+
+        plan = ApplicationPlan(
+            title="x",
+            screens=(ScreenPlan(
+                name="main", purpose="x", key_elements=("item", "orphan"), required_actions=("add_item",),
+                empty_state_message="empty", validation_rules=("rule",),
+            ),),
+            data_entities=("item",), primary_flow=("add_item",),
+        )
+        selection = TemplateSelection(template="checklist", score_by_template=(), differs_from_preliminary=False, rationale="x")
+        report = self.critic.evaluate(plan, selection, RequirementSet())
+        issue = next(i for i in report.issues if i.category == "state_completeness")
+        self.assertEqual(issue.severity, "medium")
+        self.assertTrue(report.release_ready)  # mediumはblockingにしない
+
     def test_report_tracks_evaluated_and_unevaluated_axes(self) -> None:
         """CEO実物監査(Phase 1.1)指摘5: 「評価済み軸」「未評価軸」を
         CriticReportが保持する。"""
