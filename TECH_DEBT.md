@@ -1136,3 +1136,65 @@ Repair EngineのSection(TD17)を参照。「今は困っていない理由: ど�
 `prompt_pipeline.py`が`forge_ai.repair.repair_engine.RepairEngine`を
 本番経路で呼び出しているという実態と合っていなかったため、TD17本文へ
 2026-08-11追記として訂正した(削除はせず、旧記述は履歴として残した)。
+
+---
+
+## TD32. Repair Loopは本番経路で呼ばれていたが、フィールド名の取り違えにより実際は一度も修正できていなかった(2026-08-11解消)
+
+FORGE-AI-QUALITY-001(2026-08-11)。TD17の記述訂正(「Repair Engineは
+Stubで呼ばれない」という記述が古かった)を確認する過程で、より深刻な
+実バグを発見した。
+
+**発見の経緯**: TD17を訂正する際、「では実際に何かを修正できているか」
+を裏取りしようとして`RepairEngine._try_fix()`(既知2パターン:
+`"missing_app_title"`・`"empty_checklist_state"`)の判定文字列が、
+`backend/app/ai/validators/schema_validator.py`の実際の`Category`
+enum(`"syntax"`/`"schema"`/`"semantic"`/`"runtime_safety"`の4値のみ)
+のどれとも一致しないことに気づいた。
+
+**根本原因**: `backend/app/ai/runtime/forge_ai_adapter.py`の
+`to_repair_issues()`が、`ForgeAIRepairIssue.category`へ
+`ValidationIssue.category`(4値の大分類)を渡していた。しかし
+`RepairEngine._try_fix()`が判定に使いたかったのは、具体的な識別名
+(`ValidationIssue.rule`、実際の値は`"string_length"`・`"required"`・
+`"identifier_format"`等)だった。この2つのフィールドを取り違えていた
+ため、**Repair Loop自体は本番経路で毎回呼ばれていたが(TD17参照)、
+実際にはどのValidator不合格も一度も修正できず、常に
+`repair_attempts`を使い切ってそのままエラーになる設計だった**
+(Gemini API呼び出しが1回無駄になるだけで、ユーザーへの結果は
+「Repairが無かった場合」と同じ)。
+
+加えて、`"missing_app_title"`・`"empty_checklist_state"`という2つの
+「既知パターン」自体、実際の`schema_validator.py`を確認したところ
+**どちらも実在するルールではなかった**ことも判明した: `app.title`が
+無い(keyごと欠落)こと自体はエラーにならない(`app`セクション自体が
+任意)。checklistが0件であること自体もエラーにならない(買い物リストが
+空で始まるのは正常)。おそらく`forge_ai/`単体の開発時に、実際のBackend
+Validatorのルール名を確認せず仮に置いたパターンが、そのまま残っていた
+と考えられる。
+
+**修正内容**:
+1. `to_repair_issues()`: `category=e.category.value` →
+   `category=e.rule`へ修正。
+2. `RepairEngine._try_fix()`: `"missing_app_title"`は
+   (forge_ai自身のテストがAdapterを経由せず直接構築するケースとの
+   後方互換のため)残しつつ、実際に発生しうる`"string_length"`
+   ルール(`/app/title`パスに限定、他のフィールドの`string_length`
+   エラーと誤って混同しないようpathで絞り込み)への対応を追加した。
+   実在しない`"empty_checklist_state"`パターンは削除した。
+
+**検証**: `forge_ai/tests/test_repair_engine.py`・
+`backend/tests/test_forge_ai_adapter.py`へ、実際の`schema_validator.py`
+(モックではなく本物の関数)が生成する不合格文書を使った回帰テストを
+追加(空タイトルの文書を実際に`validate_forge_document()`へ通し、
+`to_repair_issues()`が正しく`"string_length"`を返すことを確認)。
+全テスト(962件)が回帰なしで通ることを確認した。
+
+**残る限界**: `"string_length"`(app.title)以外の実際のValidator
+ルール(`"required"`・`"identifier_format"`・`"type"`等)は、依然
+決定的な自動修正の対象になっていない。これらの多くはAI生成JSON側の
+構造的な不具合(例: checklist widgetにstate_refが無い)であり、
+何を正しい値にすべきかを安全に推測できないため、今回は対応を見送った
+(不用意に「直したつもり」で別の不具合を埋め込むリスクの方が大きいと
+判断)。実際にどのルールが本番でどれだけの頻度で発生するかを計測して
+いないため、次にどのパターンへ対応すべきかの優先順位付けもできていない。

@@ -23,6 +23,20 @@ APIへ連続送信し、クラッシュ・不適切なエラー表示が無い�
 を実際に呼び出しているという実態と食い違っていたため訂正した(削除せず、
 2026-08-11追記として旧記述の下に残した)。
 
+### TD32: Repair Loopが本番経路で呼ばれてはいたが、フィールド取り違えで実際は一度も修正できていなかった
+TD17を訂正する過程で発見した、より深刻な実バグ。`forge_ai_adapter.py`の
+`to_repair_issues()`が`ValidationIssue.category`(4値の大分類:
+syntax/schema/semantic/runtime_safety)を`RepairIssue.category`へ渡して
+いたが、`RepairEngine._try_fix()`は具体的なルール名(`"string_length"`
+等、実際には`ValidationIssue.rule`に入っている)で判定していたため、
+一度も一致せず、Repair Loopは「毎回呼ばれるが何も直せない」状態だった。
+加えて、既知パターンとして想定していた`"missing_app_title"`・
+`"empty_checklist_state"`自体、実際のValidatorには存在しないルールだった
+ことも判明した(app.title欠落・checklist空はどちらも正常な状態として
+許容されている)。`category=e.rule`への修正、および実在する
+`"string_length"`(app.titleパス限定)への対応を追加し、本物の
+Validatorを使った回帰テストで確認した。
+
 ### 副次的な発見(バグではないと判断したもの)
 「植物の水やり記録」「ペットの餌やり記録」「映画鑑賞記録」等、専用Domainが
 存在しないニッチな入力はdiary(日記)Domainへ分類された。専用Domainが

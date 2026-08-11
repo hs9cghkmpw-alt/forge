@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from forge_ai.core.compiler import ForgeIRDocument, ForgeIRStateValue
+from forge_ai.core.compiler import ForgeIRDocument
 from forge_ai.prompt.prompt_builder import PromptBuilder
 from forge_ai.provider.provider_interface import AIProvider
 
@@ -99,22 +99,39 @@ class RepairEngine:
 
     def _try_fix(self, ir: ForgeIRDocument, issue: RepairIssue) -> ForgeIRDocument | None:
         """既知の問題カテゴリだけを決定的に修正する。未知のカテゴリはNoneを返し
-        (修正できなかったことを示す)、クラッシュさせない。"""
+        (修正できなかったことを示す)、クラッシュさせない。
+
+        FORGE-AI-QUALITY-001(2026-08-11)で発見・修正した実バグ:
+        `backend/app/ai/runtime/forge_ai_adapter.py`の`to_repair_issues()`
+        が、以前は`issue.category`へ`ValidationIssue.category`(Category
+        enum、`"schema"`等4値のみ)を渡していたため、ここで判定していた
+        `"missing_app_title"`・`"empty_checklist_state"`のどちらとも
+        一度も一致せず、**Repair Loopは本番経路で呼ばれてはいたが、実際の
+        Validator不合格を一度も修正できていなかった**(TD17・TD31参照)。
+        アダプター側を`e.rule`(具体的なルール名)を渡すよう修正した上で、
+        ここも実際に`schema_validator.py`が生成する具体的なrule名
+        (`"string_length"`)+path(`/app/title`)で判定するよう修正した。
+
+        `"empty_checklist_state"`という以前のパターンは削除した。実際に
+        `schema_validator.py`を確認したところ、checklistが空(0件)である
+        こと自体を不合格にするルールは存在しない(買い物リストが未入力の
+        状態で始まるのは正常な状態のため)。存在しないルールを「既知の
+        修正パターン」として持ち続けるのは、事実に基づかない安心感を
+        与えるだけだったため、正直に削除した。
+        """
         if issue.category == "missing_app_title":
+            # forge_ai自身のテスト(`test_repair_engine.py`)が直接
+            # `RepairIssue(category="missing_app_title", ...)`を構築する
+            # ケースとの後方互換のために残している(Adapterを経由しない
+            # 直接呼び出し)。実際のBackend Validator経由では、下記の
+            # `string_length` + `/app/title`パスの分岐が該当する。
             fallback_title = ir.screens[0].title if ir.screens else "新しいアプリ"
             return replace(ir, app_title=fallback_title)
 
-        if issue.category == "empty_checklist_state" and ir.screens:
-            screen = ir.screens[0]
-            new_state = dict(screen.state)
-            for key, value in new_state.items():
-                if value.type == "checklist" and not value.value:
-                    new_state[key] = ForgeIRStateValue(
-                        type="checklist",
-                        value=[{"id": "item_1", "text": "最初のアイテム", "done": False}],
-                    )
-            new_screen = replace(screen, state=new_state)
-            new_screens = (new_screen,) + ir.screens[1:]
-            return replace(ir, screens=new_screens)
+        if issue.category == "string_length" and issue.path.endswith("/app/title"):
+            # 実際のBackend Validator(`_check_schema`)が生成しうる、
+            # app.titleが1〜80文字の文字列でない場合のrule名。
+            fallback_title = ir.screens[0].title if ir.screens else "新しいアプリ"
+            return replace(ir, app_title=fallback_title)
 
         return None

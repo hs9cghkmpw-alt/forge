@@ -154,6 +154,28 @@ class TestRepairIssueAdapter(unittest.TestCase):
         issues = to_repair_issues(validation)
         self.assertEqual(issues, ())
 
+    def test_repair_issue_category_carries_the_real_validator_rule_name(self) -> None:
+        """FORGE-AI-QUALITY-001(2026-08-11)回帰テスト: 実バグ修正の確認。
+        以前は`category`へ`ValidationIssue.category`(Category enum、
+        `"schema"`等4値のみ)を渡していたため、`RepairEngine`が判定に
+        使う具体的なルール名(`"string_length"`等)と一度も一致せず、
+        Repair Loopが実質的な無効化状態になっていた(TD31参照)。
+        `category`に実際のrule名がそのまま入ることを確認する。"""
+        invalid_doc = {
+            "version": "1.0", "initial_screen_id": "s1",
+            "app": {"title": ""},
+            "screens": [{"id": "s1", "title": "T", "body": {"type": "text", "id": "t1", "value": "hi"}}],
+        }
+        validation = validate_forge_document(invalid_doc)
+        self.assertFalse(validation.valid)
+        issues = to_repair_issues(validation)
+        title_issues = [i for i in issues if i.path.endswith("/app/title")]
+        self.assertEqual(len(title_issues), 1)
+        self.assertEqual(title_issues[0].category, "string_length")
+        # 修正前の実装ではここが"schema"になっており、RepairEngineの
+        # どの既知パターンとも一致しなかった。
+        self.assertNotIn(title_issues[0].category, {"syntax", "schema", "semantic", "runtime_safety"})
+
 
 class TestRepairResultAdapter(unittest.TestCase):
     def test_converts_forge_ai_repair_result_to_backend_shape(self) -> None:

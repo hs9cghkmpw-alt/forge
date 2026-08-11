@@ -24,6 +24,8 @@ class TestRepairEngine(unittest.TestCase):
         self.engine = RepairEngine(MockProvider())
 
     def test_repair_fixes_missing_app_title(self) -> None:
+        """forge_ai自身が直接`RepairIssue`を構築する場合(Adapterを経由
+        しない呼び出し)の後方互換を確認する。"""
         ir = _make_ir(app_title=None)
         issues = (RepairIssue(path="$/app", category="missing_app_title", message="タイトルがありません"),)
         result = self.engine.repair(ir, issues)
@@ -31,11 +33,30 @@ class TestRepairEngine(unittest.TestCase):
         self.assertIn("missing_app_title", [i.category for i in result.fixed_issues])
         self.assertEqual(result.remaining_issues, ())
 
-    def test_repair_fixes_empty_checklist(self) -> None:
-        ir = _make_ir(checklist_value=[])
-        issues = (RepairIssue(path="$/screens/0/state/items", category="empty_checklist_state", message="空です"),)
+    def test_repair_fixes_invalid_app_title_length_from_real_validator_rule_name(self) -> None:
+        """FORGE-AI-QUALITY-001(2026-08-11)回帰テスト: 実際の
+        `backend/app/ai/validators/schema_validator.py`が生成する
+        rule名(`"string_length"`)+path(`.../app/title`)で、正しく
+        タイトルを修正できることを確認する(以前は`category`に
+        Category enum値(`"schema"`等)が渡っていたため、この現実の
+        パターンを一度も修正できていなかった、TD31参照)。"""
+        ir = _make_ir(app_title="")
+        issues = (RepairIssue(path="$/app/title", category="string_length", message="1〜80文字である必要があります"),)
         result = self.engine.repair(ir, issues)
-        self.assertGreater(len(result.ir.screens[0].state["items"].value), 0)
+        self.assertIsNotNone(result.ir.app_title)
+        self.assertEqual(result.remaining_issues, ())
+
+    def test_repair_does_not_fix_string_length_issues_on_unrelated_paths(self) -> None:
+        """`string_length`はchecklist項目のtext等、app.title以外にも
+        使われうるrule名のため、pathで正しく絞り込めていることを確認する
+        (誤ってtitle以外を「タイトル修正」ロジックで扱わないこと)。"""
+        ir = _make_ir(app_title="Already Set")
+        issues = (
+            RepairIssue(path="$/screens/0/state/items/value/0/text", category="string_length", message="不正な長さ"),
+        )
+        result = self.engine.repair(ir, issues)
+        self.assertEqual(result.ir.app_title, "Already Set")
+        self.assertEqual(len(result.remaining_issues), 1)
 
     def test_repair_leaves_unknown_category_unresolved_without_crashing(self) -> None:
         ir = _make_ir()
@@ -65,10 +86,10 @@ class TestRepairEngine(unittest.TestCase):
 
     def test_repair_respects_max_iterations_parameter(self) -> None:
         engine = RepairEngine(MockProvider(), max_iterations=1)
-        ir = _make_ir(app_title=None, checklist_value=[])
+        ir = _make_ir(app_title=None)
         issues = (
             RepairIssue(path="$/app", category="missing_app_title", message="x"),
-            RepairIssue(path="$/screens/0/state/items", category="empty_checklist_state", message="y"),
+            RepairIssue(path="$/x", category="unfixable", message="y"),
         )
         result = engine.repair(ir, issues)
         self.assertLessEqual(result.iterations, 1)

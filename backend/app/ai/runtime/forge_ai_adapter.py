@@ -172,9 +172,22 @@ def to_repair_issues(validation_result: ValidationResult) -> tuple[ForgeAIRepair
     """`ADAPTER_CONTRACT_V1.md` 2.4節。`ValidationResult.errors`
     (blockingなもの)だけをforge_ai.RepairIssueへ変換する。
     warningsは修正対象にしない(Validatorのblocking/warning区分をそのまま尊重する)。
+
+    FORGE-AI-QUALITY-001(2026-08-11)で発見・修正した実バグ: 以前は
+    `category=e.category.value`(`Category` enum、`"syntax"`/`"schema"`/
+    `"semantic"`/`"runtime_safety"`の4値のみ)を渡していた。一方
+    `RepairEngine._try_fix()`(`forge_ai/repair/repair_engine.py`)は
+    具体的なルール名(例: `"missing_app_title"`)で判定していたため、
+    **この4値のどれとも一致せず、実際のValidator不合格を一度も
+    修正できていなかった**(Repair Loop自体は本番経路で呼ばれているが
+    (TD17参照)、常に「1件も直せず打ち切り」になっていた)。実際に
+    Validatorのソース(`schema_validator.py`)を確認したところ、
+    具体的な識別名は`ValidationIssue.rule`(例: `"string_length"`・
+    `"required"`・`"identifier_format"`)に入っており、`category`
+    ではなかったため、`e.rule`を渡すよう修正した。
     """
     return tuple(
-        ForgeAIRepairIssue(path=e.path, category=e.category.value, message=e.message)
+        ForgeAIRepairIssue(path=e.path, category=e.rule, message=e.message)
         for e in validation_result.errors
     )
 
