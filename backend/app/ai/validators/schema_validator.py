@@ -75,7 +75,7 @@ MAX_RECORD_LIST_ITEMS = 500  # checklist/string_listと同じ上限に揃える
 MAX_RECORD_FIELDS = 20  # 1Recordが持てるFieldの上限(既存state.maxProperties: 30より保守的)
 MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)
 
-SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6"}
+SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"}
 
 # バージョン文字列同士を数値として比較するための順序付きタプル。
 # **設計上の注記(このセッションで実際に発見・修正した再発バグへの
@@ -87,7 +87,7 @@ SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6"}
 # 自身で発見・修正した)。今回、`_version_at_least()`という「以上」
 # 比較のヘルパーへ置き換え、将来のVersion追加(v1.5等)で
 # 同種の見落としが起きないようにした。
-_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6")
+_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7")
 
 
 def _version_at_least(version: str, minimum: str) -> bool:
@@ -134,6 +134,36 @@ WIDGET_TYPES_V1_5_ADDITIONS = {"section_header"}
 #   最小実装(1 Record = 1本の棒)。
 WIDGET_TYPES_V1_6_ADDITIONS = {"choice_field", "bar_chart"}
 
+# v1.7で追加された2種(FORGE-AI-QUALITY-001、2026-08-11、CEO「全て実装
+# してくれ。確認もしなくて良い、ゴールは示している。つくってくれ。」に
+# 対応する、Widget Vocabulary Expansionの第2弾)。
+#
+# * `date_field`: 日付を選ばせる入力(Flutterの`showDatePicker()`で
+#   実装、新規パッケージ依存なし)。TD33で「text_fieldのplaceholderに
+#   YYYY-MM-DD形式を書くだけ」という応急処置をしていたが、choice_field
+#   (TD34)と同じ理由で、自由入力を構造的に禁止するカレンダーUIへ置き換える。
+# * `tab_view`: 複数の子Widget群を、タブ切り替えで表示する(Flutterの
+#   `DefaultTabController`/`TabBar`/`TabBarView`で実装、新規パッケージ
+#   依存なし)。単一画面に「追加」「一覧」「編集」を縦に積み上げる
+#   今までの構成(FORGE v1.0 Sprint1、section_headerで区切っただけ)を、
+#   タブで切り替える構成へ発展させる。
+#
+#   **画面遷移(Navigator.push)ではなくタブを選んだ理由(重要な設計判断)**:
+#   Flutter Runtime側を調査した結果、`ForgeScreenView`は画面遷移の
+#   たびに**独立した新しい`ForgeRuntimeState`**を生成する設計になって
+#   いる(`forge_renderer.dart`の`_ForgeScreenViewState.initState()`)。
+#   つまり「一覧画面」の`records`と「追加画面」の`records`は、同じ
+#   `state_ref`名を使っていても実行時には別々のインスタンスであり、
+#   追加画面で`add_record`しても一覧画面には反映されない
+#   (画面をまたいだState共有・戻り値の受け渡し機構が存在しないため)。
+#   複数`screens`によるCRUD分割は、この制約を無視すると「追加した
+#   はずのデータが一覧に出てこない」という壊れたアプリを生成して
+#   しまう。この根本的なRuntime側の制約を安全に回避しつつ、
+#   「単一画面に全部詰め込まれている」という見た目の問題だけを
+#   解決する手段として、State共有が一切不要な`tab_view`
+#   (同一画面・同一Stateのまま、表示を切り替えるだけ)を選んだ。
+WIDGET_TYPES_V1_7_ADDITIONS = {"date_field", "tab_view"}
+
 WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.0": WIDGET_TYPES_V1_0,
     "1.1": WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS,
@@ -147,13 +177,21 @@ WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
         WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
         | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS
     ),
+    "1.7": (
+        WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
+        | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
+    ),
 }
 WIDGET_TYPES_ALL = (
     WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
-    | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS
+    | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
 )  # 未知Widget判定用
 
-CONTAINER_WIDGET_TYPES = {"column", "row", "card", "form"}
+# `tab_view`はchildren[i]が「1タブ分の中身」に対応する、column/row/card/
+# formと同じ「フラットなchildren配列を持つコンテナ」として設計した
+# (`_walk_widgets`・`_widget_depth`等の既存の再帰処理をそのまま再利用
+# できるようにするため。詳細はWIDGET_TYPES_V1_7_ADDITIONSのコメント参照)。
+CONTAINER_WIDGET_TYPES = {"column", "row", "card", "form", "tab_view"}
 
 # v1.0/v1.1で確定していた4種
 ACTION_TYPES_V1_0 = {"navigate", "go_back", "set_value", "add_item"}
@@ -177,6 +215,10 @@ ACTION_TYPES_BY_VERSION: dict[str, set[str]] = {
     # v1.6。choice_field/bar_chart追加は新しいAction型を追加しない
     # (choice_fieldはtext_fieldと同様set_value等の既存Actionで操作する)。
     "1.6": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
+    # v1.7。date_field/tab_view追加は新しいAction型を追加しない
+    # (date_fieldは既存の"string"型state、tab_viewはAction自体を持たない
+    # 表示専用コンテナ)。
+    "1.7": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
 }
 ACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS  # 全バージョン合計(未知typeの判定用)
 
@@ -202,6 +244,8 @@ STATE_TYPES_BY_VERSION: dict[str, set[str]] = {
     # v1.6。choice_field/bar_chart追加は新しいState型を追加しない
     # (choice_fieldは既存の"string"、bar_chartは既存の"record_list"を参照する)。
     "1.6": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
+    # v1.7。date_field/tab_view追加は新しいState型を追加しない。
+    "1.7": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
 }
 STATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS
 
@@ -925,6 +969,50 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
         if "title" in widget and (not isinstance(widget["title"], str) or len(widget["title"]) > 80):
             errors.append(_err(f"{path}/title", Category.SCHEMA, "string_length", "titleが不正です。"))
 
+    elif t == "date_field":
+        # v1.7新規(CEO「全て実装してくれ」対応、Widget Vocabulary
+        # Expansion第2弾)。choice_field(TD34)と同じ理由: TD33で
+        # `text_field`のplaceholderへ「日付(YYYY-MM-DD)」という書式の
+        # ヒントを埋め込む応急処置をしていたが、それでも利用者は自由な
+        # 文字列を打ててしまい、`ForgeFieldValueParser._parseDate()`が
+        # 要求する厳密なISO 8601完全一致を満たさない入力は依然として
+        # 送信後に拒否されうる。`showDatePicker()`(Flutter標準)による
+        # カレンダーUIへ置き換えることで、誤入力自体を構造的に防ぐ。
+        errors.extend(_check_additional_properties(
+            widget, {"type", "id", "label", "state_ref", "placeholder"}, path
+        ))
+        if not _is_nonempty_str(widget.get("label"), 80):
+            errors.append(_err(f"{path}/label", Category.SCHEMA, "string_length", "date_field.labelが不正です。"))
+        if not _is_identifier(widget.get("state_ref")):
+            errors.append(_err(f"{path}/state_ref", Category.SCHEMA, "required", "date_field.state_refは必須です。"))
+        if "placeholder" in widget and (not isinstance(widget["placeholder"], str) or len(widget["placeholder"]) > 80):
+            errors.append(_err(f"{path}/placeholder", Category.SCHEMA, "string_length", "placeholderが不正です。"))
+
+    elif t == "tab_view":
+        # v1.7新規。column/row/card/formと同じ「フラットなchildren配列を
+        # 持つコンテナ」として設計している(CONTAINER_WIDGET_TYPESの
+        # コメント参照)。`children[i]`が`tab_titles[i]`というタブの中身
+        # (通常は`column`)に対応する。
+        errors.extend(_check_additional_properties(widget, {"type", "id", "tab_titles", "children"}, path))
+        tab_titles = widget.get("tab_titles")
+        valid_titles = (
+            isinstance(tab_titles, list) and (1 <= len(tab_titles) <= 6)
+            and all(_is_nonempty_str(t, 20) for t in tab_titles)
+        )
+        if not valid_titles:
+            errors.append(_err(f"{path}/tab_titles", Category.SCHEMA, "array_bounds",
+                                "tab_titlesは要素数1〜6の、各要素が1〜20文字の文字列である配列です。"))
+        children = widget.get("children")
+        if not isinstance(children, list) or not (1 <= len(children) <= 6):
+            errors.append(_err(f"{path}/children", Category.SCHEMA, "array_bounds",
+                                "tab_view.childrenは要素数1〜6の配列です。"))
+        else:
+            for i, child in enumerate(children):
+                errors.extend(_check_widget_schema(child, f"{path}/children/{i}", allowed_widgets, version))
+        if valid_titles and isinstance(children, list) and len(tab_titles) != len(children):
+            errors.append(_err(f"{path}/children", Category.SCHEMA, "array_length_mismatch",
+                                "tab_titlesとchildrenは同じ要素数である必要があります。"))
+
     return errors
 
 
@@ -1139,7 +1227,10 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
 
             wtype = widget["type"]
 
-            if wtype in {"text", "text_field", "checklist", "list", "record_list_view", "choice_field", "bar_chart"} and (
+            if wtype in {
+                "text", "text_field", "checklist", "list", "record_list_view",
+                "choice_field", "bar_chart", "date_field",
+            } and (
                 wtype != "text" or "state_ref" in widget
             ):
                 ref = widget.get("state_ref")
@@ -1205,7 +1296,7 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
                 errors.extend(_check_action_refs(
                     widget["submit_action"], screen_ids, state, form_ids_in_screen, f"{w_path}/submit_action"
                 ))
-                input_types = {"text_field", "checkbox", "choice_field"}
+                input_types = {"text_field", "checkbox", "choice_field", "date_field"}
                 has_input = any(
                     c["type"] in input_types for _, c in _walk_widgets(widget, w_path)
                     if c["id"] != widget["id"]
@@ -1363,7 +1454,7 @@ def _check_state_ref(ref: str, expected_kind: str, state: dict, path: str, ref_f
         "string": "string", "checkbox": "boolean", "list": "string_list",
         "record_list_view": "record_list", "record_list": "record_list",
         "selected_record": "selected_record",
-        "choice_field": "string", "bar_chart": "record_list",
+        "choice_field": "string", "bar_chart": "record_list", "date_field": "string",
     }
     expected_type = expected_type_map.get(expected_kind)
     if expected_type and actual_type != expected_type:

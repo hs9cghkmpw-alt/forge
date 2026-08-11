@@ -773,6 +773,37 @@ sealed class ForgeWidgetNode {
           labelField: labelField,
           title: json['title'] as String?,
         );
+      case 'date_field':
+        // v1.7新規(Widget Vocabulary Expansion第2弾、2026-08-11)。
+        // TD33の「text_fieldのplaceholderへYYYY-MM-DD形式のヒントを
+        // 埋め込む」応急処置を、choice_field(TD34)と同じ理由で専用の
+        // カレンダー選択Widgetへ置き換える。
+        final dateStateRef = json['state_ref'];
+        if (dateStateRef is! String || dateStateRef.isEmpty) {
+          throw ForgeParseException('$path/state_ref', 'date_field.state_ref is required');
+        }
+        return ForgeDateFieldWidgetNode(
+          id,
+          stateRef: dateStateRef,
+          label: json['label'] as String? ?? '',
+          placeholder: json['placeholder'] as String?,
+        );
+      case 'tab_view':
+        // v1.7新規。column/row/card/formと同じ「フラットなchildren配列を
+        // 持つコンテナ」として設計している(`schema_validator.py`の
+        // `CONTAINER_WIDGET_TYPES`コメント参照)。`children[i]`が
+        // `tab_titles[i]`というタブの中身に対応する。
+        final rawTabTitles = json['tab_titles'];
+        if (rawTabTitles is! List || rawTabTitles.isEmpty) {
+          throw ForgeParseException('$path/tab_titles', 'tab_view.tab_titles must be a non-empty array');
+        }
+        final tabChildren = _parseChildren(json['children'], path, 'tab_view');
+        if (tabChildren.length != rawTabTitles.length) {
+          throw ForgeParseException(
+            '$path/children', 'tab_view.tab_titles and children must have the same length',
+          );
+        }
+        return ForgeTabViewWidgetNode(id, tabTitles: rawTabTitles.cast<String>(), children: tabChildren);
       default:
         // 未知Widget: 例外を投げず、専用のFallbackノードとして扱う。
         // (Validatorが既に弾いているはずだが、クライアント側も多重防御する)
@@ -960,6 +991,35 @@ class ForgeBarChartWidgetNode extends ForgeWidgetNode {
     required this.labelField,
     this.title,
   });
+}
+
+/// v1.7新規(Widget Vocabulary Expansion第2弾、2026-08-11)。カレンダー
+/// UI(`showDatePicker()`、`widget_registry_v1_7.dart`参照)で日付を
+/// 選ばせる入力。`options`と一致しない値を入力できないchoice_fieldと
+/// 同じ理由で、`ForgeFieldValueParser._parseDate()`が要求するISO 8601
+/// 完全一致を、UIの構造そのもので保証する。
+class ForgeDateFieldWidgetNode extends ForgeWidgetNode {
+  final String stateRef;
+  final String label;
+  final String? placeholder;
+  const ForgeDateFieldWidgetNode(super.id, {required this.stateRef, required this.label, this.placeholder});
+}
+
+/// v1.7新規。複数の子Widget群(`children[i]`)を、`tabTitles[i]`という
+/// タイトルのタブとして切り替え表示する(Flutterの
+/// `DefaultTabController`/`TabBar`/`TabBarView`で実装、新規パッケージ
+/// 依存なし)。**画面遷移(Navigator.push)ではなくタブを選んだ理由**:
+/// `forge_renderer.dart`の`_ForgeScreenViewState.initState()`は、画面
+/// 遷移のたびに独立した新しい`ForgeRuntimeState`を生成する設計であり、
+/// 複数`screens`によるCRUD分割は「一覧画面」と「追加画面」で`records`
+/// Stateが同期しない、壊れたアプリを生成してしまう。`tab_view`は
+/// 同一画面・同一Stateのまま表示だけを切り替えるため、この制約を
+/// 安全に回避できる(`forge_language_compiler.py`のv1.7節、
+/// `TECH_DEBT.md`参照)。
+class ForgeTabViewWidgetNode extends ForgeWidgetNode {
+  final List<String> tabTitles;
+  final List<ForgeWidgetNode> children;
+  const ForgeTabViewWidgetNode(super.id, {required this.tabTitles, required this.children});
 }
 
 /// Validatorをすり抜けた未知typeに対する、クライアント側の最終防衛線。

@@ -98,12 +98,12 @@ pip install -r requirements.txt
 python -m pytest -q
 ```
 
-`995 passed, 12 skipped`(2026-08-11時点でClaudeが実際に確認した数値。
-この時点ではまだ`GEMINI_API_KEY`を設定していない想定のため。3.6で
-設定した後に再実行すると、`GEMINI_API_KEY`が正しく読み込まれている
-証拠として1件多くskipされ`996 passed, 13 skipped`になります、
-TD35参照。作業が進むたびに`passed`件数は増えます)のように、
-`passed`件数が多数出て、`failed`が無ければ成功です。
+`1024 passed, 13 skipped`前後(2026-08-11時点でClaudeが実際に確認した
+数値。作業が進むたびに`passed`件数は増えます)のように、`passed`件数が
+多数出て、`failed`が無ければ成功です。`GEMINI_API_KEY`をまだ設定して
+いない場合、`skipped`が1件少なくなることがあります(`test_gemini_
+provider_raises_runtime_error_not_not_implemented`はキー未設定時のみ
+実行される設計のため、TD35参照)——これは異常ではありません。
 
 ### 3.4 サーバーを起動する
 

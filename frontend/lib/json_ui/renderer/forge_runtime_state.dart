@@ -85,6 +85,15 @@ class ForgeRuntimeState extends ChangeNotifier {
         final found = _findById(c, id);
         if (found != null) return found;
       }
+    } else if (node is ForgeTabViewWidgetNode) {
+      // v1.7新規(2026-08-11): tab_viewもcolumn/row/card/formと同じ
+      // 「フラットなchildren配列を持つコンテナ」であるため、同じ
+      // 再帰探索に含める(tab内にformが無いと、submit_formのform_ref
+      // 解決に失敗してしまうため必須)。
+      for (final c in node.children) {
+        final found = _findById(c, id);
+        if (found != null) return found;
+      }
     }
     return null;
   }

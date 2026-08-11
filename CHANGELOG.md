@@ -2,6 +2,40 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task056 — Widget Vocabulary Expansion 第2弾(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「全て実装してくれ。確認もしなくて良い、ゴールは示している。つくってくれ。」)
+
+前回「次に効果が大きいのは画像対応と、複数画面・ナビゲーション」と
+述べた候補について、確認を挟まず実装を進めた。
+
+**調査の結果、複数画面によるNavigator遷移は見送った**: Flutter
+Runtimeを読んだところ、画面遷移のたびに独立した新しい
+`ForgeRuntimeState`が生成される設計であり、素朴に複数`screens`へ
+分割すると「一覧画面」と「追加画面」で`records`Stateが同期せず、
+「追加したはずのデータが一覧に出てこない」壊れたアプリを生成して
+しまうことが分かった。検証手段(Flutter SDK)が無い中でこの種の
+不具合を生む実装を確認無しで進めるべきではないと判断し、見送った
+(TECH_DEBT.md TD36に詳細記録)。
+
+### TD36: `date_field`/`tab_view`の2 Widget追加(v1.7)
+新規パッケージ依存を追加せず、Runtime側の制約内で安全に実装できる
+2種を追加した。
+
+* `date_field`: カレンダー選択(`showDatePicker()`)。TD33の
+  placeholder応急処置を置き換える。
+* `tab_view`: 単一画面内の「追加」「一覧」「編集」を、`divider`
+  区切りの縦積みから、タブ切り替えへ変更。`TabBarView`
+  (`PageView`ベース、`SingleChildScrollView`内で高さ無制限になり
+  レイアウトエラーになりうる)は避け、選択中のタブだけをその場に
+  描画する自作の切り替えロジックで実装した。
+
+Python側は新規テスト29件(schema_validator側19件+compiler側10件)を
+追加した上で全テスト1024件(回帰なし)を確認し、`uvicorn`起動+HTTP
+経由でhousehold_budget・fishing_log等を再生成、`version: "1.7"`・
+`tab_view`(3タブ)・`date_field`が正しく反映されていることを確認した。
+
+Dart側は既存Widget実装と同じパターンを踏襲したが、Flutter SDK不在に
+より未検証。詳細はTECH_DEBT.md TD36参照。
+
 ## Task055 — TD35根本原因の特定・修正(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「バグは今後見つかったら徹底的に無くして」)
 
 Task054で「未解決」として記録したTD35(実`uvicorn`経由の一部

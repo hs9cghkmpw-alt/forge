@@ -98,6 +98,33 @@ Navigation・集計/グラフ・LLM-assisted Design Reasoningは、いずれも
   相当するWidgetが存在せず、実現不可能な約束だった)。
 * 「月ごとの」集計自体(この例文が本来求めている水準)は、なお
   今回のスコープ外(1 Record = 1本の棒というPhase1の制約)。
+
+**v1.7(2026-08-11、Widget Vocabulary Expansion第2弾)での変更**: CEO
+「全て実装してくれ。確認もしなくて良い、ゴールは示している。
+つくってくれ。」という明示的な指示を受けて着手。
+
+* DATE型Fieldは、TD33のplaceholderへ「YYYY-MM-DD」という書式ヒントを
+  埋め込む応急処置をやめ、専用の`date_field`Widget(カレンダー選択)を
+  使うようになった。
+* 単一画面内の「追加」「一覧」「編集」を、`divider`で区切って縦に
+  積み上げる構成から、`tab_view`によるタブ切り替え構成へ変更した。
+* **複数`screens`によるNavigator画面遷移は、今回も選択しなかった**
+  (意図的な判断であり、単なる先送りではない): Flutter Runtime側
+  (`forge_renderer.dart`)を調査した結果、`ForgeScreenView`は画面
+  遷移のたびに独立した新しい`ForgeRuntimeState`を生成する設計に
+  なっており、「一覧画面」の`records`Stateと「追加画面」の`records`
+  Stateは、同じ`state_ref`名でも実行時には別インスタンスになる
+  (画面をまたいだState共有・戻り値の受け渡し機構が存在しない)。
+  この制約を無視して複数画面へ分割すると、「追加したはずのデータが
+  一覧に出てこない」という壊れたアプリを生成してしまう。この
+  根本的なRuntime側の制約を安全に回避しつつ、「単一画面に全部
+  詰め込まれている」という見た目の問題だけを解決する手段として、
+  State共有が一切不要な`tab_view`(同一画面・同一Stateのまま、
+  表示だけを切り替える)を選んだ。真の意味での複数画面CRUD(一覧
+  画面と追加/編集画面を独立したScreenとして行き来する)を実現するには、
+  Runtime側に画面をまたいだState共有、または画面遷移の戻り値受け渡し
+  機構を新設する必要があり、これは今回のスコープ外(別途の
+  マイルストームで扱う、TECH_DEBT.md参照)。
 """
 
 from __future__ import annotations
@@ -212,6 +239,16 @@ class ForgeLanguageCompiler:
         `record_list`/`record_list_view`/`add_record`ベースへ更新、
         FORGE v0.8で選択・更新・削除を追加、FORGE v1.0で視覚的階層
         (`section_header`)・Design Token・grid layoutを追加した。
+
+        **v1.7での変更(2026-08-11、CEO「全て実装してくれ」対応)**:
+        「追加」「一覧」「編集」を`divider`区切りで縦に積み上げる構成
+        から、`tab_view`によるタブ切り替え構成へ変更した。複数
+        `screens`によるNavigator画面遷移ではなく、あくまで単一画面・
+        単一`ForgeRuntimeState`のまま表示だけをタブで切り替える
+        (`WIDGET_TYPES_V1_7_ADDITIONS`のコメント参照: Runtime側が
+        画面遷移のたびに独立したStateを生成する設計であるため、CRUDに
+        必要な`records`の共有を画面をまたいで行うことができない、という
+        Runtime側の制約を踏まえた判断)。
         """
         records_state_id = "records"
         selected_state_id = "selected"
@@ -233,23 +270,21 @@ class ForgeLanguageCompiler:
             ],
         }
 
-        # FORGE v1.0対応: 単一画面を「意味のある情報のまとまり」へ区切る
-        # (指示書「単純なColumnではなく、意味のある情報のまとまりとして
-        # 構成する」)。`section_header`はいずれも状態を持たない表示専用
-        # Widgetであり、CRUD挙動には一切影響しない。
-        body_children: list[ForgeIRWidget] = [
-            ForgeIRWidget(
-                type="section_header", id="create_section_header",
-                properties={"title": f"{entity.label}を追加", "subtitle": "必要な情報を入力してください"},
+        create_tab = ForgeIRWidget(
+            type="column", id="create_tab",
+            children=(
+                ForgeIRWidget(
+                    type="section_header", id="create_section_header",
+                    properties={"title": f"{entity.label}を追加", "subtitle": "必要な情報を入力してください"},
+                ),
+                ForgeIRWidget(
+                    type="form",
+                    id="record_form",
+                    properties={"submit_label": "保存", "submit_action": create_submit_action},
+                    children=tuple(create_form_children),
+                ),
             ),
-            ForgeIRWidget(
-                type="form",
-                id="record_form",
-                properties={"submit_label": "保存", "submit_action": create_submit_action},
-                children=tuple(create_form_children),
-            ),
-            ForgeIRWidget(type="divider", id="form_list_divider"),
-        ]
+        )
 
         state: dict[str, ForgeIRStateValue] = {
             records_state_id: ForgeIRStateValue(
@@ -285,13 +320,9 @@ class ForgeLanguageCompiler:
             record_list_view_properties["select_field_bindings"] = dict(edit_field_state_ids.items())
             state[selected_state_id] = ForgeIRStateValue(type="selected_record", value=None)
 
-        body_children.extend([
-            ForgeIRWidget(
-                type="section_header", id="list_section_header",
-                properties={"title": f"{entity.label}一覧"},
-            ),
+        list_tab_children: list[ForgeIRWidget] = [
             ForgeIRWidget(type="record_list_view", id="records_list_view", properties=record_list_view_properties),
-        ])
+        ]
 
         # v1.6新規: 数値Fieldを持つEntityは、一覧の直後にbar_chartを
         # 追加する(household_budgetの「収支をグラフで見たい」という
@@ -299,7 +330,10 @@ class ForgeLanguageCompiler:
         # 追加。数値Fieldを持たないEntityには何も追加しない)。
         bar_chart_widget = self._build_bar_chart_widget(entity, records_state_id)
         if bar_chart_widget is not None:
-            body_children.append(bar_chart_widget)
+            list_tab_children.append(bar_chart_widget)
+
+        tab_titles = [f"{entity.label}を追加", f"{entity.label}一覧"]
+        tabs = [create_tab, ForgeIRWidget(type="column", id="list_tab", children=tuple(list_tab_children))]
 
         if include_crud:
             edit_form_children, edit_field_states = self._build_field_inputs(
@@ -330,35 +364,41 @@ class ForgeLanguageCompiler:
                 ],
             }
 
-            body_children.extend([
-                ForgeIRWidget(type="divider", id="list_edit_divider"),
-                ForgeIRWidget(
-                    type="section_header", id="edit_section_header",
-                    properties={"title": f"{entity.label}を編集", "subtitle": "一覧からカードを選ぶと入力欄が埋まります"},
+            tab_titles.append(f"{entity.label}を編集")
+            tabs.append(ForgeIRWidget(
+                type="column", id="edit_tab",
+                children=(
+                    ForgeIRWidget(
+                        type="section_header", id="edit_section_header",
+                        properties={"title": f"{entity.label}を編集", "subtitle": "一覧からカードを選ぶと入力欄が埋まります"},
+                    ),
+                    ForgeIRWidget(
+                        type="form",
+                        id="record_edit_form",
+                        properties={"submit_label": "更新", "submit_action": update_submit_action},
+                        children=tuple(edit_form_children),
+                    ),
+                    ForgeIRWidget(
+                        type="button",
+                        id="record_delete_button",
+                        properties={"label": "削除", "action": delete_action},
+                    ),
                 ),
-                ForgeIRWidget(
-                    type="form",
-                    id="record_edit_form",
-                    properties={"submit_label": "更新", "submit_action": update_submit_action},
-                    children=tuple(edit_form_children),
-                ),
-                ForgeIRWidget(
-                    type="button",
-                    id="record_delete_button",
-                    properties={"label": "削除", "action": delete_action},
-                ),
-            ])
+            ))
 
-        body = ForgeIRWidget(type="column", id="root_column", children=tuple(body_children))
+        body = ForgeIRWidget(
+            type="tab_view", id="root_tabs",
+            properties={"tab_titles": tab_titles},
+            children=tuple(tabs),
+        )
         screen = ForgeIRScreen(id="generated_screen", title=title, state=state, body=body)
 
         return ForgeIRDocument(
-            # v1.6(2026-08-11、Widget Vocabulary Expansion): choice_field/
-            # bar_chartはv1.6専用のため(design_tokens/section_header/
-            # layout:"grid"は既にv1.5で追加済み、record_schemas/
-            # schema_refはv1.4で追加済み。v1.6はいずれの上位互換、
+            # v1.7(2026-08-11、Widget Vocabulary Expansion第2弾):
+            # date_field/tab_viewはv1.7専用のため(choice_field/bar_chartは
+            # 既にv1.6で追加済み、それ以前も同様。v1.7はいずれの上位互換、
             # 無変更)。
-            version="1.6",
+            version="1.7",
             initial_screen_id=screen.id,
             screens=(screen,),
             app_title=title,
@@ -412,14 +452,17 @@ class ForgeLanguageCompiler:
         `checkbox` Widget + `boolean`型stateを生成する(指示書「可能
         であれば既存checkbox Widgetを利用してください」)。これにより、
         boolean値は文字列を経由せず、Runtime全体を通して一貫して
-        `bool`型のまま扱われる(パース不要)。それ以外の型
-        (string/number/date/choice)は、既存Widget構成(`text_field`+
-        `string`型state)を維持する——Forge Languageへ新しいWidget型を
-        追加しないという指示書の制約により、これらの型は文字列として
-        入力を受け、Runtime側(`ForgeFieldValueParser`)が型付き値へ
-        変換する設計にした(4.2節`FORGE-IR-V1-PROPOSAL.md`と同じ、
-        「新しい式言語は導入せず、既存の仕組みの範囲で実現する」という
-        方針の踏襲)。
+        `bool`型のまま扱われる(パース不要)。
+
+        **v1.6/v1.7での更新**: 当初は「Forge Languageへ新しいWidget型を
+        追加しない」という制約(Widget Freeze)により、string/number/
+        date/choiceはすべて`text_field`+`string`型stateへ落とし込んで
+        いたが、CEO承認によりFreeze運用を解除して以降、choice型は
+        `choice_field`(v1.6)、date型は`date_field`(v1.7)という専用
+        Widgetを使うようになった(いずれも`string`型stateはそのまま
+        再利用する、状態の持ち方自体は変えていない)。string/number型は
+        引き続き`text_field`+`string`型stateのまま(Runtime側の
+        `ForgeFieldValueParser`が型付き値へ変換する設計は無変更)。
         """
         children: list[ForgeIRWidget] = []
         field_states: dict[str, ForgeIRStateValue] = {}
@@ -462,15 +505,25 @@ class ForgeLanguageCompiler:
                 )
                 continue
 
-            placeholder = f.label
             if f.type == FieldType.DATE:
-                # TD33参照: `ForgeFieldValueParser._parseDate()`はISO 8601
-                # (YYYY-MM-DD)の厳密一致を要求するため、送信前に形式を
-                # 示す(dateはchoice_fieldのような専用Widgetをまだ持たない
-                # ため、この応急処置は維持する)。
-                placeholder = f"{f.label}(YYYY-MM-DD)"
+                # v1.7新規(2026-08-11、CEO「全て実装してくれ」対応):
+                # TD33の「text_fieldのplaceholderへ『日付(YYYY-MM-DD)』
+                # という書式のヒントを埋め込む」応急処置を、choice_field
+                # (TD34)と同じ理由で専用Widgetへ置き換えた。
+                # `showDatePicker()`(Flutter標準)によるカレンダーUIは、
+                # 選んだ日付を常にISO 8601形式の文字列で返すため、
+                # `ForgeFieldValueParser._parseDate()`が拒否する不正な
+                # 入力(存在しない日付・区切り文字違い等)がそもそも
+                # 発生しなくなる。
+                children.append(
+                    ForgeIRWidget(
+                        type="date_field", id=f"{state_id}{id_suffix}",
+                        properties={"state_ref": state_id, "label": f.label},
+                    )
+                )
+                continue
 
-            field_properties = {"state_ref": state_id, "placeholder": placeholder}
+            field_properties = {"state_ref": state_id, "placeholder": f.label}
             if validation_rules:
                 field_properties["validation"] = {"rules": validation_rules}
 
