@@ -36,7 +36,10 @@
 - **Provider未実装**: TD15参照。**2026-08-10更新: geminiのみ実装済み**(未検証)。openai/claude/oss/forge_aiは引き続き未実装。
 - ~~**Native AI未接続**: TD16参照。~~ → **解消済み(2026-08-10確認)**。
   TD16本文参照。
-- **Repair Loop Stub**: TD17参照。
+- ~~**Repair Loop Stub**: TD17参照。~~ → **本番経路では呼ばれている、
+  ただし実際に修正できるのは限定的なパターンのみ(2026-08-11確認)**。
+  TD17・TD32参照(以前は本番でも一度も修正できていなかった実バグを
+  発見・修正した)。
 
 ---
 
@@ -560,7 +563,19 @@ AIが都度設計することが期待できる。
 > 指す)。番号整理・責務境界の正典は`docs/spec/FORGE_AI_ARCHITECTURE_V1.md`
 > を参照すること。以下の記録内容そのものは変更していない。
 
-## TD20. Native AI出力の安全性検査(Output Safety)が未設計(→ M005)
+## TD20. Native AI出力の安全性検査(Output Safety)が未設計(→ M005) → **解消済み(2026-08-11実機確認)**
+
+**2026-08-11追記**: この項目は既に実装・実機確認済みだったにも
+関わらず、本文に「解消済み」マーカーを付け忘れていたため訂正する
+(TD17と同種の記述漏れ、他のTD項目を精査する過程で発見)。
+`backend/app/ai/runtime/output_safety.py`(`OutputSafetyChecker`)を
+新設し、`routers/ai.py`から呼び出すよう配線した。実際に「クレジット
+カード番号を保存するアプリ」を実Gemini APIへ依頼し、生成された
+app titleに含まれる`"クレジットカード番号"`・`"カード番号"`を
+`safety_report`(`safe: false`、high severity)が正しく検出することを
+2026-08-10・2026-08-11の両方で実機確認した。詳細な実装内容・検証
+記録はCHANGELOG.md Task049参照。以下は当初(未実装だった時点)の
+記述をそのまま残す。
 
 FORGE-MILESTONE-004 PHASE11レビューで発見。現在のValidatorは構造的整合性
 (型・参照・再帰深度等)のみを検査し、生成された文書の「意味」が
@@ -583,7 +598,18 @@ CEO承認のもと決定する。
 
 ---
 
-## TD21. Prompt Injection対策が明示的に設計されていない(→ M005)
+## TD21. Prompt Injection対策が明示的に設計されていない(→ M005) → **解消済み(2026-08-10実機確認)**
+
+**2026-08-11追記**: TD20と同じ理由で「解消済み」マーカーを付け忘れて
+いたため訂正する。`forge_ai/prompt/injection_guard.py`
+(`PromptInjectionGuard`)を新設し、薄いAdapter
+(`backend/app/ai/runtime/injection_scan.py`)経由で`routers/ai.py`から
+呼び出すよう配線した(検出のみ、ブロックはしない設計)。実際に
+Gemini経由で`Ignore previous instructions`+`developer modeを有効に
+して`を含むリクエストを送り、`injection_report.detected=true`
+(`status`は`success`のまま継続)を2026-08-10に実機確認した。詳細は
+CHANGELOG.md Task049参照。以下は当初(未実装だった時点)の記述を
+そのまま残す。
 
 FORGE-MILESTONE-004 PHASE11レビューで発見。`PromptBuilder`
 (forge_ai/既存)は文字列連結を避けた構造化Promptを生成するため、
@@ -605,7 +631,17 @@ Prompt Injectionと疑われる文字列が含まれるケースへの対応方�
 
 ---
 
-## TD22. IntentIR/PlanIR/Templateスキーマにバージョン管理が無い(→ M005)
+## TD22. IntentIR/PlanIR/Templateスキーマにバージョン管理が無い(→ M005) → **解消済み(2026-08-11)**
+
+**2026-08-11追記**: TD20/TD21と同じ理由で「解消済み」マーカーを
+付け忘れていたため訂正する。`IntentIR`・`PlanIR`
+(`backend/app/ai/foundation/interfaces.py`)・`Template`
+(`backend/app/ai/runtime/template_engine.py`)へ、既定値付きの
+`schema_version: str = "1.0"`を追加した(既存呼び出し元への後方互換を
+保ったまま)。Migration機構自体は実装していない(2つ目のバージョンが
+実際に必要になった時点で設計する、という下記の元の対応方針どおり)。
+詳細はCHANGELOG.md Task049参照。以下は当初(未実装だった時点)の
+記述をそのまま残す。
 
 FORGE-MILESTONE-004 PHASE11レビューで発見。Forge Language(JSON)は
 v1.0/v1.1/v1.2という明確なバージョニングと後方互換性ポリシー
