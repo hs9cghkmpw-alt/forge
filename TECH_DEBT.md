@@ -637,7 +637,7 @@ Pydantic v2の一般的な既知の挙動に基づく推測であり、実際の
 
 ---
 
-## TD24. Domain内の複数Conceptに「意味的な重要度」の区別が無い → **travelのbelongingsケースは解消済み(2026-08-11)**
+## TD24. Domain内の複数Conceptに「意味的な重要度」の区別が無い → **travelのbelongings/accommodation/itineraryケースは解消済み(2026-08-11)、選定メカニズムを一般化済み**
 
 **2026-08-11追記**: CEO指示「すべてお願い」を受け対応した。
 `application_planner.py`へ`_prioritize_explicitly_mentioned_concepts()`を
@@ -704,6 +704,52 @@ Domain判定に使われた語とは別の語で一致したConcept(例:
 無かったため、着手を見送った。着手する場合は、既存Golden Test全件と
 新規のtravel/belongings向けGolden Testの両方が通ることを確認してから
 マージすること。
+
+---
+
+**2026-08-11(2回目)追記(FORGE-AI-QUALITY-001)**: CEOが選んだ4方向の
+うちの1つ「『主役となる概念』の選び方自体を直す」に対応した。
+
+実際に全15 Domainの`typical_concepts`定義を1件ずつ精査した結果、
+「先頭Conceptが単なるDomain判定のトリガーで、主役には不向き」という
+問題を持つのはtravelの`"destination"`のみであると確認できた
+(他14 Domainは、先頭Conceptがそのまま主役として自然な設計になっている)。
+そのため、「言及された概念を無条件に優先する」という、より汎用的な
+アルゴリズムへの全面刷新は見送った——実際に試した結果、"price"・
+"quantity"のような「主役の属性に過ぎない概念」が、単に言及された
+というだけで誤って主役に昇格しうることを確認したため(`compiler.py`
+冒頭が指摘する既知の制限そのもの)。
+
+代わりに、`_PREFER_AS_PRIMARY_WHEN_MENTIONED = ("belongings",)`という
+travel専用のConcept名直書き許可リストを、`DomainConcept.
+primary_candidate: bool = True`という一般的なDomain定義側のメタデータへ
+置き換えた(`domain_model.py`参照)。**選定ルール自体**(「Domain判定の
+トリガーになっただけの概念より、実際に言及された別概念を優先する」)は
+据え置きつつ、**メカニズム**を一般化した: 将来、別のDomainで同種の
+問題が見つかった場合、`application_planner.py`を一切変更せず、該当
+Conceptに`primary_candidate=False`を宣言するだけで対応できる。
+
+この変更により、travel domainで新たに2ケースが解消した(以前は
+`"destination"`が固定的に主役になっていたため、静的テーブルに
+`"destination"`のエントリしか無く、以下は生の識別子が漏れていた)。
+
+| プロンプト | 修正前 | 修正後(実機・実Gemini API確認) |
+|---|---|---|
+| 「ホテルと観光地を管理したい」 | `destination`が主役(無関係な旅行先が生成される可能性) | `accommodation`が主役 → `['グランドホテル京都 (宿泊先)', '清水寺 (観光地)', ...]` |
+
+`_EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT`(`compiler.py`)へ`accommodation`・
+`itinerary`・`expense`のエントリも追加した(昇格したConceptがテーブルに
+無いと生の識別子が漏れる、という同種の問題を防ぐため。実際に
+`test_success_cases_do_not_leak_raw_concept_identifiers_as_initial_items`
+が「ホテルと観光地を管理したい」で検出した)。
+
+`forge_ai/tests/test_planning_and_critic.py`へ3件の回帰テストを追加
+(demoteされるケース・何も言及が無ければ変わらないケース・
+`primary_candidate`を宣言していない既存Domainではメカニズム自体が
+no-opであることの確認)。forge_ai全408件・backend込み全947件が
+回帰なしで通ることを確認した上で、実際に`uvicorn`+実Gemini APIで
+3プロンプト(持ち物・ホテル/観光地・旅行計画のみ)を再実行し、
+いずれも意図した具体的な内容が生成されることを確認した。
 
 ---
 

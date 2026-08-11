@@ -297,6 +297,30 @@ class TestCognitiveApplicationPlanner(unittest.TestCase):
         plan = self._plan_for(("item",))
         self.assertEqual(plan.title, "test goal")
 
+    def test_primary_candidate_false_concept_is_demoted_when_a_mentioned_alternative_exists(self) -> None:
+        """FORGE-AI-QUALITY-001(2026-08-11)回帰テスト:
+        `DomainConcept.primary_candidate=False`(travel domainの
+        "destination")が先頭にあっても、`primary_candidate=True`の別概念
+        ("belongings")が実際にrequired_conceptsとして言及されていれば、
+        そちらが主役(=key_elementsの先頭)へ昇格する。"""
+        plan = self._plan_for(("destination", "belongings"))
+        self.assertEqual(plan.screens[0].key_elements[0], "belongings")
+
+    def test_primary_candidate_false_concept_stays_primary_when_nothing_else_is_mentioned(self) -> None:
+        """言及された概念が"destination"自身しかない場合(例:「旅行の計画を
+        立てたい」)は、並べ替えを行わず既存の挙動を保つ(travel domainの
+        通常ケースへの回帰が無いことの確認)。"""
+        plan = self._plan_for(("destination",))
+        self.assertEqual(plan.screens[0].key_elements[0], "destination")
+
+    def test_primary_candidate_metadata_is_a_no_op_for_domains_without_it(self) -> None:
+        """`primary_candidate=False`を宣言していないDomain(例: shopping)
+        では、今回のメカニズム追加によって並べ替えが一切発生しない
+        (既定値`True`により、既存の全Domainの挙動が変わらないことの
+        回帰テスト)。"""
+        plan = self._plan_for(("price", "item"))
+        self.assertEqual(plan.screens[0].key_elements[0], "item")
+
     def test_functional_requirement_with_missing_action_is_unassigned_and_blocks_critic(self) -> None:
         """CEO実物監査(Phase 1.1、2回目)指摘3の回帰テスト: 必須の
         delete_item(operation_ref)がPlanのrequired_actionsに実在しない

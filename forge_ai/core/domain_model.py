@@ -50,10 +50,43 @@ class DomainCategory(str, Enum):
 
 @dataclass(frozen=True)
 class DomainConcept:
-    """ある問題領域に典型的な「モノ」を表す語彙。UI表現(Widget種別等)は含まない。"""
+    """ある問題領域に典型的な「モノ」を表す語彙。UI表現(Widget種別等)は含まない。
+
+    FORGE-AI-QUALITY-001(2026-08-11)追加: `primary_candidate`。
+
+    `planning/application_planner.py`は、`typical_concepts`の**先頭要素**を
+    無条件に「主役となる概念」(primary_concept、チェックリストの初期
+    項目・空状態メッセージ等に使われる)として選ぶ。ほとんどのDomainでは
+    先頭要素がそのまま主役として自然だが(例: Shopping="item")、
+    Domain判定のトリガーになっただけの、汎用的すぎる概念(例:
+    Travel="destination"——「旅行」という語自体はTravel Domainだと
+    判定させるが、ユーザーが実際に列挙したいモノ(例: 持ち物)とは限らない)
+    には向かない。
+
+    `primary_candidate=False`を明示したConceptは、「Intentが実際に
+    明示的に言及していて、かつ他に`primary_candidate=True`の候補が
+    存在する場合」に限り、主役の座から除外される(`_prioritize_
+    primary_candidate_concepts()`参照)。既定値`True`のため、
+    明示的にFalseを指定しない限り、既存のDomain定義・既存の挙動は
+    一切変わらない(後方互換)。
+
+    このフィールドを追加する以前は、`application_planner.py`内に
+    `_PREFER_AS_PRIMARY_WHEN_MENTIONED = ("belongings",)`という、
+    travel domainの1件のみを想定した個別のConcept名の許可リストが
+    あった(TD24対応)。実際に全15 Domainの`typical_concepts`を
+    精査した結果、この「先頭概念が判定トリガーだが主役には不向き」
+    という問題を持つのはtravelの"destination"のみであると確認できた
+    ため、汎用的な「言及された概念を無条件に優先する」アルゴリズムへの
+    全面刷新はせず(price/quantityのような「主役の属性」が誤って
+    主役に昇格するリスクがあるため見送った、`compiler.py`冒頭の
+    既知の制限コメント参照)、この1フィールドによる、影響範囲が
+    Domain定義側で明示的に宣言されたものだけに限定される、より安全な
+    一般化にとどめた。
+    """
 
     name: str
     description: str
+    primary_candidate: bool = True
 
 
 @dataclass(frozen=True)
@@ -248,7 +281,12 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
         category=DomainCategory.TRAVEL,
         display_name="Travel",
         typical_concepts=(
-            DomainConcept("destination", "旅行先"),
+            # FORGE-AI-QUALITY-001(2026-08-11): "destination"はDomain判定の
+            # トリガーとしては典型的だが(「旅行」という語自体がこの概念に
+            # 対応する)、ユーザーが実際に列挙したいモノ(例: 持ち物)とは
+            # 限らないため、`primary_candidate=False`とする
+            # (`DomainConcept.primary_candidate`のdocstring参照)。
+            DomainConcept("destination", "旅行先", primary_candidate=False),
             DomainConcept("accommodation", "宿泊先"),
             DomainConcept("itinerary", "旅程"),
             DomainConcept("expense", "旅行にかかる費用"),

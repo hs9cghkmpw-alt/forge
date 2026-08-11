@@ -13,6 +13,7 @@ Decision Traceへ記録するだけで、Planへ反映されない実装は禁�
 
 from __future__ import annotations
 
+from forge_ai.core.domain_model import DomainConcept
 from forge_ai.core.intent_model import Intent
 from forge_ai.core.orchestration.cognitive_types import RequirementSet
 from forge_ai.core.planner import ApplicationPlan, ScreenPlan
@@ -33,35 +34,51 @@ _DESCRIPTION_BASED_CATEGORIES = ("validation", "schedule", "state")
 # 先頭)が主役として選ばれ、実際にGeminiに「京都旅行」等の旅行先を
 # 生成させてしまった(`TECH_DEBT.md` TD24参照)。
 #
-# `primary_concept = data_entities[0]`(下記)が、Domain定義順そのままの
-# 先頭要素を無条件に採用してしまうことが原因。ただし`data_entities`の
-# 並び順自体(`base_data_entities`の算出方法)は、全15 Domain共通の
-# 基盤ロジックであり、ここを一般的なアルゴリズムとして変更すると、
-# 他のDomainへの影響を全件確認しきれない(forge_aiのGolden Test 390件+
-# 今回追加分では、travel以外のDomainでこの問題を確認・調査していない)。
+# FORGE-AI-QUALITY-001(2026-08-11)で、以前ここにあった
+# `_PREFER_AS_PRIMARY_WHEN_MENTIONED = ("belongings",)`という、
+# travel domain 1件のみを想定したConcept名の直書き許可リストを、
+# `DomainConcept.primary_candidate`という一般的なDomain定義側の
+# メタデータへ置き換えた(`domain_model.py`のdocstring参照)。
 #
-# そのため、汎用的な並べ替えアルゴリズムにはせず、**個別に確認済みの
-# Conceptだけを許可リスト化**する、影響範囲を最小限に抑えた対応にした。
-# この許可リストに無いConceptの組み合わせでは、本対応を追加する前と
-# 挙動は一切変わらない(`intent.required_concepts`に実際に含まれて
-# いない限り、並べ替えは発生しない)。
-_PREFER_AS_PRIMARY_WHEN_MENTIONED: tuple[str, ...] = ("belongings",)
-
-
-def _prioritize_explicitly_mentioned_concepts(
-    data_entities: tuple[str, ...], required_concepts: tuple[str, ...]
+# **一般化の範囲について(正直な申告)**: 全15 Domainの`typical_concepts`
+# を実際に精査した結果、「先頭概念がDomain判定のトリガーだが主役には
+# 不向き」という問題を持つのはtravelの"destination"のみだった。そのため
+# 「Intentが言及した概念を無条件に優先する」という、より汎用的な
+# アルゴリズムへの刷新は見送った(`compiler.py`冒頭の既知の制限が
+# 指摘するとおり、"price"・"quantity"のような「主役の属性」に過ぎない
+# 概念が、単に言及されたというだけで誤って主役に昇格するリスクがある
+# ため)。今回一般化したのは**メカニズム**(Domain定義側で
+# `primary_candidate=False`を宣言するだけで、`application_planner.py`
+# を一切変更せずに同種の問題へ対応できる)であり、**選定ルール自体**
+# (「非トリガー概念が明示的に言及されていれば、トリガー概念より優先する」)
+# は据え置いている。
+def _prioritize_primary_candidate_concepts(
+    data_entities: tuple[str, ...],
+    required_concepts: tuple[str, ...],
+    concept_metadata: dict[str, "DomainConcept"],
 ) -> tuple[str, ...]:
-    """`_PREFER_AS_PRIMARY_WHEN_MENTIONED`のうち、`data_entities`に存在し
-    かつ実際にユーザー入力から`required_concepts`として抽出された
-    Conceptだけを先頭へ移動する。該当が無ければ`data_entities`を
+    """現在の先頭要素(`data_entities[0]`)が`primary_candidate=False`と
+    宣言されており、かつ`data_entities`内に`primary_candidate=True`かつ
+    実際に`required_concepts`として言及された別の概念が存在する場合、
+    その概念を先頭へ移動する。該当が無ければ`data_entities`を
     そのまま返す(並び替えなし、既存の挙動を保つ)。
     """
-    preferred = [
-        name for name in _PREFER_AS_PRIMARY_WHEN_MENTIONED
-        if name in data_entities and name in required_concepts
-    ]
-    if not preferred:
+    if not data_entities:
         return data_entities
+    current_primary = data_entities[0]
+    current_meta = concept_metadata.get(current_primary)
+    if current_meta is None or current_meta.primary_candidate:
+        return data_entities
+
+    eligible_mentioned = [
+        name for name in data_entities
+        if name != current_primary
+        and name in required_concepts
+        and concept_metadata.get(name, DomainConcept(name, "")).primary_candidate
+    ]
+    if not eligible_mentioned:
+        return data_entities
+    preferred = eligible_mentioned[:1]
     rest = [name for name in data_entities if name not in preferred]
     return tuple(preferred) + tuple(rest)
 
@@ -77,8 +94,9 @@ class CognitiveApplicationPlanner:
         preliminary_candidates: tuple[str, ...],
     ) -> ApplicationPlan:
         base_data_entities = tuple(o.name for o in world.objects) or intent.required_concepts or ("item",)
-        base_data_entities = _prioritize_explicitly_mentioned_concepts(
-            base_data_entities, intent.required_concepts
+        concept_metadata = {c.name: c for c in world.domain.typical_concepts}
+        base_data_entities = _prioritize_primary_candidate_concepts(
+            base_data_entities, intent.required_concepts, concept_metadata
         )
         base_required_actions = tuple(dict.fromkeys(
             rel.predicate for rel in world.relationships

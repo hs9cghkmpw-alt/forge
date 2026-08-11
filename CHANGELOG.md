@@ -41,10 +41,26 @@ diaryへ誤分類されていた(実機で確認・再現)。2エントリを追
 `CONFIRMATION_CASES`2件+専用の回帰テスト1件を追加。forge_ai全408件・
 backend込み全944件が回帰なしで通ることを確認した。
 
+### primary_concept選定メカニズムの一般化(TD24続き)
+CEOが選んだ4方向のうち「『主役となる概念』の選び方自体を直す」に
+対応した。全15 Domainの`typical_concepts`を精査し、「先頭Conceptが
+Domain判定のトリガーに過ぎず主役には不向き」という問題を持つのは
+travelの`"destination"`のみと確認した上で、travel専用だった
+Concept名の直書き許可リスト(`_PREFER_AS_PRIMARY_WHEN_MENTIONED`)を、
+`DomainConcept.primary_candidate: bool = True`という一般的なDomain
+定義側メタデータへ置き換えた(`domain_model.py`・
+`planning/application_planner.py`)。選定ルール自体は変えず、将来
+別Domainで同種の問題が見つかった場合に`application_planner.py`側の
+変更無しで対応できるようにした、という位置づけ(「言及された概念を
+無条件に優先する」という、より野心的な汎用化は、"price"のような
+属性概念が誤って昇格するリスクを実際に確認したため見送った)。
+新たにtravelの`accommodation`が主役になるケース(「ホテルと観光地を
+管理したい」)が解消し、実機で確認した。詳細は`TECH_DEBT.md` TD24
+「2026-08-11(2回目)追記」参照。
+
 ### 残タスク(このTaskでは未着手)
-CEOが選んだ残り3方向(primary_concept選定アルゴリズムの汎用的な
-再設計/Design Critic評価範囲の拡大/Widget・Templateの種類拡充)は、
-次のTaskで着手する。
+CEOが選んだ残り2方向(Design Critic評価範囲の拡大/Widget・Templateの
+種類拡充)は、次のTaskで着手する。
 
 ## Task049 — TD24深掘り修正・TD22/TD21/TD20実装・音声入力（2026-08-11、CEO「すべてお願い」）
 

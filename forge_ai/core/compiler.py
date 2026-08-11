@@ -80,6 +80,18 @@ _EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT: dict[str, tuple[str, ...]] = {
     # `test_success_cases_do_not_leak_raw_concept_identifiers_as_initial_items`
     # が実際に検出した)が発生することが分かったため追加した。
     "belongings": ("パスポート", "着替え", "歯ブラシ", "充電器"),
+    # FORGE-AI-QUALITY-001(2026-08-11)対応。`application_planner.py`の
+    # `_prioritize_primary_candidate_concepts()`一般化により、travel
+    # domainで"destination"以外の概念("accommodation"・"itinerary")も
+    # 明示的な言及があれば主役として選ばれうるようになった(例:
+    # 「ホテルと観光地を管理したい」)。上記"belongings"と同じ理由
+    # (テーブルに無い場合のraw識別子漏れ、Golden Testが実際に検出した)
+    # で追加した。"expense"は現時点のGolden Testでは主役に選ばれる
+    # ケースが無いが、将来同様の言及パターンで選ばれた場合に備え、
+    # 念のため合わせて登録しておく。
+    "accommodation": ("京都グランドホテル", "民宿さくら"),
+    "itinerary": ("1日目: 清水寺観光", "2日目: 嵐山散策"),
+    "expense": ("宿泊費", "交通費", "食費"),
 }
 
 
