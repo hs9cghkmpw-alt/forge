@@ -176,6 +176,14 @@ flutter run -d chrome
 数十秒〜数分待つと、Chromeが自動的に開き、Forgeのホーム画面が
 表示されます。
 
+**2026-08-11追記(音声入力、未検証)**: ホーム画面の入力欄の横に
+マイクボタンが追加されました(`speech_to_text`パッケージ)。この機能は
+Claude環境では一切実行できておらず、`flutter pub get`の依存解決から
+未確認です。`flutter pub get`が失敗した場合、または`flutter run`時に
+音声入力関連のコンパイルエラーが出た場合は、エラーメッセージをそのまま
+教えてください(`TECH_DEBT.md` TD25参照)。このアプリは`android/`・
+`ios/`フォルダを生成していないため、音声入力はWeb(Chrome)専用です。
+
 **接続モードについて(重要)**: このアプリは既定で「Live Mode」
 (実際にBackendのAPIを呼ぶモード)で起動します(以前は既定で
 Mock Modeでしたが、`frontend/lib/core/config/app_config.dart`の

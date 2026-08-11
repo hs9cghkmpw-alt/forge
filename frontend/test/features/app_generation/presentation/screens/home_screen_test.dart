@@ -116,13 +116,29 @@ void main() {
     expect(find.text('会話内容は安全に保護されます'), findsOneWidget);
   });
 
-  testWidgets('home screen does not show a microphone icon or a non-functional profile button', (tester) async {
+  testWidgets('home screen does not show a non-functional profile button', (tester) async {
     await tester.pumpWidget(await wrap(const HomeScreen()));
     await tester.pump();
 
-    // FORGE v0.2 P5対応: マイク未実装のためアイコンを削除。
-    // アカウント機能の無いプロフィールボタンも削除した。
-    expect(find.byIcon(Icons.mic_none_rounded), findsNothing);
+    // FORGE v0.2 P5対応: アカウント機能の無いプロフィールボタンは削除した
+    // (今も削除されたまま)。
     expect(find.byIcon(Icons.person_outline_rounded), findsNothing);
+  });
+
+  testWidgets('home screen shows a microphone button now that voice input is implemented (FORGE-AI-CONNECT-001)',
+      (tester) async {
+    await tester.pumpWidget(await wrap(const HomeScreen()));
+    await tester.pump();
+
+    // FORGE-AI-CONNECT-001(2026-08-11): 以前は「マイク未実装のため
+    // アイコンを削除した」という回帰テストがここにあった
+    // (`find.byIcon(Icons.mic_none_rounded), findsNothing`)。今回、
+    // 実際に`speech_to_text`パッケージへ接続した音声入力を実装した
+    // ため、その前提が変わった。マイクボタン自体は存在するように
+    // なったが、実際に動くかどうか(ブラウザの音声認識API・
+    // パッケージのバージョン解決)はClaude環境では検証できていない
+    // (`voice_input_provider.dart`冒頭のdocstring参照。CEO環境での
+    // 実行が必須)。
+    expect(find.byIcon(Icons.mic_none_rounded), findsOneWidget);
   });
 }

@@ -2,6 +2,75 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task049 — TD24深掘り修正・TD22/TD21/TD20実装・音声入力（2026-08-11、CEO「すべてお願い」）
+
+CEOから提示された3つの残課題(TD24の続き、TD20〜22、音声入力)を
+すべて実施した。
+
+### TD24(travel belongings、続き)
+前回(Task048近辺)の`_prioritize_explicitly_mentioned_concepts()`だけでは
+不十分だった(forge_ai自身のGolden Testが検出)。原因は
+`compiler.py`の`_EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT`に`"belongings"`の
+エントリが無く、raw識別子がそのまま漏れていたこと。エントリを追加し、
+Mock・実Gemini経由の両方で「パスポート」「着替え」「歯ブラシ」
+「充電器」が正しく生成されることを実測で確認した。
+
+### TD22(IRバージョニング)
+`IntentIR`・`PlanIR`・`Template`へ`schema_version: str = "1.0"`を追加
+(既定値付き、後方互換)。Migrationは実装していない(2つ目のバージョンが
+実際に必要になるまで、というTD22自身の対応方針どおり)。
+
+### TD21(Prompt Injection Guard)
+新規`forge_ai/prompt/injection_guard.py`。英語・日本語・混在入力に対応し、
+「developer modeを有効にして」のような、英語フレーズ直後に日本語が続く
+ケースでのUnicode単語境界問題(Pythonの`\b`が失敗する)をASCII境界の
+正規表現で回避した。`prompt_pipeline.py`の「forge_ai/を3つに限り
+直接importしてよい」という既存の制約を守るため、新規の薄いAdapter
+(`backend/app/ai/runtime/injection_scan.py`)経由で`routers/ai.py`から
+呼び出す設計にした。検出のみ、ブロックはしない。実際にGemini経由で
+`Ignore previous instructions`+`developer modeを有効にして`を含む
+リクエストを送り、`injection_report.detected=true`(`status`は
+`success`のまま)を確認した。
+
+### TD20(Output Safety Checker)
+新規`backend/app/ai/runtime/output_safety.py`(forge_ai/には依存しない)。
+最終Forge Document内の**全ての文字列値**を走査し(特定のフィールド名に
+限定しない)、クレジットカード番号・暗証番号・パスワード等のPII収集を
+示唆するキーワードと照合する。検出のみ、ブロックはしない。実際にGemini
+へ「クレジットカード番号と暗証番号を記録するアプリを作って」と依頼し、
+生成されたapp titleに含まれる該当語を`safety_report`が正しく検出
+(`safe: false`、high severity 6件)することを確認した。
+
+### 音声入力(speech_to_text)
+`speech_to_text: ^7.0.0`を新規追加(CEO承認済み)。
+`voice_input_provider.dart`(`VoiceInputController`)+
+`home_screen.dart`の`_VoiceInputButton`(マイクボタン)。**このアプリは
+`android/`・`ios/`フォルダを一度も`flutter create`していないため
+(`web/`のみ存在)、Web(Chrome)でのみ動作する想定。** 素の
+`StatefulWidget`+`setState`で実装した(このアプリで実績の無い
+`StateNotifierProvider`パターンを、検証不能なコードにさらに重ねる
+リスクを避けるため)。
+
+**この音声入力実装だけは、一切検証できていない**(Flutter SDK・
+マイク・ブラウザ音声認識APIのいずれもClaude環境に無い)。パッケージの
+バージョン解決・実際のAPIシグネチャ一致は未確認。TD25として記録。
+
+既存テスト`home screen does not show a microphone icon...`
+(「マイク未実装のためアイコン無し」という前提のテスト)は、前提が
+変わったため更新した(プロフィール非表示の確認と、マイクボタンが
+存在することの確認に分割)。
+
+### 実際に実行したテスト・結果
+```
+$ python -m pytest backend forge_ai -q
+939 passed, 12 skipped   (Flutter変更は影響なし、回帰確認のみ)
+```
+Flutter側(音声入力を含む今回の全変更)はClaude環境で`flutter analyze`/
+`flutter test`いずれも未実行。CEO環境での実行が必須。
+
+詳細は`TECH_DEBT.md`(TD20〜TD25)・
+`docs/reports/FORGE-AI-CONNECT-001-report.md`参照。
+
 ## Task048 — FlutterからGeminiを選べるトグルを追加（2026-08-11）
 
 CEOから「ガンガン進んでー」との指示を受け、`docs/reports/

@@ -704,3 +704,45 @@ Domain判定に使われた語とは別の語で一致したConcept(例:
 無かったため、着手を見送った。着手する場合は、既存Golden Test全件と
 新規のtravel/belongings向けGolden Testの両方が通ることを確認してから
 マージすること。
+
+---
+
+## TD25. Flutter音声入力(speech_to_text)が実機・実ブラウザで一度も検証できていない
+
+FORGE-AI-CONNECT-001(2026-08-11)、CEO「すべてお願い」を受けて実装。
+`frontend/lib/features/app_generation/presentation/providers/
+voice_input_provider.dart`(`VoiceInputController`、`speech_to_text`
+パッケージへの薄いラッパー)と、`home_screen.dart`の`_VoiceInputButton`
+(マイクボタン、`StatefulWidget`)を新規実装した。
+
+**今は困っていない理由(困っていない、ではなく「まだ実害が顕在化して
+いない」という意味)**: Claudeのサンドボックスには、Flutter SDK・
+マイクデバイス・ブラウザの音声認識APIのいずれも存在しない。そのため、
+以下がすべて未検証である。
+
+- `speech_to_text: ^7.0.0`という指定が、`flutter pub get`で実際に
+  解決可能か(バージョン番号は公式ドキュメントの記載に基づく推測)。
+- `SpeechToText.initialize()`/`.listen()`の実際のAPIシグネチャ
+  (`onError`/`onStatus`/`onResult`のコールバック引数の型、
+  `SpeechRecognitionError.errorMsg`・`SpeechRecognitionResult.
+  recognizedWords`/`.finalResult`等のフィールド名)が、実際にpub.devで
+  解決されるバージョンと一致するか。
+- Chrome等のブラウザで、実際にマイク権限プロンプトが出て、音声が
+  正しく文字起こしされるか。
+
+**プラットフォームの制約**: このアプリは`android/`・`ios/`という
+ネイティブプロジェクトフォルダを一度も`flutter create`で生成しておらず
+(`frontend/web/`のみ存在)、今回もこれらのフォルダは作成していない。
+そのため音声入力は**Web(Chrome等)でのみ動作する想定**であり、
+ネイティブアプリとしてビルドした場合は動作しない
+(`AndroidManifest.xml`のRECORD_AUDIO権限・`Info.plist`の
+NSMicrophoneUsageDescription等が無いため)。
+
+**将来困る条件**: CEO環境で`flutter pub get`を実行した際に依存解決が
+失敗する、または`flutter run -d chrome`実行時にAPIシグネチャ不一致で
+コンパイルエラーになる可能性がある。
+
+**対応方針**: CEO環境で`flutter pub get`→`flutter run -d chrome`を実行し、
+結果(エラーメッセージ含む)を共有してもらう。コンパイルエラーが出た場合、
+エラー内容から実際のAPIシグネチャとのズレを特定して修正する
+(`GETTING_STARTED.md`のトラブルシューティング参照)。

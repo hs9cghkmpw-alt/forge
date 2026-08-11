@@ -11,6 +11,7 @@ import '../../../app_library/presentation/providers/app_library_provider.dart';
 import '../../../app_library/presentation/screens/history_screen.dart';
 import '../../../app_library/presentation/screens/my_apps_screen.dart';
 import '../providers/app_generation_provider.dart';
+import '../providers/voice_input_provider.dart';
 import '../widgets/example_picker_sheet.dart';
 import 'generation_flow_screen.dart';
 
@@ -35,9 +36,14 @@ import 'generation_flow_screen.dart';
 /// * モックアップにある「クイック候補チップ」を追加(既存の`forgeExampleItems`
 ///   を流用。タップすると入力欄に入るだけで送信はしない、既存の
 ///   「例を見る」Bottom Sheetと同じ挙動を`_setPromptText()`で共通化)。
-///   音声入力は引き続き未実装のため、モックアップのマイクアイコンは
-///   採用していない(実装していない機能をあるように見せない、
-///   という既存方針をそのまま踏襲する)。
+///   このUI刷新の時点では音声入力が未実装だったため、モックアップの
+///   マイクアイコンは採用していなかった(実装していない機能をあるように
+///   見せない、という既存方針をそのまま踏襲していた)。
+///
+/// FORGE-AI-CONNECT-001(2026-08-11): 実際に`speech_to_text`パッケージへ
+/// 接続した音声入力を実装したため、上記の判断を更新し、マイクボタンを
+/// 追加した(`_VoiceInputButton`)。`voice_input_provider.dart`冒頭の
+/// docstring参照: Claude環境では未検証。
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -216,6 +222,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                           ),
                           const SizedBox(width: 10),
+                          _VoiceInputButton(onResult: _setPromptText),
+                          const SizedBox(width: 10),
                           _SendButton(enabled: canSubmit, onPressed: _onSubmit),
                         ],
                       ),
@@ -366,6 +374,92 @@ class _RecentAppCard extends StatelessWidget {
               ),
               const Icon(Icons.chevron_right_rounded, color: ForgeTheme.consoleInkSoft, size: 20),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// FORGE-AI-CONNECT-001対応(2026-08-11)。マイクボタン。タップで
+/// `VoiceInputController`経由の音声認識を開始/停止する。
+///
+/// **未検証(重要)**: `voice_input_provider.dart`冒頭のdocstring参照。
+/// Claude環境では一度も実行できていない。
+///
+/// 「動いたふりをしない」という既存方針(このファイル冒頭のコメント
+/// 参照)を守るため、`VoiceInputStatus.unavailable`の場合はタップしても
+/// 再試行せず、その旨を1回だけSnackBarで伝える(無言で何も起きない
+/// ボタンにしない)。
+class _VoiceInputButton extends StatefulWidget {
+  final void Function(String text) onResult;
+
+  const _VoiceInputButton({required this.onResult});
+
+  @override
+  State<_VoiceInputButton> createState() => _VoiceInputButtonState();
+}
+
+class _VoiceInputButtonState extends State<_VoiceInputButton> {
+  final VoiceInputController _controller = VoiceInputController();
+  VoiceInputStatus _status = VoiceInputStatus.idle;
+
+  void _handleStatusChange(VoiceInputStatus status, String? errorMessage) {
+    if (!mounted) return;
+    setState(() => _status = status);
+  }
+
+  Future<void> _onTap() async {
+    if (_status == VoiceInputStatus.listening) {
+      await _controller.stopListening(_handleStatusChange);
+      return;
+    }
+
+    if (_status == VoiceInputStatus.unavailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('この端末・ブラウザでは音声入力を利用できません。テキストで入力してください。')),
+      );
+      return;
+    }
+
+    await _controller.startListening(onResult: widget.onResult, onStatusChange: _handleStatusChange);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isListening = _status == VoiceInputStatus.listening;
+    final isUnavailable = _status == VoiceInputStatus.unavailable;
+
+    return Tooltip(
+      message: isListening ? '音声入力を停止' : '音声入力',
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isListening ? const Color(0xFF3D1620) : ForgeTheme.consoleSurface,
+          border: Border.all(
+            color: isListening ? const Color(0xFFE05A6E) : ForgeTheme.consoleBorder,
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: _onTap,
+            child: Icon(
+              isListening
+                  ? Icons.mic_rounded
+                  : (isUnavailable ? Icons.mic_off_rounded : Icons.mic_none_rounded),
+              color: isListening ? const Color(0xFFE05A6E) : ForgeTheme.consoleInkSoft,
+            ),
           ),
         ),
       ),

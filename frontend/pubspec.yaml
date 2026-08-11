@@ -17,6 +17,12 @@ dependencies:
   # FORGE v0.2 P5対応: マイアプリ・履歴のローカル永続化に使用する。
   # 指示書16章で明示的に承認された追加(他のFlutter Dependencyは追加していない)。
   shared_preferences: ^2.2.3
+  # FORGE-AI-CONNECT-001対応(2026-08-11、CEO「すべてお願い」で承認済みの
+  # 音声入力実装に使用)。バージョン・API・Web対応状況は公式ドキュメントの
+  # 記載に基づく(Claude環境にFlutter SDKが無く、実際に`flutter pub get`で
+  # 解決できるか・Chromeで動くかは未検証。`lib/features/app_generation/
+  # presentation/providers/voice_input_provider.dart`のdocstring参照)。
+  speech_to_text: ^7.0.0
 
 dev_dependencies:
   flutter_test:

@@ -195,11 +195,44 @@ APIキーも無い。代わりに、変更した全ファイルの括弧の対�
    存在する場合は次回共有してほしい。存在しない場合は、ゼロから実装して
    良いか判断してほしい(`docs/reports/FORGE-AI-INTELLIGENCE-001-PHASE0-report.md`
    8章参照)。
-8. 音声入力(マイクボタン)を今後実装するかどうかの方針。
+8. ~~音声入力(マイクボタン)を今後実装するかどうかの方針。~~ →
+   **2026-08-11実装した(7章)。ただし完全に未検証。**
 
 ---
 
-## 6. 変更ファイル一覧(今回のセッション全体、コミット単位)
+## 7. 「すべてお願い」で実施した4件(2026-08-11、Task049)
+
+CEOから「すべてお願い」との指示を受け、5章に挙げた残課題のうち
+以下4件をまとめて実施した。
+
+1. **TD24(travel belongings)の続き**: 前回の対応だけでは不十分だった
+   (forge_ai自身のGolden Testが検出)。`compiler.py`の例値テーブルに
+   `"belongings"`を追加し、Mock・実Gemini両方で正しい持ち物リスト
+   (パスポート・着替え・歯ブラシ・充電器)が生成されることを確認した。
+2. **TD22(IRバージョニング)**: `IntentIR`/`PlanIR`/`Template`へ
+   `schema_version`を追加(既定値付き、後方互換)。
+3. **TD21(Prompt Injection Guard)**・**TD20(Output Safety Checker)**:
+   両方とも新規実装し、**実際にGemini経由で動作を確認した**
+   (Injection: 「developer modeを有効にして」等を検出。Output Safety:
+   「クレジットカード番号を記録するアプリ」で実際に不安全な生成内容を
+   検出)。いずれも検出のみでブロックはしない設計(誤検知でForge体験を
+   壊さないため)。
+4. **音声入力(speech_to_text)**: 新規Flutter Dependency追加+マイク
+   ボタン実装。**これだけは一切検証できていない**(Flutter SDK・
+   マイク・ブラウザ音声認識APIがClaude環境に無いため)。`android/`・
+   `ios/`フォルダが無いため、Web(Chrome)専用。TD25として記録。
+
+実際に実行したテスト: `python -m pytest backend forge_ai -q` →
+`939 passed, 12 skipped`(Flutter変更は影響なし)。TD20/TD21は
+`uvicorn`+実際のcurlリクエストで、Gemini経由の実データに対して
+動作することも確認済み。
+
+**詳細:** `TECH_DEBT.md`(TD20〜TD25)・
+[`docs/reports/FORGE-AI-CONNECT-001-report.md`](./docs/reports/FORGE-AI-CONNECT-001-report.md)
+
+---
+
+## 8. 変更ファイル一覧(今回のセッション全体、コミット単位)
 
 ```
 chore: restore repository baseline from phase2-step1 (folder domain) snapshot
@@ -208,6 +241,13 @@ chore: add .gitignore for Python venv/pycache and Flutter build artifacts
 feat(frontend): Sparkle brand + dark generating-screen UI refresh (FORGE-UI-REFRESH-002)
 docs: add beginner GETTING_STARTED guide and session review summary
 feat(backend): implement GeminiProvider via httpx REST calls (FORGE-AI-CONNECT-001)
+fix(backend): correct GeminiProvider default model after live API verification
+fix(forge_ai): recognize travel 'belongings' concept, found via live Gemini test
+fix(forge_ai): fully resolve TD24 travel belongings content generation
+feat(frontend): add Mock/Gemini provider toggle to home screen (Task048)
+feat: TD22 (IR schema versioning) + TD21 (prompt injection guard)
+feat: TD20 Output Safety Checker, wired and verified live via Gemini
+feat: TD24 full fix + voice input (speech_to_text, unverified) (Task049)
 ```
 
 コミット単位の詳細は`git log`、または各コミットメッセージ本文
