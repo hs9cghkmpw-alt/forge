@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/forge_theme.dart';
 import '../../../../shared_widgets/forge_sparkle_mark.dart';
 import '../../../../shared_widgets/generated_app_host_shell.dart';
@@ -9,6 +10,7 @@ import '../../../app_library/domain/entities/saved_forge_app.dart';
 import '../../../app_library/presentation/providers/app_library_provider.dart';
 import '../../../app_library/presentation/screens/history_screen.dart';
 import '../../../app_library/presentation/screens/my_apps_screen.dart';
+import '../providers/app_generation_provider.dart';
 import '../widgets/example_picker_sheet.dart';
 import 'generation_flow_screen.dart';
 
@@ -72,8 +74,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _onSubmit() {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
+    final provider = ref.read(selectedAiProviderProvider);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => GenerationFlowScreen(inputText: text)),
+      MaterialPageRoute<void>(builder: (_) => GenerationFlowScreen(inputText: text, provider: provider)),
     );
   }
 
@@ -140,6 +143,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       'Forge',
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: ForgeTheme.consoleInk),
                     ),
+                    const Spacer(),
+                    // FORGE-AI-CONNECT-001対応(2026-08-10): Mock Modeで
+                    // ビルドされている場合(`USE_MOCK_GENERATION=true`)は
+                    // Backendへ接続しないため、Provider切り替え自体が
+                    // 意味を持たない。Live Mode(既定)のときだけ表示する。
+                    if (!AppConfig.current.mockMode) const _ProviderToggle(),
                   ],
                 ),
               ),
@@ -392,6 +401,60 @@ class _SendButton extends StatelessWidget {
             child: Icon(
               Icons.arrow_upward_rounded,
               color: enabled ? Colors.white : ForgeTheme.consoleInkSoft,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// FORGE-AI-CONNECT-001対応(2026-08-10)。Backendの生成Providerを
+/// `mock`⇔`gemini`でタップ切り替えする、小さなピル型トグル。
+///
+/// 「設定より会話」(Forge Constitution第三原則)を踏まえ、専用の設定画面は
+/// 作らず、ホーム画面のヘッダーに収まる最小限のUIにした。永続化もしない
+/// (`selectedAiProviderProvider`参照)。
+class _ProviderToggle extends ConsumerWidget {
+  const _ProviderToggle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final provider = ref.watch(selectedAiProviderProvider);
+    final isGemini = provider == 'gemini';
+
+    return Tooltip(
+      message: isGemini ? 'Gemini APIを使用中(タップでMockへ切り替え)' : 'Mockを使用中(タップでGeminiへ切り替え)',
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: () => ref.read(selectedAiProviderProvider.notifier).state = isGemini ? null : 'gemini',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: isGemini ? ForgeTheme.gradientEnd : ForgeTheme.consoleBorder),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isGemini ? Icons.auto_awesome_rounded : Icons.smart_toy_outlined,
+                  size: 14,
+                  color: isGemini ? ForgeTheme.gradientEnd : ForgeTheme.consoleInkSoft,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  isGemini ? 'Gemini' : 'Mock',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isGemini ? ForgeTheme.consoleInk : ForgeTheme.consoleInkSoft,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

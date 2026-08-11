@@ -27,7 +27,10 @@ class MockAppGenerationRepository implements AppGenerationRepository {
   static const _artificialDelay = Duration(milliseconds: 650);
 
   @override
-  Future<GenerationOutcome> generate(String text) async {
+  Future<GenerationOutcome> generate(String text, {String? provider}) async {
+    // `provider`はBackendへの接続がある場合のみ意味を持つ(このRepositoryは
+    // HTTP通信を一切行わないため、常に無視する。FORGE-AI-CONNECT-001対応で
+    // Interfaceへ追加されたが、Mock Mode自体の挙動は変えない)。
     ForgeLogger.start(_scope, 'generate() called (mock, no network)');
     ForgeLogger.request(_scope, 'building mock document for: "$text"');
 

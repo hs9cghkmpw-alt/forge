@@ -41,13 +41,13 @@ class ApiAppGenerationRepository implements AppGenerationRepository {
   static const _scope = 'ApiAppGenerationRepository';
 
   @override
-  Future<GenerationOutcome> generate(String text) async {
+  Future<GenerationOutcome> generate(String text, {String? provider}) async {
     ForgeLogger.start(_scope, 'generate()');
     // ログへ入力文をそのまま出すが、kDebugMode時のみの出力
     // (`ForgeLogger`実装参照)であり、本番ビルドでは出力されない。
-    ForgeLogger.request(_scope, 'prompt="$text"');
+    ForgeLogger.request(_scope, 'prompt="$text" provider=${provider ?? "(default)"}');
     try {
-      final body = await _api.generate(text);
+      final body = await _api.generate(text, provider: provider);
       final outcome = _parseOutcome(body);
       _logOutcome(outcome);
       return outcome;

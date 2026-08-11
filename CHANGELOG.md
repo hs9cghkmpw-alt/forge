@@ -2,6 +2,49 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task048 — FlutterからGeminiを選べるトグルを追加（2026-08-11）
+
+CEOから「ガンガン進んでー」との指示を受け、`docs/reports/
+FORGE-AI-CONNECT-001-report.md`に残っていた「Flutterアプリ側にGeminiを
+選ぶUIが無い」という既知の限界に対応した。
+
+### 追加・変更
+- `ai_generation_api.dart`: `generate()`に`{String? provider}`を追加し、
+  指定時のみ`generation_options: {engine: "forge_ai", provider: ...}`を
+  リクエストボディへ含める(未指定時はBackend既定のmockのまま、既存の
+  リクエスト形状を変えない)。
+- `AppGenerationRepository`(interface)・`ApiAppGenerationRepository`・
+  `MockAppGenerationRepository`・`GenerateAppUseCase`・
+  `GenerationRequest`・`GenerationFlowScreen`に`provider`パラメータを
+  一貫して追加(Mock実装は受け取るが無視、コメントで理由を明記)。
+- `selectedAiProviderProvider`(新規`StateProvider<String?>`):
+  ホーム画面で選ばれているProvider。永続化はしない(「設定より会話」
+  というForge Constitution第三原則を踏まえ、専用の設定画面ではなく
+  ホーム画面ヘッダーの小さなピル型トグルにした。アプリ再起動で既定の
+  mockへ戻る、意図的な設計)。
+- `_ProviderToggle`(新規Widget、`home_screen.dart`): タップで
+  Mock⇔Geminiを切り替える。Flutter側がMock Mode(`--dart-define=
+  USE_MOCK_GENERATION=true`)でビルドされている場合は、Backendへ接続
+  しないため非表示にする。
+
+### 実際に実行したテスト・結果
+- `backend`・`forge_ai`のPythonスイートは今回の変更(Flutterのみ)の
+  影響を受けないため、回帰確認として再実行: `917 passed, 12 skipped`
+  (変更なし、影響が無いことの確認)。
+- `api_app_generation_repository_test.dart`へ新規テスト2件を追加し、
+  `provider`指定時/未指定時でリクエストボディの`generation_options`が
+  意図通りになることを検証する(Dio Interceptorでリクエストボディを
+  実際にキャプチャして比較する形。**Claude環境にFlutter SDKが無いため、
+  このテスト自体は一度も実行できていない**。CEO環境での実行が必須)。
+- 影響範囲の`grep`調査: `AppGenerationRepository`を実装するクラスが
+  他に無いこと、既存テストが`generate('text')`を1引数のみで呼んでいて
+  (`provider`は省略可能な名前付き引数のため)壊れないことを確認済み。
+
+### 既知の限界
+- 本Task全体(Flutterコード)は、Claude環境にFlutter/Dart SDKが無いため
+  一度も`flutter analyze`/`flutter test`で実行できていない。手動での
+  全文読み直し・import整合性確認・括弧の対応関係チェックのみ実施。
+
 ## Task047 — FORGE-AI-CONNECT-001: Gemini実機確認（Task046の同日追記）（2026-08-10）
 
 Task046完了後、CEOがGoogle AI Studioで取得した実際のAPIキーをこの

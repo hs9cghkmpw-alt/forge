@@ -121,6 +121,52 @@ void main() {
     });
   });
 
+  group('ApiAppGenerationRepository.generate() — provider指定(FORGE-AI-CONNECT-001)', () {
+    Map<String, dynamic> minimalSuccessBody() => {
+          'version': '1.0',
+          'status': 'success',
+          'result': {
+            'forge_document': {'version': '1.0', 'app': {'title': 't'}, 'screens': []},
+            'validation': {'valid': true, 'errors': [], 'warnings': []},
+            'diagnostics': {'engine_used': 'forge_ai', 'provider_used': 'gemini', 'repair_attempts': 0},
+          },
+        };
+
+    test('providerを指定すると、generation_optionsとしてリクエストボディに含まれる', () async {
+      RequestOptions? capturedOptions;
+      final dio = _buildDio([
+        (options, handler) {
+          capturedOptions = options;
+          return _resolveJson(options, handler, 200, minimalSuccessBody());
+        },
+      ]);
+      final repository = ApiAppGenerationRepository(AiGenerationApi(dio));
+
+      await repository.generate('買い物リストを作って', provider: 'gemini');
+
+      final sentBody = capturedOptions!.data as Map<String, dynamic>;
+      final input = sentBody['input'] as Map<String, dynamic>;
+      expect(input['generation_options'], {'engine': 'forge_ai', 'provider': 'gemini'});
+    });
+
+    test('providerを指定しない場合、generation_optionsはリクエストボディに含まれない(既定=Backend側のmock)', () async {
+      RequestOptions? capturedOptions;
+      final dio = _buildDio([
+        (options, handler) {
+          capturedOptions = options;
+          return _resolveJson(options, handler, 200, minimalSuccessBody());
+        },
+      ]);
+      final repository = ApiAppGenerationRepository(AiGenerationApi(dio));
+
+      await repository.generate('買い物リストを作って');
+
+      final sentBody = capturedOptions!.data as Map<String, dynamic>;
+      final input = sentBody['input'] as Map<String, dynamic>;
+      expect(input.containsKey('generation_options'), isFalse);
+    });
+  });
+
   group('ApiAppGenerationRepository.generate() — HTTPエラー(BACKEND、構造化)', () {
     test('HTTP 422のError Envelopeを例外にせずGenerationFailureとして返す', () async {
       final dio = _buildDio([

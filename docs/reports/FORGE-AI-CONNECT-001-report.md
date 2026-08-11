@@ -174,12 +174,14 @@ $ ruff check backend/app/ai/foundation/providers.py backend/tests/test_gemini_pr
 ## 6. CEO確認事項(2026-08-10追記時点で更新)
 
 1. ~~`backend/.env`に実際のAPIキーを設定し...~~ → **完了。9章参照。**
-2. Flutterアプリ側にProviderを選ぶUI(設定画面等)を追加するかどうか
-   (未回答、引き続き確認事項)。
+2. ~~Flutterアプリ側にProviderを選ぶUI...~~ → **2026-08-11完了(Task048、
+   `CHANGELOG.md`参照)。ホーム画面ヘッダーに小さなMock⇔Geminiトグルを
+   追加した。ただしClaude環境で`flutter test`が実行できないため未検証。**
 3. ~~モデル名(`gemini-2.0-flash`)が実際に利用可能か~~ →
    **利用不可と判明、`gemini-flash-latest`へ変更済み。9章参照。**
-4. (新規)9章で見つかった、travel domainの生成品質の課題
-   (「持ち物」ではなく「旅行先」が生成される)に着手するかどうか。
+4. (未着手)9章・`TECH_DEBT.md` TD24で見つかった、travel domainの
+   生成品質の課題(「持ち物」ではなく「旅行先」が生成される)に
+   着手するかどうか。
 
 ---
 

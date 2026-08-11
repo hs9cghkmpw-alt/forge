@@ -12,13 +12,19 @@ class AiGenerationApi {
   final Dio _dio;
   const AiGenerationApi(this._dio);
 
-  Future<Map<String, dynamic>> generate(String naturalLanguage) async {
+  /// FORGE-AI-CONNECT-001対応(2026-08-10): `provider`を明示指定すると
+  /// (例: `"gemini"`)、Backendの既定(`mock`)ではなく指定したProviderで
+  /// 生成する(`backend/app/schemas/ai.py`の`GenerationOptionsDTO`)。
+  /// `null`の場合(既定)は`generation_options`自体を送らず、Backend側の
+  /// 既定動作(mock)に任せる。
+  Future<Map<String, dynamic>> generate(String naturalLanguage, {String? provider}) async {
+    final input = <String, dynamic>{'natural_language': naturalLanguage};
+    if (provider != null) {
+      input['generation_options'] = {'engine': 'forge_ai', 'provider': provider};
+    }
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/v1/ai/generate',
-      data: {
-        'version': '1.0',
-        'input': {'natural_language': naturalLanguage},
-      },
+      data: {'version': '1.0', 'input': input},
     );
     return _requireBody(response);
   }

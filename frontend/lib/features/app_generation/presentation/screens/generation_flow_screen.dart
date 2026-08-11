@@ -29,7 +29,12 @@ import '../providers/app_generation_provider.dart';
 /// * `ResponsiveAppShell`でChrome中央最大幅に対応。
 class GenerationFlowScreen extends ConsumerStatefulWidget {
   final String inputText;
-  const GenerationFlowScreen({super.key, required this.inputText});
+
+  /// FORGE-AI-CONNECT-001対応(2026-08-10)。`null`ならBackend既定
+  /// (`mock`)、`"gemini"`ならホーム画面のトグルで明示的に選ばれたもの。
+  final String? provider;
+
+  const GenerationFlowScreen({super.key, required this.inputText, this.provider});
 
   @override
   ConsumerState<GenerationFlowScreen> createState() => _GenerationFlowScreenState();
@@ -51,7 +56,9 @@ class _GenerationFlowScreenState extends ConsumerState<GenerationFlowScreen> {
       asyncOutcome = ref.watch(confirmGenerationProvider(_activeConfirmRequest!));
     } else {
       asyncOutcome = ref.watch(
-        appGenerationProvider(GenerationRequest(text: widget.inputText, nonce: _generateNonce)),
+        appGenerationProvider(
+          GenerationRequest(text: widget.inputText, nonce: _generateNonce, provider: widget.provider),
+        ),
       );
     }
 

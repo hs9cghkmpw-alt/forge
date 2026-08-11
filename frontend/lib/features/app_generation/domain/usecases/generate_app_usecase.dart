@@ -7,7 +7,8 @@ class GenerateAppUseCase {
   final AppGenerationRepository _repository;
   const GenerateAppUseCase(this._repository);
 
-  Future<GenerationOutcome> call(String text) => _repository.generate(text);
+  Future<GenerationOutcome> call(String text, {String? provider}) =>
+      _repository.generate(text, provider: provider);
 }
 
 /// FORGE v0.2 P0.2対応: `needs_confirmation`への回答送信ユースケース。

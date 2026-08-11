@@ -48,19 +48,32 @@ class GenerationRequest {
   final String text;
   final int nonce;
 
-  const GenerationRequest({required this.text, required this.nonce});
+  /// FORGE-AI-CONNECT-001対応(2026-08-10)。`null`ならBackendの既定
+  /// (`mock`)、`"gemini"`等を指定すると明示的にそのProviderで生成する。
+  final String? provider;
+
+  const GenerationRequest({required this.text, required this.nonce, this.provider});
 
   @override
   bool operator ==(Object other) =>
-      other is GenerationRequest && other.text == text && other.nonce == nonce;
+      other is GenerationRequest &&
+      other.text == text &&
+      other.nonce == nonce &&
+      other.provider == provider;
 
   @override
-  int get hashCode => Object.hash(text, nonce);
+  int get hashCode => Object.hash(text, nonce, provider);
 }
 
 /// 単調増加するnonceを払い出す。生成操作(初回送信・Retry・確認回答の
 /// いずれか)のたびに`nextNonce()`を呼び、新しい`GenerationRequest`を作る。
 final generationNonceProvider = StateProvider<int>((ref) => 0);
+
+/// FORGE-AI-CONNECT-001対応(2026-08-10)。ホーム画面のクイック切り替えで
+/// 選ばれているProvider名(`null`=Backend既定のmock、`"gemini"`=実際の
+/// Gemini APIを使う)。永続化はしない(アプリ再起動で既定のmockへ戻る、
+/// 意図的な設計。「設定より会話」の方針上、恒久的な設定画面にはしない)。
+final selectedAiProviderProvider = StateProvider<String?>((ref) => null);
 
 /// 生成結果を保持する。`FutureProvider.autoDispose.family`にすることで、
 /// 画面が破棄されたら結果も破棄され、古い結果が別の画面遷移で
@@ -68,7 +81,7 @@ final generationNonceProvider = StateProvider<int>((ref) => 0);
 final appGenerationProvider =
     FutureProvider.autoDispose.family<GenerationOutcome, GenerationRequest>((ref, request) {
   final useCase = ref.watch(_generateAppUseCaseProvider);
-  return useCase(request.text);
+  return useCase(request.text, provider: request.provider);
 });
 
 /// FORGE v0.2 P0.2対応: 確認回答送信用のリクエスト識別子(生成側と同じ、

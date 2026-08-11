@@ -12,7 +12,12 @@ abstract class AppGenerationRepository {
   /// ユーザーの自然言語入力から、生成結果を1件取得する。
   /// パース(`ForgeDocument.fromJson`)はこの層の責務ではない
   /// (json_ui/ 側、実際に描画する直前で行う)。
-  Future<GenerationOutcome> generate(String text);
+  ///
+  /// FORGE-AI-CONNECT-001対応(2026-08-10): `provider`(例: `"gemini"`)を
+  /// 指定すると、Backendの既定Provider(`mock`)ではなく明示的に指定した
+  /// Providerで生成する。`MockAppGenerationRepository`はBackendへ接続
+  /// しないため、この引数を受け取っても無視する。
+  Future<GenerationOutcome> generate(String text, {String? provider});
 
   /// `GenerationNeedsConfirmation.requestId`と、ユーザーの回答を渡し、
   /// 確認を経て生成を再実行する。
