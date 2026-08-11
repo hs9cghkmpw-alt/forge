@@ -746,3 +746,113 @@ NSMicrophoneUsageDescription等が無いため)。
 結果(エラーメッセージ含む)を共有してもらう。コンパイルエラーが出た場合、
 エラー内容から実際のAPIシグネチャとのズレを特定して修正する
 (`GETTING_STARTED.md`のトラブルシューティング参照)。
+
+---
+
+## TD26. Checklist系Domain(10種)のCompile段階が、Providerの応答をtitle以外
+すべて捨てていた → **解消済み・実機確認済み(2026-08-11)**
+
+FORGE-AI-QUALITY-001(2026-08-11)、CEO「生成できるアプリのクオリティを
+最大限にしたい」→「色々なジャンルで実際に生成→不具合を見つけて直す」を
+選択したことを受けて発見・修正。
+
+**発見の経緯**: 実際にGemini APIへ11ジャンルのプロンプトを投げて出力を
+確認したところ、以下のように、依頼内容に関係なく常に同じ初期データが
+返ってくる不具合を再現した。
+
+| プロンプト | 修正前の出力 |
+|---|---|
+| 「満足度アンケートを作って」 | `['最初の質問']` |
+| 「週間スケジュールを管理するアプリを作って」 | `['定例ミーティング']` |
+| 「毎日の勉強記録をつけたいアプリを作って」 | `['英語', '資格試験の勉強', '読書']` |
+
+**根本原因**: `forge_ai/core/compiler.py`の`Compiler.compile()`が、
+Provider(Gemini)の応答から`title`しか読み取っておらず、チェックリストの
+初期項目は`_EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT`という静的な決め打ちテーブル
+(`primary_concept`名→固定の例値タプル)からしか作られていなかった。
+このテーブルは「先頭のkey_elementが何の概念か」だけを見るため、依頼内容の
+具体的な違い(「満足度アンケート」と「習い事の満足度アンケート」)を一切
+反映できない。
+
+この`Compiler`(Checklist単一画面形状)は、`pipeline_orchestrator.py`の
+`SUPPORTED_DOMAIN_CATEGORIES`(`forge_ai/core/ir/ir_generator.py`の
+`_ENTITY_DEFINITIONS`のキー)に含まれない、以下10 Domainすべてで使われる
+(残る5 Domain=diary/inventory/household_budget/fishing_log/habit_trackingは
+`forge_ai/core/ir/`の新経路のため対象外・元々問題なし)。
+
+`shopping・hospital・attendance・task_management・survey・schedule・
+child_growth・study・travel・generic`
+
+**修正内容**:
+1. `forge_ai/prompt/prompt_builder.py`の`build_compile_prompt()`: system
+   textへ「依頼内容に即した具体的なexample_items(2〜4件)を提案すること」
+   という指示を追加。
+2. `backend/app/ai/runtime/forge_ai_provider_bridge.py`の
+   `_RESPONSE_SCHEMAS["compile"]`へ、任意項目として`example_items`
+   (`array<string>`)を追加(`required`には含めない。MockProvider・既存の
+   実LLM未接続テストは`example_items`を返さないため、その場合は既存の
+   静的テーブル→生の識別子という順序へ安全にフォールバックする)。
+3. `forge_ai/core/compiler.py`の`Compiler.compile()`: Providerが
+   `example_items`(空でない文字列のリスト)を返した場合、静的テーブルより
+   優先して使うよう変更。不正な形(非リスト・非文字列要素)は無視して
+   フォールバックする防御的な実装にした。
+
+**検証**: `forge_ai/tests/test_compiler.py`へ`TestCompilerProviderExample
+Items`(4件、優先順位・空リスト時のフォールバック・キー欠如時の
+フォールバック・不正な形の防御を検証)を追加。既存の全テスト
+(forge_ai 408件・backend込み944件)が回帰なしで通ることを確認した上で、
+実際に`uvicorn`+実Gemini APIで再実行し、修正後の出力を確認した。
+
+| プロンプト | 修正後の出力 |
+|---|---|
+| 「満足度アンケートを作って」 | `['サービス全体の満足度を教えてください', 'スタッフの接客対応はいかがでしたか？', '今後も当サービスを利用したいと思いますか？']` |
+| 「週間スケジュールを管理するアプリを作って」 | `['月曜 10:00 - チーム定例ミーティング', '水曜 14:00 - プロジェクト進捗確認', '金曜 17:00 - 週次振り返りミーティング']` |
+| 「毎日の勉強記録をつけたいアプリを作って」 | `['英検1級対策 - 公式問題集 1章〜3章完了', '基本情報技術者試験 - 過去問道場 午前50問演習', 'Pythonプログラミング学習 - 基礎文法セクション終了']` |
+
+**既知の制限**: `example_items`は依然として「チェックリストの初期項目」
+という単一の粒度でしか使われない。TD24で既に指摘した「item/price/
+quantity/storeのような、本来複数属性を持つ1件のデータをChecklistの複数行
+として扱ってしまう」という、より根本的なCompilerの構造的制約(Task
+#10「primary_concept選定アルゴリズムの汎用的な再設計」の範囲)自体は
+未解消のまま。
+
+---
+
+## TD27. 「通院記録」「勤怠」がhospital/attendance Domainへ分類されず、
+diary Domainへ誤分類されていた → **解消済み・実機確認済み(2026-08-11)**
+
+FORGE-AI-QUALITY-001(2026-08-11)、TD26と同じ実機プローブで発見。
+
+**根本原因**: `forge_ai/core/lexicon.py`の`CONCEPT_KEYWORDS`に、「通院」
+(hospitalの`appointment`概念)・「勤怠」(attendanceの`status`概念)に
+対応するエントリが無かった。一方`ACTION_KEYWORDS`の「記録」→
+`add_entry`(diaryのaction)だけは一致してしまうため、Domain Classification
+(`understanding/domain_classifier.py`)がConcept一致0件・Action一致のみで
+diaryをprimary_domainに選んでしまっていた(「Action一致のみでは
+confidenceに上限を課す」設計はあるが、他Domainが完全に0点のままだと
+それでも勝ってしまう)。結果、診療記録・勤務記録という明確な意図が
+あるにもかかわらず、確認も無く汎用日記アプリとして生成されていた。
+
+**修正内容**: `lexicon.py`の`CONCEPT_KEYWORDS`へ`("通院", "appointment")`・
+`("勤怠", "status")`を追加。「毎日」「写真」のような汎用語と異なり、
+「通院」「勤怠」は日常会話の他文脈でまず使われない語であるため、
+既存の「見送り」判断とは事情が異なると判断した。
+
+**修正後の実際の挙動(意図的にdiary誤分類ではなくなっただけで、
+即Success化はしない)**:
+- 「通院記録を管理するアプリを作って」→ hospital domainへ正しく分類され、
+  既存のPrivacy確認フロー(利用者の同意確認)へ合流するようになった。
+- 「勤怠を記録するアプリを作って」→ attendance domainへ正しく分類され、
+  「status」概念がattendance/task_managementで共有されているという
+  既存の既知の僅差競合(`出席と欠席を記録したい`と同種)により、
+  Domain確認を求めるようになった。
+
+**検証**: `forge_ai/tests/test_v03_domain_inference_golden.py`の
+`CONFIRMATION_CASES`へ2件追加し、実際のreasonコードが一致することを
+自動テスト化した。加えて、`test_hospital_and_attendance_domain_specific_
+prompts_are_no_longer_misclassified_as_diary`を新設し、reasonだけでなく
+primary_domainがhospital/attendanceになっていること自体を直接検証する
+(reasonの一致だけでは「diaryのままだが別の理由でconfirmationになった」
+というケースを見逃しうるため)。既存の全テスト(forge_ai 408件)が回帰
+なしで通ることを確認した上で、実際に`uvicorn`+実Gemini APIで再実行し、
+上記の挙動を確認した。

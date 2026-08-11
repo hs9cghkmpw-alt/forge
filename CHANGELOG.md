@@ -2,6 +2,50 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task050 — 生成品質の実機調査・修正(FORGE-AI-QUALITY-001、2026-08-11、CEO「生成できるアプリのクオリティを最大限にしたい」)
+
+CEOが提示した4方向(色々なジャンルで実際に生成→不具合修正/
+primary_concept選定の見直し/Design Critic評価範囲拡大/Widget・
+Template種類の拡充)のうち、まず最優先(CEO推奨)の「実際に生成して
+不具合を見つけて直す」を実施した。日本語プロンプト11件を`uvicorn`+
+実Gemini APIへ実際に投げ、出力(Domain分類・タイトル・初期データ)を
+1件ずつ確認し、2つの実バグを発見・修正した。詳細は`TECH_DEBT.md`
+TD26・TD27参照。
+
+### TD26: Checklist系Domain(10種)で、初期データが常に画一的な
+決め打ち値になっていた
+`forge_ai/core/compiler.py`の`Compiler.compile()`が、Provider(Gemini)の
+応答から`title`しか読み取っておらず、初期データは静的テーブル
+(`_EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT`)のみに依存していた。「満足度
+アンケート」も「習い事の満足度アンケート」も常に同じ`['最初の質問']`に
+なる、という不具合を実機で再現した。`build_compile_prompt()`・
+`_RESPONSE_SCHEMAS["compile"]`・`Compiler.compile()`の3箇所を修正し、
+Providerが返す`example_items`(依頼内容に即した具体例)を静的テーブルより
+優先するようにした(MockProvider・既存の実LLM未接続テストは
+`example_items`を返さないため、既存動作への影響は無い)。修正前後を
+実機で比較し、「満足度アンケートを作って」の初期データが
+`['最初の質問']`→実際の質問文3件に変わったことを確認した。
+
+### TD27: 「通院記録」「勤怠」がdiary Domainへ誤分類されていた
+`forge_ai/core/lexicon.py`の`CONCEPT_KEYWORDS`に「通院」「勤怠」の
+エントリが無く、`ACTION_KEYWORDS`の「記録」→`add_entry`(diaryの
+action)のみが一致してしまうため、hospital/attendance Domainを差し置いて
+diaryへ誤分類されていた(実機で確認・再現)。2エントリを追加し、
+それぞれ正しくhospital(Privacy確認フローへ合流)・attendance
+(既存のstatus概念共有によるDomain確認フローへ合流)へ分類されるように
+なったことを実機で確認した。
+
+### テスト
+`forge_ai/tests/test_compiler.py`へ`TestCompilerProviderExampleItems`
+(4件)、`forge_ai/tests/test_v03_domain_inference_golden.py`へ
+`CONFIRMATION_CASES`2件+専用の回帰テスト1件を追加。forge_ai全408件・
+backend込み全944件が回帰なしで通ることを確認した。
+
+### 残タスク(このTaskでは未着手)
+CEOが選んだ残り3方向(primary_concept選定アルゴリズムの汎用的な
+再設計/Design Critic評価範囲の拡大/Widget・Templateの種類拡充)は、
+次のTaskで着手する。
+
 ## Task049 — TD24深掘り修正・TD22/TD21/TD20実装・音声入力（2026-08-11、CEO「すべてお願い」）
 
 CEOから提示された3つの残課題(TD24の続き、TD20〜22、音声入力)を

@@ -61,7 +61,13 @@ _RESPONSE_SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "compile": {
         "type": "object",
-        "properties": {"title": {"type": "string"}},
+        "properties": {
+            "title": {"type": "string"},
+            # FORGE-AI-QUALITY-001(2026-08-11): 依頼内容に即した初期データ
+            # 例。任意項目(旧Mock応答・旧テストとの後方互換のためrequired
+            # には含めない、`compiler.py`側も未指定を正しく許容する)。
+            "example_items": {"type": "array", "items": {"type": "string"}},
+        },
         "required": ["title"],
     },
     "repair": {

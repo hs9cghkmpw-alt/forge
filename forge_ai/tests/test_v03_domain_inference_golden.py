@@ -114,6 +114,19 @@ CONFIRMATION_CASES: tuple[tuple[str, str], ...] = (
     # 複数Domainが真に僅差で競合するケース("status"がattendance/
     # task_managementの両方の概念であるため)。
     ("出席と欠席を記録したい", "priority2_low_domain_confidence"),
+    # FORGE-AI-QUALITY-001(2026-08-11)実機確認で発見: 「通院記録を管理
+    # するアプリ」「勤怠を記録するアプリ」が、hospital/attendance両
+    # Domainの既存concept語彙のいずれにも一致せず、ACTION_KEYWORDSの
+    # "記録"→"add_entry"(diary domainのaction)のみ一致してしまい、
+    # 誤ってdiary domainへSuccess分類されていた(診療記録・勤務記録の
+    # 意図が明確にあるにもかかわらず、汎用日記アプリとして無確認で
+    # 生成されてしまう不具合)。lexicon.pyへ"通院"->"appointment"・
+    # "勤怠"->"status"を追加した結果、正しくhospital/attendanceへ
+    # 分類されるようになった(hospitalは既存のPrivacy確認フローへ、
+    # attendanceは既存のstatus概念共有によるattendance/task_management
+    # 僅差競合の確認フローへ、それぞれ正しく合流する)。
+    ("通院記録を管理するアプリを作って", "revision_exhausted"),
+    ("勤怠を記録するアプリを作って", "priority2_low_domain_confidence"),
 )
 
 
@@ -174,6 +187,23 @@ class TestDomainInferenceGolden(unittest.TestCase):
                 texts = [i.get("text") for i in items_state["value"]]
                 for t in texts:
                     self.assertNotIn(t, internal_identifiers, f"{text!r} -> 初期項目に内部識別子が漏れている: {t!r}")
+
+    def test_hospital_and_attendance_domain_specific_prompts_are_no_longer_misclassified_as_diary(self) -> None:
+        """FORGE-AI-QUALITY-001回帰テスト: 以前は"記録"というAction一致
+        のみでdiary domainへ誤分類されていた2件が、正しくhospital/
+        attendanceへ分類されることを確認する(reasonの一致だけでは
+        「diaryへ誤分類されたままだが別の理由でconfirmationになった」
+        というケースを見逃しうるため、domainそのものを直接検証する)。"""
+        expectations = {
+            "通院記録を管理するアプリを作って": "hospital",
+            "勤怠を記録するアプリを作って": "attendance",
+        }
+        for text, expected_domain in expectations.items():
+            with self.subTest(text=text):
+                outcome = run_cognitive_pipeline(text, MockProvider())
+                assert isinstance(outcome, CognitivePipelineNeedsConfirmation)
+                actual_domain = outcome.partial_context.domain_classification.primary_domain.category.value
+                self.assertEqual(actual_domain, expected_domain)
 
     def test_confirmation_cases_produce_the_expected_reason(self) -> None:
         """Task4の裏付け: 正当な理由で確認要求されるケースが、

@@ -91,6 +91,16 @@ CONCEPT_KEYWORDS: tuple[tuple[str, str], ...] = (
     # (実際にGemini APIで確認したところ)「京都旅行」等の旅行先が
     # 生成され、期待される「パスポート」等の持ち物が生成されなかった。
     ("持ち物", "belongings"), ("荷物", "belongings"),
+    # FORGE-AI-QUALITY-001(2026-08-11)実機確認で発見: 「通院記録を管理する
+    # アプリ」「勤怠を記録するアプリ」が、hospital/attendance domainの
+    # 既存concept語彙("患者""診察"等/"出欠"等)のいずれにも一致せず、
+    # ACTION_KEYWORDSの"記録"→"add_entry"(diary domainのaction)のみが
+    # 一致してしまうため、両方ともdiary domainへ誤分類されていた
+    # (診療記録・勤務記録という明確な意図があるにもかかわらず、
+    # 汎用日記アプリとして生成されてしまう不具合)。"通院"・"勤怠"は
+    # 会話上の他文脈でまず使われない語であり、"毎日"/"写真"のような
+    # 汎用語で見送った過去の判断とは事情が異なるため、そのまま追加する。
+    ("通院", "appointment"), ("勤怠", "status"),
 )
 
 # (日本語キーワード, 対応する操作名) — domain_model.pyのtypical_actionsと対応させる。

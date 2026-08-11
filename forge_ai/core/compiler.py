@@ -214,7 +214,8 @@ class ForgeIRDocument:
 
 
 class Compiler:
-    """`AIProvider`を注入して使う(主にタイトル等の命名判断に使う想定)。
+    """`AIProvider`を注入して使う(タイトル等の命名判断、および
+    FORGE-AI-QUALITY-001以降は初期データ例`example_items`の提案にも使う)。
     画面構造(Widget/Action/State)の組み立て自体は決定的なPython実装であり、
     Provider任せにしていない(再現性・テスト容易性を優先した設計判断。
     IMPLEMENTATION_REPORT.mdの設計判断章に記録する)。
@@ -255,9 +256,27 @@ class Compiler:
         # 識別子と一致する場合、生の識別子ではなく複数件の現実的な
         # 例値へ置き換える(上記`_EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT`参照)。
         primary_concept = elements[0]
-        example_items = _EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT.get(primary_concept)
-        if example_items:
-            elements = list(example_items)
+
+        # FORGE-AI-QUALITY-001(2026-08-11)対応: Providerが依頼内容に即した
+        # `example_items`を返してきた場合、それを静的テーブルより優先する
+        # (静的テーブルは`primary_concept`単位の画一的な値しか持てず、
+        # 「満足度アンケート」も「習い事の満足度アンケート」も常に同じ
+        # '最初の質問'になってしまう問題があった)。MockProvider・既存の
+        # 実LLM未接続テストは`example_items`を返さないため、その場合は
+        # 従来どおり静的テーブル→生の識別子の順にfallbackし、既存の
+        # 出力を1バイトも変えない。
+        provider_example_items = response.structured.get("example_items")
+        provider_items = (
+            [str(v).strip() for v in provider_example_items if isinstance(v, str) and str(v).strip()]
+            if isinstance(provider_example_items, list)
+            else []
+        )
+        if provider_items:
+            elements = provider_items
+        else:
+            example_items = _EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT.get(primary_concept)
+            if example_items:
+                elements = list(example_items)
 
         items_state_id = "items"
         new_item_state_id = "new_item_text"

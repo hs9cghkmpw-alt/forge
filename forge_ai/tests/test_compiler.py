@@ -156,6 +156,70 @@ class TestCompilerRealisticExampleItems(unittest.TestCase):
         self.assertGreater(len(texts), 0)
 
 
+class _StubProvider:
+    """FORGE-AI-QUALITY-001テスト専用: `complete()`が常に固定の
+    `structured`を返すだけの、`AIProvider` Protocolを満たすStub。"""
+
+    def __init__(self, structured: dict) -> None:
+        self._structured = structured
+
+    def complete(self, prompt):
+        from forge_ai.provider.provider_interface import ProviderResponse
+
+        return ProviderResponse(text="stub", structured=self._structured)
+
+
+class TestCompilerProviderExampleItems(unittest.TestCase):
+    """FORGE-AI-QUALITY-001(2026-08-11)の回帰テスト: Providerが
+    `example_items`を返した場合、静的な`_EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT`
+    テーブルより優先して使う(実際のGemini APIで複数ジャンルを試した際、
+    静的テーブルしか使われず、依頼内容を反映しない画一的な出力になって
+    いた不具合への対応)。"""
+
+    def _compile_with(self, key_elements: tuple[str, ...], structured: dict):
+        plan = ApplicationPlan(
+            title="テストアプリ",
+            screens=(ScreenPlan(name="main", purpose="test", key_elements=key_elements),),
+            data_entities=key_elements,
+            primary_flow=(),
+        )
+        provider = _StubProvider(structured)
+        return Compiler(provider).compile(plan)
+
+    def test_provider_example_items_take_priority_over_static_table(self) -> None:
+        """"item"は静的テーブルで牛乳・卵・パンになるはずだが、Providerが
+        依頼内容に即した`example_items`を返した場合はそちらを使う。"""
+        ir = self._compile_with(
+            ("item",),
+            {"title": "満足度アンケート", "example_items": ["ピアノ教室の満足度", "先生の対応"]},
+        )
+        texts = [entry["text"] for entry in ir.screens[0].state["items"].value]
+        self.assertEqual(texts, ["ピアノ教室の満足度", "先生の対応"])
+
+    def test_empty_provider_example_items_falls_back_to_static_table(self) -> None:
+        """Providerが`example_items`を返さない(空リスト)場合は、既存の
+        静的テーブルへ安全にフォールバックする(既存動作を壊さない)。"""
+        ir = self._compile_with(("item",), {"title": "買い物リスト", "example_items": []})
+        texts = [entry["text"] for entry in ir.screens[0].state["items"].value]
+        self.assertEqual(texts, ["牛乳", "卵", "パン"])
+
+    def test_missing_example_items_key_falls_back_to_static_table(self) -> None:
+        """`example_items`キー自体が無い場合(MockProvider・旧LLM応答)も、
+        既存の静的テーブルへ安全にフォールバックする。"""
+        ir = self._compile_with(("item",), {"title": "買い物リスト"})
+        texts = [entry["text"] for entry in ir.screens[0].state["items"].value]
+        self.assertEqual(texts, ["牛乳", "卵", "パン"])
+
+    def test_non_string_or_malformed_example_items_are_ignored(self) -> None:
+        """Providerが不正な形(文字列以外の要素・非リスト)を返しても、
+        クラッシュせず静的テーブルへフォールバックする(実LLM応答の
+        構造がGeminiのStructured Output契約に厳密に沿わない場合の
+        安全策)。"""
+        ir = self._compile_with(("item",), {"title": "買い物リスト", "example_items": [1, 2, None, "  "]})
+        texts = [entry["text"] for entry in ir.screens[0].state["items"].value]
+        self.assertEqual(texts, ["牛乳", "卵", "パン"])
+
+
 class TestCompilerAfterIRMigration(unittest.TestCase):
     """FORGE v0.6(FORGE IR v1 Phase2)の回帰テスト。
 

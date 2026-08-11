@@ -72,12 +72,25 @@ class PromptBuilder:
         )
 
     def build_compile_prompt(self, *, plan_summary: dict[str, Any]) -> Prompt:
-        """Forge IRコンパイル段階のPromptを構築する。"""
+        """Forge IRコンパイル段階のPromptを構築する。
+
+        FORGE-AI-QUALITY-001(2026-08-11)対応: `example_items`の要求を
+        追加した。以前はtitleしか要求しておらず、初期データ(チェック
+        リストの初期項目)はCompiler側の静的な決め打ちテーブル
+        (`_EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT`)にしか依存できなかったため、
+        「満足度アンケートを作って」→常に'最初の質問'のような、実際の
+        依頼内容を反映しない画一的な出力になっていた(実機でGeminiに
+        複数ジャンルのプロンプトを投げて確認・再現した)。
+        """
         return Prompt(
             stage="compile",
             system=(
                 "あなたはApplication PlanをForge IR(構造化された中間表現)へ"
                 "変換する。ForgeのWidget/Action/State語彙のみを使うこと。"
+                "titleに加え、このアプリの用途・ユーザーの依頼内容に即した、"
+                "具体的で現実的な初期データ例(example_items、2〜4件の文字列)"
+                "も提案すること。汎用的な言い回し(「最初の項目」等)ではなく、"
+                "依頼内容から推測できる実在しそうな値にすること。"
             ),
             instruction="次のApplication PlanをForge IRへコンパイルせよ。",
             context={"plan": plan_summary},
