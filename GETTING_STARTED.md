@@ -98,8 +98,9 @@ pip install -r requirements.txt
 python -m pytest -q
 ```
 
-`518 passed, 12 skipped`(2026-08-10時点でClaudeが実際に確認した数値)の
-ように、`passed`件数が多数出て、`failed`が無ければ成功です。
+`962 passed, 12 skipped`(2026-08-11時点でClaudeが実際に確認した数値。
+作業が進むたびに件数は増えます)のように、`passed`件数が多数出て、
+`failed`が無ければ成功です。
 
 ### 3.4 サーバーを起動する
 
@@ -228,6 +229,23 @@ flutter run -d chrome --dart-define=FORGE_API_BASE_URL=http://127.0.0.1:8000
    完成画面が表示されます。
 4. 「アプリを開く」を押すと、実際に生成されたアプリを操作できます。
 
+**2026-08-11追記(試してみてほしい例)**: `provider: "gemini"`を指定した
+状態(3.6参照)で、以下のような入力も試してみてください。
+
+- 「満足度アンケートを作って」→ 以前はチェックリスト形式になって
+  いましたが、今は実際の質問文が複数の入力欄に分かれた、本物の
+  アンケートフォーム(送信すると「送信完了」画面へ遷移)になります
+  (`TECH_DEBT.md` TD29参照)。
+- 「買い物リストを作って」→ 以前は「牛乳・卵・パン」という固定の
+  例文でしたが、今はGeminiが依頼内容に応じた具体的な初期データを
+  提案します(`TECH_DEBT.md` TD26参照)。
+- 何かアプリを保存して、チェックリストに項目を追加したあと、
+  一度ブラウザを閉じて(またはタブを再読み込みして)「マイアプリ」
+  から再度開いてみてください。追加した項目が残っていれば、
+  ローカル保存機能(`TECH_DEBT.md` TD30、**未検証**)が正しく
+  動いています。うまく残らない場合は、そのままエラー内容を教えて
+  ください。
+
 ---
 
 ## 6. (任意)APIだけを直接試す
@@ -295,4 +313,7 @@ curl -X POST http://127.0.0.1:8000/api/v1/ai/generate \
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md): アーキテクチャ全体設計
 - [CHANGELOG.md](./CHANGELOG.md): これまでの変更履歴(Taskごと)
 - [TECH_DEBT.md](./TECH_DEBT.md): 既知の技術的負債
+- [KNOWN_ISSUES.md](./KNOWN_ISSUES.md): 今すぐ困りうる制約(未検証項目等)
+- [2026-08-11-SESSION-REVIEW-SUMMARY.md](./2026-08-11-SESSION-REVIEW-SUMMARY.md):
+  直近の作業内容まとめ(レビュー用)
 - [docs/reports/](./docs/reports/): 各作業の実施レポート
