@@ -118,6 +118,29 @@ class TestGeminiProviderErrorHandling(unittest.TestCase):
             provider.complete_structured("test", _SAMPLE_SCHEMA)
         self.assertIn("400", str(ctx.exception))
 
+    def test_429_rate_limit_raises_runtime_error_with_friendly_japanese_message(self) -> None:
+        """FORGE-AI-QUALITY-001(2026-08-11)回帰テスト: 実機で無料枠の
+        レート制限(429、Google側は"RESOURCE_EXHAUSTED"という英語の
+        技術用語を返す)に達した実例を再現した。ユーザーへは、原因と
+        対処法が分かる日本語の文言を先頭に出すことを確認する
+        (生のGemini応答も末尾に残ることも確認し、デバッグ手がかりを
+        失っていないことも合わせて検証する)。"""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                429,
+                json={"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "quota exceeded"}},
+            )
+
+        provider = GeminiProvider(api_key="fake-key-for-test", client=_mock_client(handler))
+        with self.assertRaises(RuntimeError) as ctx:
+            provider.complete_structured("test", _SAMPLE_SCHEMA)
+        message = str(ctx.exception)
+        self.assertIn("無料枠の利用上限", message)
+        self.assertIn("しばらく", message)
+        self.assertIn("429", message)
+        self.assertIn("RESOURCE_EXHAUSTED", message)
+
     def test_missing_candidates_raises_runtime_error(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json={"promptFeedback": {"blockReason": "SAFETY"}})

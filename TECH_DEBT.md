@@ -426,7 +426,40 @@ fallback、Caching、`CriticResult.issues`の実質化、`forge_ai.Planner`の
 ---
 
 ## TD17. Repair Engineが「決定的な既知パターン修正」と「AI委任」の
-      どちらの設計にするか未決定
+      どちらの設計にするか未決定 → **記述が古くなっていた点を訂正(2026-08-11)**
+
+**2026-08-11追記**: 「今は困っていない理由: どちらもまだ実際には
+呼ばれない(Stub/Mock)」という下記の記述は、**もう実態と合っていない**
+ことを実コードで確認した(FORGE-AI-QUALITY-001の一環)。
+
+`backend/app/ai/runtime/prompt_pipeline.py`(実際に`/api/v1/ai/generate`
+が呼ぶ本番経路)は、`forge_ai.repair.repair_engine.RepairEngine`を
+**実際にimportして呼び出している**(357〜362行目、Validator不合格時に
+`self._max_repair_attempts`回まで実行)。テスト
+(`backend/tests/test_ai_runtime.py`の`test_invalid_then_repaired_
+then_valid`・`test_repair_exhausted_still_invalid_raises_forge_
+validation_error`・`test_quality_reevaluated_after_repair`)も既に
+この本番経路を対象に書かれている。Stubのままなのは、下記で言及されている
+`backend/app/ai/runtime/repair.py`の`AIRepair` Protocol
+(`raise NotImplementedError`)だけであり、これは`run_cognitive_pipeline`
+(forge_aiの経路、現在の唯一の本番経路)ではなく、使われていない旧
+Legacy Protocol側の実装である。
+
+この訂正を踏まえると、下記「対応方針」(RepairEngineの実績を土台に
+`repair.py`側もハイブリッド設計へ寄せる)は**既に実質的に達成済み**
+とみなせる(`repair.py`側のStub自体は、使われていないコードとして
+残っている——別途削除するかは判断が必要、TD項目としては起票しない)。
+
+**今回スコープ外にしたこと**: `RepairEngine._try_fix()`が実際に
+決定的修正できるのは`missing_app_title`・`empty_checklist_state`の
+2カテゴリのみ(`forge_ai/repair/repair_engine.py`参照)。これ以外の
+Validator不合格理由(未知のWidget type等)は、Repair試行回数を使い切って
+そのままエラーになる。実際にどのカテゴリの不合格が多く発生している
+かを実機で計測していないため、今回は追加のパターン対応は見送った。
+
+---
+
+以下、2026-08-10以前の元の記述(履歴として残す)。
 
 `forge_ai/repair/repair_engine.py`(既に実装済み)は、既知2パターンのみ
 決定的に修正し、Provider呼び出しは「件数を尋ねるだけ」の軽い使い方をしている。
@@ -1062,3 +1095,44 @@ FORGE-AI-QUALITY-001(2026-08-11)、CEO「これを、ほんとにアプリスト
   `shared_preferences_app_library_repository_test.dart`)を追加したが
   未実行。CEO環境での`flutter test`実行が必須(詳細は
   `KNOWN_ISSUES.md`参照)。
+
+---
+
+## TD31. Gemini無料枠のレート制限(429)が、生のGoogle側エラーJSONのまま表示されていた(2026-08-11解消)
+
+FORGE-AI-QUALITY-001(2026-08-11)、CEO「アプリストアで人気レベルの
+アプリをつくれるようなクオリティにするには」対応の一環。多数の
+プロンプトを`uvicorn`+実Gemini APIへ連続送信して信頼性面の問題を
+探す中で実際に再現した。
+
+**発見**: 無料枠のレート制限(実測: 短時間に約20回程度でGoogle側の
+制限に達する。Google側の都合で変わりうる)に達すると、
+`GeminiProvider.complete_structured()`が`httpx.HTTPStatusError`を
+そのまま`RuntimeError`のメッセージへ埋め込むため、ユーザー(または
+Flutter側でエラー表示を見る利用者)には
+`"RESOURCE_EXHAUSTED"`・`"generativelanguage.googleapis.com"`のような、
+Google API固有の英語の技術用語がそのまま見えてしまっていた。
+
+**修正**: `providers.py`の`GeminiProvider.complete_structured()`で、
+`status_code == 429`の場合のみ、原因と対処法が一目でわかる日本語の
+文言(「Gemini APIの無料枠の利用上限に達しました。しばらく時間を
+おいてから、もう一度お試しください。」)を先頭に出すよう変更した。
+生のGemini応答は末尾に残しており、デバッグ時の手がかりは失っていない。
+それ以外のHTTPエラー(400・403等)は、既存の挙動(status codeと
+レスポンス本文をそのまま含める)のまま変更していない。
+
+**検証**: `backend/tests/test_gemini_provider.py`へ回帰テスト1件を
+追加(429時に日本語の案内文言・元のstatus code・元のGoogle側エラー
+コードの両方が含まれることを確認)。全テスト(960件)が回帰なしで
+通ることを確認した上で、実際に多数のプロンプトを連続送信して429を
+実際に発生させ、修正前後のエラーメッセージを比較した。
+
+---
+
+## 補足: TD17(Repair Engine)の記述を訂正
+
+Repair EngineのSection(TD17)を参照。「今は困っていない理由: どちらも
+まだ実際には呼ばれない(Stub/Mock)」という記述が、実際には
+`prompt_pipeline.py`が`forge_ai.repair.repair_engine.RepairEngine`を
+本番経路で呼び出しているという実態と合っていなかったため、TD17本文へ
+2026-08-11追記として訂正した(削除はせず、旧記述は履歴として残した)。

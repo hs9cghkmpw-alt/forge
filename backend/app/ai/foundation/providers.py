@@ -139,6 +139,20 @@ class GeminiProvider:
             response.raise_for_status()
             payload = response.json()
         except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                # FORGE-AI-QUALITY-001(2026-08-11)対応: 実機で複数プロンプトを
+                # 連続送信した際、無料枠のレート制限(実測: 1分あたり20回
+                # 程度、Google側の都合で変わりうる)に達し、Gemini APIの
+                # 生のエラーJSON("RESOURCE_EXHAUSTED"等の英語の技術用語)が
+                # そのままエラーメッセージとしてユーザーに表示されることを
+                # 発見した。「app store品質」として、原因と対処法が一目で
+                # わかる日本語の文言を先頭に出すよう変更した(生の詳細は
+                # 末尾に残し、デバッグ時の手がかりも失わないようにする)。
+                raise RuntimeError(
+                    "Gemini APIの無料枠の利用上限に達しました。しばらく"
+                    "時間をおいてから、もう一度お試しください。"
+                    f"(詳細: status={exc.response.status_code}, {exc.response.text[:300]})"
+                ) from exc
             raise RuntimeError(
                 f"Gemini APIがエラーを返しました(status={exc.response.status_code}): "
                 f"{exc.response.text[:500]}"
