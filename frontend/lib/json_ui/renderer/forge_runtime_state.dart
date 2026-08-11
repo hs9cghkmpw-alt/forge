@@ -180,6 +180,14 @@ class ForgeRuntimeState extends ChangeNotifier {
 
   bool contains(String key) => _store.contains(key);
 
+  /// FORGE-AI-QUALITY-001(2026-08-11)新設(ローカル永続化対応)。現在の
+  /// 全State値を、`ForgeStateValue.fromJson`が読める形(`{"type":...,
+  /// "value":...}`)でJSON化して返す。呼び出し元(`GeneratedAppHostShell`
+  /// 等)がこれをローカルストレージへ保存し、次回開いた際に
+  /// `mergePersistedState`で復元する想定(`forge_document.dart`参照)。
+  Map<String, dynamic> exportStateJson() =>
+      {for (final entry in _store.snapshot().entries) entry.key: entry.value.toJson()};
+
   /// FORGE-MILESTONE-003 Task 5新規。text_field/checkbox Builderが、
   /// 自分のstate_refに対応するエラーメッセージが無いかを見るためのAPI。
   String? getValidationError(String stateRef) => _validationErrors[stateRef];

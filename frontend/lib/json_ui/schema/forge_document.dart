@@ -371,8 +371,55 @@ class ForgeScreen {
 // State
 // ---------------------------------------------------------------------------
 
+/// FORGE-AI-QUALITY-001(2026-08-11)新設(ローカル永続化対応)。
+///
+/// 文書が宣言する初期State(`declared`、通常は`ForgeScreen.state`)へ、
+/// ローカル保存されていた実行時State(`persisted`。ユーザーが以前
+/// 追加・変更したチェックリスト項目やRecord等)を上書きマージした、
+/// 新しいMapを返す。
+///
+/// **設計方針(安全側に倒す)**: `persisted`にキーが存在しても、以下の
+/// いずれかに該当する場合は、そのキーだけ`declared`側の値(=AIが宣言した
+/// 初期値)をそのまま使う(黙って無視する。個別の復元失敗で画面全体が
+/// クラッシュ・変な状態になることを防ぐ、多重防御)。
+///
+/// * `declared`側にそのキーが無い(AIが再生成してScreen構造が変わった、
+///   等)。
+/// * 保存されていた値のJSON形式が壊れている(`ForgeStateValue.fromJson`が
+///   例外を投げる)。
+/// * 型が一致しない(例: 以前は`checklist`だったキーが、再生成後は
+///   `record_list`になっていた)。
+Map<String, ForgeStateValue> mergePersistedState(
+  Map<String, ForgeStateValue> declared,
+  Map<String, dynamic>? persisted,
+) {
+  if (persisted == null || persisted.isEmpty) return declared;
+  final merged = Map<String, ForgeStateValue>.of(declared);
+  for (final key in declared.keys) {
+    final rawValue = persisted[key];
+    if (rawValue is! Map<String, dynamic>) continue;
+    try {
+      final restored = ForgeStateValue.fromJson(rawValue, '/persisted_state/$key');
+      if (restored.runtimeType == declared[key].runtimeType) {
+        merged[key] = restored;
+      }
+    } catch (_) {
+      // 復元失敗時は宣言された初期値のまま(既にmergedへ入っている)。
+    }
+  }
+  return merged;
+}
+
 sealed class ForgeStateValue {
   const ForgeStateValue();
+
+  /// FORGE-AI-QUALITY-001(2026-08-11)新設(ローカル永続化対応)。
+  /// [fromJson]の逆変換。`{"type": ..., "value": ...}`という、[fromJson]が
+  /// 読める形と厳密に対称な形を返す(round-trip: `fromJson(toJson(x), _) == x`
+  /// 相当)。AI生成アプリの実行時State(Runtime起動中にユーザーが追加・
+  /// 変更したデータ)をローカル保存する際に使う
+  /// (`app_library/data/repositories/`参照)。
+  Map<String, dynamic> toJson();
 
   factory ForgeStateValue.fromJson(Map<String, dynamic> json, String path) {
     final type = json['type'];
@@ -460,27 +507,45 @@ ForgeRecordItem _parseRecordItem(Map<String, dynamic> json, String path) {
 class ForgeStringState extends ForgeStateValue {
   final String value;
   const ForgeStringState(this.value);
+
+  @override
+  Map<String, dynamic> toJson() => {'type': 'string', 'value': value};
 }
 
 class ForgeBooleanState extends ForgeStateValue {
   final bool value;
   const ForgeBooleanState(this.value);
+
+  @override
+  Map<String, dynamic> toJson() => {'type': 'boolean', 'value': value};
 }
 
 /// v1.2新規(FORGE-MILESTONE-003)。
 class ForgeNumberState extends ForgeStateValue {
   final double value;
   const ForgeNumberState(this.value);
+
+  @override
+  Map<String, dynamic> toJson() => {'type': 'number', 'value': value};
 }
 
 class ForgeStringListState extends ForgeStateValue {
   final List<String> value;
   const ForgeStringListState(this.value);
+
+  @override
+  Map<String, dynamic> toJson() => {'type': 'string_list', 'value': value};
 }
 
 class ForgeChecklistState extends ForgeStateValue {
   final List<ForgeChecklistItem> value;
   const ForgeChecklistState(this.value);
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'checklist',
+        'value': value.map((i) => i.toJson()).toList(),
+      };
 }
 
 class ForgeChecklistItem {
@@ -491,6 +556,8 @@ class ForgeChecklistItem {
 
   ForgeChecklistItem copyWith({String? text, bool? done}) =>
       ForgeChecklistItem(id: id, text: text ?? this.text, done: done ?? this.done);
+
+  Map<String, dynamic> toJson() => {'id': id, 'text': text, 'done': done};
 }
 
 /// v1.3新規(FORGE v0.7 Record Runtime Phase1)。複数のFieldを持つRecordの
@@ -505,6 +572,13 @@ class ForgeRecordListState extends ForgeStateValue {
   final String? schemaRef;
 
   const ForgeRecordListState(this.value, {this.schemaRef});
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'record_list',
+        'value': value.map((r) => r.toJson()).toList(),
+        if (schemaRef != null) 'schema_ref': schemaRef,
+      };
 }
 
 class ForgeRecordItem {
@@ -514,6 +588,8 @@ class ForgeRecordItem {
 
   ForgeRecordItem copyWith({Map<String, dynamic>? fields}) =>
       ForgeRecordItem(id: id, fields: fields ?? this.fields);
+
+  Map<String, dynamic> toJson() => {'id': id, 'fields': fields};
 }
 
 /// v1.3新規(FORGE v0.8 Record Runtime Phase2)。選択中の1件
@@ -525,6 +601,9 @@ class ForgeRecordItem {
 class ForgeSelectedRecordState extends ForgeStateValue {
   final ForgeRecordItem? value;
   const ForgeSelectedRecordState(this.value);
+
+  @override
+  Map<String, dynamic> toJson() => {'type': 'selected_record', 'value': value?.toJson()};
 }
 
 // ---------------------------------------------------------------------------

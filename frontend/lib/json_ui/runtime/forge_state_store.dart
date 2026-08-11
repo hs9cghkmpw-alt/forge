@@ -63,6 +63,11 @@ class ForgeStateStore {
 
   ForgeStateValue? readTyped(String key) => _values[key];
 
+  /// FORGE-AI-QUALITY-001(2026-08-11)新設(ローカル永続化対応)。現在の
+  /// 全State値のコピーを返す(呼び出し元がこのStoreの内部Mapを直接
+  /// 保持・変更できないようにするための防御的コピー)。
+  Map<String, ForgeStateValue> snapshot() => Map.of(_values);
+
   /// 汎用write。既存の型と矛盾する値が来た場合は書き込まず`false`を返す
   /// (Widget Builder個別ではなくここで一元的に型検証する。指示書Task 2)。
   /// 存在しないキーへの書き込みも`false`を返す(FORGE-MILESTONE-003.1で修正。

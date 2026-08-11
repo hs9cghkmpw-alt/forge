@@ -20,6 +20,7 @@ import '../../domain/repositories/app_library_repository.dart';
 class SharedPreferencesAppLibraryRepository implements AppLibraryRepository {
   static const _appsKey = 'forge.saved_apps.v1';
   static const _historyKey = 'forge.generation_history.v1';
+  static const _runtimeStateKey = 'forge.app_runtime_state.v1';
   static const _maxHistoryEntries = 50;
   static const _scope = 'AppLibraryRepository';
 
@@ -89,5 +90,59 @@ class SharedPreferencesAppLibraryRepository implements AppLibraryRepository {
     final entries = await listHistory();
     final updated = [entry, ...entries].take(_maxHistoryEntries).toList();
     await _prefs.setString(_historyKey, jsonEncode(updated.map((e) => e.toJson()).toList()));
+  }
+
+  // FORGE-AI-QUALITY-001(2026-08-11)新設(ローカル永続化対応)。
+  //
+  // `listSavedApps`/`saveApp`と同じ「1キーへJSON全体をまとめて読み書き
+  // する」方式を踏襲する(`_appsKey`/`_historyKey`と同じ既知の制限
+  // (TECH_DEBT.md参照)を承知の上で、既存の実績あるパターンに揃えた)。
+  // 形式: `{appId: {screenId: {stateKey: {"type":..., "value":...}}}}`。
+  Future<Map<String, dynamic>> _readAllRuntimeState() async {
+    final raw = _prefs.getString(_runtimeStateKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      return Map<String, dynamic>.from(decoded);
+    } catch (e) {
+      // JSON全体が壊れている場合、全体クラッシュはさせず空として扱う
+      // (`listSavedApps`と同じ方針。個別アプリのStateが1件壊れているより
+      // 悪い「全アプリのState消失」は避けたいが、壊れたJSON自体は
+      // 復元不能なため、安全側でリセットする)。
+      ForgeLogger.error(_scope, 'runtime state JSON is corrupted, treating as empty', error: e);
+      return {};
+    }
+  }
+
+  @override
+  Future<Map<String, Map<String, dynamic>>?> loadRuntimeState(String appId) async {
+    final all = await _readAllRuntimeState();
+    final forApp = all[appId];
+    if (forApp is! Map) return null;
+    final result = <String, Map<String, dynamic>>{};
+    forApp.forEach((screenId, screenState) {
+      if (screenState is Map) {
+        result[screenId] = Map<String, dynamic>.from(screenState);
+      }
+    });
+    return result.isEmpty ? null : result;
+  }
+
+  @override
+  Future<void> saveRuntimeStateForScreen(String appId, String screenId, Map<String, dynamic> stateJson) async {
+    final all = await _readAllRuntimeState();
+    final forApp = (all[appId] is Map) ? Map<String, dynamic>.from(all[appId] as Map) : <String, dynamic>{};
+    forApp[screenId] = stateJson;
+    all[appId] = forApp;
+    await _prefs.setString(_runtimeStateKey, jsonEncode(all));
+  }
+
+  @override
+  Future<void> deleteRuntimeState(String appId) async {
+    final all = await _readAllRuntimeState();
+    if (all.remove(appId) != null) {
+      await _prefs.setString(_runtimeStateKey, jsonEncode(all));
+    }
   }
 }

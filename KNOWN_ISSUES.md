@@ -30,10 +30,47 @@ IDに使っており、理論上は同一マイクロ秒での連続追加で衝
 起こらない)。
 今回は対応しない理由: 縦の一本の完成を優先。衝突検知が必要になったらUUID等へ切り替える。
 
-## AI生成アプリの状態はアプリ再起動で消える
+## AI生成アプリの状態はアプリ再起動で消える → **ローカル保存分は解消済み(2026-08-11、未検証)**
 制約: `ForgeRuntimeState`はメモリ内のみで、永続化していない
 (Backendの`apps`/`app_versions`テーブルは未着手。ROADMAP.md Phase 3参照)。
 今回は対応しない理由: 縦の一本のスコープ外。永続化はPhase 3の残タスク。
+
+**2026-08-11追記(FORGE-AI-QUALITY-001)**: CEO「これを、ほんとにアプリストアで
+人気レベルのアプリをつくれるようなクオリティにするにはどうしたらいい？」を
+受けて実施した調査で、この項目こそが「app store品質」への最大の障壁である
+ことを確認した(生成したチェックリスト・家計簿等のアプリが、閉じるたびに
+入力内容ごと消える設計では、実用アプリとして成立しない)。
+
+ROADMAP.mdが元々想定していた「Backendの`apps`/`app_versions`テーブル+
+Supabase」という**サーバー側・マルチデバイス同期**の永続化は、Supabase
+アカウント作成等CEO側の作業が必要なため今回は着手できなかった。代わりに、
+既に`SavedForgeApp`(アプリ定義)の保存に使っている`shared_preferences`
+(ローカル端末内のみの永続化)を、**実行時State(ユーザーが実際に追加した
+チェックリスト項目・家計簿の記録等)**にも拡張して適用した。
+
+* `ForgeStateValue`(`forge_document.dart`)へ`toJson()`を追加し、
+  `fromJson()`と対称な変換を可能にした。
+* `mergePersistedState()`: 文書の初期値へ、保存済みの実行時Stateを
+  安全にマージする(型不一致・破損データは黙って無視し、初期値へ
+  フォールバックする)。
+* `AppLibraryRepository`へ`loadRuntimeState`/`saveRuntimeStateForScreen`/
+  `deleteRuntimeState`を追加(既存の`shared_preferences`実装を拡張)。
+* `ForgeScreenView`が`ForgeRuntimeState`の変化(`notifyListeners`)を
+  検知するたびに自動保存する(text_fieldの1文字ごとの入力は`notify:
+  false`のため対象外、既存の挙動を活用)。
+* My Apps・ホーム画面の「最近のアプリ」・履歴・生成直後のプレビューの
+  計4箇所を配線した。
+
+**未解決のまま残る点**: サーバー側保存・マルチデバイス同期は依然未着手
+(引き続きROADMAP.md Phase 3の課題)。ローカル1台のみでの永続化。
+
+**Claude環境での検証状況(正直な申告)**: この作業環境にDart/Flutter SDKが
+無いため、**一切実行できていない**(構文の目視レビュー・括弧バランスの
+機械チェックのみ実施)。新規Unit Test 2ファイル(`forge_state_persistence_
+test.dart`・`shared_preferences_app_library_repository_test.dart`、
+Widget Pumpingを伴わない純粋なDartロジックのテストのため、他のUI変更より
+実行時に問題が出るリスクは低いと考えている)を追加したが、これも未実行。
+CEO環境で`flutter test`を実行し、結果を共有してほしい。
 
 ## Repair Engineが無い
 制約: Validatorが不合格を返した場合、現状は「生成失敗」としてユーザーへ即座にエラー表示するのみ。

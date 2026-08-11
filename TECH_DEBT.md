@@ -1009,3 +1009,56 @@ navigate先・JSON直列化・実際のBackend Validatorでの検証)を追加�
 3つの質問文がそれぞれ独立したtext_fieldとして生成され、実際の
 Backend Validatorに通り(`valid: true`)、Design Criticが
 `release_ready=true`になることを確認した。
+
+---
+
+## TD30. AI生成アプリの実行時Stateをローカル永続化した設計上のトレードオフ(2026-08-11新設)
+
+FORGE-AI-QUALITY-001(2026-08-11)、CEO「これを、ほんとにアプリストアで
+人気レベルのアプリをつくれるようなクオリティにするにはどうしたらいい？
+考えて考えて疑って考えて疑って考えてから実装して」への対応。
+
+**発見の経緯**: 「app store品質」に必要な要素を洗い出す過程で、
+`ForgeStateStore`(`frontend/lib/json_ui/runtime/forge_state_store.dart`)
+がメモリ内Mapのみで一切永続化しておらず、`ForgeScreenView`
+(`forge_renderer.dart`)が画面を開くたびに文書の初期値から`ForgeRuntimeState`
+を新規構築していることを実コードで確認した(`KNOWN_ISSUES.md`の
+「AI生成アプリの状態はアプリ再起動で消える」に既に記録されていた、
+意図的なスコープ外だった項目)。生成したチェックリスト・家計簿等の
+アプリが、閉じるたびに入力内容ごと消える設計では実用アプリとして
+成立しないと判断し、最優先で対応した。
+
+**採用した設計と、あえてやらなかったこと**:
+
+* ROADMAP.mdが元々想定していた「Backendの`apps`/`app_versions`テーブル
+  + Supabase」というサーバー側・マルチデバイス同期の永続化は、
+  Supabaseアカウント作成等CEO側の作業(このセッションでは実行不能な
+  外部サービス連携)が必要なため見送った。
+* 代わりに、既存の`SavedForgeApp`(アプリ定義)保存と同じ
+  `shared_preferences`(端末ローカルのみ)を使い、実行時State
+  (`{appId: {screenId: {stateKey: {type, value}}}}`という1つのJSON
+  Blob)として保存する方式にした。既存の`_appsKey`/`_historyKey`と
+  同じ「1キーへ全体をまとめて読み書きする」パターンを踏襲した(既知の
+  制限も同じ: 件数が大きく増える場合はsqlite等への移行が必要、
+  `SharedPreferencesAppLibraryRepository`冒頭のコメント参照)。
+* 保存タイミングは「State変化のたび(`notifyListeners()`)に
+  fire-and-forgetで書き込む」方式にした。`await`せず結果を待たない
+  ため、理論上は「書き込みが完了する直前にアプリが強制終了された場合」
+  にその1回分だけ失われうるが、書き込み自体はミリ秒オーダーで
+  即座に発行されるため、実用上のリスクは小さいと判断した(既存の
+  `ChangeNotifier`ベースの同期的な設計を維持するため、ここを
+  `await`する非同期化はより大きな変更になり見送った)。
+* text_fieldの1文字ごとの入力(`onChanged`)は、既存の設計どおり
+  `notify: false`で書き込まれるため、保存の対象にならない(未確定の
+  下書き入力まで毎回保存することを避ける、既存の意図を活かした)。
+
+**残る限界(正直な申告)**:
+* サーバー側保存・複数端末間の同期は依然未着手。
+* 保存されるJSON Blobのサイズに上限を設けていない(既存の
+  `_appsKey`/`_historyKey`と同じ既知の制限)。
+* この作業環境にDart/Flutter SDKが無いため、**一切実行できていない**
+  (構文の目視レビュー・括弧バランスの機械チェックのみ実施)。新規
+  Unit Test 2ファイル(`forge_state_persistence_test.dart`・
+  `shared_preferences_app_library_repository_test.dart`)を追加したが
+  未実行。CEO環境での`flutter test`実行が必須(詳細は
+  `KNOWN_ISSUES.md`参照)。

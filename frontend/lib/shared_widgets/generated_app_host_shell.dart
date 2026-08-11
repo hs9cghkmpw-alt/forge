@@ -13,13 +13,36 @@ class GeneratedAppHostShell extends StatelessWidget {
   final Map<String, dynamic> forgeDocument;
   final VoidCallback? onBack;
 
-  const GeneratedAppHostShell({super.key, required this.forgeDocument, this.onBack});
+  /// FORGE-AI-QUALITY-001(2026-08-11)新設(ローカル永続化対応)。
+  /// 画面ID→前回保存された実行時State。呼び出し元(`AppLibraryRepository`
+  /// 経由でローカルストレージから読み込む My Apps・履歴・ホーム画面の
+  /// 各画面)が渡す。生成直後でまだ保存されていないプレビュー
+  /// (`generation_flow_screen.dart`)からは渡されず、その場合は
+  /// 常に文書の初期値のまま(既存の挙動を保つ)。
+  final Map<String, Map<String, dynamic>>? initialRuntimeState;
+
+  /// FORGE-AI-QUALITY-001(2026-08-11)新設。渡した場合のみ、実際に
+  /// アプリの状態変化がローカルストレージへ保存される(呼び出し元が
+  /// 保存先を持たない場合は渡さないだけでよい、既定`null`で無効)。
+  final void Function(String screenId, Map<String, dynamic> stateJson)? onScreenStateChanged;
+
+  const GeneratedAppHostShell({
+    super.key,
+    required this.forgeDocument,
+    this.onBack,
+    this.initialRuntimeState,
+    this.onScreenStateChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        Positioned.fill(child: ForgeDocumentView(rawJson: forgeDocument)),
+        Positioned.fill(child: ForgeDocumentView(
+          rawJson: forgeDocument,
+          initialRuntimeState: initialRuntimeState,
+          onScreenStateChanged: onScreenStateChanged,
+        )),
         if (onBack != null)
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,

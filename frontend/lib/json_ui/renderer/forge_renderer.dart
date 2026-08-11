@@ -11,7 +11,25 @@ import 'forge_runtime_state.dart';
 /// 安全なエラー画面へ倒す(development: 理由を表示 / production: 静かな表示。方針12章)。
 class ForgeDocumentView extends StatelessWidget {
   final Map<String, dynamic> rawJson;
-  const ForgeDocumentView({super.key, required this.rawJson});
+
+  /// FORGE-AI-QUALITY-001(2026-08-11)新設(ローカル永続化対応)。
+  /// 画面ID→前回保存された実行時State(JSON形式)。呼び出し元
+  /// (`GeneratedAppHostShell`)がローカルストレージから読み込んで渡す。
+  /// このView自体はストレージの存在を一切知らない(Runtime非依存の
+  /// 既存方針を保つ、`forge_runtime_state.dart`冒頭のコメント参照)。
+  final Map<String, Map<String, dynamic>>? initialRuntimeState;
+
+  /// FORGE-AI-QUALITY-001(2026-08-11)新設。いずれかの画面のStateが
+  /// 変化するたびに呼ばれる(画面ID, 変化後のState全体のJSON)。
+  /// 呼び出し元がこれを実際に保存するかどうかを決める。
+  final void Function(String screenId, Map<String, dynamic> stateJson)? onScreenStateChanged;
+
+  const ForgeDocumentView({
+    super.key,
+    required this.rawJson,
+    this.initialRuntimeState,
+    this.onScreenStateChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +45,12 @@ class ForgeDocumentView extends StatelessWidget {
       return const _ForgeRenderErrorScreen(reason: 'initial_screen_id に一致する画面がありません。');
     }
 
-    final screenView = ForgeScreenView(document: document, screen: initial);
+    final screenView = ForgeScreenView(
+      document: document,
+      screen: initial,
+      initialRuntimeState: initialRuntimeState,
+      onScreenStateChanged: onScreenStateChanged,
+    );
 
     // FORGE v1.0新規(Product Quality Sprint1)。design_tokensが
     // 存在する場合のみ、ローカルな`Theme`で上書きする。ネイティブの
@@ -121,11 +144,20 @@ class ForgeScreenView extends StatefulWidget {
   /// 同一画面への無限遷移(または実質的に無限に等しい深いネスト)を防ぐために使う。
   final int navigationDepth;
 
+  /// FORGE-AI-QUALITY-001(2026-08-11)新設(ローカル永続化対応)。
+  /// `ForgeDocumentView`のdocstring参照。画面遷移(`Navigator.push`)を
+  /// またいでも同じMapをそのまま引き継ぐ(多画面の各Screenがそれぞれ
+  /// 自分のIDで参照する)。
+  final Map<String, Map<String, dynamic>>? initialRuntimeState;
+  final void Function(String screenId, Map<String, dynamic> stateJson)? onScreenStateChanged;
+
   const ForgeScreenView({
     super.key,
     required this.document,
     required this.screen,
     this.navigationDepth = 0,
+    this.initialRuntimeState,
+    this.onScreenStateChanged,
   });
 
   @override
@@ -148,8 +180,17 @@ class _ForgeScreenViewState extends State<ForgeScreenView> {
   @override
   void initState() {
     super.initState();
-    _state = ForgeRuntimeState(
+    // FORGE-AI-QUALITY-001(2026-08-11)新設(ローカル永続化対応): 文書が
+    // 宣言する初期Stateへ、前回保存された実行時Stateを上書きマージする。
+    // 保存が無い(初回起動・保存に対応していない呼び出し元)場合は
+    // `mergePersistedState`が`widget.screen.state`をそのまま返すため、
+    // 既存の挙動を一切変えない。
+    final initialState = mergePersistedState(
       widget.screen.state,
+      widget.initialRuntimeState?[widget.screen.id],
+    );
+    _state = ForgeRuntimeState(
+      initialState,
       onNavigationAction: _handleNavigationAction,
       screenRoot: widget.screen.body,
       onDiagnostic: (category, message) => ForgeLogger.error('ForgeRuntimeState', '[$category] $message'),
@@ -162,10 +203,26 @@ class _ForgeScreenViewState extends State<ForgeScreenView> {
       // 側が色・角丸を参照するために使う。CRUD挙動には一切影響しない)。
       designTokens: widget.document.designTokens,
     );
+    if (widget.onScreenStateChanged != null) {
+      _state.addListener(_persistState);
+    }
+  }
+
+  /// FORGE-AI-QUALITY-001(2026-08-11)新設。`_state`が変化するたび
+  /// (チェックリストの追加・チェック、Recordの追加・更新・削除、
+  /// フォーム送信等)呼ばれる。text_fieldの1文字ごとの入力は
+  /// `notify: false`で書き込まれるため対象外(`widget_registry.dart`
+  /// の`_BoundTextField.onChanged`参照)——未確定の下書き入力まで
+  /// 毎回保存されることを避ける、既存の設計をそのまま活かしている。
+  void _persistState() {
+    widget.onScreenStateChanged?.call(widget.screen.id, _state.exportStateJson());
   }
 
   @override
   void dispose() {
+    if (widget.onScreenStateChanged != null) {
+      _state.removeListener(_persistState);
+    }
     _state.dispose();
     super.dispose();
   }
@@ -199,6 +256,8 @@ class _ForgeScreenViewState extends State<ForgeScreenView> {
             document: widget.document,
             screen: target,
             navigationDepth: widget.navigationDepth + 1,
+            initialRuntimeState: widget.initialRuntimeState,
+            onScreenStateChanged: widget.onScreenStateChanged,
           ),
         ),
       );

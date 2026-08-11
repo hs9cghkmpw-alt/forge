@@ -138,6 +138,10 @@ class _HistoryCard extends ConsumerWidget {
     // 値を`final`のローカル変数へ入れ直すことで、以降は安全に
     // 非null型として扱えるようにする。
     final resolvedApp = app;
+    // FORGE-AI-QUALITY-001(2026-08-11)対応(ローカル永続化)。
+    // `my_apps_screen.dart`の`_openApp`と同じ理由・同じ方式。
+    final repository = ref.read(appLibraryRepositoryProvider);
+    final runtimeState = await repository.loadRuntimeState(resolvedApp.id);
     if (!context.mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -146,6 +150,9 @@ class _HistoryCard extends ConsumerWidget {
             child: GeneratedAppHostShell(
               forgeDocument: resolvedApp.forgeDocument,
               onBack: () => Navigator.of(context).pop(),
+              initialRuntimeState: runtimeState,
+              onScreenStateChanged: (screenId, stateJson) =>
+                  repository.saveRuntimeStateForScreen(resolvedApp.id, screenId, stateJson),
             ),
           ),
         ),

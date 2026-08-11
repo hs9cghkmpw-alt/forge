@@ -2,6 +2,48 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task051 — AI生成アプリのローカル永続化(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「アプリストアで人気レベルのアプリをつくれるようなクオリティにするには」)
+
+CEOから「考えて考えて疑って考えて疑って考えてから実装して」という指示を
+受け、実装前に実コードを調査して根拠を積み上げた。結論: 「app store
+品質」に必要な要素のうち、**最も致命的だったのは見た目の作り込みでは
+なく、生成したアプリの状態(チェックリストの中身・家計簿の記録等)が
+アプリを閉じるたびに消えるという、そもそもの実用性の欠如だった**
+(`ForgeStateStore`がメモリ内Mapのみで永続化していないことをコードで
+確認。`KNOWN_ISSUES.md`に既に記録されていた既知の意図的スコープ外
+だった)。
+
+Backendの`apps`/`app_versions`テーブル+Supabaseというサーバー側同期
+(ROADMAP.md Phase3の元々の想定)はCEO側の外部サービス設定が必要なため
+見送り、既存の`shared_preferences`(アプリ定義の保存に既に使っている
+仕組み)を実行時Stateにも拡張する、ローカル永続化を実装した。
+
+* `ForgeStateValue`(`forge_document.dart`)へ`toJson()`を追加
+  (`fromJson()`と対称)。
+* `mergePersistedState()`: 保存済みの実行時Stateを、文書の初期値へ
+  安全にマージ(型不一致・破損データは黙って無視して初期値へ
+  フォールバックする、多重防御)。
+* `AppLibraryRepository`/`SharedPreferencesAppLibraryRepository`へ
+  `loadRuntimeState`/`saveRuntimeStateForScreen`/`deleteRuntimeState`
+  を追加。
+* `ForgeScreenView`が状態変化(`notifyListeners`)のたび自動保存する
+  よう配線(My Apps・ホーム画面の「最近のアプリ」・履歴・生成直後の
+  プレビューの計4箇所)。
+
+Unit Test 2ファイル(`toJson`/`mergePersistedState`のround-trip・境界
+値テスト、および新規Repositoryメソッドのテスト)を追加。**Flutter SDKが
+この環境に無いため、構文レビューと括弧バランスの機械チェックのみで、
+実行は一切できていない。CEO環境での`flutter test`実行が必須。**
+詳細は`TECH_DEBT.md` TD30・`KNOWN_ISSUES.md`参照。
+
+### 今回あえて着手しなかったこと(優先順位の根拠)
+「app store品質」に必要な他の要素(Widget語彙の拡充・画像/アイコン
+対応・アニメーション・オフライン対応の強化・実機/実ブラウザでの検証・
+App Store申請要件)も検討したが、いずれも「そもそも入力したデータが
+消える」という土台の欠陥よりは優先度が低いと判断し、後回しにした。
+次に着手するとすれば、実機での動作確認(この永続化機能を含む)が
+最優先。
+
 ## Task050 — 生成品質の実機調査・修正(FORGE-AI-QUALITY-001、2026-08-11、CEO「生成できるアプリのクオリティを最大限にしたい」)
 
 CEOが提示した4方向(色々なジャンルで実際に生成→不具合修正/

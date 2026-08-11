@@ -46,6 +46,11 @@ class _GenerationFlowScreenState extends ConsumerState<GenerationFlowScreen> {
   bool _appOpened = false;
   bool _savedForCurrentResult = false;
 
+  /// FORGE-AI-QUALITY-001(2026-08-11)新設(ローカル永続化対応)。
+  /// `_persistSuccess`が生成した`SavedForgeApp.id`(`GeneratedAppHostShell`
+  /// の実行時State保存キー)。保存前(`_persistSuccess`未実行)は`null`。
+  String? _savedAppId;
+
   // 確認フローに入ったら、以降はconfirmGenerationProviderを見る。
   ConfirmationAnswerRequest? _activeConfirmRequest;
 
@@ -85,6 +90,7 @@ class _GenerationFlowScreenState extends ConsumerState<GenerationFlowScreen> {
     setState(() {
       _activeConfirmRequest = null;
       _savedForCurrentResult = false;
+      _savedAppId = null;
       _appOpened = false;
       _generateNonce += 1;
     });
@@ -93,6 +99,7 @@ class _GenerationFlowScreenState extends ConsumerState<GenerationFlowScreen> {
   void _submitConfirmation(String requestId, String answer) {
     setState(() {
       _savedForCurrentResult = false;
+      _savedAppId = null;
       _confirmNonce += 1;
       _activeConfirmRequest = ConfirmationAnswerRequest(
         requestId: requestId,
@@ -104,11 +111,22 @@ class _GenerationFlowScreenState extends ConsumerState<GenerationFlowScreen> {
 
   Widget _buildSuccess(GenerationSuccess outcome) {
     if (_appOpened) {
+      // FORGE-AI-QUALITY-001(2026-08-11)対応(ローカル永続化)。
+      // `_appOpened`になる時点で`_persistSuccess`は必ず完了済み
+      // (`onOpen`が`await _persistSuccess(...)`してから`setState`する
+      // ため)、`_savedAppId`は非nullのはず。念のためnullの場合は
+      // 永続化なしにフォールバックする(既存の挙動、クラッシュしない)。
+      final appId = _savedAppId;
       return Scaffold(
         body: SafeArea(
           child: GeneratedAppHostShell(
             forgeDocument: outcome.forgeDocument,
             onBack: () => Navigator.of(context).pop(),
+            onScreenStateChanged: appId == null
+                ? null
+                : (screenId, stateJson) => ref
+                    .read(appLibraryRepositoryProvider)
+                    .saveRuntimeStateForScreen(appId, screenId, stateJson),
           ),
         ),
       );
@@ -136,6 +154,7 @@ class _GenerationFlowScreenState extends ConsumerState<GenerationFlowScreen> {
 
     final now = DateTime.now();
     final id = '${now.microsecondsSinceEpoch}';
+    _savedAppId = id;
     String title = 'あなたのアプリ';
     try {
       title = ForgeDocument.fromJson(outcome.forgeDocument).appTitle ?? title;

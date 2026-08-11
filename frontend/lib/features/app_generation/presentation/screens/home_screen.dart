@@ -113,7 +113,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         .then((_) => setState(() => _selectedTabIndex = 0));
   }
 
-  void _openSavedApp(SavedForgeApp app) {
+  // FORGE-AI-QUALITY-001(2026-08-11)対応(ローカル永続化)。
+  // `my_apps_screen.dart`の`_openApp`と同じ理由・同じ方式。
+  Future<void> _openSavedApp(SavedForgeApp app) async {
+    final repository = ref.read(appLibraryRepositoryProvider);
+    final runtimeState = await repository.loadRuntimeState(app.id);
+    if (!mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => Scaffold(
@@ -121,6 +126,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: GeneratedAppHostShell(
               forgeDocument: app.forgeDocument,
               onBack: () => Navigator.of(context).pop(),
+              initialRuntimeState: runtimeState,
+              onScreenStateChanged: (screenId, stateJson) =>
+                  repository.saveRuntimeStateForScreen(app.id, screenId, stateJson),
             ),
           ),
         ),

@@ -96,7 +96,7 @@ class _SavedAppCard extends ConsumerWidget {
       borderRadius: BorderRadius.circular(20),
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () => _openApp(context),
+        onTap: () => _openApp(context, ref),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -138,7 +138,14 @@ class _SavedAppCard extends ConsumerWidget {
     );
   }
 
-  void _openApp(BuildContext context) {
+  // FORGE-AI-QUALITY-001(2026-08-11)対応(ローカル永続化)。以前は
+  // アプリを開くたびに文書の初期値(空のチェックリスト等)から始まり、
+  // 前回追加したデータが常に消えていた。ここで保存済みの実行時State
+  // を読み込んで渡し、State変化のたびに保存し直す。
+  Future<void> _openApp(BuildContext context, WidgetRef ref) async {
+    final repository = ref.read(appLibraryRepositoryProvider);
+    final runtimeState = await repository.loadRuntimeState(app.id);
+    if (!context.mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => Scaffold(
@@ -146,6 +153,9 @@ class _SavedAppCard extends ConsumerWidget {
             child: GeneratedAppHostShell(
               forgeDocument: app.forgeDocument,
               onBack: () => Navigator.of(context).pop(),
+              initialRuntimeState: runtimeState,
+              onScreenStateChanged: (screenId, stateJson) =>
+                  repository.saveRuntimeStateForScreen(app.id, screenId, stateJson),
             ),
           ),
         ),
@@ -166,7 +176,11 @@ class _SavedAppCard extends ConsumerWidget {
       ),
     );
     if (confirmed == true) {
-      await ref.read(appLibraryRepositoryProvider).deleteApp(app.id);
+      final repository = ref.read(appLibraryRepositoryProvider);
+      await repository.deleteApp(app.id);
+      // FORGE-AI-QUALITY-001(2026-08-11)対応: アプリ定義を消しても
+      // ローカル保存された実行時Stateだけが残り続けることを防ぐ。
+      await repository.deleteRuntimeState(app.id);
       ref.invalidate(savedAppsProvider);
     }
   }
