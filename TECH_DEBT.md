@@ -945,3 +945,67 @@ data_entities空→blocking/孤立したkey_element→medium非blocking)を
 再実行し、Design Criticの評価軸追加後もSuccess経路が正常に動作する
 ことを確認した(意図しない副作用でrelease_readyが崩れていないことの
 裏付け)。
+
+---
+
+## TD29. Template Selectorの選定結果がCompile段階へ渡されておらず、実質死んでいた → **"form"のみ解消済み(2026-08-11)**
+
+FORGE-AI-QUALITY-001(2026-08-11)、CEOが選んだ4方向のうち
+「Widget・Templateの種類を増やす」を調査した過程で発見した、最も
+影響範囲の大きい不具合。
+
+**発見の経緯**: `TemplateSelector`(`forge_ai/core/planning/
+template_selector.py`)は、11種類のTemplate名(checklist/form/tracker/
+calendar/memo/crud/dashboard/catalog/detail_list/wizard/generic)から、
+Domain別のPreliminary候補・Dominant action一致・Data lifecycle一致に
+基づく本格的なスコアリング・tie-break処理で1つを選ぶ、既に十分な
+作り込みがされた実装だった。実際に「満足度アンケートを作って」で
+`final_template_selection`のDecision Traceを見ると、正しく`template=
+form`が選ばれていた。**にもかかわらず**、`pipeline_orchestrator.py`が
+`deps.compiler.compile()`を呼ぶ箇所(12. Forge IR Compilation)で、
+この選定結果(`context.template_selection.template`)を一切引数として
+渡していなかった。結果、`Compiler.compile()`は選ばれたTemplate名を
+知りようがなく、常にChecklist単一画面(text_field+button+checklist)を
+組み立てていた——Template Selectorのスコアリング・tie-break・
+Preliminary/Final不一致時の再計画ループは、**実際の出力に何の影響も
+与えていない、事実上の死にコードだった**。
+
+**今は困っていない理由(だった)**: Validator・Repair・Critic等の
+パイプラインは正しく動作しており、生成自体は失敗しない。「Templateが
+実際の構造に反映されない」という、生成される中身の豊かさに関わる
+品質面の課題だった。
+
+**修正内容**: `Compiler.compile()`へ`template: str = "checklist"`
+引数を追加し、`pipeline_orchestrator.py`から`context.template_
+selection.template`を渡すよう変更した。`template=="form"`の場合のみ、
+新設`_compile_form_template()`(2画面: 入力画面+送礼画面、`heading`→
+`card`→`form`→`text_field`*N、送信で`navigate`)へ分岐する。この形状は
+**新規発明ではなく**、既にWidget Registry v1.1〜1.2で実装・テスト
+済みの`backend/app/ai/generators/templates/form_template.py`
+(`build_form_template`)・`frontend/lib/features/app_generation/data/
+datasources/templates.dart`(`buildFormTemplate`、Mock Generator用)と
+**完全に同じ構造**を採用した(新しいWidget構成パターンを増やさない、
+既存の実績あるShapeへ意図的に合わせる設計判断)。
+
+**残り9種(tracker/calendar/memo/crud/dashboard/catalog/detail_list/
+wizard/generic)は未対応のまま**。実際に選ばれる頻度が高いのは
+"form"(survey/hospital)・"checklist"(shopping/task_management等、
+既存動作)であり、"tracker"系Domain(household_budget等)は
+`forge_ai/core/ir/`という別経路(Template Selectorを経由しない)で
+既に十分な品質を確保できている。残りの候補(calendar/memo/crud/
+dashboard/catalog/detail_list/wizard)は、実際にどのDomain・入力で
+最終的に選ばれるかを確認しないまま実装すると過剰設計になりうるため、
+今回は"form"のみに絞った。
+
+**検証**: `forge_ai/tests/test_compiler.py`へ`TestCompilerFormTemplate`
+(8件: 既定挙動が変わらないこと・2画面構成・form/heading/card Widget
+使用・質問ごとのtext_field生成・version="1.2"・submit_actionの
+navigate先・JSON直列化・実際のBackend Validatorでの検証)を追加。
+`forge_ai/tests/golden_cognitive/04_survey.json`(Golden Test)を
+`ir_valid_screens: 1→2`へ意図的に更新した(実際の出力が変わった
+ことを正しく反映)。forge_ai全415件・backend込み全959件が回帰なしで
+通ることを確認した上で、実際に`uvicorn`+実Gemini APIで「満足度
+アンケートを作って」を再実行し、実際のサービス改善アンケートらしい
+3つの質問文がそれぞれ独立したtext_fieldとして生成され、実際の
+Backend Validatorに通り(`valid: true`)、Design Criticが
+`release_ready=true`になることを確認した。

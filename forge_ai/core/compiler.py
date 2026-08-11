@@ -237,14 +237,32 @@ class Compiler:
         self._provider = provider
         self._prompt_builder = prompt_builder or PromptBuilder()
 
-    def compile(self, plan: ApplicationPlan, *, domain_category: str | None = None) -> ForgeIRDocument:
-        """ApplicationPlanから、Checklistテンプレート形状のForgeIRDocumentを
-        決定的に組み立てる(タイトルのみProviderの判断を反映する)。
+    def compile(
+        self, plan: ApplicationPlan, *, domain_category: str | None = None, template: str = "checklist"
+    ) -> ForgeIRDocument:
+        """ApplicationPlanから、ForgeIRDocumentを決定的に組み立てる
+        (タイトル・初期データ例のみProviderの判断を反映する)。
 
         FORGE v0.6対応: `domain_category`は後方互換のため引数として残して
-        いるが、このメソッド自体はもう使わない(対象3 Domainは
+        いるが、このメソッド自体はもう使わない(対象5 Domainは
         `pipeline_orchestrator.py`が`forge_ai.core.ir`経由へ振り分ける
         ため、このメソッドへは到達しない)。
+
+        FORGE-AI-QUALITY-001(2026-08-11)対応: `template`引数を新設した。
+        `TemplateSelector.select_final()`は"checklist"の他に10種類の
+        Template名(form/tracker/calendar/memo/crud/dashboard/catalog/
+        detail_list/wizard/generic)を選定していたが、以前はこの選定結果が
+        `pipeline_orchestrator.py`から`Compiler.compile()`へ一度も渡され
+        ておらず、選定内容に関わらず常にChecklist単一画面が作られていた
+        (「満足度アンケート」のようなsurvey Domainが"form"を選んでも、
+        実際にはChecklistとして出力されていた、実機Gemini確認で発見した
+        不具合)。今回、`template=="form"`の場合のみ、`_compile_form_
+        template()`(既存のバックエンドMock Generator`form_template.py`・
+        Flutter `templates.dart`の`buildFormTemplate`と同一形状、
+        Widget Registry v1.1で既に実装・テスト済みのform/heading/
+        card/checkbox Widgetを再利用)へ分岐するようにした。それ以外の
+        template名(tracker/calendar/memo等)は、今回は対応を見送り、
+        既存のChecklist単一画面のままとする(`TECH_DEBT.md`参照)。
         """
         prompt = self._prompt_builder.build_compile_prompt(
             plan_summary={
@@ -289,6 +307,9 @@ class Compiler:
             example_items = _EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT.get(primary_concept)
             if example_items:
                 elements = list(example_items)
+
+        if template == "form":
+            return self._compile_form_template(title, elements)
 
         items_state_id = "items"
         new_item_state_id = "new_item_text"
@@ -346,5 +367,97 @@ class Compiler:
             version="1.0",
             initial_screen_id=screen.id,
             screens=(screen,),
+            app_title=title,
+        )
+
+    def _compile_form_template(self, title: str, questions: list[str]) -> ForgeIRDocument:
+        """FORGE-AI-QUALITY-001(2026-08-11)新設。`elements`(質問文の
+        リスト)から、2画面(入力画面+送礼画面)のForm形状のForgeIR
+        Documentを組み立てる。
+
+        `backend/app/ai/generators/templates/form_template.py`
+        (`build_form_template`)・`frontend/lib/features/app_generation/
+        data/datasources/templates.dart`(`buildFormTemplate`)と**同一の
+        Widget構成**(heading→card→form→text_field*N、送信でthanks_screen
+        へnavigate)を採用している。これらは既にMock Generator経由で
+        Widget Registry v1.1〜1.2(form/heading/card Widget)に対して
+        実績があるため、新しいWidget構成パターンを発明せず、既存の
+        実績あるShapeへ意図的に合わせた(Widget Registry自体は今回
+        一切変更していない)。
+
+        **既知の制限**: 質問の種類(text/checkbox)を判別する情報源が
+        現状無いため、全問をtext_field(自由記述)として扱う(`checkbox`
+        Widgetの利用は将来の拡張点として見送った)。
+        """
+        state: dict[str, ForgeIRStateValue] = {}
+        question_widgets: list[ForgeIRWidget] = []
+        for i, question in enumerate(questions):
+            key = f"q{i + 1}"
+            state[key] = ForgeIRStateValue(type="string", value="")
+            question_widgets.append(ForgeIRWidget(
+                type="text_field",
+                id=f"{key}_input",
+                properties={
+                    "state_ref": key,
+                    "placeholder": question,
+                    "validation": {"rules": [
+                        {"type": "max_length", "value": 200, "message": "200文字以内でお願いします"},
+                    ]},
+                },
+            ))
+
+        main_screen = ForgeIRScreen(
+            id="generated_screen",
+            title=title,
+            state=state,
+            body=ForgeIRWidget(
+                type="column",
+                id="root_column",
+                children=(
+                    ForgeIRWidget(type="heading", id="heading1", properties={"value": title, "level": 1}),
+                    ForgeIRWidget(
+                        type="card",
+                        id="form_card",
+                        children=(
+                            ForgeIRWidget(
+                                type="form",
+                                id="main_form",
+                                properties={
+                                    "submit_label": "送信する",
+                                    "submit_action": {"type": "navigate", "target_screen_id": "thanks_screen"},
+                                },
+                                children=tuple(question_widgets),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        thanks_screen = ForgeIRScreen(
+            id="thanks_screen",
+            title="送信完了",
+            state={},
+            body=ForgeIRWidget(
+                type="column",
+                id="thanks_root",
+                children=(
+                    ForgeIRWidget(type="heading", id="thanks_heading", properties={"value": "送信完了", "level": 1}),
+                    ForgeIRWidget(type="text", id="thanks_text", properties={"value": "ご協力ありがとうございました。"}),
+                    ForgeIRWidget(
+                        type="button", id="back_button",
+                        properties={"label": "戻る", "action": {"type": "go_back"}},
+                    ),
+                ),
+            ),
+        )
+
+        return ForgeIRDocument(
+            # form_template.py・templates.dartと同じ理由(v1.1専用Widget
+            # (form/checkbox/card/heading)+v1.2専用のvalidationプロパティ
+            # を使うため)でversion="1.2"とする。
+            version="1.2",
+            initial_screen_id=main_screen.id,
+            screens=(main_screen, thanks_screen),
             app_title=title,
         )

@@ -302,8 +302,16 @@ class CognitiveOrchestrator:
                     ir, domain_category=domain_category_value, title=context.plan.title
                 )
             else:
+                # FORGE-AI-QUALITY-001(2026-08-11): 以前はここで
+                # `context.template_selection.template`を一切渡しておらず、
+                # Template Selectorが"form"等を選んでも常にChecklist単一
+                # 画面になっていた(実機Gemini確認で発見)。`Compiler.
+                # compile()`が実際に分岐へ対応しているのは現状"form"のみ
+                # (`compiler.py`参照)、それ以外のtemplate名は引き続き
+                # Checklistへフォールバックする。
                 forge_document = deps.compiler.compile(
-                    context.plan, domain_category=domain_category_value
+                    context.plan, domain_category=domain_category_value,
+                    template=context.template_selection.template,
                 )
 
             # 13. Initial Quality Evaluation(共有Legacy Protocol、無変更。M004の責務)

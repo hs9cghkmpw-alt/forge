@@ -71,9 +71,35 @@ requirements)だけでは機械的に判定できない情報を要するため�
 軸と同種の、将来の複数画面Plan拡張に備える防御的な評価軸)ことを
 正直に記録した上で、回帰テスト4件を追加。詳細は`TECH_DEBT.md` TD28参照。
 
-### 残タスク(このTaskでは未着手)
-CEOが選んだ残り1方向(Widget・Templateの種類拡充)は、次のTaskで
-着手する。
+### Templateの種類拡充(Widget Registry変更なし)
+CEOが選んだ4方向の最後「Widget・Templateの種類を増やす」を調査した
+結果、最大の発見は「新Widgetが必要」ではなく、**既存のTemplate
+Selectorの選定結果が、そもそもCompile段階へ一度も渡されていなかった**
+ことだった(`TD29`参照)。`TemplateSelector`は"form"等11種類を本格的な
+スコアリングで選んでいたが、`pipeline_orchestrator.py`がその結果を
+`Compiler.compile()`へ渡し忘れていたため、選定に関わらず常にChecklist
+単一画面が生成されていた(「満足度アンケート」がform Templateを
+選びながら実際にはChecklistになっていた根本原因)。
+
+`Compiler.compile()`へ`template`引数を追加して配線し、`template==
+"form"`の場合のみ、既存のMock Generator(`form_template.py`・
+`templates.dart`)と同一形状の2画面Form(heading→card→form→
+text_field*N→送礼画面)を生成するようにした。新しいWidget種別は
+一切追加していない(`form`/`heading`/`card`は既にWidget Registry
+v1.1で実装・テスト済み)。残り9種のTemplate(tracker/calendar/memo等)
+は、実際に選ばれる頻度・必要性を見極めた上で次回以降に判断する。
+
+Golden Test(`04_survey.json`)を意図的に更新(1画面→2画面)。回帰
+テスト8件を追加。実機Geminiで「満足度アンケートを作って」を再実行し、
+実際の質問文3件がそれぞれ独立したtext_fieldとして生成され、本物の
+Backend Validatorに通り、Design Criticがrelease_ready=trueになる
+ことを確認した。
+
+### 残タスク
+CEOが選んだ4方向すべてに着手した(#8色々なジャンルで生成→修正、
+#9個別バグ修正、#10 primary_concept一般化、#11 Design Critic拡張、
+#12 Template配線)。今回スコープ外にしたものは各TD(TD26〜TD29)に
+将来課題として記録済み。
 
 ## Task049 — TD24深掘り修正・TD22/TD21/TD20実装・音声入力（2026-08-11、CEO「すべてお願い」）
 

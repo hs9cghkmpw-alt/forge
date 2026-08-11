@@ -263,5 +263,124 @@ class TestCompilerAfterIRMigration(unittest.TestCase):
         self.assertEqual(ir.version, "1.0")
 
 
+class TestCompilerFormTemplate(unittest.TestCase):
+    """FORGE-AI-QUALITY-001(2026-08-11)新設: `template="form"`の
+    回帰テスト。以前はTemplate Selectorが"form"を選んでも
+    `Compiler.compile()`へ一切伝わらず、常にChecklist単一画面になって
+    いた(実機Gemini確認で発見、`TECH_DEBT.md`参照)。"""
+
+    def setUp(self) -> None:
+        self.provider = MockProvider()
+
+    def _compile_form(self, key_elements: tuple[str, ...]):
+        plan = ApplicationPlan(
+            title="満足度アンケート",
+            screens=(ScreenPlan(name="main", purpose="test", key_elements=key_elements),),
+            data_entities=key_elements,
+            primary_flow=(),
+        )
+        return Compiler(self.provider).compile(plan, template="form")
+
+    def test_default_template_is_unaffected(self) -> None:
+        """`template`引数を省略した場合、既存の挙動(Checklist単一画面、
+        version 1.0)が一切変わらないことの回帰テスト。"""
+        plan = ApplicationPlan(
+            title="x", screens=(ScreenPlan(name="main", purpose="x", key_elements=("item",)),),
+            data_entities=("item",), primary_flow=(),
+        )
+        ir = Compiler(self.provider).compile(plan)
+        self.assertEqual(ir.version, "1.0")
+        self.assertEqual(len(ir.screens), 1)
+
+    def test_form_template_produces_two_screens(self) -> None:
+        """入力画面+送礼(thanks)画面の2画面構成になる
+        (`form_template.py`・`templates.dart`のbuildFormTemplateと同形)。"""
+        ir = self._compile_form(("question",))
+        self.assertEqual(len(ir.screens), 2)
+        self.assertEqual(ir.initial_screen_id, "generated_screen")
+        self.assertEqual({s.id for s in ir.screens}, {"generated_screen", "thanks_screen"})
+
+    def test_form_template_uses_form_and_heading_widgets(self) -> None:
+        ir = self._compile_form(("question",))
+        main_screen = next(s for s in ir.screens if s.id == "generated_screen")
+        widget_types = {w.type for w in _flatten(main_screen.body)}
+        self.assertIn("form", widget_types)
+        self.assertIn("heading", widget_types)
+        self.assertIn("card", widget_types)
+        self.assertIn("text_field", widget_types)
+        self.assertNotIn("checklist", widget_types)
+
+    def test_form_template_creates_one_text_field_per_question(self) -> None:
+        """Providerが返す(または静的テーブルの)複数の質問文それぞれに、
+        対応するtext_fieldが1つずつ作られる。"""
+        provider = _StubProvider({
+            "title": "満足度アンケート",
+            "example_items": ["サービス全体の満足度", "スタッフの対応"],
+        })
+        plan = ApplicationPlan(
+            title="満足度アンケート",
+            screens=(ScreenPlan(name="main", purpose="test", key_elements=("question",)),),
+            data_entities=("question",), primary_flow=(),
+        )
+        ir = Compiler(provider).compile(plan, template="form")
+        main_screen = next(s for s in ir.screens if s.id == "generated_screen")
+        placeholders = [
+            w.properties.get("placeholder") for w in _flatten(main_screen.body) if w.type == "text_field"
+        ]
+        self.assertEqual(placeholders, ["サービス全体の満足度", "スタッフの対応"])
+        self.assertEqual(len(main_screen.state), 2)
+
+    def test_form_template_version_is_1_2(self) -> None:
+        """form/heading/card Widget(v1.1)+validationプロパティ(v1.2)を
+        使うため、version="1.2"を宣言する(そうしないと実際の
+        Validatorがform/heading/cardを未知Widgetとして拒否する、
+        `test_form_template_validates_against_real_backend_validator`
+        参照)。"""
+        ir = self._compile_form(("question",))
+        self.assertEqual(ir.version, "1.2")
+
+    def test_form_template_submit_action_navigates_to_thanks_screen(self) -> None:
+        ir = self._compile_form(("question",))
+        main_screen = next(s for s in ir.screens if s.id == "generated_screen")
+        form_widget = next(w for w in _flatten(main_screen.body) if w.type == "form")
+        self.assertEqual(
+            form_widget.properties.get("submit_action"),
+            {"type": "navigate", "target_screen_id": "thanks_screen"},
+        )
+
+    def test_form_template_to_json_dict_is_json_serializable(self) -> None:
+        import json
+
+        ir = self._compile_form(("question",))
+        serialized = json.dumps(ir.to_json_dict(), ensure_ascii=False)
+        reparsed = json.loads(serialized)
+        self.assertEqual(reparsed["version"], "1.2")
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("app") is not None or os.path.isdir(
+            os.path.join(os.path.dirname(__file__), "..", "..", "backend", "app")
+        ),
+        "backend/app が無い環境では外部検証をスキップする(forge_ai/自体の必須依存ではない)",
+    )
+    def test_form_template_validates_against_real_backend_validator(self) -> None:
+        """`TestCompiler.test_compiled_output_validates_against_real_
+        backend_validator`と同じ理由(forge_ai/自体はbackend/への依存を
+        持たないが、実際の本物のValidatorに通ることを一度だけ追加確認
+        する)。特にversion="1.2"の設定漏れ(=form/heading/cardが未知
+        Widgetとして拒否される)を検出する目的が大きい。"""
+        backend_path = os.path.join(os.path.dirname(__file__), "..", "..", "backend")
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
+        try:
+            from app.ai.validators.schema_validator import validate_forge_document
+        except ImportError:
+            self.skipTest("backend/appをimportできない環境")
+            return
+
+        ir = self._compile_form(("question", "answer"))
+        result = validate_forge_document(ir.to_json_dict())
+        self.assertTrue(result.valid, msg=result.to_dict())
+
+
 if __name__ == "__main__":
     unittest.main()
