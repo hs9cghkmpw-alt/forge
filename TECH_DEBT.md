@@ -637,7 +637,28 @@ Pydantic v2の一般的な既知の挙動に基づく推測であり、実際の
 
 ---
 
-## TD24. Domain内の複数Conceptに「意味的な重要度」の区別が無い
+## TD24. Domain内の複数Conceptに「意味的な重要度」の区別が無い → **travelのbelongingsケースは解消済み(2026-08-11)**
+
+**2026-08-11追記**: CEO指示「すべてお願い」を受け対応した。
+`application_planner.py`へ`_prioritize_explicitly_mentioned_concepts()`を
+追加し、`"belongings"`が`intent.required_concepts`に実際に含まれる
+場合のみ先頭へ優先する、許可リスト方式(travel domain以外への影響
+無し)で対応。加えて、この過程で`forge_ai`自身のGolden Test
+(`test_success_cases_do_not_leak_raw_concept_identifiers_as_initial_items`)
+が、`compiler.py`の`_EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT`テーブルに
+`"belongings"`のエントリが無いことによる別の実バグ(内部識別子の
+raw leak)を検出したため、`("パスポート", "着替え", "歯ブラシ",
+"充電器")`を追加して解消した。
+
+実際にGemini APIで再検証し、「パスポート」「着替え」「歯ブラシ」
+「充電器」が正しく生成されることを確認した(forge_ai/backend
+テストスイート917 passed, 12 skippedも維持)。
+
+**残る限界**: この解決策は`"belongings"`という個別Conceptへの
+対応であり、「Domain内の複数Conceptから、文の主題を汎用的に
+選び出す」という根本課題自体は未解決のまま(下記は当初の記述)。
+
+---
 
 FORGE-AI-CONNECT-001の実機確認(2026-08-10、実際のGemini APIで
 「旅行の持ち物チェックリストを作って」を試して発見)。

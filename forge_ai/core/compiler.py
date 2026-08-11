@@ -72,6 +72,14 @@ _EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT: dict[str, tuple[str, ...]] = {
     "habit": ("水を飲む", "運動", "読書"),
     "subject": ("英語", "資格試験の勉強", "読書"),
     "destination": ("京都旅行", "沖縄旅行", "温泉旅行"),
+    # FORGE-AI-CONNECT-001 TD24対応(2026-08-11)。「旅行の持ち物
+    # チェックリストを作って」がprimary_conceptとして"belongings"を
+    # 選ぶようになった(application_planner.pyの
+    # `_prioritize_explicitly_mentioned_concepts`参照)ことで、この
+    # テーブルに無い場合のraw fallback(内部識別子がそのまま漏れる、
+    # `test_success_cases_do_not_leak_raw_concept_identifiers_as_initial_items`
+    # が実際に検出した)が発生することが分かったため追加した。
+    "belongings": ("パスポート", "着替え", "歯ブラシ", "充電器"),
 }
 
 

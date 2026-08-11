@@ -26,6 +26,45 @@ from forge_ai.core.world_model import World
 # すれば割当済み」)と同じ判定方式を、schedule/stateへも適用する)。
 _DESCRIPTION_BASED_CATEGORIES = ("validation", "schedule", "state")
 
+# FORGE-AI-CONNECT-001 TD24対応(2026-08-11、実際にGemini APIで再現した
+# 実例に基づく)。「旅行の持ち物チェックリストを作って」で、"belongings"
+# (持ち物、ユーザーが明示的に述べた具体的な概念)ではなく"destination"
+# (旅行先、Domain判定のトリガーになった広い概念で`typical_concepts`の
+# 先頭)が主役として選ばれ、実際にGeminiに「京都旅行」等の旅行先を
+# 生成させてしまった(`TECH_DEBT.md` TD24参照)。
+#
+# `primary_concept = data_entities[0]`(下記)が、Domain定義順そのままの
+# 先頭要素を無条件に採用してしまうことが原因。ただし`data_entities`の
+# 並び順自体(`base_data_entities`の算出方法)は、全15 Domain共通の
+# 基盤ロジックであり、ここを一般的なアルゴリズムとして変更すると、
+# 他のDomainへの影響を全件確認しきれない(forge_aiのGolden Test 390件+
+# 今回追加分では、travel以外のDomainでこの問題を確認・調査していない)。
+#
+# そのため、汎用的な並べ替えアルゴリズムにはせず、**個別に確認済みの
+# Conceptだけを許可リスト化**する、影響範囲を最小限に抑えた対応にした。
+# この許可リストに無いConceptの組み合わせでは、本対応を追加する前と
+# 挙動は一切変わらない(`intent.required_concepts`に実際に含まれて
+# いない限り、並べ替えは発生しない)。
+_PREFER_AS_PRIMARY_WHEN_MENTIONED: tuple[str, ...] = ("belongings",)
+
+
+def _prioritize_explicitly_mentioned_concepts(
+    data_entities: tuple[str, ...], required_concepts: tuple[str, ...]
+) -> tuple[str, ...]:
+    """`_PREFER_AS_PRIMARY_WHEN_MENTIONED`のうち、`data_entities`に存在し
+    かつ実際にユーザー入力から`required_concepts`として抽出された
+    Conceptだけを先頭へ移動する。該当が無ければ`data_entities`を
+    そのまま返す(並び替えなし、既存の挙動を保つ)。
+    """
+    preferred = [
+        name for name in _PREFER_AS_PRIMARY_WHEN_MENTIONED
+        if name in data_entities and name in required_concepts
+    ]
+    if not preferred:
+        return data_entities
+    rest = [name for name in data_entities if name not in preferred]
+    return tuple(preferred) + tuple(rest)
+
 
 class CognitiveApplicationPlanner:
     """`CognitivePlannerProtocol`を満たす。"""
@@ -38,6 +77,9 @@ class CognitiveApplicationPlanner:
         preliminary_candidates: tuple[str, ...],
     ) -> ApplicationPlan:
         base_data_entities = tuple(o.name for o in world.objects) or intent.required_concepts or ("item",)
+        base_data_entities = _prioritize_explicitly_mentioned_concepts(
+            base_data_entities, intent.required_concepts
+        )
         base_required_actions = tuple(dict.fromkeys(
             rel.predicate for rel in world.relationships
         )) or intent.required_actions or ("add_item",)
