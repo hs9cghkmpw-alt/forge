@@ -414,7 +414,24 @@ class ForgeLanguageCompiler:
                 for rule in f.validations
             ]
 
-            field_properties: dict[str, Any] = {"state_ref": state_id, "placeholder": f.label}
+            placeholder = f.label
+            if f.type == FieldType.CHOICE and f.choices:
+                # FORGE-AI-QUALITY-001(2026-08-11)で発見・修正した実バグ:
+                # choice型Fieldも(Widget Registryが凍結されておりドロップ
+                # ダウンWidgetを追加できないため)text_fieldで受け付ける
+                # 設計だが、以前はplaceholderが単にFieldラベル(例:
+                # "カテゴリ")のみで、有効な選択肢(例: 食費/交通費/娯楽/
+                # その他)がどこにも示されていなかった。実際に
+                # `ForgeFieldValueParser._parseChoice()`(Dart Runtime側)
+                # を確認したところ、選択肢と完全一致しない入力は
+                # `invalidChoice`として送信時に拒否される(エラー
+                # メッセージ自体には選択肢が含まれるが、それは**送信して
+                # 失敗した後**にしか分からない)。素直に入力した大半の
+                # ユーザーが初回submitで弾かれる設計になっていたため、
+                # placeholderへ選択肢をあらかじめ含めるよう修正した。
+                placeholder = f"{f.label}({'・'.join(f.choices)})"
+
+            field_properties: dict[str, Any] = {"state_ref": state_id, "placeholder": placeholder}
             if validation_rules:
                 field_properties["validation"] = {"rules": validation_rules}
 

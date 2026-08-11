@@ -548,6 +548,31 @@ class TestForgeLanguageCompilerTypedFields(unittest.TestCase):
         category_field = next(c for c in create_form.children if c.id == "field_category_input")
         self.assertEqual(category_field.type, "text_field")
 
+    def test_choice_field_placeholder_lists_the_valid_options(self) -> None:
+        """FORGE-AI-QUALITY-001(2026-08-11)回帰テスト: choice型Fieldは
+        text_fieldのplaceholderがFieldラベルのみ(例: "カテゴリ")で、
+        有効な選択肢がどこにも示されていなかった。実際にDart Runtime側の
+        `ForgeFieldValueParser._parseChoice()`を確認したところ、選択肢と
+        完全一致しない入力は送信時に`invalidChoice`として拒否される
+        設計であり、UIに何のヒントも無いまま素直な入力が高確率で
+        弾かれる実バグだった。placeholderへ選択肢を含めるよう修正した。"""
+        document = self._compile("household_budget")
+        create_form = next(c for c in document.screens[0].body.children if c.id == "record_form")
+        category_field = next(c for c in create_form.children if c.id == "field_category_input")
+        placeholder = category_field.properties["placeholder"]
+        self.assertIn("食費", placeholder)
+        self.assertIn("交通費", placeholder)
+        self.assertIn("娯楽", placeholder)
+        self.assertIn("その他", placeholder)
+
+    def test_non_choice_field_placeholder_is_unchanged(self) -> None:
+        """choice以外のFieldは、既存どおりFieldラベルのみのplaceholder
+        のまま(意図しない副作用が無いことの回帰テスト)。"""
+        document = self._compile("fishing_log")
+        create_form = next(c for c in document.screens[0].body.children if c.id == "record_form")
+        species_field = next(c for c in create_form.children if c.id == "field_species_input")
+        self.assertEqual(species_field.properties["placeholder"], "魚種")
+
     def test_all_three_domains_still_produce_the_same_top_level_widget_composition(self) -> None:
         """Field型の多様化(boolean/date/choice追加)後も、画面トップ
         レベルのWidget構成は3 Domainで一貫していること(指示書「Widget

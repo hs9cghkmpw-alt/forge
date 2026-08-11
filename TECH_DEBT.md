@@ -1234,3 +1234,51 @@ Validatorのルール名を確認せず仮に置いたパターンが、その�
 (不用意に「直したつもり」で別の不具合を埋め込むリスクの方が大きいと
 判断)。実際にどのルールが本番でどれだけの頻度で発生するかを計測して
 いないため、次にどのパターンへ対応すべきかの優先順位付けもできていない。
+
+---
+
+## TD33. record_list系Domain(3種)のchoice型Field(カテゴリ・気分等)が、有効な選択肢を一切示さないまま送信させ、高確率で入力を弾いていた(2026-08-11解消)
+
+FORGE-AI-QUALITY-001(2026-08-11)、CEO「がっつしバグ全部探して潰して」
+対応の一環。IR経由(record_list形状)で生成されるDomain
+(household_budget/inventory/diary)を実際にGemini APIで生成し、
+生成されたJSONの中身を1フィールドずつ確認する過程で発見した。
+
+**発見**: `household_budget`の「カテゴリ」・`inventory`の「カテゴリ」・
+`diary`の「気分」は、いずれも`choice`型Field(あらかじめ決められた
+選択肢からのみ選べるはずのField)として`record_schemas`に正しく
+宣言されているにも関わらず、実際の入力Widgetはplaceholderが
+Fieldラベルのみ(例:「カテゴリ」)の、ただの`text_field`だった。
+
+**根本原因**: Widget Registryが凍結されており、ドロップダウン等の
+専用Widgetを新設できないという既存の制約(`FORGE-IR-V1-PROPOSAL.md`)
+自体は正しい設計判断だが、その代替として「有効な選択肢をどこにも
+示さない」ままにしていたのは見落としだった。実際にDart Runtime側の
+`ForgeFieldValueParser._parseChoice()`
+(`frontend/lib/json_ui/validation/forge_field_value_parser.dart`)を
+確認したところ、`options.contains(raw)`という**厳密な完全一致検査**
+だった。つまり「食費」以外の表記(「食費だ」「Food」「食費 」等)は
+送信時に`invalidChoice`として拒否される仕様であり、UIには選択肢の
+手がかりが一切無いまま、素直な入力の大半が初回submitで弾かれる
+設計になっていた(エラーメッセージ自体には選択肢が含まれるが、
+それは送信して失敗した**後**にしか分からない)。
+
+**修正**: `forge_ai/core/ir/forge_language_compiler.py`の
+`_build_field_inputs()`で、`FieldType.CHOICE`のFieldに限り、
+placeholderへ選択肢を埋め込むよう修正した(例: 「カテゴリ」→
+「カテゴリ(食費・交通費・娯楽・その他)」)。新しいWidget型は
+追加していない(既存の`text_field`+`placeholder`プロパティのみで
+実現)。作成用フォーム・編集用フォームの両方がこの共有関数を通るため、
+両方に反映される。
+
+**検証**: `forge_ai/tests/test_forge_language_compiler.py`へ回帰
+テスト2件(choice型Fieldのplaceholderに全選択肢が含まれること・
+choice以外のFieldのplaceholderが変わっていないこと)を追加。全テスト
+(964件)が回帰なしで通ることを確認した上で、実際に`uvicorn`+実Gemini
+APIで`household_budget`・`inventory`・`diary`の3 Domainを再生成し、
+いずれも選択肢がplaceholderへ正しく反映されていることを確認した。
+
+**残る限界**: これはあくまで「テキストとして選択肢を見せる」という
+最小限の緩和であり、実際にタップで選べるドロップダウン/チップ選択の
+ような体験には及ばない。Widget Registryの拡張(専用のchoice Widget
+追加)は、今回のスコープ(既存Widget内での改善)を超えるため見送った。
