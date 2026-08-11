@@ -100,7 +100,14 @@ void main() {
       expect(find.text('✨ アプリが完成しました！'), findsOneWidget);
 
       // 6. 「アプリを開く」をタップ → Renderer(ForgeDocumentView)を表示。
-      await tester.tap(find.widgetWithText(ElevatedButton, 'アプリを開く'));
+      //
+      // 2026-08-11修正(`flutter test`実機確認で発見した実バグ、
+      // FORGE-AI-QUALITY-001): 以前は`ElevatedButton`だったが、
+      // FORGE-UI-REFRESH(2026-08-10)で`DecoratedBox`+`InkWell`による
+      // グラデーションCTAへ再デザインされ、このテストが追従していな
+      // かった(詳細は`survey_form_validation_flow_test.dart`の
+      // 同種修正コメント参照)。
+      await tester.tap(find.text('アプリを開く'));
       await tester.pumpAndSettle();
 
       // 7. Generated Screenのタイトルとチェックリスト項目を確認

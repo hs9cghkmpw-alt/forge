@@ -3,12 +3,41 @@
 Task003(FORGE-MERGE-001)時点。Prototype v0.1.3のKNOWN_ISSUES.mdの書式を踏襲する
 (制約 / 今回は対応しない理由、を明記する)。
 
-## Dart/Flutterコードが`flutter analyze`未実施
-制約: Claudeのサンドボックスに Dart/Flutter SDK が無く、ネットワークも無いため導入できない。
-今回は対応しない理由: 対応できない(環境の物理的制約)。代わりに、相対import 23件の解決確認・
-カスタム型の定義-参照突合という機械チェックを実施し、レビュー中に発見した2件の実装ミス
-(未定義メソッド参照、switch文のフォールスルー)は修正済み。CEO環境での`flutter analyze`
-実行が次の必須ステップ(Immediate Next Task参照)。
+## ~~Dart/Flutterコードが`flutter analyze`未実施~~ → **解消済み(2026-08-11、FORGE-AI-QUALITY-001)**
+
+**この制約は「サンドボックスの物理的制約」ではなかった。** CEO「出し惜しみせず、
+完璧を求めてくれ」という指示を受けて改めて調査したところ、`storage.googleapis.com`
+(Flutter公式のリリース配布元)がこの環境のプロキシ経由で到達可能であることが
+判明した。実際にFlutter SDK(stable、3.44.9)をダウンロード・展開し、
+`flutter pub get`・`flutter analyze`・`flutter test`をすべて実行できた
+(`pub.dev`も到達可能だったため依存パッケージの解決にも成功した。一方
+`github.com`・`pub.dartlang.org`はプロキシに拒否される)。
+
+**セットアップ手順(次回セッションでの再現用、SDKはスクラッチパッド配下で
+セッションをまたいで永続しないため毎回必要)**:
+```bash
+curl -sS -o flutter.tar.xz \
+  "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.44.9-stable.tar.xz"
+tar -xf flutter.tar.xz
+git config --global --add safe.directory "$(pwd)/flutter"
+git config --global --add safe.directory /home/user/forge
+export PATH="$(pwd)/flutter/bin:$PATH"
+cd /home/user/forge/frontend && flutter pub get && flutter analyze && flutter test
+```
+(最新の安定版URLは`https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json`
+の`current_release.stable`から辿った`releases[].archive`で確認できる。)
+
+**この発見が意味すること**: これまで「Flutter SDK不在のため未検証」として
+記録されてきたDart/Flutter側の実装(TD25の音声入力、TD30のローカル永続化、
+TD34/TD36のWidget追加等)は、いずれも一度も実際に検証されていなかった。
+実際に検証した結果、**4種類の新規Widget(choice_field/bar_chart/date_field/
+tab_view)が、`widget_registry_core.dart`の`typeNameOf()`という網羅的switch式に
+ケースを追加し忘れていたため、一度もRuntime上で描画できない状態だった**
+という重大な実バグが見つかった(TD37に詳細を記録)。加えて、既存の
+Dart単体テスト・Widget Test・E2E Testを実際に実行した結果、3件の
+(このセッションの作業とは無関係な、より以前のUIリデザインに起因する)
+既存テストの不整合も発見・修正した。全435件のDart/Flutterテストが
+現在通過することを確認済み(2026-08-11時点)。
 
 ## Backend(FastAPI/Pydantic)コードが未実行
 制約: pydantic/fastapiがClaudeのサンドボックスに無く、ネットワーク不可のためインストールできない。

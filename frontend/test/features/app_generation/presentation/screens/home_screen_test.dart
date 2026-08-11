@@ -70,7 +70,18 @@ void main() {
     // 'forgeExampleItems.take(4)')を常時表示するようになったため、
     // 先頭4件のタイトルはチップとBottom Sheetの両方に存在し、
     // find.text()が一意に定まらない。5件目(チップに含まれない)を使う。
-    await tester.tap(find.text('子どもの成長記録を作りたい'));
+    //
+    // 2026-08-11修正(`flutter test`実機確認で発見した実バグ、
+    // FORGE-AI-QUALITY-001): 5件目はBottom Sheet内の`ListView.
+    // separated`で下の方にあり、既定のテストウィンドウサイズ
+    // (800x600)ではスクロールしないと画面外(hit test対象外)になる。
+    // このサンドボックスで`flutter test`を実行できる手段が今まで
+    // 無く、検出できなかった。`ensureVisible()`で対象を含む
+    // Scrollableを実際にスクロールしてからタップする。
+    final targetExample = find.text('子どもの成長記録を作りたい');
+    await tester.ensureVisible(targetExample);
+    await tester.pumpAndSettle();
+    await tester.tap(targetExample);
     await tester.pumpAndSettle();
 
     // Bottom Sheetは文章を入れるだけで送信しない、という仕様

@@ -2,6 +2,42 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task057 — Flutter SDKを実際に取得し、Dart側を初めて実機検証(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「出し惜しみせず、完璧を求めてくれ」)
+
+これまで数セッションにわたり「ClaudeのサンドボックスにFlutter SDKが
+無く、ネットワークも無いため検証不可能」という前提でDart側の全実装を
+未検証のまま報告してきたが、実際に到達性を調べ直したところ
+`storage.googleapis.com`(Flutter公式配布元)・`pub.dev`が到達可能
+であることが判明。Flutter SDK(stable 3.44.9)を実際にダウンロード・
+展開し、`flutter pub get`・`flutter analyze`・`flutter test`を
+このセッションで初めて実行できた。
+
+### TD37: 4種の新規Widgetが、実は一度も描画できていなかった(発見・修正)
+`flutter analyze`を実行した結果、`widget_registry_core.dart`の
+`typeNameOf()`(Widget描画の入口となる、sealed classの網羅的switch式)
+に、TD34・TD36で追加した`choice_field`・`bar_chart`・`date_field`・
+`tab_view`の4ケースが1つも登録されていない、コンパイルエラー
+(`non_exhaustive_switch_expression`)を発見した。Backend側のpytestは
+「正しいJSONを生成できているか」しか検証しておらず、「実際にFlutterで
+描画できるか」は検証範囲外だったため、これまで一度も気づけなかった。
+`typeNameOf()`へ4ケースを追加して修正。
+
+副次的に、このセッションとは無関係な既存バグ3件も発見・修正した:
+`shared_preferences_app_library_repository.dart`(TD30)の型エラー、
+E2Eテスト2件のFinderが2026-08-10のUI再デザイン(ElevatedButton→
+InkWell+DecoratedBoxのグラデーションCTA)に追従していなかった問題、
+Widget Test 1件のスクロール漏れ。
+
+### 検証結果
+新規Widget Test(`v1_6_v1_7_widget_vocabulary_expansion_test.dart`、
+9件)を`ForgeDocumentView`経由の実描画で新設し、choice_field/
+bar_chart/date_field/tab_viewそれぞれが実際に動作することを確認した
+(date_fieldは実際に`DatePickerDialog`を開いて日付を選ぶところまで)。
+既存のDartテスト全件を含め、435件が通ることを確認した(Python側
+1024件と合わせて合計1459件)。KNOWN_ISSUES.mdへFlutter SDKの
+セットアップ手順を記録し、次回セッション以降も再現できるようにした。
+詳細はTECH_DEBT.md TD37参照。
+
 ## Task056 — Widget Vocabulary Expansion 第2弾(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「全て実装してくれ。確認もしなくて良い、ゴールは示している。つくってくれ。」)
 
 前回「次に効果が大きいのは画像対応と、複数画面・ナビゲーション」と

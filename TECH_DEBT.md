@@ -45,8 +45,12 @@
   `date_field`/`tab_view`(TD36)を追加。Widget型は14種→18種。単一
   画面を`tab_view`によるタブ構成へ更新した。真の複数画面CRUDは、
   Runtime側の制約(画面をまたいだState共有が無い)により見送った、
-  TD36参照。Python側は全ドメインで実機検証済み、Dart側は引き続き
-  未検証(Flutter SDK不在、KNOWN_ISSUES.md参照)。
+  TD36参照。Python側・Dart側とも実機検証済み(TD37でFlutter SDKを
+  実際に取得・実行できることが判明し、`typeNameOf()`の網羅的switch式
+  にケース追加漏れがあったため4種のWidgetが一度も描画できていな
+  かった重大なバグを発見・修正した)。全Dartテスト435件・Pythonテスト
+  1024件が通ることを確認済み。KNOWN_ISSUES.mdの「Flutter SDK不在」
+  制約は解消済み(セットアップ手順を記録)。
 - ~~**新規発見(2026-08-11)**: TD35。~~ → **解消済み(2026-08-11)**。
   `backend/.env`を実際に読み込むコードがどこにも無く、Gemini接続が
   必要なDomain(Legacy/checklist系)は常に失敗していた
@@ -1599,10 +1603,16 @@ Runtime設計(単一画面・単一State)の制約の中で、確実に安全と
 `ForgeTabViewWidgetNode`追加、`forge_runtime_state.dart`の
 `_findById`へのtab_view対応、新規
 `frontend/lib/json_ui/widget_registry/widget_registry_v1_7.dart`の
-`buildDateField`/`buildTabView`)は、このセッションを通じて一貫している
-既知の制限(Flutter SDK不在)により未検証。`tab_view`の実装方針
-(`TabBarView`を避けた理由)は上記の通り、レイアウトエラーを避けるための
-意図的な設計判断であり、当てずっぽうではない。
+`buildDateField`/`buildTabView`)は、この時点では「Flutter SDK不在の
+ため未検証」と記録していたが、**実際には誤りだった**——TD37で
+Flutter SDKを実際に取得・実行できることが判明し、検証した結果、
+`typeNameOf()`の網羅的switch式にこの節で追加した4種のケースが
+1つも登録されておらず、choice_field/bar_chart/date_field/tab_viewの
+いずれも一度もRuntime上で描画できない状態だった(重大な実バグ、
+TD37参照)。修正・実際の`flutter test`での動作確認込みで解消済み。
+`tab_view`の実装方針(`TabBarView`を避けた理由)は上記の通り、
+レイアウトエラーを避けるための意図的な設計判断であり、当てずっぽうでは
+なかったことも実機で確認できた。
 
 **残る限界(意図的にスコープ外、根拠つき)**:
 
@@ -1618,3 +1628,107 @@ Runtime設計(単一画面・単一State)の制約の中で、確実に安全と
   あるが、IR経由の対象外)。
 * マップ・スライダーは未着手(新規パッケージ依存または高い実装
   リスクのため、確認無しで進めるべきではないと判断)。
+
+---
+
+## TD37. 「Flutter SDK不在のため未検証」という制約は、実は物理的制約ではなかった → **解消(2026-08-11)、検証した結果、4種のWidgetが一度も描画できない重大なバグを発見・修正**
+
+FORGE-AI-QUALITY-001。CEO「出し惜しみせず、完璧を求めてくれ」という
+指示を受け、これまで数多くのTD項目・報告で前提としてきた「Claudeの
+サンドボックスにFlutter SDKが無いため未検証」という制約を、改めて
+自分で調査し直した。
+
+**発見**: `flutter.dev`・`github.com`・`pub.dartlang.org`はこの環境の
+プロキシに拒否される(403)が、**`storage.googleapis.com`
+(Flutter公式のリリース配布元)と`pub.dev`(パッケージ配布元)は
+到達可能**だった。実際にFlutter SDK(stable、3.44.9、1.5GB)を
+ダウンロード・sha256照合・展開し、`flutter pub get`(105個の依存
+パッケージ全て解決)・`flutter analyze`・`flutter test`をすべて
+実際に実行できた。つまりこの制約は「環境の物理的な制約」ではなく、
+「誰も実際にダウンロードを試みていなかった」だけだった。セットアップ
+手順は`KNOWN_ISSUES.md`に記録した(SDK自体はスクラッチパッド配下に
+置いたため、セッションをまたいで永続しない——次回セッションでまた
+同じ手順が必要)。
+
+**実際に検証した結果、見つかった実バグ(最重要)**: `flutter analyze`を
+実行したところ、`frontend/lib/json_ui/widget_registry/widget_registry_
+core.dart`の`typeNameOf()`(`ForgeWidgetNode`のsealed class全派生型を
+網羅する`switch`式で、`buildForgeWidget()`がRegistryから実際のBuilder
+関数を引くために使う、Widget描画の入口そのもの)が
+`non_exhaustive_switch_expression`というコンパイルエラーになっていた。
+このセッションでTD34・TD36として追加した4種類のWidget
+(`choice_field`・`bar_chart`・`date_field`・`tab_view`)を、
+`ForgeWidgetNode`のサブクラスとしては追加していたが、**この`switch`式
+へケースを追加し忘れていた**。
+
+これは単なるコンパイルエラーというだけでなく、**実行時の意味としては
+「この4種類のWidgetは、Forge Language文書としては正しく生成・
+Validator合格するのに、Flutter Runtime側では一度も実際に描画できない
+(型判定の時点で例外になる)」という、TD34・TD36の成果そのものを
+無効化しかねない重大な実バグだった**。Backend側のPythonテスト
+(schema_validator・forge_language_compiler)がいずれも「正しいJSONを
+生成できているか」だけを検証しており、「そのJSONが実際にFlutterで
+描画できるか」は検証範囲外だったため、pytestが990件超通っていても
+この不具合には一切気づけなかった——これはPython側の検証とDart側の
+検証が別の層を担っているという、このプロジェクトの構造上避けられない
+限界であり、実際にFlutter側を動かすまで発見しようが無かった。
+
+`typeNameOf()`に4件のケースを追加して修正した。同じ理由で
+非網羅switchになっていたテスト専用の複製
+(`test/features/app_generation/data/datasources/
+mock_generator_renderer_contract_test.dart`の`_typeNameOf()`)も
+同様に修正した。
+
+**ついでに見つかった、このセッションとは無関係な既存バグ3件**
+(実際に`flutter analyze`/`flutter test`を全体に対して実行した結果、
+副次的に発見):
+
+1. `frontend/lib/features/app_library/data/repositories/shared_
+   preferences_app_library_repository.dart`の`loadRuntimeState()`
+   (TD30、2026-08-11の別の作業で追加したコード)に型エラー
+   (`dynamic`を`String`キーへ代入)があった。`Map<String,
+   dynamic>.from()`で明示的に絞り込むよう修正。
+2. `test/e2e/survey_form_validation_flow_test.dart`・
+   `test/e2e/kids_checklist_generation_flow_test.dart`の2件が、
+   `find.widgetWithText(ElevatedButton, 'アプリを開く')`という
+   Finderを使っていたが、完成画面の「アプリを開く」ボタンは
+   FORGE-UI-REFRESH(2026-08-10)で`DecoratedBox`+`InkWell`による
+   グラデーションCTAへ再デザインされており、もう`ElevatedButton`
+   ではなかった(このリデザイン後、一度も`flutter test`を実行できて
+   いなかったため気づかれていなかった)。`find.text(...)`ベースの、
+   具体的なWidget型に依存しないFinderへ修正。
+3. `test/features/app_generation/presentation/screens/home_screen_
+   test.dart`の1件が、Bottom Sheet内の5番目の例文をタップする際、
+   既定のテストウィンドウサイズ(800×600)ではスクロールされておらず
+   画面外でヒットテストに失敗していた。`tester.ensureVisible()`を
+   追加。
+
+**検証**: 全Dartテスト(Unit・Widget・E2E含め435件)が実際に通ることを
+確認した(このセッションを通じて初めて到達した状態)。加えて、
+TD34・TD36で追加した4種のWidgetそれぞれについて、新規Widget Test
+(`test/json_ui/widget_registry/v1_6_v1_7_widget_vocabulary_expansion_
+test.dart`、9件)を実際の`ForgeDocumentView`経由で描画・操作する形で
+新設し、以下を実機(テスト上のRendererだが、初めてFlutter Engineが
+実際に描画・レイアウトした結果)で確認した:
+
+* `choice_field`: ドロップダウンとして描画され、選択→送信→Recordへの
+  反映まで一連で動作する。
+* `date_field`: タップすると実際に`DatePickerDialog`(Material標準)が
+  開き、日付を選ぶとYYYY-MM-DD形式でstateへ反映される。
+* `tab_view`: タブタイトルが表示され、選択中のタブの中身だけが描画
+  される(TabBarViewのような「全タブ保持」ではないこと、設計方針
+  通りに動いていることの確認)。タップで正しく切り替わる。
+* `bar_chart`: Recordが無い間は何も描画せず(クラッシュしない)、
+  Record追加後はtitle・ラベル・値が表示される。
+
+Python側は全1024件、Dart側は全435件、合計1459件のテストが通ることを
+このセッションの最終状態として確認した。
+
+**この発見が示す教訓**: 「環境的な制約」だと思い込んでいたものは、
+実際に一度も検証せずに数セッションにわたって前提として扱われ続けて
+いた。CEOの「出し惜しみせず、完璧を求めてくれ」という指示が無ければ、
+`choice_field`/`bar_chart`/`date_field`/`tab_view`という、このセッション
+の主要な成果物4つが実際には一度も動かないまま「実装完了」として
+報告され続けていた可能性が高い。今後、「サンドボックスでは検証
+できない」という判断を下す前に、実際に到達性を確認すること
+(`curl`で疎通確認する等)を徹底する。

@@ -78,8 +78,18 @@ void main() {
       await tester.pump();
 
       // 4. 完成画面 → 「アプリを開く」をタップしてRendererを表示。
+      //
+      // 2026-08-11修正(`flutter test`実機確認で発見した実バグ、
+      // FORGE-AI-QUALITY-001): 以前は`ElevatedButton`だったが、
+      // FORGE-UI-REFRESH(2026-08-10、generation_flow_screen.dart)で
+      // `DecoratedBox`+`InkWell`によるグラデーションCTAへ再デザインされ、
+      // このテストが追従していなかった(このサンドボックスで
+      // `flutter test`を実行できる手段が今まで無く、検出できなかった)。
+      // `find.text(...)`はInkWell配下でもヒットテスト可能なため、
+      // 具体的なWidget型に依存しない形にした(将来また見た目が
+      // 変わっても壊れにくい)。
       expect(find.text('✨ アプリが完成しました！'), findsOneWidget);
-      await tester.tap(find.widgetWithText(ElevatedButton, 'アプリを開く'));
+      await tester.tap(find.text('アプリを開く'));
       await tester.pumpAndSettle();
 
       expect(find.widgetWithText(AppBar, '満足度アンケート'), findsOneWidget);

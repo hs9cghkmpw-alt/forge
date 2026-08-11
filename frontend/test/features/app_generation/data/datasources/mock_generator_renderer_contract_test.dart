@@ -35,6 +35,7 @@ const Set<String> kRegisteredWidgetTypes = {
   'heading', 'checkbox', 'card', 'list', 'divider', 'form',
   'record_list_view',
   'section_header',
+  'choice_field', 'bar_chart', 'date_field', 'tab_view',
 };
 
 /// sealed ForgeWidgetNode の全14派生型(13 Widget種 + Unknown)を網羅する。
@@ -63,10 +64,20 @@ String _typeNameOf(ForgeWidgetNode node) => switch (node) {
       ForgeSectionHeaderWidgetNode() => 'section_header',
       ForgeDividerWidgetNode() => 'divider',
       ForgeFormWidgetNode() => 'form',
+      // v1.6/v1.7新規(2026-08-11、Widget Vocabulary Expansion)。
+      // Mock Generatorの12レガシーカテゴリはこれらを生成しないため
+      // 実際のアサーション結果には影響しないが、`widget_registry_core.
+      // dart`の`typeNameOf()`が同じ理由で非網羅switchのコンパイル
+      // エラーになっていた実バグ(FORGE-AI-QUALITY-001で発見・修正)と
+      // 同期させるため追加した。
+      ForgeChoiceFieldWidgetNode() => 'choice_field',
+      ForgeBarChartWidgetNode() => 'bar_chart',
+      ForgeDateFieldWidgetNode() => 'date_field',
+      ForgeTabViewWidgetNode() => 'tab_view',
       ForgeUnknownWidgetNode() => 'unknown',
     };
 
-/// column/row/card/form いずれもchildrenを持ちうるため、全種を辿る。
+/// column/row/card/form/tab_view いずれもchildrenを持ちうるため、全種を辿る。
 List<ForgeWidgetNode> _flatten(ForgeWidgetNode node) {
   final result = <ForgeWidgetNode>[node];
   if (node is ForgeColumnWidgetNode) {
@@ -82,6 +93,10 @@ List<ForgeWidgetNode> _flatten(ForgeWidgetNode node) {
       result.addAll(_flatten(c));
     }
   } else if (node is ForgeFormWidgetNode) {
+    for (final c in node.children) {
+      result.addAll(_flatten(c));
+    }
+  } else if (node is ForgeTabViewWidgetNode) {
     for (final c in node.children) {
       result.addAll(_flatten(c));
     }

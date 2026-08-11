@@ -51,6 +51,10 @@ String typeNameOf(ForgeWidgetNode node) => switch (node) {
       ForgeSectionHeaderWidgetNode() => 'section_header',
       ForgeDividerWidgetNode() => 'divider',
       ForgeFormWidgetNode() => 'form',
+      ForgeChoiceFieldWidgetNode() => 'choice_field',
+      ForgeBarChartWidgetNode() => 'bar_chart',
+      ForgeDateFieldWidgetNode() => 'date_field',
+      ForgeTabViewWidgetNode() => 'tab_view',
       ForgeUnknownWidgetNode() => 'unknown',
     };
 

@@ -118,8 +118,18 @@ class SharedPreferencesAppLibraryRepository implements AppLibraryRepository {
   @override
   Future<Map<String, Map<String, dynamic>>?> loadRuntimeState(String appId) async {
     final all = await _readAllRuntimeState();
-    final forApp = all[appId];
-    if (forApp is! Map) return null;
+    final rawForApp = all[appId];
+    if (rawForApp is! Map) return null;
+    // 2026-08-11修正(`flutter analyze`実機確認で発見した実バグ、
+    // FORGE-AI-QUALITY-001): `rawForApp`は`is! Map`チェックだけでは
+    // 型引数無しの`Map`(キーが`dynamic`)にしか絞り込まれず、下の
+    // `forEach`のコールバック引数`screenId`も`dynamic`のままになる。
+    // `result[screenId] = ...`は`Map<String, ...>`への代入のため、
+    // `dynamic`のままでは型エラーになる(このサンドボックスでは
+    // 今まで`flutter analyze`を実行できておらず未検出だった)。
+    // `saveRuntimeStateForScreen()`(下記)と同じ`Map<String,
+    // dynamic>.from()`パターンで明示的に絞り込む。
+    final forApp = Map<String, dynamic>.from(rawForApp);
     final result = <String, Map<String, dynamic>>{};
     forApp.forEach((screenId, screenState) {
       if (screenState is Map) {
