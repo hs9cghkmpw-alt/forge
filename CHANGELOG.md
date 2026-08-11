@@ -2,6 +2,51 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task053 — バグハント(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「がっつしバグ全部探して潰していってよ」)
+
+指示を受け、Backend/forge_ai側で実際に検証できる範囲を体系的に洗い直した。
+
+### TD32: Repair Loopが本番経路で呼ばれてはいたが、一度も実際に修正できていなかった
+TD17(Repair Engine)の記述を訂正する過程で発見。`to_repair_issues()`が
+`ValidationIssue.category`(4値の大分類)を渡していたが、`RepairEngine.
+_try_fix()`は具体的なルール名で判定していたため一致せず、Repair Loopは
+「毎回呼ばれるが何も直せない」状態だった。加えて、想定していた2つの
+「既知パターン」自体、実際のValidatorには存在しないルールだったことも
+判明した。`e.rule`を渡すよう修正し、実在する`string_length`(app.title
+パス限定)への対応を追加。本物のValidatorを使った回帰テストで確認した。
+詳細はTECH_DEBT.md TD32参照。
+
+### TD33: record_list系Domainのchoice/date型Fieldが、有効な入力形式を一切示さないまま高確率で入力を弾いていた
+`household_budget`・`inventory`・`diary`を実際にGemini APIで生成し、
+JSONの中身を1フィールドずつ確認して発見。choice型Field(カテゴリ・
+気分等)はplaceholderがFieldラベルのみで、Dart Runtime側
+(`ForgeFieldValueParser._parseChoice()`)は選択肢との完全一致を要求する
+ため、素直な入力の大半が送信後に初めて弾かれる設計だった。同じ調査で
+date型Fieldも同様の問題(YYYY-MM-DD形式の指定がどこにも無い)を発見した。
+いずれも既存の`text_field`+`placeholder`のみで(新しいWidget型を追加
+せず)選択肢・形式を事前に示すよう修正した。回帰テスト4件を追加、実際に
+4 Domain(household_budget/inventory/diary/fishing_log)で実機確認した。
+詳細はTECH_DEBT.md TD33参照。
+
+### ドキュメントの棚卸し
+同じ手法で他の「未実装」表記も確認し、TD20(Output Safety)・
+TD21(Prompt Injection Guard)・TD22(スキーマバージョン管理)が実は
+実装・実機確認済みなのに「解消済み」マークを付け忘れていたことも発見・
+訂正した。
+
+### 全テスト
+forge_ai・backend込み全体で965 passed, 12 skipped(回帰なし)。
+
+### 確認したが問題無しと判断した箇所
+- IR経由の5 Domain(household_budget/habit_tracking/inventory/
+  fishing_log/diary)を実際にGemini APIで再生成し、いずれも
+  `valid: true`であることを確認した。
+- Number型Fieldの検証・エラーメッセージは十分自明(「数字で入力して
+  ください」)であり、choice/date同様の事前ヒント追加は不要と判断した。
+- 「checklist item idの重複が検出されない」という既知のギャップ(TD5)
+  は、実際のCompilerが常に連番で一意なIDを生成するため実害が無い
+  ことを再確認した(理論上の制限として記録済みのまま据え置き)。
+
 ## Task052 — 信頼性面の実機調査(FORGE-AI-QUALITY-001続き、2026-08-11、CEO「進められるところをどんどん進めてください」)
 
 Task051(ローカル永続化)がCEO確認待ちの間、検証可能なBackend/forge_ai側の
