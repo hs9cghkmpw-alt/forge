@@ -1282,3 +1282,12 @@ APIで`household_budget`・`inventory`・`diary`の3 Domainを再生成し、
 最小限の緩和であり、実際にタップで選べるドロップダウン/チップ選択の
 ような体験には及ばない。Widget Registryの拡張(専用のchoice Widget
 追加)は、今回のスコープ(既存Widget内での改善)を超えるため見送った。
+
+**追記(同日、同種の問題をdate型Fieldでも発見・修正)**: `choice`型と
+同じ調査の過程で、`date`型Field(例: 家計簿記録の「日付」)も同様に
+placeholderがFieldラベルのみ(「日付」)で、`ForgeFieldValueParser.
+_parseDate()`が要求する厳密なISO 8601形式(YYYY-MM-DD)がどこにも
+示されていないことに気づいた。choiceほど致命的ではない(YYYY-MM-DD
+自体は広く知られた書式のため)が、同じ理由・同じ修正方針で
+placeholderへ「日付(YYYY-MM-DD)」のように形式を含めるよう修正した。
+回帰テストを追加し、全テスト(965件)が通ることを確認した。

@@ -430,6 +430,11 @@ class ForgeLanguageCompiler:
                 # ユーザーが初回submitで弾かれる設計になっていたため、
                 # placeholderへ選択肢をあらかじめ含めるよう修正した。
                 placeholder = f"{f.label}({'・'.join(f.choices)})"
+            elif f.type == FieldType.DATE:
+                # 同じ理由(TD33参照)で、日付形式も送信前に示しておく。
+                # `ForgeFieldValueParser._parseDate()`はISO 8601
+                # (YYYY-MM-DD)の厳密一致を要求するため。
+                placeholder = f"{f.label}(YYYY-MM-DD)"
 
             field_properties: dict[str, Any] = {"state_ref": state_id, "placeholder": placeholder}
             if validation_rules:

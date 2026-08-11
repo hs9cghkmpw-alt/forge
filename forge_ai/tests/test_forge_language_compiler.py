@@ -565,9 +565,17 @@ class TestForgeLanguageCompilerTypedFields(unittest.TestCase):
         self.assertIn("娯楽", placeholder)
         self.assertIn("その他", placeholder)
 
-    def test_non_choice_field_placeholder_is_unchanged(self) -> None:
-        """choice以外のFieldは、既存どおりFieldラベルのみのplaceholder
-        のまま(意図しない副作用が無いことの回帰テスト)。"""
+    def test_date_field_placeholder_shows_the_expected_format(self) -> None:
+        """TD33と同じ理由: `_parseDate()`もISO 8601(YYYY-MM-DD)の厳密
+        一致を要求するため、送信前に形式を示す。"""
+        document = self._compile("fishing_log")
+        create_form = next(c for c in document.screens[0].body.children if c.id == "record_form")
+        date_field = next(c for c in create_form.children if c.id == "field_date_input")
+        self.assertEqual(date_field.properties["placeholder"], "日付(YYYY-MM-DD)")
+
+    def test_string_field_placeholder_is_unchanged(self) -> None:
+        """string型のFieldは、既存どおりFieldラベルのみのplaceholderの
+        まま(意図しない副作用が無いことの回帰テスト)。"""
         document = self._compile("fishing_log")
         create_form = next(c for c in document.screens[0].body.children if c.id == "record_form")
         species_field = next(c for c in create_form.children if c.id == "field_species_input")
