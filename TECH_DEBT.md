@@ -2079,3 +2079,93 @@ pumpAndSettle禁止」と同種の、タイミング依存の落とし穴)。`en
 `conversation_flow_screen_test.dart`2件)、既存E2E/Widget Testの修正
 (Home画面の遷移先変更・文言変更に追従、`ensureVisible()`の適用漏れ
 修正)を含め、Dart側全447件がgreen。`flutter analyze`は0エラー。
+
+## TD44. `design_tokens`(配色テーマ)がCurated Domain Library(5 Domain)にしか適用されておらず、生成されるアプリの大半がFlutter既定のMaterial配色のままだった → **解消(2026-08-12)**
+
+CEO「widgetの充実が良いのか、生成できるAIが良いのか、実際に作られる
+アプリのクオリティをアプリストアにあるようなレベルにするにはどう
+すればいいか、めちゃくちゃ考えて、多次元レベルで色々な角度から
+疑って、これだ！って答えが出たら実装してみて」という指示への対応。
+
+**分析(指示された「多次元での検討」の結果)**: Widget語彙(19種、
+v1.8で拡充済み)・生成AIの賢さ(プロンプト・分類ロジック)・視覚的
+デザイン品質、の3方向を比較した。
+
+* Widget語彙は既に19種あり、「機能が足りない」ことが目に見える
+  不具合として観測されていない(むしろTD39のように、既存Widgetを
+  使う経路にすら到達できないDomainがある方が問題)。
+* 生成AIの賢さ(Gemini呼び出しの精度)は本質的にセッションをまたいで
+  改善し続けるべき対象だが、単一のコード変更で「これだ」と言える
+  性質のものではない(効果測定にABテスト相当の運用が要る)。
+* 一方、`QualityEngine`(`forge_ai/quality/quality_engine.py`)・
+  `DesignCritic`(`forge_ai/core/critic/design_critic.py`)を実際に
+  読むと、6軸+10軸のいずれも**構造的な自己無矛盾性**(画面がある、
+  IDが重複しない、Actionがある等)しか評価しておらず、**視覚的な
+  仕上がり**(配色・角丸・余白の一貫性)は一度も評価対象になって
+  いなかった。さらに実装(`forge_ai/core/compiler.py`・
+  `forge_ai/core/ir/forge_language_compiler.py`)を読むと、
+  `design_tokens`という仕組み自体はFORGE v1.0 Product Quality
+  Sprint1で**既に実装・Flutter Runtime側の描画対応も完了済み**
+  だったが、`ForgeLanguageCompiler`(Curated Domain Library、
+  実機到達可能なのはfishing_log/household_budget/habit_tracking/
+  inventory/diaryの5 Domainのみ、TD39参照)だけが使っており、
+  legacy`Compiler`(それ以外の10 Domain: shopping・hospital・
+  attendance・task_management・survey・schedule・child_growth・
+  study・travel・generic——実際に生成されるアプリの大半)は
+  `design_tokens`を一度も出力していなかった。つまり「アプリストア
+  レベルの品質」に一番効くはずの、**既に作った資産(4種のプリセット
+  配色)を、対象の大半に配れていなかった**というのが実際の状況
+  だった(新しいWidgetを増やすでも、AIの賢さを底上げするでもなく、
+  「既存の高品質な仕組みを取りこぼしなく適用する」ことが最も
+  レバレッジの高い改善、という結論に至った)。
+
+**実装**: `_DESIGN_TOKEN_PRESETS`(4プリセット: calm/warm/vibrant/
+neutral)を`forge_language_compiler.py`から`compiler.py`(元々前者が
+後者をimportしているため、循環importを避けるにはこちらが単一の
+定義元になる必要がある)へ移動し、`design_tokens_for_style()`・
+`design_tokens_for_domain()`という2つの公開関数として再構成した。
+`design_tokens_for_domain()`は、`_VISUAL_STYLE_BY_DOMAIN_CATEGORY`
+という新設のDomain→visual_styleマップ(Curated Domain Library分は
+`ir_generator.py`の`_ENTITY_DEFINITIONS[...].visual_style`と意図的に
+一致させ、残り10 Domainは新たに割り当てた)を経由してプリセットを
+選ぶ。`Compiler.compile()`のChecklist経路・Form Template経路の両方が、
+`ForgeIRDocument`構築時にこれを呼ぶよう変更した。
+
+**副作用として必要だったversion引き上げ**: `design_tokens`は
+Validator(`schema_validator.py`)がv1.5以降でのみ許可するフィールド
+のため、Checklist経路の`version="1.0"`・Form経路の`version="1.2"`を
+いずれも`"1.5"`へ引き上げた。使用するWidget/Action/State型自体は
+いずれもv1.0〜v1.2の範囲内のままで、v1.5はその上位互換のため、
+実際の画面構成・挙動は一切変わらない。
+
+**Frontend側の変更は不要だった**: Flutter Runtime
+(`forge_document.dart`・`forge_renderer.dart`)は元々
+`design_tokens`キーの有無だけを見てテーマを切り替える設計になって
+おり(Sprint1で実装済み)、versionやDomainには依存しないため、
+Dart側のコード変更は一切不要だった。
+
+**確認**: `forge_ai/tests/test_compiler.py`に新規テストクラス
+`TestCompilerDesignTokensByDomain`(4件、全15 DomainCategoryが空でない
+design_tokensを持つこと・Domainによって実際に異なる配色になること・
+未知Domainは"calm"へ安全にフォールバックすること・Form Template
+経路にも適用されることを検証)を追加。既存の`version`固定値アサーション
+(10箇所)を、"1.0"/"1.2"→"1.5"へ理由を添えて更新した。forge_ai/側
+451件・Backend側645件、全てgreen。実際にuvicorn+curlで
+`/api/v1/ai/generate`を叩き、「買い物リストを作りたい」(shopping、
+以前は無配色)が`#D68C45`(warm)、「満足度アンケートを作りたい」
+(survey、以前は無配色)が`#5C6470`(neutral)という異なる配色で、
+実際のSchema Validatorを通過して返ることをライブ確認した。
+
+**やらなかったこと・今後の検討事項**: 今回はプリセット配色の
+「取りこぼしを無くす」ことに絞り、以下は意図的にスコープ外とした。
+* `QualityEngine`/`DesignCritic`へ視覚的仕上がりを評価する軸を
+  追加すること(「配色が適用されているか」を機械的にチェックする
+  軸自体は追加できるはずだが、この変更で全Domainに配色を適用した
+  今、緊急度は下がった)。
+* プリセットを4種から増やすこと、またはAIにセマンティックな
+  visual_style選択(例: 「几帳面な人向けの日記」→neutral、
+  「楽しい家計簿」→vibrant)をさせること(現状は`domain_category`
+  という粗い単位でしか選べない。指示書3.4節の「無限に多様な配色を
+  AIが自由に生成するのではなく、少数の選択肢から選ぶ」という制約は
+  維持しつつ、選ぶ粒度をDomain単位からもう少し細かくできる余地は
+  ある)。

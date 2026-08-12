@@ -2,6 +2,40 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task063 — 生成アプリの視覚品質: design_tokens(配色テーマ)を全Domainへ拡大(2026-08-12、CEO「アプリストアレベルの品質にするにはどうすればいいか」)
+
+CEOから「widgetの充実が良いのか、生成できるAIが良いのか、実際に
+作られるアプリのクオリティをアプリストアにあるようなレベルにする
+にはどうすればいいか、めちゃくちゃ考えて、多次元レベルで色々な
+角度から疑って、これだ！って答えが出たら実装してみて」という指示を
+受け、Widget語彙・生成AIの精度・視覚的デザイン品質の3方向を検討した
+結果、「`design_tokens`(配色・角丸・余白のテーマ)という、Product
+Quality Sprint1で既に実装・Flutter側の描画対応も完了していた資産が、
+Curated Domain Library(5 Domain)にしか適用されておらず、実際に
+生成されるアプリの大半(shopping・survey・travel等、legacy
+`Compiler`経路の10 Domain)はFlutter既定のMaterial配色のままだった」
+という取りこぼしが、最もレバレッジの高い改善だと判断した(詳細は
+TECH_DEBT.md TD44)。
+
+**実装**: `_DESIGN_TOKEN_PRESETS`を`forge_ai/core/ir/
+forge_language_compiler.py`から`forge_ai/core/compiler.py`(循環
+import回避のため、こちらが単一の定義元)へ移動し、`design_tokens_
+for_style()`・`design_tokens_for_domain()`(新設、Domain→visual_style
+マップ経由でプリセットを選ぶ)として再構成。`Compiler.compile()`の
+Checklist経路・Form Template経路の両方に適用した。付随して、
+`design_tokens`がValidator上v1.5以降専用のため、両経路のversionを
+"1.0"/"1.2"から"1.5"へ引き上げた(使用Widget/Action/State型は
+上位互換の範囲内、挙動は不変)。Flutter側の変更は不要(Sprint1の
+実装がversion/Domain非依存のため)。
+
+**テスト**: `forge_ai/tests/test_compiler.py`に`TestCompilerDesign
+TokensByDomain`(新規4件)を追加、既存version固定値アサーション10件を
+更新。forge_ai/側451件・Backend側645件、全てgreen。uvicorn+curlで
+`/api/v1/ai/generate`をライブ確認: 「買い物リストを作りたい」
+(shopping)が`#D68C45`、「満足度アンケートを作りたい」(survey)が
+`#5C6470`という異なる配色で、実際のSchema Validatorを通過して
+返ることを確認した。
+
 ## Task062 — FORGE-PRODUCT-VISION-002続き: フロントエンド統合(2026-08-11、同日中、CEO「自由度はどれくらいなのだろう？今最新で与えている情報を優先にしてほしい」)
 
 report.mdで「CEO確認が必要」として保留していたフロントエンド統合

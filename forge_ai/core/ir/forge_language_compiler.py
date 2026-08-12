@@ -138,41 +138,23 @@ from forge_ai.core.compiler import (
     ForgeIRScreen,
     ForgeIRStateValue,
     ForgeIRWidget,
+    design_tokens_for_style,
 )
 from forge_ai.core.ir.ir_types import Entity, FieldType, ForgeIR, ViewKind
 
 # FORGE v1.0新規(Product Quality Sprint1)。Entityの`visual_style`
 # (IR層、プラットフォーム非依存の「雰囲気」ヒント)から、実際の
 # Forge Language `design_tokens`(色コード・角丸・余白という、Flutter
-# Runtime固有の描画情報)への変換表。**具体的な色コードを選ぶという
-# 判断はここ、Compiler層に閉じる**(IRはこの変換表の存在を知らない、
+# Runtime固有の描画情報)への変換は、`design_tokens_for_style()`
+# (`forge_ai/core/compiler.py`)へ委譲する。**具体的な色コードを選ぶ
+# という判断はCompiler層に閉じる**(IRはこの変換表の存在を知らない、
 # ADR-012の方針)。
 #
-# 4種類という少数のプリセットに絞ったのは、`FORGE-PRODUCT-DESIGN-
-# LAYER-PROPOSAL.md`3.4節の判断(「無限に多様な配色をAIが自由に生成
-# するのではなく、品質が保証された少数の選択肢から選ぶ」)に基づく。
-_DESIGN_TOKEN_PRESETS: dict[str, dict[str, Any]] = {
-    "calm": {
-        "color_scheme": {"primary": "#5B7C99", "secondary": "#8FA8BD", "success": "#6B9080", "error": "#C1666B"},
-        "corner_radius": {"small": 8, "medium": 12, "large": 16},
-        "spacing_scale": {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 32},
-    },
-    "warm": {
-        "color_scheme": {"primary": "#D68C45", "secondary": "#E8B37A", "success": "#7A9D6F", "error": "#C1666B"},
-        "corner_radius": {"small": 10, "medium": 16, "large": 24},
-        "spacing_scale": {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 32},
-    },
-    "vibrant": {
-        "color_scheme": {"primary": "#6366F1", "secondary": "#EC4899", "success": "#10B981", "error": "#EF4444"},
-        "corner_radius": {"small": 12, "medium": 18, "large": 28},
-        "spacing_scale": {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 32},
-    },
-    "neutral": {
-        "color_scheme": {"primary": "#5C6470", "secondary": "#8A94A6", "success": "#4C9A6A", "error": "#B5493A"},
-        "corner_radius": {"small": 6, "medium": 10, "large": 14},
-        "spacing_scale": {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 32},
-    },
-}
+# FORGE-PRODUCT-VISION-002(2026-08-12)対応: プリセット表自体は、
+# legacy Checklist経路(`Compiler`)にも同じテーマ適用を広げるため、
+# `forge_ai/core/compiler.py`側へ移動した(このモジュールは元々
+# `forge_ai.core.compiler`をimportしているため、単一の定義元は
+# そちらに置くのが自然。TECH_DEBT.md TD44参照)。
 
 # FORGE v1.0新規(Product Quality Sprint1)。一覧をgrid表示にする
 # Domain(Field数が少なく、一覧性を優先したいもの)。それ以外は
@@ -413,12 +395,7 @@ class ForgeLanguageCompiler:
         フォールバックする(既存の「未知Widgetは安全にFallback」と
         同じ設計原則を、Design Tokenの選択にも適用したもの)。
         """
-        preset = _DESIGN_TOKEN_PRESETS.get(entity.visual_style, _DESIGN_TOKEN_PRESETS["calm"])
-        return {
-            "color_scheme": dict(preset["color_scheme"]),
-            "corner_radius": dict(preset["corner_radius"]),
-            "spacing_scale": dict(preset["spacing_scale"]),
-        }
+        return design_tokens_for_style(entity.visual_style)
 
     def _build_record_schema(self, entity: Entity) -> ForgeIRRecordSchema:
         """FORGE v0.9新規(Typed Record Runtime Phase1)。IRの`Entity.

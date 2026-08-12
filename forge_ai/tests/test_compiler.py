@@ -55,7 +55,10 @@ class TestCompiler(unittest.TestCase):
         self.assertIsInstance(serialized, str)
         # 往復確認: JSON化→再parseしても同じ構造になる。
         reparsed = json.loads(serialized)
-        self.assertEqual(reparsed["version"], "1.0")
+        # FORGE-PRODUCT-VISION-002(2026-08-12)対応: design_tokensを常に
+        # 出力するようになったため、version="1.0"(design_tokens非対応)
+        # ではなく"1.5"以降を宣言するようになった(`compiler.py`参照)。
+        self.assertEqual(reparsed["version"], "1.5")
 
     def test_compile_never_crashes_across_all_domains(self) -> None:
         for category in DomainCategory:
@@ -103,6 +106,56 @@ def _flatten(widget: ForgeIRWidget) -> list[ForgeIRWidget]:
     for child in widget.children:
         result.extend(_flatten(child))
     return result
+
+
+class TestCompilerDesignTokensByDomain(unittest.TestCase):
+    """FORGE-PRODUCT-VISION-002(2026-08-12、CEO「アプリストアレベルの
+    品質にするにはどうすればいいか」対応)の回帰テスト。
+
+    以前は`Compiler`(legacy Checklist/Form経路)がdesign_tokensを
+    一切出力せず、Curated Domain Library(5 Domain)を除く全Domain
+    (shopping・survey・travel等、実際に生成されるアプリの大半)が
+    Flutter既定のMaterial配色のまま描画されていた
+    (`forge_ai/core/ir/forge_language_compiler.py`側だけが
+    design_tokensを持っていた)。`design_tokens_for_domain()`により、
+    `Compiler`が扱う全Domainにもテーマ適用が広がったことを確認する。
+    """
+
+    def setUp(self) -> None:
+        self.compiler = Compiler(MockProvider())
+        self.plan = ApplicationPlan(
+            title="テスト",
+            screens=(ScreenPlan(name="main", purpose="test", key_elements=("item",)),),
+            data_entities=("item",),
+            primary_flow=(),
+        )
+
+    def test_every_domain_category_gets_non_empty_design_tokens(self) -> None:
+        for category in DomainCategory:
+            with self.subTest(category=category):
+                ir = self.compiler.compile(self.plan, domain_category=category.value)
+                self.assertTrue(ir.design_tokens, f"{category.value}のdesign_tokensが空です")
+                self.assertIn("primary", ir.design_tokens["color_scheme"])
+
+    def test_different_domains_can_receive_different_color_presets(self) -> None:
+        """全Domainが同じ1色に固定されているわけではないことを確認する
+        (少数のプリセットから選ばれる、`FORGE-PRODUCT-DESIGN-LAYER-
+        PROPOSAL.md`3.4節の設計を`Compiler`経路にも適用したことの確認)。"""
+        shopping = self.compiler.compile(self.plan, domain_category="shopping")
+        survey = self.compiler.compile(self.plan, domain_category="survey")
+        self.assertNotEqual(
+            shopping.design_tokens["color_scheme"]["primary"],
+            survey.design_tokens["color_scheme"]["primary"],
+        )
+
+    def test_unknown_domain_category_falls_back_to_calm_preset(self) -> None:
+        ir = self.compiler.compile(self.plan, domain_category="no_such_domain")
+        self.assertEqual(ir.design_tokens["color_scheme"]["primary"], "#5B7C99")
+
+    def test_form_template_also_receives_domain_design_tokens(self) -> None:
+        ir = self.compiler.compile(self.plan, domain_category="survey", template="form")
+        self.assertTrue(ir.design_tokens)
+        self.assertEqual(ir.design_tokens["color_scheme"]["primary"], "#5C6470")
 
 
 class TestCompilerRealisticExampleItems(unittest.TestCase):
@@ -245,12 +298,17 @@ class TestCompilerAfterIRMigration(unittest.TestCase):
     def test_compiler_always_produces_checklist_template_regardless_of_domain_category(self) -> None:
         """`domain_category`に、FORGE IR v1移設対象の3 Domain
         (fishing_log等)を渡しても、`Compiler`自体はもう特別扱いせず、
-        常にChecklist単一画面(version 1.0)を返す(後方互換の一部として
-        パラメータ自体は残しているが、無視される)。"""
+        常にChecklist単一画面を返す(後方互換の一部としてパラメータ
+        自体は残しているが、画面構成自体は無視される)。
+
+        FORGE-PRODUCT-VISION-002(2026-08-12)対応:
+        version(design_tokensの有無に伴い"1.0"→"1.5")は
+        `domain_category`の値に応じて変わりうるようになったため
+        (`design_tokens_for_domain()`参照)、ここでは固定していない。"""
         for domain_category in (None, "shopping", "fishing_log", "household_budget", "habit_tracking"):
             with self.subTest(domain_category=domain_category):
                 ir = self.compiler.compile(self.plan, domain_category=domain_category)
-                self.assertEqual(ir.version, "1.0")
+                self.assertEqual(ir.version, "1.5")
                 self.assertEqual(len(ir.screens), 1)
                 widget_types = [c.type for c in ir.screens[0].body.children]
                 self.assertNotIn("form", widget_types)
@@ -258,9 +316,10 @@ class TestCompilerAfterIRMigration(unittest.TestCase):
 
     def test_compile_without_domain_category_argument_still_works(self) -> None:
         """`domain_category`省略時(既存呼び出し元との後方互換)も
-        正しく動作する。"""
+        正しく動作する(design_tokensは"calm"へフォールバックする)。"""
         ir = self.compiler.compile(self.plan)
-        self.assertEqual(ir.version, "1.0")
+        self.assertEqual(ir.version, "1.5")
+        self.assertEqual(ir.design_tokens["color_scheme"]["primary"], "#5B7C99")
 
 
 class TestCompilerFormTemplate(unittest.TestCase):
@@ -282,14 +341,17 @@ class TestCompilerFormTemplate(unittest.TestCase):
         return Compiler(self.provider).compile(plan, template="form")
 
     def test_default_template_is_unaffected(self) -> None:
-        """`template`引数を省略した場合、既存の挙動(Checklist単一画面、
-        version 1.0)が一切変わらないことの回帰テスト。"""
+        """`template`引数を省略した場合、既存の挙動(Checklist単一画面)
+        自体は変わらないことの回帰テスト(versionはFORGE-PRODUCT-
+        VISION-002対応でdesign_tokens常時出力に伴い"1.5"へ引き上げ済み、
+        `test_compiler_always_produces_checklist_template_regardless_
+        of_domain_category`と同じ理由)。"""
         plan = ApplicationPlan(
             title="x", screens=(ScreenPlan(name="main", purpose="x", key_elements=("item",)),),
             data_entities=("item",), primary_flow=(),
         )
         ir = Compiler(self.provider).compile(plan)
-        self.assertEqual(ir.version, "1.0")
+        self.assertEqual(ir.version, "1.5")
         self.assertEqual(len(ir.screens), 1)
 
     def test_form_template_produces_two_screens(self) -> None:
@@ -330,14 +392,16 @@ class TestCompilerFormTemplate(unittest.TestCase):
         self.assertEqual(placeholders, ["サービス全体の満足度", "スタッフの対応"])
         self.assertEqual(len(main_screen.state), 2)
 
-    def test_form_template_version_is_1_2(self) -> None:
+    def test_form_template_version_is_1_5(self) -> None:
         """form/heading/card Widget(v1.1)+validationプロパティ(v1.2)を
-        使うため、version="1.2"を宣言する(そうしないと実際の
+        使うため、v1.2以降を宣言する必要がある(そうしないと実際の
         Validatorがform/heading/cardを未知Widgetとして拒否する、
         `test_form_template_validates_against_real_backend_validator`
-        参照)。"""
+        参照)。FORGE-PRODUCT-VISION-002(2026-08-12)対応でdesign_tokens
+        を常に出力するようになったため、実際の宣言値は"1.2"ではなく
+        design_tokens対応の下限である"1.5"になる。"""
         ir = self._compile_form(("question",))
-        self.assertEqual(ir.version, "1.2")
+        self.assertEqual(ir.version, "1.5")
 
     def test_form_template_submit_action_navigates_to_thanks_screen(self) -> None:
         ir = self._compile_form(("question",))
@@ -354,7 +418,7 @@ class TestCompilerFormTemplate(unittest.TestCase):
         ir = self._compile_form(("question",))
         serialized = json.dumps(ir.to_json_dict(), ensure_ascii=False)
         reparsed = json.loads(serialized)
-        self.assertEqual(reparsed["version"], "1.2")
+        self.assertEqual(reparsed["version"], "1.5")
 
     @unittest.skipUnless(
         importlib.util.find_spec("app") is not None or os.path.isdir(

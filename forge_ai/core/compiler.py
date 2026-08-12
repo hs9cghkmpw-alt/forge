@@ -95,6 +95,99 @@ _EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT: dict[str, tuple[str, ...]] = {
 }
 
 
+# FORGE v1.0新規(Product Quality Sprint1)。色・角丸・余白のプリセット表。
+# 元々`forge_ai/core/ir/forge_language_compiler.py`だけが持っていたが、
+# FORGE-PRODUCT-VISION-002(2026-08-12、CEO「アプリストアレベルの品質に
+# するにはどうすればいいか」対応)で、このモジュール(`Compiler`、
+# legacy Checklist経路)にも同じテーマ適用を広げるにあたり、単一の定義元
+# としてこちらへ移動した(`forge_language_compiler.py`は既にこの
+# モジュールをimportしているため、逆方向のimportは循環importになる。
+# 詳細はTECH_DEBT.md TD44)。
+#
+# 4種類という少数のプリセットに絞ったのは、`FORGE-PRODUCT-DESIGN-
+# LAYER-PROPOSAL.md`3.4節の判断(「無限に多様な配色をAIが自由に生成
+# するのではなく、品質が保証された少数の選択肢から選ぶ」)に基づく。
+_DESIGN_TOKEN_PRESETS: dict[str, dict[str, Any]] = {
+    "calm": {
+        "color_scheme": {"primary": "#5B7C99", "secondary": "#8FA8BD", "success": "#6B9080", "error": "#C1666B"},
+        "corner_radius": {"small": 8, "medium": 12, "large": 16},
+        "spacing_scale": {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 32},
+    },
+    "warm": {
+        "color_scheme": {"primary": "#D68C45", "secondary": "#E8B37A", "success": "#7A9D6F", "error": "#C1666B"},
+        "corner_radius": {"small": 10, "medium": 16, "large": 24},
+        "spacing_scale": {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 32},
+    },
+    "vibrant": {
+        "color_scheme": {"primary": "#6366F1", "secondary": "#EC4899", "success": "#10B981", "error": "#EF4444"},
+        "corner_radius": {"small": 12, "medium": 18, "large": 28},
+        "spacing_scale": {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 32},
+    },
+    "neutral": {
+        "color_scheme": {"primary": "#5C6470", "secondary": "#8A94A6", "success": "#4C9A6A", "error": "#B5493A"},
+        "corner_radius": {"small": 6, "medium": 10, "large": 14},
+        "spacing_scale": {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 32},
+    },
+}
+
+# FORGE-PRODUCT-VISION-002(2026-08-12)新規。legacy Checklist経路
+# (`Compiler.compile()`)は`forge_ai/core/ir/ir_generator.py`の
+# `_ENTITY_DEFINITIONS`のようなDomainごとの手作りEntity定義を持たない
+# ため、`Entity.visual_style`を経由できない。代わりに`domain_category`
+# (文字列)から直接visual_styleを選ぶ、同種の少数プリセット方式にする。
+#
+# 7 Curated Domain(fishing_log/household_budget/habit_tracking/todo/
+# reading_log/inventory/diary)分の値は、`ir_generator.py`の
+# `_ENTITY_DEFINITIONS[...].visual_style`と意図的に一致させている
+# (todo/reading_logはTD39の分類バグにより現状この経路へ実際には到達
+# しないが、TD39が解消された場合に見た目が変わらないようにするため)。
+# 残り10 DomainはCurated Domain Libraryの対象外(引き続きこの
+# `Compiler`のChecklist/Form経路を使う)であり、今回新たに割り当てた。
+_VISUAL_STYLE_BY_DOMAIN_CATEGORY: dict[str, str] = {
+    "fishing_log": "neutral",
+    "household_budget": "calm",
+    "habit_tracking": "vibrant",
+    "todo": "vibrant",
+    "reading_log": "warm",
+    "inventory": "neutral",
+    "diary": "warm",
+    "shopping": "warm",
+    "hospital": "calm",
+    "attendance": "neutral",
+    "task_management": "vibrant",
+    "survey": "neutral",
+    "schedule": "calm",
+    "child_growth": "warm",
+    "study": "vibrant",
+    "travel": "warm",
+    "generic": "calm",
+}
+
+
+def design_tokens_for_style(visual_style: str) -> dict[str, Any]:
+    """visual_style名(calm/warm/vibrant/neutral)から、Forge Language
+    design_tokens(色コード・角丸・余白)を組み立てる。未知のvisual_style
+    が来た場合は"calm"へ安全にフォールバックする(未知Widgetは安全に
+    Fallbackするという既存の設計原則を、Design Tokenの選択にも
+    適用したもの)。
+    """
+    preset = _DESIGN_TOKEN_PRESETS.get(visual_style, _DESIGN_TOKEN_PRESETS["calm"])
+    return {
+        "color_scheme": dict(preset["color_scheme"]),
+        "corner_radius": dict(preset["corner_radius"]),
+        "spacing_scale": dict(preset["spacing_scale"]),
+    }
+
+
+def design_tokens_for_domain(domain_category: str | None) -> dict[str, Any]:
+    """domain_category(文字列、`DomainCategory.value`相当)から、Forge
+    Language design_tokensを選ぶ。未知/Noneの場合は"calm"へ
+    フォールバックする(`design_tokens_for_style()`と同じ設計原則)。
+    """
+    style = _VISUAL_STYLE_BY_DOMAIN_CATEGORY.get(domain_category or "", "calm")
+    return design_tokens_for_style(style)
+
+
 @dataclass(frozen=True)
 class ForgeIRWidget:
     """Forge Widgetノード1件のIR表現。"""
@@ -309,7 +402,7 @@ class Compiler:
                 elements = list(example_items)
 
         if template == "form":
-            return self._compile_form_template(title, elements)
+            return self._compile_form_template(title, elements, domain_category=domain_category)
 
         items_state_id = "items"
         new_item_state_id = "new_item_text"
@@ -364,13 +457,32 @@ class Compiler:
         )
 
         return ForgeIRDocument(
-            version="1.0",
+            # FORGE-PRODUCT-VISION-002(2026-08-12)対応: design_tokensは
+            # v1.5以降の文書でのみ許可される(`schema_validator.py`の
+            # `field_not_allowed_in_version`)。以前のversion="1.0"は
+            # design_tokensを一切使わない前提の値だったため、
+            # design_tokensを常に出力するようになった今回、あわせて
+            # 引き上げる(使うWidget/Action/State型自体はv1.0の範囲内
+            # のまま、実際に変わるのはこのversion番号とdesign_tokensの
+            # 有無だけ)。
+            version="1.5",
             initial_screen_id=screen.id,
             screens=(screen,),
             app_title=title,
+            # FORGE-PRODUCT-VISION-002(2026-08-12)対応: 以前はこの経路
+            # (Checklist、legacy Compiler)だけがdesign_tokensを一切
+            # 出力せず、Curated Domain Library外の全Domain(shopping・
+            # survey・travel等、CEO実物監査で「アプリストアレベルの
+            # 品質にするには」と問われた対象の大半)がFlutter既定の
+            # Material配色のまま描画されていた。`design_tokens_for_
+            # domain()`(このモジュール冒頭で定義)を使い、Curated
+            # Domain Libraryと同じテーマ適用をこの経路にも広げる。
+            design_tokens=design_tokens_for_domain(domain_category),
         )
 
-    def _compile_form_template(self, title: str, questions: list[str]) -> ForgeIRDocument:
+    def _compile_form_template(
+        self, title: str, questions: list[str], *, domain_category: str | None = None
+    ) -> ForgeIRDocument:
         """FORGE-AI-QUALITY-001(2026-08-11)新設。`elements`(質問文の
         リスト)から、2画面(入力画面+送礼画面)のForm形状のForgeIR
         Documentを組み立てる。
@@ -453,11 +565,16 @@ class Compiler:
         )
 
         return ForgeIRDocument(
-            # form_template.py・templates.dartと同じ理由(v1.1専用Widget
-            # (form/checkbox/card/heading)+v1.2専用のvalidationプロパティ
-            # を使うため)でversion="1.2"とする。
-            version="1.2",
+            # 元々はform_template.py・templates.dartと同じ理由(v1.1専用
+            # Widget(form/checkbox/card/heading)+v1.2専用のvalidation
+            # プロパティを使うため)でversion="1.2"だった。
+            # FORGE-PRODUCT-VISION-002(2026-08-12)対応: design_tokensを
+            # 常に出力するようになったため、checklist経路と同じ理由で
+            # v1.5へ引き上げる(v1.2で使っていたWidget/Action/State型は
+            # すべてv1.5でも引き続き許可される、上位互換の範囲内)。
+            version="1.5",
             initial_screen_id=main_screen.id,
             screens=(main_screen, thanks_screen),
             app_title=title,
+            design_tokens=design_tokens_for_domain(domain_category),
         )
