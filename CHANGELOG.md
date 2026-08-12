@@ -2,6 +2,54 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task065 — Conversation Readiness / CONFIRM / 「はい、どうぞ」体験(2026-08-12、FORGE-CONVERSATION-READY-001)
+
+Conversation Engineを、単なるターン制会話から「情報充足度・不確実性・
+リスクを見てASK/BUILD/UPDATE/CONFIRMを決めるエンジン」へ進化させた。
+
+**中心的な修正**: ターン数による強制BUILDの廃止。以前は
+`force_ready = (not unknown_important) or (user_turn_count >= MAX_CONVERSATION_TURNS)`
+で、重要な未知が残っていても3ターンでBUILDへ倒れていた。加えて監査で、
+`if force_ready or llm_action in ("build","update")`という、より深刻な
+経路が見つかった——**LLMが"build"と言えば未知の有無に関わらず常に
+BUILD**していた。両方を廃止し、Readinessによる決定的な判断へ置き換えた
+(詳細はDECISIONS.md D66・D67、TECH_DEBT.md TD46)。
+
+**新設**:
+* `conversation_policy.py` — Readiness / Question / Confirm / Build失敗
+  分類の4つの決定的なPolicy。LLMを一切知らない純粋関数群。
+* `ConversationReadiness`(5値)・`UnknownItem`(impact + reason)・
+  `SafeAssumption`(value + reason)・`DecisionContext`(System Facts)。
+* `conversation_metrics.py` — 構造化メトリクス。生の会話本文は保存せず、
+  session_idもハッシュ化する。
+* CONFIRMの正式統合(`ConverseConfirmResponse`、会話の1ターンとして返す)。
+* BUILD失敗時のASKフォールバック(理解段階の失敗のみ。Validator/Repair
+  の失敗はユーザーの情報不足として見せない)。
+* 「はい、どうぞ」Moment(Frontend、合計1.5秒の3発話)。
+* `ConversationConfirm`(Flutter側のOutcome)。
+
+**発見・修正した実バグ2件**:
+1. `MockLLMAdapter`に`"boolean"`の分岐が無く、文字列`"mock_result"`へ
+   落ちていた。`bool()`変換が常にTrueになり、mock providerでの会話が
+   **毎回CONFIRMへ倒れる**症状としてテストが検出した(既知の`"number"`
+   バグと同種の見落とし)。
+2. `/converse`導入以降、Cognitive Pipelineへ渡るのが長い`build_brief`に
+   なったため、80文字超のタイトルが生成され、Validatorの`string_length`
+   違反でBUILDが失敗していた(Repairでは直らない)。実機Geminiで再現・
+   確認し、`clamp_title()`で全経路のタイトルを1〜80文字へ収めた。
+
+**テスト**: 新規Python 84件(`test_conversation_policy.py` 40件・
+`test_conversation_golden.py` 20件・`test_conversation_readiness_http.py`
+12件・engine拡張ほか)。Conversation Golden Testは、最終JSONではなく
+**会話そのもの**(質問回数・聞くべきことを聞いたか・繰り返し質問・
+CONFIRMの正しさ)を評価する。forge_ai 495件・Backend 733件・
+Flutter 451件、全green。
+
+**ドキュメント**: docs/AI.md 6章(Readiness/Question Policy/Safe
+Assumption/Build Failure Fallback)、docs/ARCHITECTURE.md 7章
+(Conversation層の責務境界)、docs/ROADMAP.md Phase 7、
+DECISIONS.md D66-D68、STATUS.md(新設)。
+
 ## Task064 — 作れるアプリの自由度: Entity定義をAIが合成できるようにした(2026-08-12、CEO「つくれるアプリの自由度をあげたい。トップレベルまで」)
 
 **天井の正体**: `IRGenerator`は、記録するデータの型(Entity・Field・

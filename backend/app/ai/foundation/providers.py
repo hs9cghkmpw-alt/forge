@@ -310,6 +310,24 @@ class MockLLMAdapter:
             # (uvicorn+mock provider)で発見した。
             return 0.0
 
+        if field_type == "boolean":
+            # FORGE-CONVERSATION-READY-001(2026-08-12)で発見した実バグの
+            # 修正。上の"number"と**同じ種類**の見落としである: JSON
+            # Schemaの"boolean"を判定する分岐が無く、下のデフォルト分岐
+            # (文字列"mock_result"を返す)へ落ちていた。呼び出し側が
+            # `bool(...)`で変換すると、**空でない文字列は常にTrue**に
+            # なるため、「Mockでは常にフラグが立つ」という危険な挙動に
+            # なっていた——実際、`ConversationEngine`の
+            # `external_effect`/`destructive`が常にTrueになり、mock
+            # providerでの会話が**毎回CONFIRMへ倒れる**という形で
+            # テストが検出した。
+            #
+            # 既定を`False`にしているのは、この2フィールドに限らず
+            # 一般に「Mockは特別な状態を主張しない」のが安全側であるため
+            # (フラグが立つ側を既定にすると、Mock利用時だけ通らない経路が
+            # 生まれる)。
+            return False
+
         if field_type == "object":
             return {}
 

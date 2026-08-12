@@ -97,12 +97,67 @@ void main() {
     for (var i = 0; i < 4; i++) {
       await tester.pump();
     }
+    // 「はい、どうぞ」Moment(指示書7章)の分を進める。
+    await tester.pump(ConversationFlowScreen.handoffMomentDuration);
+    await tester.pump();
 
     expect(find.byType(GeneratedAppHostShell), findsOneWidget);
     expect(repository.capturedMessages, [
       '買い物行くと、いつも何買うか忘れるんだよね',
       'いや、自分だけでいいかな',
     ]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('はい、どうぞMoment: BUILD後、Toolへ切り替わる前に会話がつながる文言が出る', (tester) async {
+    final repository = _FakeConversationRepository([
+      ConversationBuilt(buildBrief: '買い物リストを作る', result: _buildResult('買い物リスト')),
+    ]);
+
+    await tester.pumpWidget(await _wrap(
+      const ConversationFlowScreen(initialMessage: '買い物で忘れる'), repository,
+    ));
+    await tester.pump();
+    for (var i = 0; i < 4; i++) {
+      await tester.pump();
+    }
+
+    // 指示書7章: 「うん、だいたい分かった。」→ 道具の名前を含む一言 →
+    // 「はい、どうぞ。」の順で、会話からToolへ意味的につながる。
+    expect(find.text('うん、だいたい分かった。'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('「買い物リスト」があると楽そう。'), findsOneWidget,
+        reason: '生成された道具の名前が文言に入っていること(汎用文言にしない)');
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('はい、どうぞ。'), findsOneWidget);
+
+    // その後、Toolへ切り替わる。
+    await tester.pump(ConversationFlowScreen.handoffMomentDuration);
+    await tester.pump();
+    expect(find.byType(GeneratedAppHostShell), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('CONFIRM: 外部作用を伴う依頼は、確認が会話の1ターンとして表示される', (tester) async {
+    final repository = _FakeConversationRepository([
+      const ConversationConfirm(
+        sessionId: 'sess-1',
+        question: '作ったリストをご家族へ送ってよいですか？',
+        reason: 'Forgeの外(他の人・外部サービス)へ影響が及ぶため',
+        needModel: NeedModelSummary(problem: '家族へ共有したい'),
+      ),
+    ]);
+
+    await tester.pumpWidget(await _wrap(
+      const ConversationFlowScreen(initialMessage: 'これを家族にも送って'), repository,
+    ));
+    await tester.pump();
+
+    // 専用の確認画面へ遷移せず、会話の中に確認が出る(指示書4章)。
+    expect(find.text('作ったリストをご家族へ送ってよいですか？'), findsOneWidget);
+    expect(find.byType(GeneratedAppHostShell), findsNothing);
+    // 返信できる状態のまま(セッションが続いている)。
+    expect(find.byType(TextField), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

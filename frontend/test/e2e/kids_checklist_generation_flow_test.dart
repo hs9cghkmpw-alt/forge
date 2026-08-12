@@ -47,6 +47,7 @@ import 'package:forge_app/features/app_generation/data/repositories/mock_app_gen
 import 'package:forge_app/features/app_generation/data/repositories/mock_conversation_repository.dart';
 import 'package:forge_app/features/app_generation/presentation/providers/app_generation_provider.dart';
 import 'package:forge_app/features/app_generation/presentation/providers/conversation_provider.dart';
+import 'package:forge_app/features/app_generation/presentation/screens/conversation_flow_screen.dart';
 import 'package:forge_app/features/app_generation/presentation/screens/home_screen.dart';
 import 'package:forge_app/features/app_library/presentation/providers/app_library_provider.dart';
 import 'package:forge_app/main.dart';
@@ -105,6 +106,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 700));
       await tester.pump(); // FutureProviderの結果反映
       await tester.pump(); // _finishBuild()内のsaveApp()/addHistoryEntry()(非同期)を進める
+      // 5. 「はい、どうぞ」Moment(FORGE-CONVERSATION-READY-001、指示書7章)。
+      //    BUILD後、Toolへ切り替わる前に短い発話が3つ入るため、その分を
+      //    明示的に進める(長さは`handoffMomentDuration`が単一の情報源)。
+      await tester.pump(ConversationFlowScreen.handoffMomentDuration);
       await tester.pump(); // Navigator.pushReplacement()の反映
       await tester.pumpAndSettle();
 

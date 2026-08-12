@@ -66,6 +66,72 @@ void main() {
       expect(ask.needModel.knownFacts, ['店で消す']);
     });
 
+    test('confirmレスポンスをConversationConfirmへ変換する', () async {
+      // FORGE-CONVERSATION-READY-001(2026-08-12、指示書4章)。
+      final dio = _buildDio([
+        (options, handler) => _resolveJson(options, handler, 200, {
+              'version': '1.0',
+              'status': 'confirm',
+              'session_id': 'sess-9',
+              'question': 'ご家族へ送ってよいですか？',
+              'reason': 'Forgeの外(他の人・外部サービス)へ影響が及ぶため',
+              'readiness': 'needs_confirmation',
+              'need_model': {
+                'problem': '家族へ共有したい',
+                'known': [],
+                'unknown_important': [],
+                'safe_assumptions': [],
+                'confidence': 0.8,
+                'unknowns': [],
+                'assumptions': [],
+              },
+            }),
+      ]);
+      final repository = ApiConversationRepository(AiConversationApi(dio));
+
+      final outcome = await repository.converse(message: 'これを家族にも送って');
+
+      expect(outcome, isA<ConversationConfirm>());
+      final confirm = outcome as ConversationConfirm;
+      expect(confirm.sessionId, 'sess-9');
+      expect(confirm.question, 'ご家族へ送ってよいですか？');
+      expect(confirm.reason, contains('外'));
+    });
+
+    test('need_modelの新しいunknowns/assumptionsがあっても既存パースを壊さない', () async {
+      // 後方互換の確認: `unknown_important`/`safe_assumptions`(文字列
+      // リスト)は従来どおり読めること。
+      final dio = _buildDio([
+        (options, handler) => _resolveJson(options, handler, 200, {
+              'version': '1.0',
+              'status': 'ask',
+              'session_id': 'sess-1',
+              'question': '家族も使いますか?',
+              'readiness': 'needs_question',
+              'need_model': {
+                'problem': '買い物で忘れる',
+                'known': ['店で消す'],
+                'unknown_important': ['shared_usage'],
+                'safe_assumptions': ['allow_delete=true'],
+                'confidence': 0.5,
+                'unknowns': [
+                  {'key': 'shared_usage', 'impact': 'high', 'reason': '権限が変わる', 'status': 'unknown'},
+                ],
+                'assumptions': [
+                  {'key': 'allow_delete', 'value': 'true', 'reason': '元に戻せる操作のため'},
+                ],
+              },
+            }),
+      ]);
+      final repository = ApiConversationRepository(AiConversationApi(dio));
+
+      final outcome = await repository.converse(message: '買い物で忘れる');
+
+      final ask = outcome as ConversationAsk;
+      expect(ask.needModel.knownFacts, ['店で消す']);
+      expect(ask.needModel.safeAssumptions, ['allow_delete=true']);
+    });
+
     test('buildレスポンスをConversationBuiltへ変換する', () async {
       final dio = _buildDio([
         (options, handler) => _resolveJson(options, handler, 200, {

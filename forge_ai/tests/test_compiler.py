@@ -7,7 +7,7 @@ import os
 import sys
 import unittest
 
-from forge_ai.core.compiler import Compiler, ForgeIRWidget
+from forge_ai.core.compiler import MAX_TITLE_LENGTH, Compiler, ForgeIRWidget, clamp_title
 from forge_ai.core.domain_model import DomainCategory, DomainRegistry
 from forge_ai.core.intent_model import IntentBuilder
 from forge_ai.core.meaning_model import MeaningExtractor
@@ -448,3 +448,57 @@ class TestCompilerFormTemplate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestClampTitle(unittest.TestCase):
+    """FORGE-CONVERSATION-READY-001(2026-08-12)で発見した実バグの
+    回帰テスト。
+
+    `/converse`導入後、Cognitive Pipelineへ渡るのはユーザーの短い一言
+    ではなく「会話全体を要約した自己完結型のbuild_brief」になったため、
+    80文字を超えるタイトルが現実に生成されるようになった。Validatorは
+    これを`string_length`のblockingエラーとするが、**Repairでは直らない**
+    ため、利用者には「Repair(2回)後もValidatorに合格しませんでした」と
+    しか見えていなかった(実機Geminiで再現・確認した)。
+    """
+
+    def test_a_long_brief_style_title_is_clamped_to_the_first_sentence(self) -> None:
+        long_title = (
+            "ユーザーが自分専用で読んだ本の感想を記録・管理するための読書ノートアプリ。"
+            "入力および管理機能として、本のタイトル、著者名、読了日、5段階の星評価、"
+            "感想テキストフィールドを備え、記録した本の一覧表示・詳細閲覧ができる構造とする。"
+        )
+        self.assertGreater(len(long_title), MAX_TITLE_LENGTH)
+        clamped = clamp_title(long_title)
+        self.assertEqual(clamped, "ユーザーが自分専用で読んだ本の感想を記録・管理するための読書ノートアプリ")
+        self.assertLessEqual(len(clamped), MAX_TITLE_LENGTH)
+
+    def test_a_long_title_without_any_sentence_break_is_hard_truncated(self) -> None:
+        clamped = clamp_title("あ" * 200)
+        self.assertLessEqual(len(clamped), MAX_TITLE_LENGTH)
+        self.assertTrue(clamped.endswith("…"))
+
+    def test_a_long_first_sentence_is_still_clamped(self) -> None:
+        """最初の句点までが既に長すぎる場合も、必ず上限内へ収める。"""
+        clamped = clamp_title("あ" * 200 + "。短い続き")
+        self.assertLessEqual(len(clamped), MAX_TITLE_LENGTH)
+
+    def test_short_titles_are_left_untouched(self) -> None:
+        self.assertEqual(clamp_title("買い物リスト"), "買い物リスト")
+
+    def test_empty_and_none_titles_fall_back_instead_of_producing_an_invalid_document(self) -> None:
+        """Validatorは1文字以上を要求するため、空文字は許されない。"""
+        for raw in ("", "   ", None):
+            with self.subTest(raw=raw):
+                self.assertTrue(clamp_title(raw))
+
+    def test_compiler_output_title_always_satisfies_the_validator_limit(self) -> None:
+        long_plan = ApplicationPlan(
+            title="あ" * 300,
+            screens=(ScreenPlan(name="main", purpose="x", key_elements=("item",)),),
+            data_entities=("item",), primary_flow=(),
+        )
+        ir = Compiler(MockProvider()).compile(long_plan)
+        self.assertLessEqual(len(ir.app_title or ""), MAX_TITLE_LENGTH)
+        for screen in ir.screens:
+            self.assertLessEqual(len(screen.title), MAX_TITLE_LENGTH)

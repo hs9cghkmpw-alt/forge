@@ -164,6 +164,49 @@ _VISUAL_STYLE_BY_DOMAIN_CATEGORY: dict[str, str] = {
 }
 
 
+# Forge Language の `app.title`・`screen.title` の文字数上限
+# (`backend/app/ai/validators/schema_validator.py`の`string_length`
+# ルールと一致させている)。forge_ai/はbackend/をimportしないため、
+# 既存の他の語彙・上限と同じく**手動同期**である(モジュール冒頭の
+# 説明を参照)。
+MAX_TITLE_LENGTH = 80
+
+_FALLBACK_TITLE = "新しいアプリ"
+
+
+def clamp_title(raw: str | None) -> str:
+    """タイトルをForge Languageの制約(1〜80文字)へ必ず収める。
+
+    **FORGE-CONVERSATION-READY-001(2026-08-12)で追加した実バグの修正**:
+    `/converse`が導入されて以降、Cognitive Pipelineへ渡るのは
+    ユーザーの短い一言ではなく、**会話全体を要約した自己完結型の
+    `build_brief`(数十〜百数十文字の説明文)**になった。`ApplicationPlan.
+    title`はこの入力から導出されるため、80文字を超えるタイトルが
+    現実に生成されるようになり、Validatorが`string_length`違反として
+    blockingエラーを出す。しかもこれはRepairでは直らない種類の
+    エラーであるため、「Repair(2回)後もValidatorに合格しませんでした」
+    という失敗として利用者に見えていた(実機Geminiで再現・確認済み)。
+
+    切り詰め方は、単なる先頭80文字ではなく、**最初の句点まで**を
+    優先する(「〜アプリ。入力および管理機能として、〜」のような
+    説明文から、意味の通る短いタイトルを取り出すため)。
+    """
+    text = (raw or "").strip()
+    if not text:
+        return _FALLBACK_TITLE
+
+    # 最初の句点までが妥当な長さなら、それをタイトルとする。
+    head = text.split("。", 1)[0].strip()
+    if head and len(head) <= MAX_TITLE_LENGTH:
+        return head
+
+    if len(text) <= MAX_TITLE_LENGTH:
+        return text
+    # 末尾を「…」にして、切り詰めたことが分かるようにする
+    # (「…」も1文字として上限に数える)。
+    return text[: MAX_TITLE_LENGTH - 1].rstrip() + "…"
+
+
 def design_tokens_for_style(visual_style: str) -> dict[str, Any]:
     """visual_style名(calm/warm/vibrant/neutral)から、Forge Language
     design_tokens(色コード・角丸・余白)を組み立てる。未知のvisual_style
@@ -368,7 +411,9 @@ class Compiler:
             }
         )
         response = self._provider.complete(prompt)
-        title = str(response.structured.get("title") or plan.title or "新しいアプリ")
+        # `clamp_title()`でForge Languageの1〜80文字制約へ必ず収める
+        # (会話由来の長いbuild_briefでタイトルが上限超過する実バグの修正)。
+        title = clamp_title(str(response.structured.get("title") or plan.title or ""))
 
         primary_screen = plan.screens[0] if plan.screens else None
         elements = list(primary_screen.key_elements) if primary_screen else list(plan.data_entities)

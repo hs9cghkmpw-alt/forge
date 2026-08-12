@@ -42,6 +42,13 @@ class ConversationFlowScreen extends ConsumerStatefulWidget {
 
   bool get isUpdateMode => currentDocument != null;
 
+  /// 「はい、どうぞ」Moment(指示書7章)の合計所要時間。
+  ///
+  /// 公開しているのはテストのためである——Widget Testがこの演出を
+  /// 待つ際、マジックナンバー(「1500ms待つ」)を各テストへ散らすと、
+  /// 演出の長さを変えた瞬間に複数のテストが理由不明で落ちる。
+  static const handoffMomentDuration = Duration(milliseconds: 1500);
+
   @override
   ConsumerState<ConversationFlowScreen> createState() => _ConversationFlowScreenState();
 }
@@ -182,6 +189,15 @@ class _ConversationFlowScreenState extends ConsumerState<ConversationFlowScreen>
           _awaitingReply = true;
         });
         _scrollToBottomSoon();
+      case ConversationConfirm(:final sessionId, :final question):
+        // 指示書4章: 確認は専用画面ではなく、会話の1ターンとして出す。
+        // ユーザーの返事は通常どおり`/converse`へ戻る。
+        setState(() {
+          _sessionId = sessionId;
+          _transcript.add(_ChatEntry(isUser: false, text: question));
+          _awaitingReply = true;
+        });
+        _scrollToBottomSoon();
       case ConversationBuilt(:final result):
         _finishBuild(result);
       case ConversationUpdated(:final forgeDocument):
@@ -221,6 +237,38 @@ class _ConversationFlowScreenState extends ConsumerState<ConversationFlowScreen>
     }
   }
 
+  /// 「はい、どうぞ」Moment(FORGE-CONVERSATION-READY-001、2026-08-12、
+  /// 指示書7章)。
+  ///
+  /// チャットから使えるものへ、意味的につながったまま切り替わる体験を
+  /// つくる。単なる画面遷移にしないが、**アニメーション過多にもしない**
+  /// ——足すのは3つの短い発話だけで、合計1.5秒に収める(指示書7章
+  /// 「長い待機画面も避ける」)。生成そのものの待ち時間は、既存の
+  /// `_ThinkingBubble`が担っている。
+  ///
+  /// 「こんなのがあると楽そう。」に**実際に作られた道具の名前**を
+  /// 差し込むのが要点である(指示書7章「会話からToolへ意味的に
+  /// つながる文言」)——ここが汎用文言だと、ただの装飾になる。
+  static const _handoffBeat = Duration(milliseconds: 550);
+  static const _handoffFinalBeat = Duration(milliseconds: 400);
+
+  Future<void> _playHandoffMoment(String title) async {
+    void say(String text) {
+      if (!mounted) return;
+      setState(() => _transcript.add(_ChatEntry(isUser: false, text: text)));
+      _scrollToBottomSoon();
+    }
+
+    say('うん、だいたい分かった。');
+    await Future<void>.delayed(_handoffBeat);
+    if (!mounted) return;
+    say('「$title」があると楽そう。');
+    await Future<void>.delayed(_handoffBeat);
+    if (!mounted) return;
+    say('はい、どうぞ。');
+    await Future<void>.delayed(_handoffFinalBeat);
+  }
+
   Future<void> _finishBuild(GenerationSuccess result) async {
     if (_savedForCurrentResult) return;
     _savedForCurrentResult = true;
@@ -251,6 +299,10 @@ class _ConversationFlowScreenState extends ConsumerState<ConversationFlowScreen>
     ref.invalidate(savedAppsProvider);
     ref.invalidate(generationHistoryProvider);
 
+    if (!mounted) return;
+    // 指示書7章「はい、どうぞ」Moment。保存はここまでで完了しており、
+    // ここから先は演出だけなので、途中で失敗しても道具は失われない。
+    await _playHandoffMoment(title);
     if (!mounted) return;
     Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
       builder: (_) => Scaffold(

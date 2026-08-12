@@ -40,6 +40,29 @@ class TestMockLLMAdapterFieldSynthesis(unittest.TestCase):
         result = self.adapter.complete_structured("買い物 追加する", schema)
         self.assertIsInstance(result["tags"], list)
 
+    def test_boolean_type_returns_a_bool_not_a_truthy_string(self) -> None:
+        """FORGE-CONVERSATION-READY-001(2026-08-12)で発見した実バグの
+        回帰テスト。"boolean"の分岐が無く文字列"mock_result"へ落ちて
+        いたため、`bool(...)`変換が**常にTrue**になっていた。"""
+        schema = {"type": "object", "properties": {"external_effect": {"type": "boolean"}}}
+        result = self.adapter.complete_structured("買い物で忘れる", schema)
+        self.assertIsInstance(result["external_effect"], bool)
+        self.assertFalse(result["external_effect"])
+
+    def test_boolean_risk_flags_do_not_force_every_mock_conversation_to_confirm(self) -> None:
+        """上のバグが実際に引き起こしていた症状の再現テスト:
+        `ConversationEngine`のrisk flagが常に立ち、mock providerでの
+        会話が毎回CONFIRMへ倒れていた。"""
+        schema = {
+            "type": "object",
+            "properties": {
+                "external_effect": {"type": "boolean"},
+                "destructive": {"type": "boolean"},
+            },
+        }
+        result = self.adapter.complete_structured("買い物で何を買うか忘れる", schema)
+        self.assertFalse(bool(result["external_effect"]) or bool(result["destructive"]))
+
     def test_number_field_can_be_used_in_float_conversion_without_crashing(self) -> None:
         """`ConversationEngine.step()`の`float(raw.get("confidence", 0.0)
         or 0.0)`と同じ変換をここでも直接確認する(実際のクラッシュ経路の

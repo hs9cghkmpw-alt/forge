@@ -23,6 +23,31 @@ class ConversationAsk extends ConversationOutcome {
   const ConversationAsk({required this.sessionId, required this.question, required this.needModel});
 }
 
+/// Forgeが実行前に確認を求めている(FORGE-CONVERSATION-READY-001、
+/// 2026-08-12、指示書4章)。
+///
+/// 外部送信・共有・公開・削除・金銭・権限変更など、**Forgeの外へ影響が
+/// 及ぶ、または元に戻せない**操作を含む依頼に対してのみ返る。専用の
+/// 確認画面へ遷移するのではなく、ASKと同じく会話の1ターンとして扱う
+/// (指示書4章「Confirm Screenを復活させるのではなく、必要な時だけ
+/// 会話の中で確認する」)。
+class ConversationConfirm extends ConversationOutcome {
+  final String sessionId;
+  final String question;
+
+  /// なぜ確認が必要なのか(「外部へ影響が及ぶため」等)。
+  final String reason;
+
+  final NeedModelSummary needModel;
+
+  const ConversationConfirm({
+    required this.sessionId,
+    required this.question,
+    required this.reason,
+    required this.needModel,
+  });
+}
+
 /// 新しいツールが生成された(Space/Formingの終着点、「はい、どうぞ」)。
 class ConversationBuilt extends ConversationOutcome {
   final String buildBrief;

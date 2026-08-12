@@ -242,12 +242,38 @@ class ConverseRequest(BaseModel):
     )
 
 
+class UnknownItemDTO(BaseModel):
+    """FORGE-CONVERSATION-READY-001(2026-08-12)新設(指示書6章)。
+    未知情報に「なぜ重要なのか」を持たせる。"""
+
+    key: str
+    impact: Literal["blocking", "high", "low", "cosmetic"]
+    reason: str
+    status: Literal["unknown", "resolved"] = "unknown"
+
+
+class SafeAssumptionDTO(BaseModel):
+    """FORGE-CONVERSATION-READY-001(2026-08-12)新設(指示書6章)。
+    Forgeが聞かずに決めたことと、その理由。"""
+
+    key: str
+    value: str
+    reason: str
+
+
 class NeedModelDTO(BaseModel):
+    """FORGE-CONVERSATION-READY-001(2026-08-12)で`unknowns`/`assumptions`
+    を**追加**した。既存の`unknown_important`/`safe_assumptions`
+    (文字列リスト)は、Flutter側の`NeedModelSummary`が既にパースして
+    いるため、型・キー名ともに一切変更していない(後方互換)。"""
+
     problem: str
     known: list[str] = Field(default_factory=list)
     unknown_important: list[str] = Field(default_factory=list)
     safe_assumptions: list[str] = Field(default_factory=list)
     confidence: float = 0.0
+    unknowns: list[UnknownItemDTO] = Field(default_factory=list)
+    assumptions: list[SafeAssumptionDTO] = Field(default_factory=list)
 
 
 class ConverseAskResponse(BaseModel):
@@ -256,6 +282,32 @@ class ConverseAskResponse(BaseModel):
     session_id: str
     question: str
     need_model: NeedModelDTO
+    readiness: str = "needs_question"
+    """FORGE-CONVERSATION-READY-001(2026-08-12)新設。この質問に至った
+    Readiness(`needs_question` / `insufficient_information`)。Metrics・
+    Golden Test・Debugのために返す(指示書2章)。"""
+
+
+class ConverseConfirmResponse(BaseModel):
+    """FORGE-CONVERSATION-READY-001(2026-08-12)新設(指示書4章)。
+
+    外部作用・不可逆操作を含む依頼に対し、**実行する前に**会話の中で
+    確認する。専用のConfirm Screenを復活させるのではなく、ASKと同じ
+    「会話の1ターン」として返す(指示書4章)——Flutter側も、質問と
+    同じ吹き出しとして自然に表示できる。
+    """
+
+    version: Literal["1.0"] = "1.0"
+    status: Literal["confirm"] = "confirm"
+    session_id: str
+    question: str
+    """ユーザーへ見せる確認文。"""
+
+    reason: str
+    """なぜ確認が必要なのか(外部送信・不可逆操作など)。"""
+
+    need_model: NeedModelDTO
+    readiness: str = "needs_confirmation"
 
 
 class ConverseBuildResponse(BaseModel):
@@ -270,6 +322,10 @@ class ConverseBuildResponse(BaseModel):
     need_model: NeedModelDTO
     build_brief: str
     result: GenerateResultDTO
+    readiness: str = "build_ready"
+    """FORGE-CONVERSATION-READY-001(2026-08-12)新設。どのReadinessで
+    作ることにしたか(`build_ready` / `safe_to_assume`)。Metrics・
+    Golden Test・Debugのために返す(指示書2章)。"""
 
 
 # ---------------------------------------------------------------------------

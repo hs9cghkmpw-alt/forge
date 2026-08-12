@@ -138,6 +138,7 @@ from forge_ai.core.compiler import (
     ForgeIRScreen,
     ForgeIRStateValue,
     ForgeIRWidget,
+    clamp_title,
     design_tokens_for_style,
 )
 from forge_ai.core.ir.ir_types import Entity, FieldType, ForgeIR, ViewKind
@@ -210,7 +211,11 @@ class ForgeLanguageCompiler:
         )
 
         return self._compile_single_screen(
-            entity, title, include_crud=edit_form_view is not None, domain_category=domain_category
+            # `clamp_title()`でForge Languageの1〜80文字制約へ必ず収める
+            # (`compiler.py`参照。会話由来の長いbuild_briefで、app.title・
+            # screen.titleが上限超過してValidatorに落ちる実バグの修正)。
+            entity, clamp_title(title),
+            include_crud=edit_form_view is not None, domain_category=domain_category,
         )
 
     def _compile_single_screen(

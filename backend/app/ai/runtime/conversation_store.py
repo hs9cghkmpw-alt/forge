@@ -18,9 +18,25 @@ from threading import Lock
 
 from app.ai.runtime.conversation_types import ConversationSession, ConversationTurn
 
-# design doc B.3「ターン数が一定以上に達したら強制的にBUILDへ倒す」の
-# 上限。`MAX_CONFIRMATION_ROUNDS`(confirmation_store.py)と同じ値を
-# 踏襲した(無限に聞き続けない、という同じ思想)。
+# **FORGE-CONVERSATION-READY-001(2026-08-12)で意味が変わった定数**。
+#
+# 旧: 「ターン数がこれに達したら**強制的にBUILDへ倒す**」上限。
+# 新: 「ターン数がこれに達したら**質問戦略を変える**」閾値。
+#
+# 変更理由(指示書1章): 「質問しすぎない」と「分からなくても作る」は
+# 別である。旧実装では、解を左右する重要な未知が残っていても、3ターン
+# 経過しただけでBUILDへ倒していた——これは製品の核心である「どこまで
+# 聞いたら作るのか」の判断を、単なるカウンタへ委ねていたことになる。
+#
+# この閾値に達したときに変わるのは、以下の**質問の仕方**だけである
+# (`conversation_policy._askable_impacts()`・
+# `conversation_engine._NARROWED_QUESTION_GUIDANCE`参照):
+#   * HIGH(構造は変わるが、答えなくても作れる)は質問をやめ、
+#     理由付きのSafe Assumptionへ回す。
+#   * 残る質問は自由回答ではなく短い二択にする。
+# 一方、BLOCKING(これが分からないと何を作るか決まらない)は、この
+# 閾値に達しても質問し続ける。BUILDの可否はあくまで
+# `ConversationReadiness`が決める(指示書16章の完了条件)。
 MAX_CONVERSATION_TURNS = 3
 
 _TTL_SECONDS = 60 * 30  # 30分。confirmation_store.pyと同じ。
@@ -72,6 +88,16 @@ class ConversationStore:
         session = self.get(session_id)
         updated = session.with_turn(turn)
         self.save(updated)
+        return updated
+
+    def mark_question_asked(self, session_id: str, key: str) -> ConversationSession:
+        """FORGE-CONVERSATION-READY-001(2026-08-12)新設。今聞いた未知の
+        keyを記録し、同じUnknownを繰り返し質問しないようにする
+        (指示書5章)。`key`が空・既存の場合は何もしない。"""
+        session = self.get(session_id)
+        updated = session.with_asked_key(key)
+        if updated is not session:
+            self.save(updated)
         return updated
 
     def size(self) -> int:

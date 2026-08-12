@@ -42,6 +42,8 @@ class ApiConversationRepository implements ConversationRepository {
     switch (outcome) {
       case ConversationAsk():
         ForgeLogger.success(_scope, 'ask received');
+      case ConversationConfirm():
+        ForgeLogger.success(_scope, 'confirm received');
       case ConversationBuilt():
         ForgeLogger.success(_scope, 'build received');
       case ConversationUpdated():
@@ -81,6 +83,8 @@ class ApiConversationRepository implements ConversationRepository {
     switch (status) {
       case 'ask':
         return _parseAsk(body);
+      case 'confirm':
+        return _parseConfirm(body);
       case 'build':
         return _parseBuild(body);
       case 'update':
@@ -108,6 +112,26 @@ class ApiConversationRepository implements ConversationRepository {
       );
     }
     return ConversationAsk(sessionId: sessionId, question: question, needModel: _parseNeedModel(body));
+  }
+
+  /// FORGE-CONVERSATION-READY-001(2026-08-12)。`ask`と同じ形
+  /// (session_id + question)に、なぜ確認が要るのかを表す`reason`が
+  /// 加わる。
+  ConversationConfirm _parseConfirm(Map<String, dynamic> body) {
+    final sessionId = body['session_id'] as String?;
+    final question = body['question'] as String?;
+    if (sessionId == null || question == null) {
+      throw const AppGenerationException(
+        code: 'INVALID_RESPONSE',
+        message: 'サーバーからの応答を解釈できませんでした。',
+      );
+    }
+    return ConversationConfirm(
+      sessionId: sessionId,
+      question: question,
+      reason: body['reason'] as String? ?? '',
+      needModel: _parseNeedModel(body),
+    );
   }
 
   ConversationBuilt _parseBuild(Map<String, dynamic> body) {

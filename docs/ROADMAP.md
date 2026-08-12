@@ -81,3 +81,29 @@ Task003（Prototype統合・最初の縦の一本）で何が「書かれた」/
 `docs/tasks/task003.md` と `docs/DECISIONS.md` を参照。本ファイルのチェックは、
 Claudeが実際に実行して確認できたものだけに`[x]`を付けている
 （コードが存在するが未実行のものは`[ ]`のまま注記で状況を残した）。
+
+## Phase 7 — Conversation Readiness(FORGE-CONVERSATION-READY-001、2026-08-12)
+
+「困りごとを話す → 必要最小限だけ質問 → 自然にToolが現れる →
+会話で育てる」を一本通すための、Conversation Engineの意思決定強化。
+
+**完了**:
+
+* `MAX_CONVERSATION_TURNS`による強制BUILDの廃止(ターン上限は質問戦略の
+  閾値へ変更)。
+* `ConversationReadiness`(5値)とPolicy層(`conversation_policy.py`)の新設。
+* Question Policy(blocking / high / low / cosmeticのimpact分類、
+  繰り返し質問の抑止)。
+* CONFIRMのConversation Policyへの正式統合(外部作用・不可逆操作)。
+* Unknown / Assumptionへの`reason`付与。
+* BUILD失敗時のASKフォールバック(理解段階の失敗のみ)。
+* 「はい、どうぞ」Moment(Frontend)。
+* Conversation Golden Test / Conversation Metrics。
+
+**未着手(次段階)**:
+
+* Voice(STT/TTS)のAdapter接続。Product Logic側は完成しており、
+  Voice未実装でも成立する状態にしてある(指示書11章の優先順位に従い、
+  意図的に後回しにした)。
+* Metricsの外部分析基盤への送出(現状はプロセス内メモリのみ)。
+* Readiness判定の実データによる調整(現在は決定的なルールベース)。

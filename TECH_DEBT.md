@@ -2284,3 +2284,98 @@ Curated定義を比較して依頼文との適合度が高い方を選ぶ、と�
 * TD39(todo/reading_logがDomainCategory enumに存在せず、分類から
   到達不可能)は未解消のまま。ただし影響は小さくなった——到達
   できなくても、合成経路が同等のアプリを生成するようになったため。
+
+## TD46. Conversation Engineが「分からなくても作る」設計になっていた → **解消(2026-08-12、FORGE-CONVERSATION-READY-001)**
+
+CEO指示書「Conversation Readiness / CONFIRM / 『はい、どうぞ』体験 改修」
+への対応。監査で見つけた問題は7件あり、いずれも「どこまで聞いたら
+作るのか」という製品の核心の判断が弱いことに起因していた。
+
+**発見した問題と対応**:
+
+1. **ターン数による強制BUILD**(指示書1章が名指しした問題)。
+   `force_ready = (not unknown_important) or (user_turn_count >= MAX_CONVERSATION_TURNS)`。
+   → ターン上限をBUILD条件から外し、**質問戦略を変える閾値**へ変更。
+2. **LLMの`next_action="build"`が無条件でBUILDを起こしていた**
+   (監査で発見した、1より深刻な経路)。
+   `if force_ready or llm_action in ("build","update")`という条件により、
+   未知の有無に関わらずLLMの一言でBUILDしていた。指示書3章
+   (LLM Proposal < System Facts)に真っ向から反する。
+   → Readinessによる決定的判断へ置き換え。
+3. **空の質問文がBUILDへ倒れていた**。`ask`なのに`question`が空だと
+   BUILDしていた。これも「分からなくても作る」である。
+   → 未知のkeyから質問文を組み立てて、必ず聞く。
+4. **CONFIRMが型としてしか存在しなかった**(発火経路ゼロ)。
+   → `requires_confirmation()`を新設し、会話の1ターンとして返す。
+5. **未知・仮定に理由が無かった**(単なる文字列のリスト)。
+   → `UnknownItem`(key/impact/reason/status)・`SafeAssumption`
+   (key/value/reason)へ格上げ。
+6. **繰り返し質問の抑止が無かった**。
+   → `ConversationSession.asked_question_keys`とPolicy側のフィルタ、
+   さらにプロンプトへの明示の三重で抑止。
+7. **BUILD失敗が「作れませんでした」で終わっていた**。
+   → `classify_build_failure()`で、理解段階の失敗のみASKへ戻す。
+
+**設計上の判断(なぜ1モジュールにまとめたか)**: 指示書12章は
+`readiness_policy`/`question_policy`/`confirmation_policy`への分離を
+許可しつつ「空の抽象化は作らない」とも指示していた。3つはいずれも
+同じ入力(NeedModel + DecisionContext)を共有し、互いに参照し合う
+(Readiness判定がConfirm判定を呼ぶ)。ファイルを3つに割ると、共有型と
+定数を行き来するだけの薄いモジュールが増えるため、
+`conversation_policy.py`1つの中でセクションを明確に分ける形にした。
+
+**MAX_CONVERSATION_TURNSの新しい意味**: 到達時に変わるのは質問の
+仕方だけである——`high`はSafe Assumptionへ回し、残る質問は二択にする。
+`blocking`は到達後も質問し続ける。「質問しすぎない」と「分からなくても
+作る」は別の問題であり、前者はQuestion Policyで、後者はReadinessで解く。
+
+**BLOCKINGが解消しない場合に無限ループしないのか**: `blocking`が
+質問済みでも未解消なら`INSUFFICIENT_INFORMATION`となり、BUILDはしないが
+質問の仕方は変わる(二択化)。指示書16章の完了条件を優先し、
+「ターン数だけを理由にBUILDする」ことは一切しない設計とした。
+利用者が答えられない場合は会話を離脱できる(既存のセッションTTLで
+30分後に破棄される)。
+
+**ライブ確認(実機Gemini)**:
+* 「買い物リストを作って、できたら家族にも共有したい」→ `status: confirm`
+  (reason: 「Forgeの外(他の人・外部サービス)へ影響が及ぶため」)。
+* 「買い物行くと、いつも何買うか忘れるんだよね」→ `status: ask`。
+  Geminiが`share_type`をhigh(理由: 「一人で使うか家族・同居人と共有
+  するかでデータ構造やアクセス権限が変わるため」)、
+  `item_repeatability`をlowと分類し、**highの1問だけ**聞いた。
+
+**未確認(Gemini無料枠の上限に到達したため)**: 実機Geminiでの
+「ASK → 回答 → BUILD」の完走。Policy側はGolden Test・Integration Test
+(いずれもLLM非依存)で検証済みであり、残るのはGemini応答の質のみ。
+
+## TD47. `/converse`のbuild_briefが長いため、生成タイトルがValidatorの80文字制限を超えていた → **解消(2026-08-12)**
+
+TD46のライブ確認中に発見した、**実際に生成を失敗させていた**バグ。
+
+**症状**: `/converse`で「読んだ本の感想を記録したい。自分だけで使う。」
+と話すと、`validation_error`「Repair(2回)後もValidatorに合格しません
+でした」で失敗する。利用者からは原因が全く分からない。
+
+**原因**: `/converse`が導入されて以降、Cognitive Pipelineへ渡るのは
+ユーザーの短い一言ではなく、**会話全体を要約した自己完結型の
+`build_brief`**(この例では113文字)になった。`ApplicationPlan.title`は
+この入力から導出されるため、80文字を超えるタイトルが生成され、
+`app.title`・`screen.title`の`string_length`制約に違反していた。
+Repairはこの種のエラーを直せないため、2回試して諦めていた。
+
+つまり、`/generate`(短いユーザー入力)では滅多に起きなかった問題が、
+`/converse`(長いbrief)の導入によって**常態化**していた。
+
+**修正**: `forge_ai/core/compiler.py`に`clamp_title()`を新設し、
+legacy Compiler経路・ForgeLanguageCompiler経路の両方で必ず通す。
+単純な先頭80文字ではなく、**最初の句点まで**を優先して切り出す
+(「〜アプリ。入力および管理機能として、〜」という説明文から、
+意味の通る「〜アプリ」を取り出すため)。実際、113文字のbriefから
+36文字の妥当なタイトルが得られることを確認した。
+
+**この種のバグが今後も起きうる箇所**: `build_brief`は他にも
+`natural_language`(2000文字上限)としてPipelineへ入る。タイトル以外に
+文字数制約を持つフィールドがある場合、同じ経路で違反しうる。今回は
+タイトルのみを修正した(Validatorの`string_length`制約を持つ他の
+フィールドは、いずれもCompilerが固定文字列を入れており、入力長に
+依存しないことを確認済み)。

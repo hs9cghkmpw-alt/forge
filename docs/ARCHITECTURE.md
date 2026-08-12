@@ -164,3 +164,49 @@ routers → services → usecases(domain) → repositories(interface, domain)
   変更する際は`PROMPTS/`を先に更新し、`docs/prompts/`にその理由を残す運用とする。
 - `.ai/` と `.agents/` の違いは「共通」か「役割別」かの違い。単一のAIエージェントのみで
   開発する場合は `.ai/CONTEXT.md` だけで十分であり、`.agents/` は複数エージェント運用時に使う。
+
+## 7. Conversation層(FORGE-PRODUCT-VISION-002 / FORGE-CONVERSATION-READY-001)
+
+Cognitive Pipelineの**外側**に立つ薄い意思決定層(ADR-014)。既存の
+Pipeline・Validator・Repair・Criticは一切変更していない。
+
+```
+ユーザー発話
+  ↓
+ConversationEngine.step()            ← LLM呼び出しは1ターン1回だけ
+  ├─ NeedModel(problem/known/unknowns/assumptions/confidence)
+  └─ DecisionContext(System Facts)
+       ↓
+conversation_policy                   ← ここが決定的な判断層
+  ├─ requires_confirmation()          外部作用・不可逆操作 → CONFIRM
+  ├─ select_question()                blocking/high かつ未質問のものを1件
+  ├─ evaluate_readiness()             5値のReadinessを導出
+  └─ resolve_action()                 ASK / BUILD / UPDATE / CONFIRM
+       ↓
+  ├─ ASK / CONFIRM → 会話を継続(セッションは維持)
+  ├─ UPDATE        → ForgeOperationEngine.apply_update()
+  └─ BUILD         → PromptPipeline.run(build_brief)
+                        ↓
+                     Cognitive Pipeline → Forge Language
+                        → Validator / Repair / Critic → Runtime
+```
+
+**責務の境界**:
+
+* `conversation_engine.py` — LLMを1回呼び、応答をパース・サニタイズし、
+  Policyの結果を`ConversationStepResult`へ組み立てるだけ。判断ロジックは
+  持たない。
+* `conversation_policy.py` — 判断のすべて。LLMを知らない純粋関数群で
+  あり、LLM無しで直接テストできる(`test_conversation_policy.py`)。
+* `conversation_store.py` — セッション(発話履歴 + 質問済みkey)。
+  プロセス内メモリのみ(TD41)。
+* `conversation_metrics.py` — 構造化メトリクス。**生の会話本文は
+  保存しない**(session_idはハッシュ化、記録APIは本文を受け取る引数を
+  持たない)。
+
+**「はい、どうぞ」Moment**(Frontend、
+`conversation_flow_screen.dart`): BUILD成功後、Toolへ切り替わる前に
+「うん、だいたい分かった。」→「「<道具の名前>」があると楽そう。」→
+「はい、どうぞ。」の3発話を挟む(合計1.5秒、`handoffMomentDuration`)。
+会話からToolへ意味的につなげるための最小限の演出であり、生成中の待ちは
+従来どおり`_ThinkingBubble`が担う。

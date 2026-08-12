@@ -881,3 +881,59 @@ run()`へそのまま渡す。理由: Cognitive Pipelineは「1回の自然文�
 反転する条件: `build_brief`という1本の自然文への要約だけでは、
 Cognitive Pipeline側のDomain分類・Ambiguity Detectionの精度が実運用で
 不足すると判明した場合(ADR-014のRevisit Conditions参照)。
+
+## D66. ターン数はBUILD条件ではなく、質問戦略を変える閾値である
+
+**背景**: `ConversationEngine`は当初、
+`force_ready = (not unknown_important) or (user_turn_count >= MAX_CONVERSATION_TURNS)`
+という式でBUILDを決めていた。「無限に質問し続けない」ことが狙いだった。
+
+**問題**: これは「質問しすぎない」ではなく「**分からなくても作る**」で
+あった。解を左右する重要な未知が残っていても、3ターン経過しただけで
+BUILDへ倒れる。製品の核心である「どこまで聞いたら作るのか」の判断を、
+単なるカウンタへ委ねていたことになる。
+
+さらに監査で、より深刻な経路が見つかった:
+`if force_ready or llm_action in ("build", "update")`——**LLMが
+`next_action="build"`と言えば、未知の有無に関わらず常にBUILDしていた**。
+ターン上限は2つある premature-BUILD 経路のうちの1つに過ぎなかった。
+
+**決定**: ターン上限をBUILD条件から完全に外す。到達時に変わるのは
+質問の仕方だけとする(`high`はSafe Assumptionへ回す、残る質問は
+二択にする)。`blocking`な未知は、ターン数に関わらず質問し続ける。
+BUILDの可否は`ConversationReadiness`が決定的に決める。
+
+**根拠**: 「質問しすぎない」と「分からなくても作る」は別の問題であり、
+別の手段で解くべきである。前者はQuestion Policy(impactによる絞り込みと
+繰り返し質問の抑止)で解き、後者はReadinessで解く。
+
+## D67. Conversation判断において、LLMの自己申告は単独では根拠にしない
+
+**決定**: `next_action`・`confidence`は「提案」として受け取るのみとし、
+実際のActionはForge側が事実として知っていること(`DecisionContext`:
+既存Toolの有無・ターン数・質問済みkey・外部作用・不可逆操作)から
+決定的に導出する。
+
+この思想自体は既に`wants_update = llm_action == "update" and
+has_existing_tool`という形で1箇所だけ実装されていた(存在しないツールを
+更新させない)。これをConversation Engine全体へ広げた。
+
+**帰結**: `conversation_policy.py`はLLMを一切知らない純粋関数群となり、
+「LLMが誤った提案をしてもPolicyが正す」ことをLLM無しで直接テストできる
+(`test_conversation_policy.py`・`test_conversation_golden.py`)。
+
+## D68. CONFIRMは専用画面ではなく、会話の1ターンとして返す
+
+**決定**: 外部作用(送信・共有・公開・通知)や不可逆操作(削除・金銭・
+権限変更)を含む依頼に対しては`ConversationAction.CONFIRM`を返し、
+`/converse`は`status: "confirm"`をASKと同じ形(session_id + question)
+で返す。セッションは破棄せず、ユーザーの返事は通常どおり`/converse`へ戻る。
+
+**却下した案**: 独立したConfirm Screenの復活。会話の流れを断ち切り、
+「話していたら急に契約書が出てきた」ような体験になるため。
+
+**安全側の非対称性**: 外部作用・不可逆操作の検出は、LLMの申告と
+Forge側のキーワード検出の**OR**を取る。LLMが「無い」と言っても
+Forge側が検出したならCONFIRMする。一方、単なるローカルTool生成では
+毎回CONFIRMしない(キーワード表には「記録したい」「管理したい」の
+ようなローカルに閉じた語を決して入れない)。

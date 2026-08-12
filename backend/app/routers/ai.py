@@ -38,13 +38,20 @@ from app.ai.runtime.confirmation_store import (
     default_confirmation_store,
 )
 from app.ai.runtime.conversation_engine import ConversationEngine
+from app.ai.runtime.conversation_metrics import record_conversation_event
+from app.ai.runtime.conversation_policy import classify_build_failure
 from app.ai.runtime.conversation_store import ConversationNotFoundError, default_conversation_store
-from app.ai.runtime.conversation_types import ConversationAction, ConversationTurn
+from app.ai.runtime.conversation_types import (
+    ConversationAction,
+    ConversationReadiness,
+    ConversationTurn,
+)
 from app.ai.runtime.forge_operation import ForgeOperationEngine
 from app.ai.runtime.injection_scan import scan_for_injection
 from app.ai.runtime.pipeline_errors import (
     ConfirmationSessionError,
     ConversationSessionError,
+    ForgeAIPipelineError,
     ProviderError,
     UpdateOperationError,
 )
@@ -55,6 +62,7 @@ from app.schemas.ai import (
     ConfirmationDTO,
     ConverseAskResponse,
     ConverseBuildResponse,
+    ConverseConfirmResponse,
     ConverseRequest,
     ConverseUpdateResponse,
     CriticResultDTO,
@@ -302,8 +310,13 @@ def confirm(request: ConfirmationAnswerRequest):
 # ---------------------------------------------------------------------------
 
 _CONVERSE_RESPONSE_MODEL = (
-    ConverseAskResponse | ConverseBuildResponse | ConverseUpdateResponse | GenerateNeedsConfirmationResponse
+    ConverseAskResponse | ConverseConfirmResponse | ConverseBuildResponse
+    | ConverseUpdateResponse | GenerateNeedsConfirmationResponse
 )
+
+# 指示書8章: BUILD判定後にPipelineが失敗した場合、原因が追加質問で
+# 解消しうるなら、「作れませんでした」で終わらせず会話へ戻す。
+_BUILD_FAILURE_ASK_PREFIX = "少しだけ確認させて。"
 
 
 @router.post("/converse", response_model=_CONVERSE_RESPONSE_MODEL, responses=_GENERATE_ERROR_RESPONSES)
@@ -362,8 +375,36 @@ def converse(request: ConverseRequest):
         default_conversation_store.add_turn(
             session.session_id, ConversationTurn(role="forge", text=step_result.question or "")
         )
+        # 同じUnknownを繰り返し質問しないため、今聞いたkeyを記録する
+        # (指示書5章)。次ターンの`select_question()`がこれを見て除外する。
+        if step_result.question_key:
+            default_conversation_store.mark_question_asked(session.session_id, step_result.question_key)
+        record_conversation_event(
+            session.session_id, "ask", readiness=step_result.readiness.value,
+            question_key=step_result.question_key,
+        )
         return ConverseAskResponse(
             session_id=session.session_id, question=step_result.question or "", need_model=need_model_dto,
+            readiness=step_result.readiness.value,
+        )
+
+    if step_result.action == ConversationAction.CONFIRM:
+        # 指示書4章: 専用のConfirm Screenへ倒すのではなく、会話の中で
+        # 確認する。ユーザーの次の返事は通常どおり`/converse`へ戻る
+        # (セッションは破棄しない)。
+        confirm_text = step_result.question or (
+            "この操作は元に戻せない可能性があります。進めてよいですか？"
+        )
+        default_conversation_store.add_turn(
+            session.session_id, ConversationTurn(role="forge", text=confirm_text)
+        )
+        record_conversation_event(
+            session.session_id, "confirm", readiness=step_result.readiness.value,
+        )
+        return ConverseConfirmResponse(
+            session_id=session.session_id, question=confirm_text,
+            reason=step_result.confirm_reason or "確認が必要な操作を含むため",
+            need_model=need_model_dto, readiness=step_result.readiness.value,
         )
 
     if step_result.action == ConversationAction.UPDATE:
@@ -394,20 +435,55 @@ def converse(request: ConverseRequest):
             ),
         )
 
-    assert step_result.action == ConversationAction.BUILD  # noqa: S101 — ASK/BUILD/UPDATE以外はPhase Eでは発火しない(design doc B.2)
+    assert step_result.action == ConversationAction.BUILD  # noqa: S101 — CONFIRM/ASK/UPDATEは上で処理済み
     build_brief = step_result.build_brief or ""
     injection_report = scan_for_injection(build_brief)
-    result = PromptPipeline().run(
-        build_brief, engine="forge_ai", provider=provider_name, injection_report=injection_report,
+    try:
+        result = PromptPipeline().run(
+            build_brief, engine="forge_ai", provider=provider_name, injection_report=injection_report,
+        )
+    except ForgeAIPipelineError as exc:
+        # 指示書8章: BUILD判定後にPipelineが失敗した場合、「作れません
+        # でした」だけで終わらせない。原因が追加質問で解消しうるもの
+        # (入力の曖昧さなど、理解段階の失敗)なら会話へ戻す。
+        # Validator/Repair/生成段階の失敗は**Forge側の不具合**であり、
+        # ユーザーに聞いても直らないため、そのまま安全なエラーとして
+        # 送出する(AIの失敗とユーザーの情報不足を混同しない)。
+        recoverable = classify_build_failure(
+            stage=getattr(exc, "stage", None), sub_reason=getattr(exc, "sub_reason", None)
+        )
+        record_conversation_event(
+            session.session_id, "build_failed", readiness=step_result.readiness.value,
+        )
+        if not recoverable:
+            default_conversation_store.discard(session.session_id)
+            raise
+        record_conversation_event(session.session_id, "build_to_ask_fallback")
+        question = f"{_BUILD_FAILURE_ASK_PREFIX}どんな場面で使いたいか、もう少しだけ教えてもらえますか？"
+        default_conversation_store.add_turn(
+            session.session_id, ConversationTurn(role="forge", text=question)
+        )
+        return ConverseAskResponse(
+            session_id=session.session_id, question=question, need_model=need_model_dto,
+            readiness=ConversationReadiness.INSUFFICIENT_INFORMATION.value,
+        )
+
+    if isinstance(result, PipelineNeedsConfirmationResult):
+        # Cognitive Pipeline側が確認を求めた場合は、既存の
+        # `/generate/confirm`契約へそのまま委ねる(無変更)。
+        record_conversation_event(session.session_id, "pipeline_needs_confirmation")
+        return _needs_confirmation_response_with_input(result, build_brief, round_count=1)
+
+    record_conversation_event(
+        session.session_id, "build", readiness=step_result.readiness.value,
+        blocking_unknowns=len(step_result.need_model.blocking_unknowns()),
+        safe_assumptions=len(step_result.need_model.assumptions),
     )
     default_conversation_store.discard(session.session_id)
 
-    if isinstance(result, PipelineNeedsConfirmationResult):
-        return _needs_confirmation_response_with_input(result, build_brief, round_count=1)
-
     return ConverseBuildResponse(
         session_id=session.session_id, need_model=need_model_dto, build_brief=build_brief,
-        result=_result_dto(result),
+        result=_result_dto(result), readiness=step_result.readiness.value,
     )
 
 
