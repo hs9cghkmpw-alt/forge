@@ -28,6 +28,7 @@ from forge_ai.contracts.cognitive_interfaces import (
     TemplateSelectorProtocol,
 )
 from forge_ai.contracts.interfaces import CompilerProtocol, QualityEngineProtocol
+from forge_ai.core.ir.entity_synthesizer import EntitySynthesizer
 
 
 @dataclass(frozen=True)
@@ -46,3 +47,15 @@ class CognitiveDependencies:
     escalation_handler: EscalationHandlerProtocol
     compiler: CompilerProtocol
     quality_engine: QualityEngineProtocol
+    # FORGE-PRODUCT-VISION-002(2026-08-12)新規。Curated Domain Library
+    # (`ir_generator.py`の手書きテーブル)に無いDomainについて、記録する
+    # データ構造をAIに合成させる(`entity_synthesizer.py`参照)。
+    #
+    # **既定を`None`にしている理由**: このフィールドを必須にすると、
+    # 既にこのdataclassを直接構築している箇所(テストフィクスチャ等)が
+    # 全て壊れる。`None`の場合、`pipeline_orchestrator.py`は合成を
+    # 一切試みず、従来どおりChecklistへフォールバックする——つまり
+    # 「合成を注入しなければ以前と完全に同じ挙動」であり、この機能は
+    # 純粋な追加になっている。実運用の組み立て
+    # (`_default_cognitive_dependencies()`)では必ず注入される。
+    entity_synthesizer: EntitySynthesizer | None = None

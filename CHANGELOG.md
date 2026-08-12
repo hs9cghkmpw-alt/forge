@@ -2,6 +2,44 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task064 — 作れるアプリの自由度: Entity定義をAIが合成できるようにした(2026-08-12、CEO「つくれるアプリの自由度をあげたい。トップレベルまで」)
+
+**天井の正体**: `IRGenerator`は、記録するデータの型(Entity・Field・
+型・選択肢)を`_ENTITY_DEFINITIONS`という手書きdictから引いており、
+そこに載っている7 Domain(実機到達可能なのはTD39により5つ)だけが
+型付きCRUDアプリ(タブ・record_list_view・日付ピッカー・選択肢・
+スライダー・グラフ・編集・削除)になり、それ以外の依頼は例外なく
+Checklist(文字列が並ぶだけ)へ落ちていた。つまり「作れるアプリの
+種類」の上限は、Widget語彙数でもAIの賢さでもなく、**人手で書いた
+Domain数(5)そのもの**だった。
+
+**実装**: `forge_ai/core/ir/entity_synthesizer.py`(新規)。Curated
+Domain Libraryに無いDomainについて、記録する1件分のデータ構造をAIに
+設計させ、手書きテーブルと同じ表現(`EntitySpec`/`FieldSpec`、公開名へ
+改名)で`IRGenerator.build_from_spec()`(公開)へ渡す。以降の経路は
+合成と手書きを一切区別しない。AIの出力は決定的に検証・サニタイズし、
+使えなければ`None`を返して従来のChecklistへ安全に落ちる(失敗しても
+以前より悪くならない)。付随して`entity_synthesis` stageを
+`PromptBuilder`・`MockProvider`・`ForgeAIProviderBridge`へ追加した。
+
+**テスト**: `forge_ai/tests/test_entity_synthesizer.py`(新規34件、
+大半は壊れた/悪意ある応答に対するサニタイズの確認)。forge_ai/側489件・
+Backend側645件、全green。Golden file 7件を差分確認のうえ更新
+(6件はDecision Trace追加のみ、1件はForm2画面→record CRUD 1画面)。
+
+**ライブ確認**(実機Gemini): 「スーパーで買うものをメモしておきたい」→
+`shopping_item`(item_name/quantity/estimated_price/store_name/
+is_purchased)、「会議の議事録を残したい」→ `meeting_minutes`
+(title/meeting_date/participants/summary/action_items)で3タブCRUD。
+いずれも以前はChecklistにしかならなかった依頼である。Frontend側の
+変更は不要だった(Flutter Runtimeは既に同じ形へ対応済みのため)。
+
+**未解消として記録した重要な発見**: 「毎日の血圧を記録したい」は
+Domain分類が`diary`(Curated)へ寄るため、Curated優先の原則により
+手書きdiary定義(title/content/mood/date)が使われ、合成より悪い結果に
+なる。優先順位の変更はCurated 5 Domainの回帰リスクがあるため今回は
+見送り、TECH_DEBT.md TD45へ次の一手の案とともに記録した。
+
 ## Task063 — 生成アプリの視覚品質: design_tokens(配色テーマ)を全Domainへ拡大(2026-08-12、CEO「アプリストアレベルの品質にするにはどうすればいいか」)
 
 CEOから「widgetの充実が良いのか、生成できるAIが良いのか、実際に

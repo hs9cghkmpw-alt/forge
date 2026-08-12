@@ -81,13 +81,22 @@ from forge_ai.core.ir.ir_types import (
 from forge_ai.core.planner import ApplicationPlan
 
 
-class _FieldSpec:
-    """Entity定義を書く際の内部シンタックスシュガー(モジュール外へは
-    公開しない)。`_ENTITY_DEFINITIONS`の記述を簡潔にするためだけの
-    もので、IRそのものではない(IRは`ir_types.Field`)。
+class FieldSpec:
+    """Entity定義を書く際のシンタックスシュガー。`_ENTITY_DEFINITIONS`の
+    記述を簡潔にするためのもので、IRそのものではない(IRは`ir_types.Field`)。
 
     FORGE v1.0対応: `is_numeric: bool`(影の型情報、監査で発見)を廃止し、
     `field_type: FieldType`を直接持つように変更した。
+
+    FORGE-PRODUCT-VISION-002(2026-08-12)対応: `_FieldSpec`から改名して
+    公開した。以前はこのモジュール内の手書きテーブル
+    (`_ENTITY_DEFINITIONS`)を書くためだけの内部表現だったが、
+    `entity_synthesizer.py`(Domain定義をAIが合成する経路)が、手書き
+    テーブルと**まったく同じ表現**を組み立てて`IRGenerator.
+    build_from_spec()`へ渡せるようにするため、モジュール外へ公開する
+    必要が生じた(合成された定義と手書きの定義が、以降の全経路で
+    区別されないことが、この設計の要点である)。旧名`_FieldSpec`は
+    このモジュール内の後方互換エイリアスとして残している。
     """
 
     __slots__ = ("name", "label", "field_type", "required", "choices", "min_value", "max_value")
@@ -114,11 +123,18 @@ class _FieldSpec:
         self.max_value = max_value
 
 
-class _EntitySpec:
+class EntitySpec:
+    """1つのEntity(アプリが記録するデータの型)の定義。
+
+    FORGE-PRODUCT-VISION-002(2026-08-12)対応: `_EntitySpec`から改名して
+    公開した(理由は`FieldSpec`のdocstring参照)。旧名`_EntitySpec`は
+    このモジュール内の後方互換エイリアスとして残している。
+    """
+
     __slots__ = ("name", "label", "field_specs", "visual_style")
 
     def __init__(
-        self, name: str, label: str, field_specs: tuple[_FieldSpec, ...], *, visual_style: str = "calm"
+        self, name: str, label: str, field_specs: tuple[FieldSpec, ...], *, visual_style: str = "calm"
     ) -> None:
         self.name = name
         self.label = label
@@ -132,6 +148,13 @@ class _EntitySpec:
         # `ForgeLanguageCompiler`がDesign Tokenプリセット・一覧の
         # レイアウト(card/grid)を選ぶ材料として使う。
         self.visual_style = visual_style
+
+
+# FORGE-PRODUCT-VISION-002(2026-08-12): 旧名の後方互換エイリアス。
+# `_ENTITY_DEFINITIONS`(このモジュール内の手書きテーブル)は引き続き
+# 旧名で書かれているため、テーブル本体を書き換えずに公開名へ移行する。
+_FieldSpec = FieldSpec
+_EntitySpec = EntitySpec
 
 
 # FORGE v0.6対応: Template-aware Compiler Stage1の`_DOMAIN_DATA_MODELS`
@@ -305,9 +328,23 @@ class IRGenerator:
         spec = _ENTITY_DEFINITIONS.get(domain_category)
         if spec is None:
             return None
+        return self.build_from_spec(spec)
+
+    def build_from_spec(self, spec: EntitySpec) -> ForgeIR:
+        """FORGE-PRODUCT-VISION-002(2026-08-12)対応で公開した
+        (旧`_build_ir()`、内容は無変更)。
+
+        `generate()`が手書きテーブル(`_ENTITY_DEFINITIONS`)から引いた
+        `EntitySpec`を渡すのに対し、`entity_synthesizer.py`は**AIが
+        合成し、決定的に検証・サニタイズされた**`EntitySpec`を渡す。
+        このメソッドから先(IR構築・参照整合性チェック・
+        `ForgeLanguageCompiler`によるForge Language化)は、両者を一切
+        区別しない——「合成された定義であっても、手書きのCurated Domain
+        とまったく同じ品質の経路を通る」ことが、この設計の要点である。
+        """
         return self._build_ir(spec)
 
-    def _build_ir(self, spec: _EntitySpec) -> ForgeIR:
+    def _build_ir(self, spec: EntitySpec) -> ForgeIR:
         fields = tuple(self._build_field(fs) for fs in spec.field_specs)
         entity = Entity(name=spec.name, label=spec.label, fields=fields, visual_style=spec.visual_style)
 
@@ -387,7 +424,7 @@ class IRGenerator:
 
         return ir
 
-    def _build_field(self, spec: _FieldSpec) -> Field:
+    def _build_field(self, spec: FieldSpec) -> Field:
         has_slider_bounds = spec.field_type == FieldType.NUMBER and spec.min_value is not None and spec.max_value is not None
         validations: list[FieldValidationRule] = []
         if spec.required:

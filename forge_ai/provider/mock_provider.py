@@ -96,6 +96,44 @@ def _handle_compile(prompt: Prompt) -> ProviderResponse:
     )
 
 
+def _handle_entity_synthesis(prompt: Prompt) -> ProviderResponse:
+    """FORGE-PRODUCT-VISION-002(2026-08-12)新規。entity_synthesis
+    stageの決定的処理。
+
+    実LLMのように依頼内容を理解して項目を設計することはできないため、
+    Planの`data_entities`(概念名)の先頭を1件分のデータの名前として
+    採用し、そこへ「いつの記録か」を表す`date`だけを機械的に添える、
+    という決定的な最小の構造を返す。
+
+    **これはMockであり、実LLMの品質の代わりではない**(このMockが
+    返す構造は、依頼内容がどうであれ`<概念名>` + `date`という同じ形に
+    なる)。Mockでも`entity_synthesizer.py`の検証・サニタイズ経路と、
+    その先のIR生成・Forge Language化・Validator通過までが一通り
+    実行されることを保証する、という点に意味がある(キックオフ指示書
+    3章「全機能がMock Providerで動作すること」への対応)。
+    """
+    plan: dict[str, Any] = prompt.context.get("plan", {})
+    entities = tuple(plan.get("data_entities", ())) or ("item",)
+    primary = str(entities[0]).strip() or "item"
+    # 実LLMには英小文字スネークケースを要求しているが、Mockは
+    # `data_entities`(日本語を含みうる)をそのまま使う。identifierとして
+    # 不正な値は`entity_synthesizer.py`側が決定的にサニタイズするため、
+    # ここで整形せずに渡し、そのサニタイズ経路自体もMock実行時に
+    # 通るようにしている。
+    return ProviderResponse(
+        text=f"'{primary}'を1件分のデータとして記録する構造を設計しました。",
+        structured={
+            "entity_name": primary,
+            "entity_label": primary,
+            "visual_style": "calm",
+            "fields": [
+                {"name": primary, "label": primary, "type": "string", "required": True},
+                {"name": "date", "label": "日付", "type": "date", "required": False},
+            ],
+        },
+    )
+
+
 def _handle_repair(prompt: Prompt) -> ProviderResponse:
     """repair stageの決定的処理: 件数を集計して返すのみ
     (実際の修正はRepairEngine側の決定的Pythonロジックが担う)。"""
@@ -115,6 +153,7 @@ _STAGE_HANDLERS = {
     "meaning": _handle_meaning,
     "intent": _handle_intent,
     "planning": _handle_planning,
+    "entity_synthesis": _handle_entity_synthesis,
     "compile": _handle_compile,
     "repair": _handle_repair,
 }

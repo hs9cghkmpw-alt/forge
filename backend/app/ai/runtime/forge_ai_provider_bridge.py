@@ -59,6 +59,45 @@ _RESPONSE_SCHEMAS: dict[str, dict[str, Any]] = {
         },
         "required": ["title", "screens", "data_entities", "primary_flow"],
     },
+    # FORGE-PRODUCT-VISION-002(2026-08-12)新規。「このアプリが繰り返し
+    # 記録する1件分のデータ」の構造をAIに設計させる段階
+    # (`forge_ai/core/ir/entity_synthesizer.py`)。
+    #
+    # **このスキーマの登録は必須である**(省略してはならない): 未登録の
+    # stageは下の`_UNKNOWN_STAGE_SCHEMA`(`{"type": "object"}`、
+    # propertiesを持たない)へ落ちるが、TD40で実機確認したとおり、
+    # Geminiは`properties`の無い`"type": "object"`をresponseSchemaとして
+    # 渡されると**黙って空オブジェクト`{}`を返す**。その場合、合成は
+    # 常に失敗し、全Domainが従来のChecklistへフォールバックし続ける
+    # ——しかもエラーにはならないため、気付けない。
+    "entity_synthesis": {
+        "type": "object",
+        "properties": {
+            "entity_name": {"type": "string"},
+            "entity_label": {"type": "string"},
+            "visual_style": {"type": "string", "enum": ["calm", "warm", "vibrant", "neutral"]},
+            "fields": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "label": {"type": "string"},
+                        "type": {
+                            "type": "string",
+                            "enum": ["string", "number", "boolean", "date", "choice"],
+                        },
+                        "required": {"type": "boolean"},
+                        "choices": {"type": "array", "items": {"type": "string"}},
+                        "min_value": {"type": "number"},
+                        "max_value": {"type": "number"},
+                    },
+                    "required": ["name", "label", "type"],
+                },
+            },
+        },
+        "required": ["entity_name", "entity_label", "visual_style", "fields"],
+    },
     "compile": {
         "type": "object",
         "properties": {

@@ -294,10 +294,43 @@ class CognitiveOrchestrator:
             # `_default_cognitive_dependencies()`・既存の全テスト
             # フィクスチャへの変更を避け、変更範囲を最小限に留める
             # ための意図的な設計判断)。
+            #
+            # **FORGE-PRODUCT-VISION-002(2026-08-12)での変更**: 以前は、
+            # Curated Domain Library(手書きテーブル)に載っているDomain
+            # だけがこの型付きCRUD経路を通り、それ以外は**全て**
+            # Checklist(型も編集も無い、文字列が並ぶだけ)へ落ちていた。
+            # つまり「作れるアプリの種類」の上限が、人手でテーブルに
+            # 書いた数と一致していた。今回、テーブルに無いDomainについて
+            # `EntitySynthesizer`(記録するデータ構造をAIに設計させ、
+            # 決定的に検証する)を挟み、合成できた場合は**手書きDomainと
+            # 同じ経路**へ合流させる。合成できなかった場合(AIの応答が
+            # 不正、Provider未注入等)は、従来どおりChecklistへ安全に
+            # フォールバックする——この機能が失敗しても以前より悪くは
+            # ならない、という形にしている。
             domain_category_value = context.domain_classification.primary_domain.category.value
+            ir = None
+            entity_source = "curated"
             if domain_category_value in SUPPORTED_DOMAIN_CATEGORIES:
                 ir = IRGenerator().generate(context.plan, domain_category=domain_category_value)
                 assert ir is not None  # SUPPORTED_DOMAIN_CATEGORIESに含まれる場合は必ず生成される
+            elif deps.entity_synthesizer is not None:
+                synthesized_spec = deps.entity_synthesizer.synthesize(
+                    context.plan,
+                    user_text=context.raw_input,
+                    domain_name=domain_category_value,
+                )
+                if synthesized_spec is not None:
+                    ir = IRGenerator().build_from_spec(synthesized_spec)
+                    entity_source = "synthesized"
+
+            if ir is not None:
+                context = context.with_decision(_trace(
+                    "entity_source",
+                    f"{entity_source}({domain_category_value})",
+                    "Curated Domain Libraryの手書き定義を使用"
+                    if entity_source == "curated"
+                    else "AIが合成したデータ構造を使用(決定的な検証・サニタイズ済み)",
+                ))
                 forge_document = ForgeLanguageCompiler().compile(
                     ir, domain_category=domain_category_value, title=context.plan.title
                 )

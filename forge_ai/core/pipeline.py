@@ -82,6 +82,7 @@ from forge_ai.core.critic.design_critic import DesignCritic  # noqa: E402
 from forge_ai.core.critic.revision_engine import RevisionEngine  # noqa: E402
 from forge_ai.core.input_processing.ambiguity_detector import AmbiguityDetector  # noqa: E402
 from forge_ai.core.input_processing.normalizer import InputNormalizer  # noqa: E402
+from forge_ai.core.ir.entity_synthesizer import EntitySynthesizer  # noqa: E402
 from forge_ai.core.orchestration.cognitive_dependencies import CognitiveDependencies  # noqa: E402
 from forge_ai.core.orchestration.outcomes import CognitivePipelineOutcome  # noqa: E402
 from forge_ai.core.orchestration.pipeline_orchestrator import CognitiveOrchestrator  # noqa: E402
@@ -123,6 +124,11 @@ def _default_cognitive_dependencies(provider: AIProvider) -> CognitiveDependenci
         escalation_handler=EscalationHandler(),
         compiler=Compiler(provider=provider),
         quality_engine=QualityEngine(),
+        # FORGE-PRODUCT-VISION-002(2026-08-12): Curated Domain Libraryに
+        # 無い依頼でも、型付きCRUDアプリを生成できるようにする
+        # (`entity_synthesizer.py`参照)。`compiler`と同じく、実際に
+        # `provider.complete()`を呼び出すコンポーネントである。
+        entity_synthesizer=EntitySynthesizer(provider=provider),
     )
 
 

@@ -11,7 +11,7 @@
   "has_empty_state": true,
   "has_validation": true,
   "input": "簡単なアンケートを作りたい",
-  "ir_valid_screens": 2,
+  "ir_valid_screens": 1,
   "revision_attempt": 0,
   "screen_count": 1,
   "template": "form"

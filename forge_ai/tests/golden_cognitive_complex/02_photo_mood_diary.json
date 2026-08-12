@@ -13,7 +13,8 @@
     "meaning_extraction",
     "preliminary_template_selection",
     "final_template_selection",
-    "design_critic"
+    "design_critic",
+    "entity_source"
   ],
   "domain": "diary",
   "input": "写真と気分を記録できる日記がほしい",

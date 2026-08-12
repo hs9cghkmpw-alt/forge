@@ -13,7 +13,8 @@
     "meaning_extraction",
     "preliminary_template_selection",
     "final_template_selection",
-    "design_critic"
+    "design_critic",
+    "entity_source"
   ],
   "domain": "shopping",
   "input": "家族で共有できる買い物リストを作りたい",

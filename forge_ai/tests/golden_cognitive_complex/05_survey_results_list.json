@@ -13,7 +13,8 @@
     "meaning_extraction",
     "preliminary_template_selection",
     "final_template_selection",
-    "design_critic"
+    "design_critic",
+    "entity_source"
   ],
   "domain": "survey",
   "input": "回答後に結果を一覧で確認できるアンケート",

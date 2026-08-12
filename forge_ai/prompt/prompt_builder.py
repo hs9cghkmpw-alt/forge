@@ -25,7 +25,7 @@ class Prompt:
         参照する構造化データであり、文字列へ事前結合しない。
     """
 
-    stage: str  # "meaning" | "intent" | "planning" | "compile" | "repair"
+    stage: str  # "meaning" | "intent" | "planning" | "entity_synthesis" | "compile" | "repair"
     system: str
     instruction: str
     context: dict[str, Any] = field(default_factory=dict)
@@ -69,6 +69,73 @@ class PromptBuilder:
             ),
             instruction="次のIntentからApplication Planを生成せよ。",
             context={"intent": intent_summary},
+        )
+
+    def build_entity_synthesis_prompt(
+        self, *, user_text: str, plan_summary: dict[str, Any], domain_name: str
+    ) -> Prompt:
+        """FORGE-PRODUCT-VISION-002(2026-08-12)新規。「このアプリが
+        繰り返し記録するデータは何か」をAIに設計させる段階のPrompt。
+
+        **なぜこの段階が要るのか**: 以前は、記録するデータの型
+        (Entity・Field・型・選択肢)が`ir_generator.py`の手書きテーブル
+        (`_ENTITY_DEFINITIONS`、7 Domain分)にしか存在せず、そこに無い
+        領域の依頼は、型の無い単なるChecklist(項目名の文字列が並ぶだけ)
+        へ落ちていた。つまり「作れるアプリの種類」の上限が、人手で
+        テーブルに書いた数と完全に一致していた。この段階を挟むことで、
+        テーブルに無い領域でも、手書きDomainと**同じ**型付きCRUDアプリ
+        (日付ピッカー・選択肢・スライダー・グラフ・編集・削除)を
+        生成できるようになる。
+
+        **AIに委ねる範囲を意図的に狭くしている**: ここでAIが決めるのは
+        「どんなデータを、どんな型で記録するか」という**意味の設計**
+        だけであり、Widget種別・画面構成・色・Action種別といった実装は
+        一切決めさせない(それらは従来どおり`IRGenerator`→
+        `ForgeLanguageCompiler`の決定的なPythonコードが組み立てる)。
+        AIの出力は`entity_synthesizer.py`が決定的に検証・サニタイズし、
+        通らなければ従来のChecklist経路へ安全に落ちる。
+        """
+        return Prompt(
+            stage="entity_synthesis",
+            system=(
+                "あなたは、ユーザーの困りごとから「そのアプリが繰り返し記録する"
+                "1件分のデータ」の構造を設計する。画面・ボタン・色・レイアウトの"
+                "ことは一切考えなくてよい(それらは別の仕組みが決める)。"
+                "あなたが決めるのは、記録する項目の名前・表示名・型だけである。\n"
+                "\n"
+                "規則:\n"
+                "1. Entityは必ず1種類だけにすること。ユーザーが繰り返し追加していく"
+                "「1件」に相当するものを選ぶ(例: 買い物なら『買う品物』1件、"
+                "通院記録なら『受診1回』、勤怠なら『1日の勤務』)。\n"
+                "2. 項目(fields)は3〜6個。多すぎると入力が面倒になり使われなくなる。"
+                "ユーザーが実際に毎回入力する気になる項目だけに絞ること。\n"
+                "3. entity_nameと各項目のnameは、英小文字のスネークケース"
+                "(a-z, 0-9, _ のみ、先頭は英小文字)にすること。"
+                "labelは日本語の短い表示名にすること。\n"
+                "4. typeは string / number / boolean / date / choice のいずれか。\n"
+                "   - 金額・数量・回数・時間などはnumber。\n"
+                "   - 日付はdate。\n"
+                "   - 『済んだか』『行ったか』のような二択はboolean。\n"
+                "   - 分類・状態のように**選択肢を具体的に列挙できる**場合だけchoice。\n"
+                "5. choiceを選んだ場合、choicesには実際にありえる選択肢を2〜6個"
+                "入れること。**根拠なく選択肢を発明してはならない**。"
+                "ユーザーの依頼から自然に導けない場合は、choiceではなくstringにすること。\n"
+                "6. min_value/max_valueは、5段階評価・10点満点のように"
+                "**上限と下限が本当に決まっている数値**の場合だけ設定する。"
+                "金額・数量のように上限が無いものには設定しないこと。\n"
+                "7. 最低1つの項目はrequired=trueにすること(何も入力せずに"
+                "空のデータが増えていくのを防ぐため)。\n"
+                "8. visual_styleは、その記録が持つ雰囲気に合うものを"
+                "calm / warm / vibrant / neutral から1つ選ぶ"
+                "(お金・健康・仕事のような落ち着いた対象はcalm/neutral、"
+                "日記・育児・思い出のような対象はwarm、"
+                "習慣・目標・達成のような対象はvibrant)。"
+            ),
+            instruction=(
+                "次の依頼内容に対して、このアプリが繰り返し記録する1件分の"
+                "データ構造を設計せよ。"
+            ),
+            context={"user_text": user_text, "plan": plan_summary, "domain_name": domain_name},
         )
 
     def build_compile_prompt(self, *, plan_summary: dict[str, Any]) -> Prompt:

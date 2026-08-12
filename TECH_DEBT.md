@@ -2169,3 +2169,118 @@ design_tokensを持つこと・Domainによって実際に異なる配色にな�
   AIが自由に生成するのではなく、少数の選択肢から選ぶ」という制約は
   維持しつつ、選ぶ粒度をDomain単位からもう少し細かくできる余地は
   ある)。
+
+## TD45. 「作れるアプリの種類」の上限が、人手でテーブルに書いたDomain数と完全に一致していた → **解消(2026-08-12)、AIによるEntity合成を導入**
+
+CEO「つくれるアプリの自由度をあげたい。トップレベルまで」への対応。
+
+**天井の正体**: `IRGenerator.generate()`は、記録するデータの型
+(Entity・Field・型・選択肢)を`_ENTITY_DEFINITIONS`という**手書きの
+dictテーブル**から`.get(domain_category)`で引いていた。テーブルに
+載っている7 Domain(うち実機で到達可能なのはTD39により5つ)だけが、
+型付きCRUDアプリ——タブ構成・record_list_view・日付ピッカー・
+選択肢ドロップダウン・スライダー・棒グラフ・編集・削除・
+design_tokens——になり、**それ以外の全ての依頼は例外なく
+`compiler.py`のChecklist**(文字列が縦に並ぶだけ、型も編集も削除も
+無い)へ落ちていた。
+
+つまり「Forgeで作れるアプリの種類」の上限は、Widget語彙の数でも
+Geminiの賢さでもなく、**人間が`ir_generator.py`に手で書いた
+Domainの数(5)そのもの**だった。新しい領域に対応するには、毎回
+人手でEntity定義を書き足す以外に方法が無かった——これが自由度の
+天井であり、CEOの言う「トップレベルまで上げたい」対象そのものである。
+
+**実装**: `forge_ai/core/ir/entity_synthesizer.py`(新規)。
+Curated Domain Libraryに無いDomainについて、「このアプリが繰り返し
+記録する1件分のデータ」の構造をAIに設計させ、手書きテーブルと
+**まったく同じ表現**(`EntitySpec`/`FieldSpec`、今回`_`付きの
+private名から公開名へ改名)を組み立てて`IRGenerator.
+build_from_spec()`(今回`_build_ir()`から公開)へ渡す。以降の経路
+——IR構築、`ForgeLanguageCompiler`によるForge Language化、Widget選択、
+Design Token適用、Validator——は、**合成された定義と手書きの定義を
+一切区別しない**。
+
+新設した`entity_synthesis` stageの周辺:
+* `PromptBuilder.build_entity_synthesis_prompt()`(新規)。
+* `MockProvider._handle_entity_synthesis()`(新規、決定的)。Mockは
+  依頼内容を理解できないため`<概念名>`+`date`という同じ形しか
+  返さないが、**合成経路そのもの**(検証・IR生成・Forge Language化・
+  Validator通過)がMockだけで一通り実行されることを保証する。
+* `ForgeAIProviderBridge._RESPONSE_SCHEMAS["entity_synthesis"]`(新規)。
+  **この登録は必須**である: 未登録stageは`{"type": "object"}`
+  (propertiesなし)へ落ち、TD40で実機確認したとおりGeminiは黙って
+  空dict`{}`を返す。その場合、合成は常に失敗して全Domainが
+  Checklistへ戻るが、**エラーにはならないため気付けない**。
+
+**AIの出力を一切信用しない設計**(このモジュールの要点):
+`synthesize()`は応答を`_sanitize_*`群で決定的に検証・整形し、
+使える形にできなければ`None`を返す。`None`なら
+`pipeline_orchestrator.py`は従来のChecklistへ落ちる——つまり
+**この機能が失敗しても以前より悪くなることはない**。主なルール:
+* entity名・Field名は`identifier`パターンへ機械的に整形(大文字→
+  小文字、空白/ハイフン→`_`)。整形しても無理なら諦める。
+* 未知の型名(`text`・`integer`等)は項目ごと捨てずにSTRINGへ倒す。
+* 選択肢が2件未満のchoiceはSTRINGへ降格する(「根拠のない選択肢を
+  発明しない」既存方針を合成経路でも守る)。
+* `records`/`selected`/`id`は`ForgeLanguageCompiler`が固定で使う
+  State IDと衝突するため予約語として弾く。
+* Field数は8件で打ち切る(Validator上限は20/30だが、毎回20項目を
+  入力させるフォームは使われない、というUX判断)。
+* requiredが1つも無ければ先頭を強制的にrequiredにする(空レコードが
+  無限に増えるのを防ぐ)。
+* min/maxはNUMBER型かつ両方数値かつmin<maxのときだけ採用
+  (`isinstance(True, int)`がTrueになるため、bool を明示的に除外)。
+
+**`CognitiveDependencies.entity_synthesizer`の既定を`None`にしている
+理由**: 必須フィールドにすると、このdataclassを直接構築している
+既存テストフィクスチャが全て壊れる。`None`なら合成を一切試みず
+従来どおりの挙動になる——つまりこの機能は純粋な追加であり、
+注入しなければ以前と1バイトも変わらない。
+
+**確認**: forge_ai/側489件(新規34件、`test_entity_synthesizer.py`)・
+Backend側645件、全green。Golden fileは7件更新した(差分を1件ずつ
+確認済み: 6件は新設の`entity_source` Decision Traceが増えただけ、
+1件(04_survey)は2画面→1画面。後者は「Form送信→サンクス画面へ遷移
+してデータは**保存されない**」から「回答をrecord_listへ蓄積し、
+一覧・編集・削除できる」への変化であり、意図した改善である)。
+
+実機Gemini(`/api/v1/ai/generate`, provider=gemini)でのライブ確認:
+* 「スーパーで買うものをメモしておきたい」→ `shopping_item`
+  (item_name:string必須 / quantity:number / estimated_price:number /
+  store_name:string / is_purchased:boolean)
+* 「会議の議事録を残したい」→ `meeting_minutes`
+  (title:string必須 / meeting_date:date必須 / participants:string /
+  summary:string / action_items:string)、3タブ構成
+  (追加・一覧・編集)、date_field・form・section_header・
+  record_list_viewを使用。
+いずれも以前はChecklist(文字列の羅列)にしかならなかった依頼である。
+
+**Frontend側の変更は不要**: Flutter Runtimeは既に19種のWidgetと
+record_list/record_schemas/design_tokensへ対応済み(Curated Domain
+5つが同じ形を出力していたため)。合成経路は同じ形を出すだけなので、
+Dart側のコードは一切変更していない。
+
+**ライブ確認中に見つかった、未解消の別問題(重要)**: 「毎日の血圧を
+記録したい」を投げると、Domain分類が`diary`(Curated)と判定し、
+**Curatedが合成より優先される**ため、手書きのdiary定義
+(title/content/mood/date)がそのまま使われた。血圧記録としては
+明らかに不適切(収縮期/拡張期/脈拍が無い)であり、合成に任せた方が
+良い結果になったはずである。つまり「分類器がゆるくCurated Domainへ
+寄せてしまうと、合成より**悪い**結果になる」という経路が存在する。
+
+今回この優先順位は変更していない。Curated 5 Domainは人手で丁寧に
+調整され、Golden Testで固定されており、優先順位を変えると
+それらを回帰させるリスクがあるためである。次の一手としては
+(a)分類の確信度が低い場合のみ合成を優先する、(b)合成結果と
+Curated定義を比較して依頼文との適合度が高い方を選ぶ、といった
+案が考えられるが、いずれも「どちらが良いか」を機械的に判定する
+基準が要るため、独立した検討が必要である。
+
+**その他、今回スコープ外としたこと**:
+* 複数Entity(例: 「買い物リスト」と「店舗マスタ」)の合成。
+  `ForgeLanguageCompiler`が単一Entityしか受け付けない
+  (`len(ir.entities) != 1`で例外)という既存の制約があり、
+  Compiler側の設計変更を伴うため。
+* TD39(todo/reading_logがDomainCategory enumに存在せず、分類から
+  到達不可能)は未解消のまま。ただし影響は小さくなった——到達
+  できなくても、合成経路が同等のアプリを生成するようになったため。

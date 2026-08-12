@@ -13,7 +13,8 @@
     "meaning_extraction",
     "preliminary_template_selection",
     "final_template_selection",
-    "design_critic"
+    "design_critic",
+    "entity_source"
   ],
   "domain": "task_management",
   "input": "期限と優先度を設定できるタスク管理アプリ",

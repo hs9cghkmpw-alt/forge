@@ -12,7 +12,8 @@
     "meaning_extraction",
     "preliminary_template_selection",
     "final_template_selection",
-    "design_critic"
+    "design_critic",
+    "entity_source"
   ],
   "domain": "inventory",
   "input": "在庫が少なくなったら分かるようにしたい",
