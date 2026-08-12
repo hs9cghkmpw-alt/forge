@@ -2,6 +2,35 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task066 — ニーズに合わせて「解の形」を選ぶ(2026-08-12、CEO「常にニーズに合わせた最適解を出せるようにして」)
+
+Conversation Readiness(Task065)で「いつ作るか」は判断できるように
+なったが、「**何を**作るか」は固定だった。`ForgeLanguageCompiler`は
+Entityの中身に関わらず常に3タブCRUD(追加/一覧/編集 + フォーム +
+record_list_view)を出力しており、買い物メモが欲しい人にも釣果記録と
+同じ重さの道具を渡していた。
+
+**実装**: `forge_ai/core/ir/solution_shape.py`(新規)。Entityの
+フィールド構成から解の形を決定的に選ぶ。`CHECKLIST`(並べて消す、
+1画面・タブ無し)と`RECORD_CRUD`(従来の3タブ)の2形。
+`checklist`Stateの1項目`{id, text, done}`で情報を落とさず表現しきれる
+場合(文字列1つ、または文字列1つ+真偽値1つ)だけ`CHECKLIST`にする
+——形を軽くすることと情報を捨てることは別、という線引きを明示した。
+
+あわせて`build_entity_synthesis_prompt()`を「項目は3〜6個」から
+「本当に必要な数だけ。1個で足りるなら1個」へ変更した(形の選択だけ
+直しても、合成が常に5項目返すのでは`CHECKLIST`に到達しないため)。
+
+**Curated Domainへの影響はゼロ**(手作り7定義は全て4〜5 Fieldで条件に
+非該当、回帰テスト化済み)。
+
+**テスト**: 新規15件(`test_solution_shape.py`)。forge_ai 510件・
+Backend 733件・Flutter 451件、全green。`CHECKLIST`出力が実物の
+Backend Validatorを通ることを確認。
+
+**未確認**: 実機Geminiでの`CHECKLIST`到達(無料枠の上限に到達したため
+実行できず)。`RECORD_CRUD`側は実機確認済み。詳細はTECH_DEBT.md TD48。
+
 ## Task065 — Conversation Readiness / CONFIRM / 「はい、どうぞ」体験(2026-08-12、FORGE-CONVERSATION-READY-001)
 
 Conversation Engineを、単なるターン制会話から「情報充足度・不確実性・

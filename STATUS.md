@@ -31,6 +31,7 @@
 | Cognitive Pipeline | 動作 | `forge_ai/core/orchestration/pipeline_orchestrator.py`(13段階) |
 | Entity合成(任意Domain対応) | 動作 | `forge_ai/core/ir/entity_synthesizer.py` |
 | Forge Language生成 | 動作 | Curated 5 Domain + 合成経路 |
+| Solution Shape選択 | 動作 | CHECKLIST / RECORD_CRUD の2形 |
 | Validator / Repair / Critic | 動作 | Validator最大3回・Repair最大2回 |
 | Flutter Runtime | 動作 | Widget 19種、v1.8 |
 | 「はい、どうぞ」UX | 動作 | `conversation_flow_screen.dart` |
@@ -41,7 +42,7 @@
 
 | 対象 | 件数 | 状態 |
 |---|---|---|
-| `forge_ai/tests` | 495 | 全green |
+| `forge_ai/tests` | 510 | 全green |
 | `backend/tests` | 733 | 全green(skip 13) |
 | `frontend`(Flutter) | 451 | 全green、`flutter analyze` 0エラー |
 
@@ -55,3 +56,6 @@
   (TD39。ただし合成経路が同等のアプリを作るため影響は限定的)。
 * Gemini無料枠のレート制限(429)に当たると生成が失敗する。
 * Conversation Metricsは測れる形にしただけで、まだ運用していない。
+* 解の形が`CHECKLIST`・`RECORD_CRUD`の2つしかない。カウンタ形は
+  Forge Languageに動的な加算Actionが無いため作れない(TD48)。
+* 実機Geminiでの`CHECKLIST`到達は未確認(無料枠上限のため)。

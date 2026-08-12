@@ -151,3 +151,29 @@ BUILD判定後にPipelineが失敗した場合、`classify_build_failure()`が
   エラー表示。**AIの失敗をユーザーの情報不足のように見せない**。
 * Provider障害(rate_limited / unavailable)→ 追加質問では直らないため
   エラー表示。
+
+## 7. Solution Shape(2026-08-12)
+
+「いつ作るか」(Readiness)と対になる、「**何を作るか**」の判断。
+実装は`forge_ai/core/ir/solution_shape.py`。
+
+| Shape | 形 | 条件 |
+|---|---|---|
+| `CHECKLIST` | 1画面・タブ無し・入力欄1つ・チェックリスト | 文字列1つ、または文字列1つ+真偽値1つ |
+| `RECORD_CRUD` | 追加/一覧/編集の3タブ・型付きフォーム・一覧・グラフ | それ以外 |
+
+**判定材料をEntityのFieldに限っている理由**: ユーザーの言葉
+(「数えたい」「チェックしたい」)から直接選ぶと表現の揺れに弱く、
+同じニーズでも言い方次第で形が変わる。Entityは会話と
+EntitySynthesizerを通って煮詰まった結果であり、「属性が1つしかない」
+=「並べてチェックするだけで足りる」という対応が構造的に安定している。
+
+**軽くしすぎて情報を捨てない**: `CHECKLIST`にするのは、`checklist`
+Stateの1項目`{id, text, done}`で情報を落とさず表現しきれる場合だけ。
+日付や金額を持つEntityをchecklistへ押し込むと、ユーザーが記録したかった
+情報が消える。形を軽くすることと情報を捨てることは別である。
+
+**カウンタ形が無い理由**: Forge Languageの`ACTION_TYPES`には
+`set_value`(固定値の代入)しか無く、`count + 1`という動的な加算を
+表現できない。作ると「押しても増えないボタン」になるため、Runtimeに
+increment相当が入るまでは`RECORD_CRUD`で代用する。

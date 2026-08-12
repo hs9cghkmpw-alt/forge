@@ -142,6 +142,7 @@ from forge_ai.core.compiler import (
     design_tokens_for_style,
 )
 from forge_ai.core.ir.ir_types import Entity, FieldType, ForgeIR, ViewKind
+from forge_ai.core.ir.solution_shape import SolutionShape, select_solution_shape
 
 # FORGE v1.0新規(Product Quality Sprint1)。Entityの`visual_style`
 # (IR層、プラットフォーム非依存の「雰囲気」ヒント)から、実際の
@@ -210,12 +211,106 @@ class ForgeLanguageCompiler:
             (v for v in ir.views if v.kind == ViewKind.FORM and v.entity == entity.name and v.mode == "edit"), None
         )
 
+        # `clamp_title()`でForge Languageの1〜80文字制約へ必ず収める
+        # (`compiler.py`参照。会話由来の長いbuild_briefで、app.title・
+        # screen.titleが上限超過してValidatorに落ちる実バグの修正)。
+        safe_title = clamp_title(title)
+
+        # 2026-08-12(CEO「常にニーズに合わせた最適解を出せるように
+        # して」)対応: 以前はニーズが何であれ`_compile_single_screen()`
+        # (3タブCRUD)へ直行していた。属性を1つしか持たないEntity
+        # (「買うもの」だけ)にまで、釣果記録と同じ重さの道具を
+        # 渡していたことになる。`select_solution_shape()`が、Entityの
+        # 構造から解の形を決定的に選ぶ(`solution_shape.py`参照)。
+        shape = select_solution_shape(entity)
+        if shape is SolutionShape.CHECKLIST:
+            return self._compile_checklist_screen(entity, safe_title, domain_category=domain_category)
+
         return self._compile_single_screen(
-            # `clamp_title()`でForge Languageの1〜80文字制約へ必ず収める
-            # (`compiler.py`参照。会話由来の長いbuild_briefで、app.title・
-            # screen.titleが上限超過してValidatorに落ちる実バグの修正)。
-            entity, clamp_title(title),
+            entity, safe_title,
             include_crud=edit_form_view is not None, domain_category=domain_category,
+        )
+
+    def _compile_checklist_screen(
+        self, entity: Entity, title: str, *, domain_category: str
+    ) -> ForgeIRDocument:
+        """CHECKLIST形(2026-08-12新設)。「並べて、消す」だけの道具。
+
+        属性を1つ(または「文字列 + 済んだか」の2つ)しか持たない
+        Entityに対して、タブもフォームも編集画面も作らず、
+        **1画面・入力欄1つ・一覧1つ**へ畳み込む。
+
+        Widget構成は`forge_ai/core/compiler.py`のChecklist経路と
+        意図的に同じ形(`checklist` + `row[text_field, button]`)に
+        している——この形はForge Language v1.0から存在し、Flutter
+        Runtime・Validatorの双方で最も実績があるためである
+        (新しいWidget構成を発明しない、という既存の方針)。
+
+        `section_header`だけはv1.5の語彙を使い、「何のリストなのか」を
+        画面上で示す(3タブ構成では`tab_titles`が担っていた役割)。
+        """
+        items_state_id = "items"
+        new_item_state_id = "new_item_text"
+
+        body = ForgeIRWidget(
+            type="column",
+            id="root_column",
+            children=(
+                ForgeIRWidget(
+                    type="section_header", id="list_section_header",
+                    properties={
+                        "title": entity.label,
+                        "subtitle": "思いついたら追加して、済んだらチェックしてください",
+                    },
+                ),
+                ForgeIRWidget(
+                    type="checklist", id="items_checklist",
+                    properties={
+                        "state_ref": items_state_id,
+                        "empty_state_text": f"まだ{entity.label}がありません",
+                    },
+                ),
+                ForgeIRWidget(
+                    type="row", id="add_row",
+                    children=(
+                        ForgeIRWidget(
+                            type="text_field", id="add_field",
+                            properties={"state_ref": new_item_state_id, "placeholder": "追加する"},
+                        ),
+                        ForgeIRWidget(
+                            type="button", id="add_button",
+                            properties={
+                                "label": "追加",
+                                "action": {
+                                    "type": "add_item",
+                                    "target_state_ref": items_state_id,
+                                    "source_state_ref": new_item_state_id,
+                                },
+                            },
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        screen = ForgeIRScreen(
+            id="generated_screen", title=title,
+            state={
+                items_state_id: ForgeIRStateValue(type="checklist", value=[]),
+                new_item_state_id: ForgeIRStateValue(type="string", value=""),
+            },
+            body=body,
+        )
+        return ForgeIRDocument(
+            # section_header(v1.5)・design_tokens(v1.5)を使うため。
+            # RECORD_CRUD経路と揃えて"1.8"(上位互換)を宣言する。
+            version="1.8",
+            initial_screen_id=screen.id,
+            screens=(screen,),
+            app_title=title,
+            # record_listを使わないため`record_schemas`は出力しない
+            # (空dictはJSONへ出ない、`ForgeIRDocument.to_json_dict()`参照)。
+            design_tokens=self._build_design_tokens(entity),
         )
 
     def _compile_single_screen(
