@@ -300,6 +300,16 @@ class MockLLMAdapter:
         if field_type == "integer":
             return 0
 
+        if field_type == "number":
+            # FORGE-PRODUCT-VISION-002続き(2026-08-11)で発見した実バグの
+            # 修正: JSON Schemaの"number"(浮動小数点、"integer"とは別の型)
+            # を判定する分岐が無く、下のデフォルト分岐(文字列"mock_result"
+            # を返す)へ落ちていた。呼び出し側(`ConversationEngine.
+            # step()`のconfidenceフィールド等)が`float(...)`で数値変換
+            # しようとして`ValueError`になる実クラッシュを、実機確認
+            # (uvicorn+mock provider)で発見した。
+            return 0.0
+
         if field_type == "object":
             return {}
 

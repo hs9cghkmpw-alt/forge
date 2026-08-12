@@ -2,6 +2,44 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task061 — FORGE-PRODUCT-VISION-002続き: /converseと/updateを結線(2026-08-11、同日中、CEO「自由度はどれくらいなのだろう？今最新で与えている情報を優先にしてほしい」)
+
+report.mdで「次の一手」として残していた、「`/converse`内で新しい問題か
+既存ツールへの変更要求かを判定する」を実装した。CEOから、フロントエンド
+統合等を「CEO確認事項」として保留していた判断について、指示書の文面に
+過度に慎重になっていたと指摘を受け、可逆な変更として直ちに実施した。
+
+### 実装
+`ConversationEngine.step()`が`has_existing_tool: bool`引数を受け取り、
+`True`の場合のみ`next_action="update"`を選びうる(LLMの自己申告を
+鵜呑みにしない決定的上書きルールは既存方針を踏襲)。`ConverseRequest`へ
+`current_document`(任意)追加。`update`と判定された場合、既存の
+`ForgeOperationEngine.apply_update()`(TD40)へそのまま委譲する。
+
+### 実機確認の過程で発見・修正した実バグ3件
+1. `/converse`のProvider呼び出しに例外処理が一切無く、Gemini APIの
+   レート制限時に親切な日本語メッセージが失われ汎用500エラーへ落ちて
+   いた(修正: `ProviderError`への変換を追加)。
+2. `MockLLMAdapter`がJSON Schemaの`"number"`型を処理しておらず、
+   `ConversationEngine`の`confidence`フィールドで`float("mock_result")`
+   という実クラッシュが発生していた(修正: `"number"`分岐を追加)。
+3. 新規テストファイルが`app.main`をFeature Flag設定前にimportし、
+   `test_workspace_router.py`・`test_folder_router.py`を巻き込んで
+   壊すテスト分離バグを発見・修正した。
+
+いずれも実際に`uvicorn`+`TestClient`/`curl`を叩いて初めて表面化した
+もので、Unit Testだけでは検出できなかった(TD37と同じ教訓の再確認)。
+
+### 検証
+新規Python 20件、既存backend全テストと合わせ645件、全てgreen。
+`/converse`のエラー変換自体はライブGemini経由で正しく動作することを
+確認したが、Gemini無料枠の**日次クォータ**をこのセッションの検証作業
+(TD37以降、多数のライブ呼び出し)で使い切っており、「実際にGeminiが
+会話中でupdateを自発的に選ぶ」ところまでのライブE2E確認は完了できな
+かった(正直な申告、TD42参照)。分岐ロジック自体は`test_conversation_
+engine.py`のFakeProviderテストで確認済み、`apply_update()`本体は
+Task060で既にライブ確認済み。
+
 ## Task060 — FORGE-PRODUCT-VISION-002続き: Forming Operation(UPDATE)実装(2026-08-11、同日中、CEO「実装できたの？できるまでやって」)
 
 Task059でTD40(UPDATE=生成後に会話で「育てる」機能)を「Gemini

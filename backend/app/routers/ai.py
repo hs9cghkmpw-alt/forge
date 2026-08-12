@@ -42,7 +42,12 @@ from app.ai.runtime.conversation_store import ConversationNotFoundError, default
 from app.ai.runtime.conversation_types import ConversationAction, ConversationTurn
 from app.ai.runtime.forge_operation import ForgeOperationEngine
 from app.ai.runtime.injection_scan import scan_for_injection
-from app.ai.runtime.pipeline_errors import ConfirmationSessionError, ConversationSessionError, UpdateOperationError
+from app.ai.runtime.pipeline_errors import (
+    ConfirmationSessionError,
+    ConversationSessionError,
+    ProviderError,
+    UpdateOperationError,
+)
 from app.ai.runtime.prompt_pipeline import PipelineNeedsConfirmationResult, PromptPipeline
 from app.ai.runtime.provider_router import ProviderRouter
 from app.schemas.ai import (
@@ -51,6 +56,7 @@ from app.schemas.ai import (
     ConverseAskResponse,
     ConverseBuildResponse,
     ConverseRequest,
+    ConverseUpdateResponse,
     CriticResultDTO,
     DiagnosticsDTO,
     ErrorEnvelope,
@@ -295,7 +301,9 @@ def confirm(request: ConfirmationAnswerRequest):
 # 併存する(このエンドポイントは追加のみ、後方互換)。
 # ---------------------------------------------------------------------------
 
-_CONVERSE_RESPONSE_MODEL = ConverseAskResponse | ConverseBuildResponse | GenerateNeedsConfirmationResponse
+_CONVERSE_RESPONSE_MODEL = (
+    ConverseAskResponse | ConverseBuildResponse | ConverseUpdateResponse | GenerateNeedsConfirmationResponse
+)
 
 
 @router.post("/converse", response_model=_CONVERSE_RESPONSE_MODEL, responses=_GENERATE_ERROR_RESPONSES)
@@ -310,6 +318,10 @@ def converse(request: ConverseRequest):
     知識を一切持たず、既存資産を完全に再利用する)。既存Cognitive
     Pipeline側がさらに`needs_confirmation`を返した場合は、既存の
     `/generate/confirm`の契約へそのまま委ねる。
+
+    `current_document`が渡された場合(Held画面からの再開)のみ、`update`
+    (既存ツールへの変更要求、TD40)を選びうる——`ForgeOperationEngine.
+    apply_update()`へそのまま委ねる(`/api/v1/ai/update`と同じ実装)。
     """
     if request.session_id is None:
         session = default_conversation_store.create()
@@ -329,7 +341,21 @@ def converse(request: ConverseRequest):
 
     provider_name = request.provider or "mock"
     provider = ProviderRouter().resolve(provider_name)
-    step_result = ConversationEngine(provider).step(session)
+    try:
+        step_result = ConversationEngine(provider).step(
+            session, has_existing_tool=request.current_document is not None
+        )
+    except Exception as exc:  # noqa: BLE001 — Provider呼び出し失敗を、既存の/generate系と同じ
+        # ForgeAIPipelineError系(友好的な日本語メッセージ・友好的な
+        # HTTPステータス)へ変換する。実機確認(2026-08-11)で発見した
+        # 実バグの修正: 以前はここで例外を捕捉しておらず、Gemini APIの
+        # レート制限(429)発生時に、汎用の`unhandled_exception_handler`
+        # (「予期しないエラーが発生しました」という素っ気ない文言)まで
+        # 素通りしてしまい、`GeminiProvider`自身が用意した親切な日本語
+        # メッセージ(TD31対応)が失われていた。
+        message = str(exc)
+        sub_reason = "rate_limited" if ("429" in message or "利用上限" in message) else "unavailable"
+        raise ProviderError(message, sub_reason=sub_reason, stage="conversation") from exc
     need_model_dto = NeedModelDTO(**step_result.need_model.to_dict())
 
     if step_result.action == ConversationAction.ASK:
@@ -340,7 +366,35 @@ def converse(request: ConverseRequest):
             session_id=session.session_id, question=step_result.question or "", need_model=need_model_dto,
         )
 
-    assert step_result.action == ConversationAction.BUILD  # noqa: S101 — ASK/BUILD以外はPhase Eでは発火しない(design doc B.2)
+    if step_result.action == ConversationAction.UPDATE:
+        assert request.current_document is not None  # noqa: S101 — has_existing_tool=Trueの場合のみConversationEngineがUPDATEを選ぶ(conversation_engine.py参照)
+        change_request = step_result.build_brief or ""
+        update_result = ForgeOperationEngine(provider).apply_update(request.current_document, change_request)
+        default_conversation_store.discard(session.session_id)
+        if not update_result.success:
+            raise UpdateOperationError(
+                update_result.error_message or "更新に失敗しました。",
+                validation_errors=(
+                    tuple(e.to_dict() for e in update_result.validation.errors)
+                    if update_result.validation is not None else ()
+                ),
+                stage="forming_operation",
+            )
+        assert update_result.forge_document is not None and update_result.validation is not None  # noqa: S101 — successなら両方Non-None(forge_operation.pyの契約)
+        return ConverseUpdateResponse(
+            session_id=session.session_id, need_model=need_model_dto, change_request=change_request,
+            result=UpdateResultDTO(
+                forge_document=update_result.forge_document,
+                validation=ValidationResultDTO(
+                    valid=update_result.validation.valid,
+                    errors=[ValidationIssueDTO(**e.to_dict()) for e in update_result.validation.errors],
+                    warnings=[ValidationIssueDTO(**w.to_dict()) for w in update_result.validation.warnings],
+                ),
+                attempts=update_result.attempts,
+            ),
+        )
+
+    assert step_result.action == ConversationAction.BUILD  # noqa: S101 — ASK/BUILD/UPDATE以外はPhase Eでは発火しない(design doc B.2)
     build_brief = step_result.build_brief or ""
     injection_report = scan_for_injection(build_brief)
     result = PromptPipeline().run(

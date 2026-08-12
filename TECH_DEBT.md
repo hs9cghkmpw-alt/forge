@@ -1942,3 +1942,82 @@ conversation_store.py`は、`confirmation_store.py`と全く同じ設計
 新規の問題ではなく既存の設計方針をそのまま継承しただけである。将来
 複数ワーカーで運用する場合、両Storeをまとめて Redis等の外部ストアへ
 置き換えることを検討する。
+
+## TD42. `/converse`と`/update`を結線(2026-08-11、同日中)、その過程で発見・修正した実バグ3件
+
+CEO「自由度はどれくらいなのだろう？今最新で与えている情報を優先に
+してほしい」という指示を受け、report.mdで「次の一手」としていた
+「`/converse`内で新しい問題と既存ツールへの変更要求を判定する」を
+実装した。
+
+**実装**: `ConversationEngine.step()`が`has_existing_tool: bool`引数を
+受け取るようになった(既定`False`、後方互換)。`True`の場合のみ
+`next_action="update"`を選びうる(design doc B.3と同じ決定的上書き
+ルール: `has_existing_tool=False`なのに"update"と自己申告してきても
+鵜呑みにせずBUILDへ倒す)。`ConverseRequest`へ`current_document`
+(任意)を追加、渡された場合のみHeld画面からの再開として扱う。
+`/converse`ルーターは`update`と判定された場合、`ForgeOperationEngine.
+apply_update()`(TD40)へそのまま委譲する。
+
+**実機確認の過程で発見・修正した実バグ3件**(いずれもこのTD42の作業
+自体が原因ではなく、実際にHTTPを叩いて初めて表面化した既存の穴):
+
+1. **`/converse`のProvider呼び出しに例外処理が一切無かった**:
+   `ConversationEngine(provider).step()`の呼び出しが、`PromptPipeline.
+   run()`(既存の`/generate`系、内部で例外を`ProviderError`/
+   `PlanningError`へ変換済み)や`ForgeOperationEngine.apply_update()`
+   (内部で例外を捕捉し`UpdateResult(success=False, ...)`を返す)とは
+   異なり、**一切の例外処理を経由せず素通りしていた**。実機で
+   Gemini APIのレート制限(429)に遭遇したところ、`GeminiProvider`が
+   用意した親切な日本語メッセージ(TD31対応)が失われ、汎用の
+   `unhandled_exception_handler`(「予期しないエラーが発生しました」)
+   まで落ちることを確認した。`app/routers/ai.py`の`converse()`で
+   `try/except`を追加し、`ProviderError`(429/"利用上限"を含む
+   メッセージなら`sub_reason="rate_limited"`)へ変換するよう修正した。
+2. **`MockLLMAdapter`が JSON Schemaの`"number"`型を処理していなかった**:
+   `_synthesize_field()`は`"array"`/`"integer"`/`"object"`のみ分岐して
+   おり、`"number"`(浮動小数点)は素通りしてデフォルトの文字列分岐
+   (`"mock_result"`)へ落ちていた。`ConversationEngine`の`NeedModel.
+   confidence`フィールド(`{"type": "number"}`)がこれに該当し、
+   呼び出し側の`float(raw.get("confidence", 0.0) or 0.0)`が
+   `float("mock_result")`で`ValueError`になる実クラッシュを、
+   `TestClient`経由の実機テストで発見した。`"number"`分岐を追加し
+   `0.0`を返すよう修正(`"integer"`→`0`と対称的)。
+3. **新規テストファイルが、他の無関係なテストを壊すテスト分離バグ**:
+   `app.main`はプロセス内で1度しかimportされない(`sys.modules`
+   キャッシュ)ため、Feature Flag Router(workspace/folder)の登録可否は
+   「プロセスで最初に`app.main`をimportした時点の環境変数」で確定
+   する。`test_workspace_router.py`・`test_folder_router.py`はそれぞれ
+   自分のFlagを`os.environ.setdefault()`してからimportするが、新規
+   `test_converse_and_update_http.py`がFlagを一切設定せず`app.main`を
+   importしていたため、`unittest discover`のアルファベット順によっては
+   このファイルが先に走り、後続の`test_workspace_router.py`等の
+   `setdefault`が手遅れになる(Router自体が未登録のまま確定し、
+   期待していた401が404になる)ことをフルスイート実行で発見した。
+   同じ防御パターン(両Flagの`setdefault`)を新規ファイルへも追加して
+   修正した。
+
+**実機確認**: 修正後のコードで`uvicorn`を再起動し、`/converse`
+(`current_document`付き、"よく買うものを上に置きたい。カテゴリ分けも
+したい。")を再送したところ、エラー変換自体は正しく`provider_error`/
+`rate_limited`/`retryable=true`へ分類されることを確認した——ただし
+Gemini無料枠の**日次クォータ**そのものをこのセッションの検証作業
+(このドキュメント全体を通じた多数のライブ呼び出し)で使い切っており
+(`「You exceeded your current quota」`という文言が数分間の再試行を
+挟んでも変化しなかったため、単なる分単位のレート制限ではなく日次上限と
+判断)、「実際にGeminiがupdateを選ぶ」ところまでのライブE2E確認は
+このセッション内では完了できなかった。
+
+**代替の検証**: (a) 分岐ロジック自体は`test_conversation_engine.py`の
+`TestConversationEngineUpdate`(4件、has_existing_tool=True/Falseの
+両方を実際のFakeProviderで検証)で確認済み。(b)
+`ForgeOperationEngine.apply_update()`自体は、TD40で既にライブGemini
+経由でEnd-to-Endの成功(買い物リストのカテゴリ分割)を確認済みであり、
+`/converse`から呼ばれる経路は同じ実装をそのまま再利用している。(c)
+新規Python 20件(`test_converse_and_update_http.py`4件・
+`test_mock_llm_adapter.py`4件・`test_conversation_engine.py`追加4件・
+既存修正分)、既存backend全テストと合わせ645件、全てgreen。
+
+正直な評価として、「実際のGeminiが会話の中で自発的にupdateを選ぶ」
+という最後の1点だけは、クォータ回復後(翌日以降)に再確認することを
+推奨する。

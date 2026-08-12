@@ -231,6 +231,15 @@ class ConverseRequest(BaseModel):
     provider: Literal["mock", "gemini"] | None = Field(
         default=None, description="ConversationEngineが使うLLM Provider。既定は'mock'。"
     )
+    current_document: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "FORGE-PRODUCT-VISION-002続き(2026-08-11新設)。Held画面(既に"
+            "生成済みのツールを表示中)から会話を再開する場合、そのForge "
+            "Documentをそのまま渡す。渡された場合のみConversationEngineは"
+            "'update'(既存ツールへの変更要求)を選びうる(TD40)。"
+        ),
+    )
 
 
 class NeedModelDTO(BaseModel):
@@ -285,4 +294,19 @@ class UpdateResultDTO(BaseModel):
 class UpdateSuccessResponse(BaseModel):
     version: Literal["1.0"] = "1.0"
     status: Literal["success"] = "success"
+    result: UpdateResultDTO
+
+
+class ConverseUpdateResponse(BaseModel):
+    """`/converse`がConversationSessionから`update`と判定した場合の
+    レスポンス(FORGE-PRODUCT-VISION-002続き、2026-08-11新設)。中身は
+    `UpdateSuccessResponse`と同じ`ForgeOperationEngine`の結果だが、会話
+    セッションの文脈(`session_id`・`need_model`・変更要求の要約)も
+    一緒に返す(`ConverseBuildResponse`と対称的な設計)。"""
+
+    version: Literal["1.0"] = "1.0"
+    status: Literal["update"] = "update"
+    session_id: str
+    need_model: NeedModelDTO
+    change_request: str
     result: UpdateResultDTO

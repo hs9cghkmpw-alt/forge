@@ -160,5 +160,55 @@ class TestConversationEngineBuild(unittest.TestCase):
         self.assertIn("買い物で忘れる", result.build_brief or "")
 
 
+class TestConversationEngineUpdate(unittest.TestCase):
+    """FORGE-PRODUCT-VISION-002続き(2026-08-11新設)。`has_existing_tool`
+    引数によるASK/BUILD/UPDATE分岐の回帰テスト。"""
+
+    def test_llm_says_update_and_has_existing_tool_yields_update(self) -> None:
+        provider = _FakeProvider({
+            "problem": "p", "known": [], "unknown_important": [], "safe_assumptions": [],
+            "confidence": 0.9, "next_action": "update", "question": "",
+            "build_brief": "よく買うものを上に置きたい",
+        })
+        session = _session_with_user_text("よく買うものを上に置きたい")
+        result = ConversationEngine(provider).step(session, has_existing_tool=True)
+
+        self.assertEqual(result.action, ConversationAction.UPDATE)
+        self.assertEqual(result.build_brief, "よく買うものを上に置きたい")
+
+    def test_llm_says_update_but_no_existing_tool_falls_back_to_build(self) -> None:
+        """design doc B.3と同じ思想の決定的な上書きルール: 更新対象が
+        無いのにupdateを鵜呑みにしない(has_existing_tool=Falseが既定)。"""
+        provider = _FakeProvider({
+            "problem": "p", "known": [], "unknown_important": [], "safe_assumptions": [],
+            "confidence": 0.9, "next_action": "update", "question": "",
+            "build_brief": "よく買うものを上に置きたい",
+        })
+        session = _session_with_user_text("よく買うものを上に置きたい")
+        result = ConversationEngine(provider).step(session, has_existing_tool=False)
+
+        self.assertEqual(result.action, ConversationAction.BUILD)
+
+    def test_prompt_mentions_existing_tool_state_when_true(self) -> None:
+        provider = _FakeProvider({
+            "problem": "p", "known": [], "unknown_important": [], "safe_assumptions": [],
+            "confidence": 0.9, "next_action": "update", "question": "", "build_brief": "b",
+        })
+        session = _session_with_user_text("変更したい")
+        ConversationEngine(provider).step(session, has_existing_tool=True)
+        assert provider.last_prompt is not None
+        self.assertIn("既に生成済みのツールを使っています", provider.last_prompt)
+
+    def test_prompt_mentions_no_tool_state_when_false(self) -> None:
+        provider = _FakeProvider({
+            "problem": "p", "known": ["k"], "unknown_important": ["x"], "safe_assumptions": [],
+            "confidence": 0.3, "next_action": "ask", "question": "q?", "build_brief": "",
+        })
+        session = _session_with_user_text("困ってる")
+        ConversationEngine(provider).step(session, has_existing_tool=False)
+        assert provider.last_prompt is not None
+        self.assertIn("まだツールは生成されていません", provider.last_prompt)
+
+
 if __name__ == "__main__":
     unittest.main()
