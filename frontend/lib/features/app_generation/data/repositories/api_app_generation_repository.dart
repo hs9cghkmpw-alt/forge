@@ -4,6 +4,7 @@ import '../../../../core/utils/forge_logger.dart';
 import '../../domain/entities/generation_outcome.dart';
 import '../../domain/repositories/app_generation_repository.dart';
 import '../datasources/ai_generation_api.dart';
+import 'generation_result_parsing.dart';
 
 /// FastAPI Backend(`run_cognitive_pipeline()`経由の実生成)へ接続する
 /// Repository実装。
@@ -130,72 +131,18 @@ class ApiAppGenerationRepository implements AppGenerationRepository {
 
   GenerationSuccess _parseSuccess(Map<String, dynamic> body) {
     final result = body['result'] as Map<String, dynamic>?;
-    final document = result?['forge_document'] as Map<String, dynamic>?;
-    if (result == null || document == null) {
-      ForgeLogger.error(_scope, '[INVALID_RESPONSE] forge_document missing from success response');
+    if (result == null) {
+      ForgeLogger.error(_scope, '[INVALID_RESPONSE] result missing from success response');
       throw const AppGenerationException(
         code: 'INVALID_RESPONSE',
         message: 'サーバーからの応答にアプリのデータが含まれていませんでした。',
       );
     }
-    return GenerationSuccess(
-      forgeDocument: document,
-      diagnostics: _parseDiagnostics(result['diagnostics'] as Map<String, dynamic>?),
-      quality: _parseQuality(result['quality'] as Map<String, dynamic>?),
-    );
+    return parseGenerationSuccessResult(result);
   }
 
-  GenerationNeedsConfirmation _parseNeedsConfirmation(Map<String, dynamic> body) {
-    final confirmation = body['confirmation'] as Map<String, dynamic>?;
-    if (confirmation == null) {
-      ForgeLogger.error(_scope, '[INVALID_RESPONSE] confirmation missing from needs_confirmation response');
-      throw const AppGenerationException(
-        code: 'INVALID_RESPONSE',
-        message: 'サーバーからの応答を解釈できませんでした。',
-      );
-    }
-    return GenerationNeedsConfirmation(
-      requestId: confirmation['request_id'] as String? ?? '',
-      question: confirmation['question'] as String? ?? '確認が必要です。',
-      reason: confirmation['reason'] as String? ?? '',
-      reachedStage: confirmation['reached_stage'] as String? ?? '',
-      openQuestions: (confirmation['open_questions'] as List<dynamic>?)?.cast<String>() ?? const [],
-      roundsRemaining: confirmation['rounds_remaining'] as int? ?? 0,
-    );
-  }
+  GenerationNeedsConfirmation _parseNeedsConfirmation(Map<String, dynamic> body) =>
+      parseGenerationNeedsConfirmation(body);
 
-  GenerationFailure _parseFailure(Map<String, dynamic> body) {
-    final error = body['error'] as Map<String, dynamic>?;
-    return GenerationFailure(
-      category: error?['category'] as String? ?? 'unexpected_error',
-      subReason: error?['sub_reason'] as String?,
-      message: error?['message'] as String? ?? '生成に失敗しました。',
-      retryable: error?['retryable'] as bool? ?? false,
-      reachedStage: error?['reached_stage'] as String?,
-    );
-  }
-
-  GenerationDiagnostics _parseDiagnostics(Map<String, dynamic>? diagnostics) {
-    if (diagnostics == null) {
-      return const GenerationDiagnostics(engineUsed: 'forge_ai', providerUsed: 'unknown', repairAttempts: 0);
-    }
-    return GenerationDiagnostics(
-      engineUsed: diagnostics['engine_used'] as String? ?? 'forge_ai',
-      providerUsed: diagnostics['provider_used'] as String? ?? 'unknown',
-      repairAttempts: diagnostics['repair_attempts'] as int? ?? 0,
-      cognitiveRevisionAttempts: diagnostics['cognitive_revision_attempts'] as int? ?? 0,
-      conversionWarnings: (diagnostics['conversion_warnings'] as List<dynamic>?)?.cast<String>() ?? const [],
-      domainClassification: diagnostics['domain_classification'] as Map<String, dynamic>?,
-      decisionTrace: (diagnostics['decision_trace'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? const [],
-    );
-  }
-
-  GenerationQualitySummary? _parseQuality(Map<String, dynamic>? quality) {
-    if (quality == null) return null;
-    return GenerationQualitySummary(
-      score: quality['score'] as int? ?? 0,
-      releaseReady: quality['release_ready'] as bool? ?? false,
-      requiredFixes: (quality['required_fixes'] as List<dynamic>?)?.cast<String>() ?? const [],
-    );
-  }
+  GenerationFailure _parseFailure(Map<String, dynamic> body) => parseGenerationFailure(body);
 }

@@ -63,7 +63,14 @@ void main() {
     await tester.pump();
 
     // FORGE-UI-REFRESH-002(2026-08-10): 「例を見る」→「もっと例を見る」に改名。
-    await tester.tap(find.text('もっと例を見る'));
+    // FORGE-PRODUCT-VISION-002(2026-08-11)対応: 見出し文言変更に伴い、
+    // 既定のテストウィンドウサイズ(800x600)では対象がスクロールしないと
+    // 画面外になることがあるため、`ensureVisible()`を明示的に挟む
+    // (`home_screen_test.dart`の他のensureVisible修正と同じ理由)。
+    final showExamplesButton = find.text('もっと例を見る');
+    await tester.ensureVisible(showExamplesButton);
+    await tester.pump();
+    await tester.tap(showExamplesButton);
     await tester.pumpAndSettle();
 
     // FORGE-UI-REFRESH-002: ホーム画面にクイック候補チップ(先頭4件、
@@ -96,7 +103,13 @@ void main() {
     await tester.pumpWidget(await wrap(const HomeScreen()));
     await tester.pump();
 
-    await tester.tap(find.text('もっと例を見る'));
+    // FORGE-PRODUCT-VISION-002(2026-08-11)対応: 見出し文言変更に伴い、
+    // 既定のテストウィンドウサイズでは対象がスクロールしないと画面外に
+    // なることがあるため、`ensureVisible()`を明示的に挟む。
+    final showExamplesButton2 = find.text('もっと例を見る');
+    await tester.ensureVisible(showExamplesButton2);
+    await tester.pump();
+    await tester.tap(showExamplesButton2);
     await tester.pumpAndSettle();
 
     // FORGE-UI-REFRESH-002: 先頭4件はホーム画面のクイック候補チップにも
@@ -121,8 +134,11 @@ void main() {
     await tester.pump();
 
     // FORGE v0.2 P5対応: マイク機能を実装していないため、「話すだけで」
-    // という誤解を招くコピーは使わない。実際のコピーへ更新した。
-    expect(find.textContaining('アイデアを入力するだけで'), findsOneWidget);
+    // という誤解を招くコピーは使わない。
+    // FORGE-PRODUCT-VISION-002(2026-08-11)対応: 「何のアプリを作り
+    // ますか」的な文言から「困りごとを話せる場所」的な文言へ変更した
+    // (design doc C.1、Space)。
+    expect(find.textContaining('困ってることある'), findsOneWidget);
     expect(find.textContaining('話すだけで'), findsNothing);
     expect(find.text('会話内容は安全に保護されます'), findsOneWidget);
   });

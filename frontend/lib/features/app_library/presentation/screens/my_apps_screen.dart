@@ -154,6 +154,13 @@ class _SavedAppCard extends ConsumerWidget {
               forgeDocument: app.forgeDocument,
               onBack: () => Navigator.of(context).pop(),
               initialRuntimeState: runtimeState,
+              // FORGE-PRODUCT-VISION-002(2026-08-11)対応: マイアプリから
+              // 開いた場合も「ここを変える」で会話に戻れる(design doc C章)。
+              onDocumentUpdated: (updated) => repository.saveApp(SavedForgeApp(
+                id: app.id, title: app.title, originalPrompt: app.originalPrompt, forgeDocument: updated,
+                createdAt: app.createdAt, updatedAt: DateTime.now(), providerUsed: app.providerUsed,
+                qualityScore: app.qualityScore,
+              )),
               onScreenStateChanged: (screenId, stateJson) =>
                   repository.saveRuntimeStateForScreen(app.id, screenId, stateJson),
             ),

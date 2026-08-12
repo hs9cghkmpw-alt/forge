@@ -32,7 +32,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forge_app/features/app_generation/data/datasources/mock_generation_datasource.dart';
 import 'package:forge_app/features/app_generation/data/repositories/mock_app_generation_repository.dart';
+import 'package:forge_app/features/app_generation/data/repositories/mock_conversation_repository.dart';
 import 'package:forge_app/features/app_generation/presentation/providers/app_generation_provider.dart';
+import 'package:forge_app/features/app_generation/presentation/providers/conversation_provider.dart';
 import 'package:forge_app/features/app_generation/presentation/screens/home_screen.dart';
 import 'package:forge_app/features/app_library/presentation/providers/app_library_provider.dart';
 import 'package:forge_app/main.dart';
@@ -52,6 +54,12 @@ void main() {
             appGenerationRepositoryProvider.overrideWithValue(
               const MockAppGenerationRepository(MockGenerationDataSource()),
             ),
+            // FORGE-PRODUCT-VISION-002(2026-08-11)対応: Home画面は
+            // `ConversationFlowScreen`(`/converse`)へ遷移するようになった
+            // ため、そちらのRepositoryも明示的にMockへoverrideする。
+            conversationRepositoryProvider.overrideWithValue(
+              const MockConversationRepository(MockGenerationDataSource()),
+            ),
           ],
           child: const ForgeApp(),
         ),
@@ -65,31 +73,21 @@ void main() {
       await tester.enterText(find.byType(TextField), 'アンケートを作って');
       await tester.pump();
 
-      // 3. 送信ボタン(丸いアイコンボタン)をタップ → GenerationFlowScreenへ
-      //    (生成中状態にRotationTransitionによる無期限アニメーションが
-      //    あるためpumpAndSettle禁止)。
+      // 3. 送信ボタン(丸いアイコンボタン)をタップ → ConversationFlowScreen
+      //    へ(FORGE-PRODUCT-VISION-002、2026-08-11)。`_ThinkingBubble`に
+      //    無期限アニメーションがある間はpumpAndSettle禁止。
       await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      // FORGE-UI-REFRESH-002(2026-08-10)で生成中画面の見出しを変更した。
-      expect(find.text('AIがアプリを設計中…'), findsOneWidget);
 
-      await tester.pump(const Duration(milliseconds: 700)); // Mock Modeの人工遅延(650ms)を進める
-      await tester.pump();
-
-      // 4. 完成画面 → 「アプリを開く」をタップしてRendererを表示。
-      //
-      // 2026-08-11修正(`flutter test`実機確認で発見した実バグ、
-      // FORGE-AI-QUALITY-001): 以前は`ElevatedButton`だったが、
-      // FORGE-UI-REFRESH(2026-08-10、generation_flow_screen.dart)で
-      // `DecoratedBox`+`InkWell`によるグラデーションCTAへ再デザインされ、
-      // このテストが追従していなかった(このサンドボックスで
-      // `flutter test`を実行できる手段が今まで無く、検出できなかった)。
-      // `find.text(...)`はInkWell配下でもヒットテスト可能なため、
-      // 具体的なWidget型に依存しない形にした(将来また見た目が
-      // 変わっても壊れにくい)。
-      expect(find.text('✨ アプリが完成しました！'), findsOneWidget);
-      await tester.tap(find.text('アプリを開く'));
+      // 4. Mock Modeの人工遅延(650ms)を進める。`MockConversationRepository`
+      //    は常に即座にBUILDを返す設計のため、完成画面を経由せず直接
+      //    Renderer(GeneratedAppHostShell)へ遷移する
+      //    (`conversation_flow_screen.dart`の`_finishBuild()`)。
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pump(); // FutureProviderの結果反映
+      await tester.pump(); // _finishBuild()内のsaveApp()/addHistoryEntry()(非同期)を進める
+      await tester.pump(); // Navigator.pushReplacement()の反映
       await tester.pumpAndSettle();
 
       expect(find.widgetWithText(AppBar, '満足度アンケート'), findsOneWidget);

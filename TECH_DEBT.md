@@ -2021,3 +2021,61 @@ Gemini無料枠の**日次クォータ**そのものをこのセッションの�
 正直な評価として、「実際のGeminiが会話の中で自発的にupdateを選ぶ」
 という最後の1点だけは、クォータ回復後(翌日以降)に再確認することを
 推奨する。
+
+## TD43. Frontend統合: Home画面・Held画面を`/converse`・`/update`へ接続(2026-08-11、同日中)
+
+CEO「自由度はどれくらいなのだろう？今最新で与えている情報を優先に
+してほしい」という指示を受け、report.mdで「CEO確認が必要」として
+保留していたフロントエンド統合(Home画面の文言変更、Inspiration
+Cardsの遷移先変更)を、実際には指示書28章の確認事項リストのどれにも
+当てはまらない可逆な変更だと判断し直し、実装した。
+
+**実装内容**:
+* `HomeScreen`: 見出しを「アイデアを入力するだけで、あなただけの
+  アプリに。」から「最近、ちょっと困ってることある？」へ(design doc
+  C.1、Space)。`_onSubmit()`の遷移先を`GenerationFlowScreen`(単発
+  生成、無変更のまま残す)から新設`ConversationFlowScreen`
+  (`/converse`、複数ターンの会話)へ変更。
+* `GeneratedAppHostShell`: `StatelessWidget`→`StatefulWidget`化。
+  `onDocumentUpdated`を渡した呼び出し元にのみ「ここを変える」ボタンを
+  表示し、タップで`ConversationFlowScreen`(`currentDocument`付き、
+  UPDATE専用モード)を開く。Home(保存済みアプリを開く経路)・My Apps
+  画面の両方へ配線した(Held→Forming→Heldの入口、design doc C章)。
+* 新規`ConversationFlowScreen`: ASK/BUILD/UPDATE/フォールバック
+  confirmationの4分岐を1画面で扱う。既存の`GenerationFlowScreen`は
+  無変更のまま残している(削除しない、可逆性優先)。
+* 共有パーサー`generation_result_parsing.dart`を新設し、`Api
+  AppGenerationRepository`・新設`ApiConversationRepository`の両方が
+  同じ`GenerateResultDTO`解析ロジックを再利用する(重複させない)。
+
+**Widget Testで発見・修正した実バグ(重要)**: `ConversationFlowScreen`が
+`ConversationTurnRequest`(Riverpod `.family`のキャッシュキー)を
+`build()`内で`_sessionId`(ASKレスポンス処理の副作用としてsetStateする
+値)から毎回組み立て直していたため、ASKレスポンスを受け取った直後の
+再描画で、**ユーザーがまだ何も送っていないのに、同じ発話でもう一度
+`/converse`を呼んでしまう**(`sessionId`だけが変わり`==`が不一致に
+なるため、Riverpodが新しいリクエストとして扱う)実バグを、Widget Test
+実行で発見した。この余分な呼び出しの結果は`_handledCurrentTurn`
+フラグにより画面には反映されないため、目視や手動テストでは気づけない
+種類のバグだった——実際のGemini会話であれば、無駄な1往復を消費し、
+Backend側の会話履歴(`ConversationStore`)にも本来無いはずの重複した
+ユーザー発話が残ってしまう。
+
+**修正**: `_sessionId`から毎回`ConversationTurnRequest`を組み立て直す
+のをやめ、`_currentRequest`という「その時点で確定したリクエストの
+スナップショット」を`_sendReply()`(ユーザーが実際に送信した瞬間)と
+`initState()`でのみ更新する方式へ変更した。ASKレスポンス処理で
+`_sessionId`をsetStateしても、次にユーザーが送信するまで`_current
+Request`は変化しない。
+
+**もう1つ、Widget Testで発見した実装上の注意点**: `enterText()`の
+直後に同じフレームで`tap()`すると、テキスト変更が`_ReplyBar`の
+送信ボタンの有効状態(`canSend`)へ反映されないまま`tap()`が空振り
+することがあった(既存のE2Eテストにある「RotationTransitionの間は
+pumpAndSettle禁止」と同種の、タイミング依存の落とし穴)。`enterText()`
+と`tap()`の間に`pump()`を1回挟むことで解消した。
+
+**テスト**: 新規Dart 8件(`api_conversation_repository_test.dart`6件・
+`conversation_flow_screen_test.dart`2件)、既存E2E/Widget Testの修正
+(Home画面の遷移先変更・文言変更に追従、`ensureVisible()`の適用漏れ
+修正)を含め、Dart側全447件がgreen。`flutter analyze`は0エラー。

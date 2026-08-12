@@ -44,7 +44,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:forge_app/features/app_generation/data/datasources/mock_generation_datasource.dart';
 import 'package:forge_app/features/app_generation/data/repositories/mock_app_generation_repository.dart';
+import 'package:forge_app/features/app_generation/data/repositories/mock_conversation_repository.dart';
 import 'package:forge_app/features/app_generation/presentation/providers/app_generation_provider.dart';
+import 'package:forge_app/features/app_generation/presentation/providers/conversation_provider.dart';
 import 'package:forge_app/features/app_generation/presentation/screens/home_screen.dart';
 import 'package:forge_app/features/app_library/presentation/providers/app_library_provider.dart';
 import 'package:forge_app/main.dart';
@@ -67,6 +69,12 @@ void main() {
             appGenerationRepositoryProvider.overrideWithValue(
               const MockAppGenerationRepository(MockGenerationDataSource()),
             ),
+            // FORGE-PRODUCT-VISION-002(2026-08-11)対応: Home画面は
+            // `ConversationFlowScreen`(`/converse`)へ遷移するようになった
+            // ため、そちらのRepositoryも明示的にMockへoverrideする。
+            conversationRepositoryProvider.overrideWithValue(
+              const MockConversationRepository(MockGenerationDataSource()),
+            ),
           ],
           child: const ForgeApp(),
         ),
@@ -83,34 +91,24 @@ void main() {
       expect(homeField.controller?.text, '子どもの持ち物チェックを作って');
 
       // 3. 送信ボタン(丸いアイコンボタン、入力があるためアクティブ)を
-      //    タップ → GenerationFlowScreenへ(生成中状態にRotationTransition
-      //    による無期限アニメーションがあるためpumpAndSettle禁止)。
+      //    タップ → ConversationFlowScreenへ(FORGE-PRODUCT-VISION-002、
+      //    2026-08-11)。`_ThinkingBubble`に無期限アニメーションがある
+      //    間はpumpAndSettle禁止(GenerationFlowScreen時代と同じ注意)。
       await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
       await tester.pump(); // 画面遷移開始
       await tester.pump(const Duration(milliseconds: 300)); // 画面遷移アニメーション相当
 
-      // この時点で生成中画面(FORGE-UI-REFRESH-002で「AIがアプリを設計中…」へ変更)のはず。
-      expect(find.text('AIがアプリを設計中…'), findsOneWidget);
-
-      // 4. Mock Modeの人工遅延(650ms)を明示的に進める
+      // 4. Mock Modeの人工遅延(650ms)を明示的に進める。`MockConversation
+      //    Repository`は常に即座にBUILDを返す設計のため、完成画面を
+      //    経由せず直接Renderer(GeneratedAppHostShell)へ遷移する
+      //    (`conversation_flow_screen.dart`の`_finishBuild()`)。
       await tester.pump(const Duration(milliseconds: 700));
-      await tester.pump(); // FutureProviderの結果反映を1フレーム分進める
-
-      // 5. 完成画面(「✨ アプリが完成しました！」)が表示されるはず。
-      expect(find.text('✨ アプリが完成しました！'), findsOneWidget);
-
-      // 6. 「アプリを開く」をタップ → Renderer(ForgeDocumentView)を表示。
-      //
-      // 2026-08-11修正(`flutter test`実機確認で発見した実バグ、
-      // FORGE-AI-QUALITY-001): 以前は`ElevatedButton`だったが、
-      // FORGE-UI-REFRESH(2026-08-10)で`DecoratedBox`+`InkWell`による
-      // グラデーションCTAへ再デザインされ、このテストが追従していな
-      // かった(詳細は`survey_form_validation_flow_test.dart`の
-      // 同種修正コメント参照)。
-      await tester.tap(find.text('アプリを開く'));
+      await tester.pump(); // FutureProviderの結果反映
+      await tester.pump(); // _finishBuild()内のsaveApp()/addHistoryEntry()(非同期)を進める
+      await tester.pump(); // Navigator.pushReplacement()の反映
       await tester.pumpAndSettle();
 
-      // 7. Generated Screenのタイトルとチェックリスト項目を確認
+      // 5. Generated Screenのタイトルとチェックリスト項目を確認
       //    (Renderer自体は今回のUI変更で触れていないため、旧テストと同じ
       //    項目名で確認する)。
       expect(find.widgetWithText(AppBar, '子どもの持ち物チェック'), findsOneWidget);
@@ -120,7 +118,7 @@ void main() {
       expect(find.text('タオル'), findsOneWidget);
       expect(find.text('お気に入りのおもちゃ'), findsOneWidget);
 
-      // 8. 最初の項目(item_1 = 着替え)をタップしてチェック状態を確認
+      // 6. 最初の項目(item_1 = 着替え)をタップしてチェック状態を確認
       final firstItemTile = find.byKey(const ValueKey('checklist_item_item_1'));
       expect(firstItemTile, findsOneWidget);
       expect(
@@ -140,7 +138,7 @@ void main() {
         reason: 'タップ後はチェック済み状態のアイコンに変わるはず',
       );
 
-      // 9. Flutter例外が一切発生していないこと
+      // 7. Flutter例外が一切発生していないこと
       expect(tester.takeException(), isNull);
     },
   );

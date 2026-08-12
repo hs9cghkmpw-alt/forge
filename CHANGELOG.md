@@ -2,6 +2,36 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task062 — FORGE-PRODUCT-VISION-002続き: フロントエンド統合(2026-08-11、同日中、CEO「自由度はどれくらいなのだろう？今最新で与えている情報を優先にしてほしい」)
+
+report.mdで「CEO確認が必要」として保留していたフロントエンド統合
+(Home画面の文言変更、Inspiration Cardsの遷移先変更)について、CEOから
+指示書28章の確認事項リストのどれにも実際には当てはまらない(可逆な
+UI/ロジック変更)という指摘を受け、保留を撤回して実装した。
+
+### 実装
+`HomeScreen`の見出しを「困ってることある？」的な文言へ変更し(design
+doc C.1、Space)、送信の遷移先を単発生成の`GenerationFlowScreen`
+(無変更のまま残す)から新設`ConversationFlowScreen`(複数ターンの
+会話、`/converse`)へ切り替えた。`GeneratedAppHostShell`へ「ここを
+変える」ボタンを追加し(`StatefulWidget`化)、Held画面(Home・My Apps
+から開いたアプリ)からUPDATE(TD40)へ戻れるようにした
+(design doc C章、Held→Forming→Held)。
+
+### Widget Testで発見・修正した実バグ
+`ConversationTurnRequest`(Riverpod `.family`のキャッシュキー)を
+`_sessionId`から毎回組み立て直していたため、ASKレスポンス処理の
+副作用で、ユーザーがまだ何も送っていないのに同じ発話でもう一度
+`/converse`を呼んでしまう実バグを発見した。目視では気づけない種類の
+バグ(結果は`_handledCurrentTurn`ガードで画面に反映されないため)で、
+実際のGemini会話であれば無駄な往復とBackend側の会話履歴の重複を
+招いていた。リクエストを`_sendReply()`時にのみ確定するスナップショット
+方式へ変更して修正した。詳細はTECH_DEBT.md TD43参照。
+
+### テスト
+新規Dart 8件、既存E2E/Widget Testの追従修正を含め、Dart側全447件が
+green。`flutter analyze`は0エラー。
+
 ## Task061 — FORGE-PRODUCT-VISION-002続き: /converseと/updateを結線(2026-08-11、同日中、CEO「自由度はどれくらいなのだろう？今最新で与えている情報を優先にしてほしい」)
 
 report.mdで「次の一手」として残していた、「`/converse`内で新しい問題か

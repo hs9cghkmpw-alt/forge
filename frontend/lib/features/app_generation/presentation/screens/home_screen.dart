@@ -13,7 +13,7 @@ import '../../../app_library/presentation/screens/my_apps_screen.dart';
 import '../providers/app_generation_provider.dart';
 import '../providers/voice_input_provider.dart';
 import '../widgets/example_picker_sheet.dart';
-import 'generation_flow_screen.dart';
+import 'conversation_flow_screen.dart';
 
 /// ホーム画面。
 ///
@@ -81,8 +81,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     final provider = ref.read(selectedAiProviderProvider);
+    // FORGE-PRODUCT-VISION-002(2026-08-11)対応: 単発の生成
+    // (`GenerationFlowScreen`、無変更のまま残す)ではなく、複数ターンの
+    // 会話(`ConversationFlowScreen`、design doc C章)へ遷移する。
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => GenerationFlowScreen(inputText: text, provider: provider)),
+      MaterialPageRoute<void>(builder: (_) => ConversationFlowScreen(initialMessage: text, provider: provider)),
     );
   }
 
@@ -119,6 +122,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final repository = ref.read(appLibraryRepositoryProvider);
     final runtimeState = await repository.loadRuntimeState(app.id);
     if (!mounted) return;
+    final provider = ref.read(selectedAiProviderProvider);
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => Scaffold(
@@ -127,6 +131,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               forgeDocument: app.forgeDocument,
               onBack: () => Navigator.of(context).pop(),
               initialRuntimeState: runtimeState,
+              provider: provider,
+              // FORGE-PRODUCT-VISION-002(2026-08-11)対応: 保存済みアプリを
+              // 開いた画面(Held)からも「ここを変える」で会話に戻れる
+              // (design doc C章)。
+              onDocumentUpdated: (updated) => repository.saveApp(SavedForgeApp(
+                id: app.id, title: app.title, originalPrompt: app.originalPrompt, forgeDocument: updated,
+                createdAt: app.createdAt, updatedAt: DateTime.now(), providerUsed: app.providerUsed,
+                qualityScore: app.qualityScore,
+              )),
               onScreenStateChanged: (screenId, stateJson) =>
                   repository.saveRuntimeStateForScreen(app.id, screenId, stateJson),
             ),
@@ -174,11 +187,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       const SizedBox(height: 20),
                       const ForgeSparkleMark(size: 72),
                       const SizedBox(height: 24),
-                      // FORGE v0.2 P5対応: 音声入力を実装していないため、
-                      // 「話すだけで」というコピーとマイクアイコンを削除し、
-                      // 実態(テキスト入力)に一致させた。
+                      // FORGE-PRODUCT-VISION-002(2026-08-11)対応:
+                      // 「アプリを作るAI」ではなく「困りごとを話すと道具が
+                      // 生まれるAI」という製品思想更新(design doc C.1、
+                      // Space)に合わせ、「何のアプリを作りますか」的な
+                      // 導入文言から「困りごとを話せる場所」的な文言へ
+                      // 変更した。入力欄への遷移先自体は
+                      // `ConversationFlowScreen`(複数ターンの会話)へ
+                      // 既に切り替え済み(`_onSubmit()`参照)。
                       const Text(
-                        'アイデアを入力するだけで、\nあなただけのアプリに。',
+                        '最近、ちょっと\n困ってることある？',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 24,
@@ -190,7 +208,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        '作りたいものを自由に入力してください。\nForgeが使えるアプリに仕上げます。',
+                        '面倒だな、忘れちゃう、毎回同じことしてる——\nそんな一言をそのまま話してください。',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 14, color: ForgeTheme.consoleInkSoft, height: 1.4),
                       ),
@@ -209,7 +227,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               cursorColor: ForgeTheme.consoleInk,
                               textInputAction: TextInputAction.done,
                               decoration: InputDecoration(
-                                hintText: 'どんなアプリを作りますか？',
+                                hintText: '困っていることを話してみてください',
                                 hintStyle: const TextStyle(color: ForgeTheme.consoleInkSoft),
                                 filled: true,
                                 fillColor: ForgeTheme.consoleSurface,
