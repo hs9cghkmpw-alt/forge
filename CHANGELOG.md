@@ -2,6 +2,40 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task060 — FORGE-PRODUCT-VISION-002続き: Forming Operation(UPDATE)実装(2026-08-11、同日中、CEO「実装できたの？できるまでやって」)
+
+Task059でTD40(UPDATE=生成後に会話で「育てる」機能)を「Gemini
+`responseSchema`の再帰制約が未検証」という理由で設計のみに留めていた
+ところ、CEOから「実装できたの？できるまでやって」という指示を受け、
+同日中に技術検証・実装・実機確認まで完了させた。
+
+### 技術検証
+`responseSchema`へ「type: object」とだけ渡し`properties`を書かない形
+(Forge DocumentのWidget木のような、再帰的で事前に形を確定できない
+構造)を実機で試したところ、その部分が**空オブジェクトで返ってくる**
+ことを確認した(既存データを丸ごと失う、深刻な失敗モード。懸念は
+正しかった)。`responseSchema`を送らずフリーフォームJSON生成にすると、
+既存構造を維持しながら要素を追加できることも確認し、こちらを採用。
+
+### 実装
+`GeminiProvider.complete_structured()`が`response_schema={}`の場合に
+`responseSchema`送信自体を省略するよう拡張(既存の非空schema呼び出しは
+無変更、回帰テストで確認)。新規`ForgeOperationEngine.apply_update()`
+(`backend/app/ai/runtime/forge_operation.py`)が、Validator不合格時に
+1回だけエラー内容をプロンプトへ追記して再生成する(最大2回、無限
+リトライ禁止の既存方針を踏襲)。新規`POST /api/v1/ai/update`追加。
+
+### 実機確認
+`/converse`で生成した3件の買い物チェックリスト(牛乳・食パン・卵)に
+「よく買うものを上に置きたい。カテゴリ分けもしたい。」を`/update`で
+適用。1回目はValidator不合格、2回目(Repair往復1回)で合格。既存3件を
+正しく3つのcategory別checklistへ分割・再配置し、対応する追加ボタンも
+生成した。指示書6・16・18章の例がそのまま動くことを確認した。
+
+新規Python 9件(`test_forge_operation.py`)+`GeminiProvider`回帰テスト
+2件、既存backend全テストと合わせ633件、全てgreen。詳細はTECH_DEBT.md
+TD40の追記・`docs/reports/FORGE-PRODUCT-VISION-002-report.md`参照。
+
 ## Task059 — FORGE-PRODUCT-VISION-002: Conversation Engine(2026-08-11、CEO「『アプリを作るAI』から『困りごとを話すと道具が生まれるAI』への製品思想更新」)
 
 CEOより、Forgeの製品思想を「アプリ生成AI」から「困りごとを話すと道具が

@@ -125,3 +125,19 @@ class ConversationSessionError(ForgeAIPipelineError):
     """
 
     category = "request_error"
+
+
+class UpdateOperationError(ForgeAIPipelineError):
+    """FORGE-PRODUCT-VISION-002 TD40対応(2026-08-11): `POST /api/v1/
+    ai/update`(Forming Operation)が、Provider呼び出し失敗、または
+    Repair往復(`forge_operation.MAX_UPDATE_ATTEMPTS`回)後もValidatorに
+    合格しなかった場合。`ForgeValidationError`と同じ`validation_errors`
+    フィールドを持つ(生成経路と同じ形でFrontendへ詳細を返せるように
+    するため)。
+    """
+
+    category = "validation_error"
+
+    def __init__(self, message: str, *, validation_errors: tuple[dict, ...] = (), stage: str | None = None) -> None:
+        super().__init__(message, stage=stage)
+        self.validation_errors = validation_errors

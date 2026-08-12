@@ -261,3 +261,28 @@ class ConverseBuildResponse(BaseModel):
     need_model: NeedModelDTO
     build_brief: str
     result: GenerateResultDTO
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/ai/update — Forming Operation(FORGE-PRODUCT-VISION-002
+# TD40対応、2026-08-11)。Held状態のアプリを、会話で「育てる」。
+# ---------------------------------------------------------------------------
+
+
+class UpdateRequest(BaseModel):
+    version: Literal["1.0"] = "1.0"
+    forge_document: dict[str, Any] = Field(..., description="更新対象の既存Forge Document(現在の状態そのまま)")
+    change_request: str = Field(..., min_length=1, max_length=2000, description="ユーザーの変更要求(自然言語)")
+    provider: Literal["mock", "gemini"] | None = None
+
+
+class UpdateResultDTO(BaseModel):
+    forge_document: dict[str, Any]
+    validation: ValidationResultDTO
+    attempts: int
+
+
+class UpdateSuccessResponse(BaseModel):
+    version: Literal["1.0"] = "1.0"
+    status: Literal["success"] = "success"
+    result: UpdateResultDTO

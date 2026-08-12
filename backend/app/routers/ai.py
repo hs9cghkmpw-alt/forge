@@ -40,8 +40,9 @@ from app.ai.runtime.confirmation_store import (
 from app.ai.runtime.conversation_engine import ConversationEngine
 from app.ai.runtime.conversation_store import ConversationNotFoundError, default_conversation_store
 from app.ai.runtime.conversation_types import ConversationAction, ConversationTurn
+from app.ai.runtime.forge_operation import ForgeOperationEngine
 from app.ai.runtime.injection_scan import scan_for_injection
-from app.ai.runtime.pipeline_errors import ConfirmationSessionError, ConversationSessionError
+from app.ai.runtime.pipeline_errors import ConfirmationSessionError, ConversationSessionError, UpdateOperationError
 from app.ai.runtime.prompt_pipeline import PipelineNeedsConfirmationResult, PromptPipeline
 from app.ai.runtime.provider_router import ProviderRouter
 from app.schemas.ai import (
@@ -58,6 +59,9 @@ from app.schemas.ai import (
     GenerateResultDTO,
     GenerateSuccessResponse,
     NeedModelDTO,
+    UpdateRequest,
+    UpdateResultDTO,
+    UpdateSuccessResponse,
     ValidationIssueDTO,
     ValidationResultDTO,
 )
@@ -350,4 +354,46 @@ def converse(request: ConverseRequest):
     return ConverseBuildResponse(
         session_id=session.session_id, need_model=need_model_dto, build_brief=build_brief,
         result=_result_dto(result),
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/ai/update — Forming Operation(FORGE-PRODUCT-VISION-002
+# TD40対応、2026-08-11)。Held状態のアプリを、会話で「育てる」。
+# ---------------------------------------------------------------------------
+
+
+@router.post("/update", response_model=UpdateSuccessResponse, responses=_GENERATE_ERROR_RESPONSES)
+def update(request: UpdateRequest):
+    """既存の`forge_document`を、`change_request`に従って更新する
+    (`forge_operation.py`参照)。Cognitive Pipelineを一切通らない
+    (Forge Language知識はValidatorだけに委ね、生成しない=既存の
+    `/generate`とは独立した経路)。Repair往復後もValidatorに合格
+    しなければ、`UpdateOperationError`(422相当)として失敗を返す
+    ——不正なJSONを「成功」として返すことは絶対にしない。
+    """
+    provider_name = request.provider or "mock"
+    provider = ProviderRouter().resolve(provider_name)
+    result = ForgeOperationEngine(provider).apply_update(request.forge_document, request.change_request)
+
+    if not result.success:
+        raise UpdateOperationError(
+            result.error_message or "更新に失敗しました。",
+            validation_errors=(
+                tuple(e.to_dict() for e in result.validation.errors) if result.validation is not None else ()
+            ),
+            stage="forming_operation",
+        )
+
+    assert result.forge_document is not None and result.validation is not None  # noqa: S101 — successならforge_operation.pyの契約上必ず両方Non-None
+    return UpdateSuccessResponse(
+        result=UpdateResultDTO(
+            forge_document=result.forge_document,
+            validation=ValidationResultDTO(
+                valid=result.validation.valid,
+                errors=[ValidationIssueDTO(**e.to_dict()) for e in result.validation.errors],
+                warnings=[ValidationIssueDTO(**w.to_dict()) for w in result.validation.warnings],
+            ),
+            attempts=result.attempts,
+        )
     )

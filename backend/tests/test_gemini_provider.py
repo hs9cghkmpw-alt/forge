@@ -91,6 +91,45 @@ class TestGeminiProviderRequestConstruction(unittest.TestCase):
         self.assertEqual(captured["body"]["generationConfig"]["responseSchema"], _SAMPLE_SCHEMA)
         self.assertEqual(captured["body"]["generationConfig"]["responseMimeType"], "application/json")
 
+    def test_empty_schema_omits_response_schema_for_freeform_json(self) -> None:
+        """FORGE-PRODUCT-VISION-002 TD40対応(2026-08-11)の回帰テスト。
+        `response_schema={}`(空dict)を渡すと、`responseSchema`自体を
+        送らない(実機検証で判明した、再帰的なJSON——Forge Documentの
+        Widget木——をresponseSchemaで強制すると内容が失われる問題への
+        対処、`GeminiProvider.complete_structured()`のdocstring参照)。"""
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(
+                200, json={"candidates": [{"content": {"parts": [{"text": json.dumps({"x": 1})}]}}]},
+            )
+
+        provider = GeminiProvider(api_key="fake-key-for-test", client=_mock_client(handler))
+        provider.complete_structured("何か", {})
+
+        self.assertNotIn("responseSchema", captured["body"]["generationConfig"])
+        self.assertEqual(captured["body"]["generationConfig"]["responseMimeType"], "application/json")
+
+    def test_nonempty_schema_still_sends_response_schema(self) -> None:
+        """既存の挙動(非空schemaなら送る)が変わっていないことの回帰テスト。"""
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "candidates": [
+                        {"content": {"parts": [{"text": json.dumps({"goal": "x", "required_actions": []})}]}}
+                    ]
+                },
+            )
+
+        provider = GeminiProvider(api_key="fake-key-for-test", client=_mock_client(handler))
+        provider.complete_structured("x", _SAMPLE_SCHEMA)
+        self.assertEqual(captured["body"]["generationConfig"]["responseSchema"], _SAMPLE_SCHEMA)
+
 
 class TestGeminiProviderSuccessResponse(unittest.TestCase):
     def test_parses_structured_json_from_response(self) -> None:

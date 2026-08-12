@@ -114,6 +114,23 @@ class GeminiProvider:
         self._timeout = timeout
 
     def complete_structured(self, prompt: str, response_schema: dict[str, Any]) -> dict[str, Any]:
+        """`response_schema`が空dict(`{}`)の場合、`responseSchema`自体を
+        省略し、`responseMimeType: application/json`のみでフリーフォームの
+        JSON出力を要求する(FORGE-PRODUCT-VISION-002 TD40対応、
+        2026-08-11)。
+
+        **技術検証の記録**: `responseSchema`(OpenAPI Schemaのサブセット、
+        `$ref`未対応)で「type: object」だけを指定し`properties`を
+        書かない形(Forge DocumentのWidget木のような、再帰的で事前に
+        形を確定できない構造)を試したところ、Geminiはその部分を
+        **空オブジェクト`{}`で返す**ことを実機で確認した(既存の
+        構造化データを丸ごと失う、深刻な失敗モード)。一方、
+        `responseSchema`を送らずフリーフォームJSONとして生成させると、
+        既存の構造を正しく維持しながら新しい要素を追加できることも
+        実機で確認した。したがって「事前に形が分からない/再帰的な
+        JSONを生成させたい」場合は、呼び出し側が`response_schema={}`を
+        渡すことで、この分岐に入る(`forge_operation.py`参照)。
+        """
         if not self._api_key:
             raise RuntimeError(
                 "GEMINI_API_KEY が設定されていません。Google AI Studio "
@@ -122,12 +139,12 @@ class GeminiProvider:
             )
 
         url = f"{self._API_BASE}/models/{self._model}:generateContent"
+        generation_config: dict[str, Any] = {"responseMimeType": "application/json"}
+        if response_schema:
+            generation_config["responseSchema"] = response_schema
         body = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "responseSchema": response_schema,
-            },
+            "generationConfig": generation_config,
         }
 
         client = self._client

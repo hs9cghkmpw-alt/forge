@@ -1861,7 +1861,7 @@ Expansion第3弾)であり、`todo`/`reading_log`を実機到達可能にする�
 追加する。分類器の構造次第では影響範囲が広くなる可能性があるため、
 着手前に`core/understanding/`配下の分類ロジックを読み込むこと。
 
-## TD40. Forming Operation(UPDATE、生成後に会話で「育てる」)は設計のみで未実装(2026-08-11新設)
+## TD40. Forming Operation(UPDATE、生成後に会話で「育てる」)は設計のみで未実装 → **解消(2026-08-11、同日中)**
 
 FORGE-PRODUCT-VISION-002(製品思想更新)対応。CEO指示書が要求する
 「Held状態から会話に戻り、既存の道具を更新する」体験の中核だが、
@@ -1892,6 +1892,45 @@ TD37(4種のWidgetが一度も描画できていなかった)と同種の「実�
 はLLMの応答を実際には使っていない決定的修正のみ、A.6参照)を新規実装
 することになるため、次のセッションで小さく検証しながら進めることを
 推奨する。
+
+**追記(2026-08-11、同日中に解消)**: CEO「実装できたの？できるまで
+やって」という指示を受け、上記「未検証」を実際に検証した。
+
+**技術検証の結果**: `responseSchema`へ「type: object」とだけ渡して
+`properties`を書かない形(再帰的なWidget木の型を事前に確定できない
+ケース)を実際にGemini APIへ送ったところ、**その部分は空オブジェクト
+`{}`で返ってくる**ことを実機で確認した(既存の構造化データを丸ごと
+失う、深刻な失敗モード。懸念は正しかった)。一方、`responseSchema`を
+一切送らず、`responseMimeType: application/json`のみでフリーフォームの
+JSON生成を要求したところ、既存の再帰的な構造を正しく維持しながら
+新しい要素を追加できることも実機で確認した——上記の設計候補2案のうち
+「案2」を採用した。
+
+**実装内容**: `GeminiProvider.complete_structured()`
+(`backend/app/ai/foundation/providers.py`)を、`response_schema`が
+空dict(`{}`)の場合に`responseSchema`自体を省略する形へ拡張(既存の
+非空schema呼び出しの挙動は完全に無変更、回帰テストで確認済み)。
+新規`backend/app/ai/runtime/forge_operation.py`の
+`ForgeOperationEngine.apply_update()`が、既存Forge Document+変更要求を
+受け取り、Validator不合格時は1回だけ「直前のエラー内容」をプロンプトへ
+追記して再生成する(`MAX_UPDATE_ATTEMPTS = 2`、`prompt_pipeline.py`の
+`MAX_REPAIR_ATTEMPTS`と同じ「無限リトライ禁止」の思想)。新規
+`POST /api/v1/ai/update`エンドポイント追加。
+
+**実機確認**: `uvicorn`+実Geminiで、`/converse`が生成した3件の
+買い物チェックリスト(牛乳・食パン・卵)に対し、「よく買うものを
+上に置きたい。カテゴリ分けもしたい。」という変更要求を`/update`へ
+送った。1回目の応答はValidator不合格だったが、2回目(Repair往復1回)で
+Validator合格した更新済みJSONが返り、既存3件のitemを正しく
+`frequent_items`/`food_items`/`daily_items`という3つのchecklist
+stateへ分割・再配置し、対応する3つの`add`ボタン(それぞれ異なる
+`target_state_ref`)まで生成していることを確認した。指示書6・16・18章の
+「よく買うものを上に置きたい」「カテゴリ分けしたい」という例そのものが、
+実際に動作することを確認した。
+
+新規Python 9件(`test_forge_operation.py`)・`GeminiProvider`の回帰
+テスト2件(`test_gemini_provider.py`)追加。既存backend全テストと合わせ
+633件、全てgreen。
 
 ## TD41. ConversationStoreはプロセス内メモリのみ(`ConfirmationStore`と同じ既知の制限、2026-08-11新設)
 

@@ -112,6 +112,17 @@ Validator合格。指示書18章の例(「仕事のやること忘れる」→Ta
 ほぼ同じ形(「毎朝持ち物を忘れる」→チェックリスト)が、実際に会話から
 生成されることを確認した。
 
+### 4.4 「よく買うものを上に置きたい。カテゴリ分けもしたい。」(UPDATE、追記: 同日中に実装完了)
+
+4.1で生成した3件の買い物チェックリスト(牛乳・食パン・卵)に対し、
+`POST /api/v1/ai/update`(TD40)へ上記の変更要求を送った。1回目は
+Validator不合格、2回目(Repair往復1回)でValidator合格。既存3件のitemを
+`frequent_items`/`food_items`/`daily_items`という3つのchecklist state
+へ正しく分割・再配置し、対応する3つの追加ボタンまで生成した。指示書
+6・16・18章が例として挙げる「よく買うものを上に置きたい」「カテゴリ
+分けしたい」がそのまま実際に動くことを確認した。詳細はTECH_DEBT.md
+TD40の追記参照。
+
 ## 5. Decision Log(指示書27・28章対応)
 
 以下は、明確に安全・可逆と判断し、CEO確認を待たずに実施した:
@@ -121,7 +132,12 @@ Validator合格。指示書18章の例(「仕事のやること忘れる」→Ta
   後方互換)。
 * Question PolicyのMVP版(EIG×Impact÷Frictionの数式化は見送り、
   決定的な上書きルールのみ実装、design doc B.3)。
-* UPDATE(Forming Operation)の実装見送り(技術検証が先、TD40)。
+* UPDATE(Forming Operation)の技術検証(`responseSchema`の再帰制約を
+  実機確認)と、その結果に基づく実装(`GeminiProvider.complete_
+  structured()`の拡張、`ForgeOperationEngine`、新規`POST /api/v1/ai/
+  update`)。CEO「実装できたの？できるまでやって」という指示を受け、
+  当初「次のセッションで検証」としていたTD40を同日中に検証・実装まで
+  完了させた。
 
 以下は、指示書28章の基準に照らし、**CEO確認が必要**と判断し、この
 セッションでは実施しなかった:
@@ -136,25 +152,33 @@ Validator合格。指示書18章の例(「仕事のやること忘れる」→Ta
 
 ## 6. 残存リスク(正直な申告)
 
-1. UPDATE(Forming Operation)が未実装のため、指示書のE2E例
-   (「よく買うものを上に置きたい」で既存Toolを更新)の後半ターンは
-   まだ実現できない(TD40)。
+1. ~~UPDATE(Forming Operation)が未実装~~ → 同日中に実装・実機確認済み
+   (4.4節、TD40)。ただし現状は`/update`単体のエンドポイントであり、
+   `/converse`の会話フロー(`ConversationAction.UPDATE`)とはまだ
+   結線していない——「今のメッセージは新しい問題か、既存Toolへの
+   変更要求か」を判定するロジックは未実装(次の一手として残る)。
 2. Question Policyが簡略版であり、4.2で確認した通り、Solution分岐点の
    検出精度はまだ指示書の理想に届いていない。
-3. `/converse`はbackendにのみ存在し、Flutter Frontendからはまだ
-   呼ばれていない。CEO・エンドユーザーが実際に触れるには、
+3. `/converse`・`/update`はbackendにのみ存在し、Flutter Frontendからは
+   まだ呼ばれていない。CEO・エンドユーザーが実際に触れるには、
    Frontend側の統合(最低限、新しい会話UIまたは既存Home画面からの
    呼び出し切り替え)が必要。
 4. Product Metrics(指示書25章、平均質問回数等)の計測基盤は未着手。
 5. `ConversationStore`はプロセス内メモリのみ(TD41、既存
    `ConfirmationStore`と同じ既知の制限)。
+6. `/update`のRepair往復(最大2回)は、Validator不合格の理由をテキストで
+   LLMへ見せて再生成させるという、`repair_engine.py`には無い新しい
+   パターンである(A.6参照)。今回2回の実機確認(4.4節、うち1回は
+   1回目失敗→2回目成功)では機能したが、試行回数はまだ少なく、
+   より複雑な変更要求でも安定して収束するかは追加検証が必要。
 
 ## 7. 次に進むために本当に必要なもの
 
 * **CEO判断**: 5章で挙げたフロントエンドの主要導入体験の変更を、
   実際に採用するかどうか。
-* 技術検証(CEO承認は不要、次セッションで着手可能): UPDATE
-  (Forming Operation)のためのGemini `responseSchema`再帰制約の検証
-  (TD40の2案のどちらが実際に動くか)。
-* Frontend統合(会話UIの実装)は、上記CEO判断の後に着手するのが
-  合理的(判断が変わるとUIの形も変わるため)。
+* Frontend統合(会話UI・UPDATE呼び出しの実装)は、上記CEO判断の後に
+  着手するのが合理的(判断が変わるとUIの形も変わるため)。
+* (CEO承認不要、次セッションで着手可能)`/converse`と`/update`の
+  結線: 会話中のメッセージが「新しい問題」か「既存Toolへの変更要求」
+  かを判定するロジック(現状は`ConversationAction.UPDATE`という型は
+  あるが、実際に発火する経路が無い、6章1項)。
