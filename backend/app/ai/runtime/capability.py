@@ -258,12 +258,43 @@ class SolutionHypothesis:
         if buildable:
             parts.append("代わりに、" + "・".join(buildable) + "ができる形なら作れます。")
 
+        # Semantic分解が「もっと近い代替」を知っている場合、それを添える
+        # (FORGE-USER-GUIDED-SELF-EXTENSION-006 §30・§59)。
+        # 「地図で濃淡」は4つのPrimitiveが要るが、同じ困りごとに答える
+        # 「場所ごとの集計」は1つで足りる——この差を黙っていると、
+        # ユーザーは「できない」としか受け取れない。
+        # **勝手に代替版を作らず、短く確認する**(§59)。
+        hint = self._closer_alternative_hint()
+        if hint:
+            parts.append(hint)
+
         confirm_needed = [c.label_ja for c in self.effects if c.requires_confirmation]
         if confirm_needed:
             parts.append("(" + "・".join(confirm_needed) + "は、作る前に確認させてください。)")
 
         parts.append("この形で進めますか？違うところがあれば教えてください。")
         return "".join(parts)
+
+    def _closer_alternative_hint(self) -> str:
+        """`semantic_capability`の分解を使い、より少ない不足で成立する
+        代替があれば一言添える。分解表に無ければ何も言わない
+        (**知らないことを、それらしく言わない**)。"""
+        from app.ai.runtime.semantic_capability import (  # noqa: PLC0415 — 循環import回避
+            SEMANTIC_LABELS_JA,
+            decompose,
+        )
+
+        for gap in self.missing:
+            decomposition = decompose(gap.id)
+            if decomposition is None:
+                continue
+            alternative = decomposition.nearest_alternative()
+            if alternative is None:
+                continue
+            label = SEMANTIC_LABELS_JA.get(alternative[0])
+            if label:
+                return f"({label}なら、もう少しで作れるようになります。)"
+        return ""
 
     def to_build_note(self) -> str:
         """BUILDへ渡す`build_brief`へ追記する一文
