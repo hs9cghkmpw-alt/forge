@@ -442,6 +442,11 @@ def converse(request: ConverseRequest):
     try:
         result = PromptPipeline().run(
             build_brief, engine="forge_ai", provider=provider_name, injection_report=injection_report,
+            # FORGE-HANDOFF-LOCAL-AI-UX-004(2026-08-13): アプリのタイトルは
+            # `build_brief`(Forgeが書いた説明文)ではなく、**ユーザー自身の
+            # 言葉**から作る。実機で「買い物で何買うかを記録・管理する
+            # ための道具」という説明文がそのままアプリ名になっていた。
+            title_seed=step_result.need_model.problem or None,
         )
     except ForgeAIPipelineError as exc:
         # 指示書8章: BUILD判定後にPipelineが失敗した場合、「作れません

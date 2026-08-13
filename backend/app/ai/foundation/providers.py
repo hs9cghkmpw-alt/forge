@@ -222,6 +222,110 @@ _WORD_RE = re.compile(r"[A-Za-z\u3040-\u30FF\u4E00-\u9FFF]+")
 # 上で修正した)。
 _LABELED_VALUE_RE = re.compile(r"'(title|goal|purpose)':\s*'([^']*)'")
 
+# --- Realistic Mock(FORGE-HANDOFF-LOCAL-AI-UX-004 §35 / -005 §26)-------
+#
+# **解いている問題**: 実機検証で、Mock Provider利用時に生成されたToolへ
+# `mock_result` `plan` `title` `screens`といった**内部構造がそのまま
+# 露出**し、会話も「mock resultがあると楽そう」という不自然な内容に
+# なっていた。指示書は「Mockだから内部JSONっぽい画面が出てもいい、
+# という考えは禁止」「MockでもUI Flow / Navigation / Runtimeを
+# Productionと同じUX契約で検証できること」と明示している。
+#
+# 方針: Mockは**LLMのふりをしない**が、**ユーザーの実際の発話から
+# もっともらしい日本語を決定的に組み立てる**。乱数は使わない
+# (同じ入力なら常に同じ出力=テストが安定する)。
+
+# ユーザー発話を拾う手がかり。会話プロンプトは「ユーザー: 〜」、
+# Bridge経由のプロンプトは`[CONTEXT]`内の`'user_text'`/
+# `'natural_language'`に入る。
+_USER_TURN_RE = re.compile(r"ユーザー:\s*(.+)")
+_CONTEXT_TEXT_RE = re.compile(r"'(?:user_text|natural_language)':\s*'([^']*)'")
+
+# 助詞・語尾を落として「何についての道具か」を取り出すための除去語。
+# 形態素解析は使わない(Mockに重い依存を持ち込まない)。
+_TOPIC_NOISE = (
+    "を記録したい", "を管理したい", "をつけたい", "を作りたい", "が欲しい",
+    "を残したい", "をメモしたい", "したい", "を作って", "作って",
+    "忘れちゃう", "忘れる", "困ってる", "ちょっと",
+)
+
+# 話題→(アプリ名, もっともらしい初期データ)。
+#
+# * 初期データ: Mockが「牛乳・卵・パン」のような**実在しそうな値**を
+#   返すことで、生成Toolが製品として成立して見える。
+# * アプリ名: 実機で「買い物で何買うかを記録・管理するための道具」という
+#   **説明文がそのままタイトル**になっていた。App Storeに並ぶアプリの
+#   名前は説明文ではなく短い名詞句なので、話題ごとに短い名前を持たせる。
+_TOPIC_PROFILES: tuple[tuple[tuple[str, ...], str, tuple[str, ...]], ...] = (
+    (("買い物", "買うもの", "スーパー"), "買い物リスト", ("牛乳", "卵", "パン")),
+    (("持ち物", "準備", "旅行"), "持ち物リスト", ("充電器", "着替え", "歯ブラシ")),
+    (("タスク", "todo", "やること", "仕事"), "やることリスト", ("メールを返す", "資料を作る", "掃除")),
+    (("本", "読書"), "読書記録", ("こころ", "ノルウェイの森", "銀河鉄道の夜")),
+    (("血圧", "体温", "体重", "健康"), "健康記録", ("朝の計測", "夜の計測")),
+    (("家計", "出費", "支出", "お金"), "家計簿", ("食費", "交通費", "日用品")),
+    (("習慣", "運動", "勉強"), "習慣記録", ("ストレッチ", "読書", "英単語")),
+    (("在庫", "ストック"), "在庫リスト", ("トイレットペーパー", "洗剤", "米")),
+    (("日記", "記録"), "日記", ("今日のできごと",)),
+    (("会議", "議事録", "打ち合わせ"), "議事メモ", ("定例ミーティング",)),
+)
+
+_DEFAULT_EXAMPLES: tuple[str, ...] = ("最初の項目", "2つめの項目")
+
+# アプリ名として許容する長さ。これを超えるものは「名前」ではなく
+# 「説明文」である、という判断に使う。
+_MAX_MOCK_TITLE_LENGTH = 14
+
+
+def _extract_user_utterance(prompt: str) -> str:
+    """プロンプトからユーザーの実際の発話を取り出す。
+
+    会話プロンプトでは複数ターンあるため**最後のユーザー発話**を使う
+    (今まさに応答すべき相手の言葉だから)。
+    """
+    turns = _USER_TURN_RE.findall(prompt)
+    if turns:
+        return turns[-1].strip()
+    matched = _CONTEXT_TEXT_RE.search(prompt)
+    return matched.group(1).strip() if matched else ""
+
+
+def _topic_of(utterance: str) -> str:
+    """発話から「何についての道具か」を粗く取り出す。
+
+    形態素解析はしない。語尾・助詞を落とすだけの決定的な処理であり、
+    完全な理解ではない——それでも`mock_result`よりは遥かに実物に近い。
+    """
+    topic = (utterance or "").strip()
+    for noise in _TOPIC_NOISE:
+        topic = topic.replace(noise, "")
+    topic = topic.strip("、。 　の")
+    return topic or "メモ"
+
+
+def _examples_for(utterance: str) -> tuple[str, ...]:
+    for keywords, _title, examples in _TOPIC_PROFILES:
+        if any(k in utterance for k in keywords):
+            return examples
+    return _DEFAULT_EXAMPLES
+
+
+def _title_for(text: str, fallback_topic: str) -> str:
+    """アプリ名(短い名詞句)を返す。
+
+    まず話題テーブルの短い名前を探す。見つからない場合は`fallback_topic`
+    を使うが、それが**説明文の長さ**(`_MAX_MOCK_TITLE_LENGTH`超)なら
+    名前として採用せず、既定の短い名前へ落とす。実機で
+    「買い物で何買うかを記録・管理するための道具」がタイトルとして
+    表示されていた問題への対応。
+    """
+    for keywords, title, _examples in _TOPIC_PROFILES:
+        if any(k in text for k in keywords):
+            return title
+    topic = (fallback_topic or "").strip()
+    if topic and len(topic) <= _MAX_MOCK_TITLE_LENGTH:
+        return topic
+    return "メモ"
+
 
 class MockLLMAdapter:
     """実際に動作するProvider実装(FORGE-MILESTONE-005 Task7)。
@@ -279,6 +383,16 @@ class MockLLMAdapter:
         field_type = spec.get("type")
 
         if field_type == "array":
+            # Realistic Mock: 生成Toolの初期データは、内部識別子ではなく
+            # 「牛乳・卵・パン」のような**実在しそうな値**にする
+            # (実機で`plan` `title` `screens`がそのままチェックリストの
+            # 項目として表示されていた問題への対応、指示書§35)。
+            if name == "example_items":
+                # 話題キーワードの照合は**プロンプト全体**に対して行う。
+                # compile段のプロンプトには生の発話が含まれず、
+                # `plan.title`等に話題が現れるため(発話だけを見ると
+                # 常に既定値になってしまう、実行して確認した)。
+                return list(_examples_for(_extract_user_utterance(prompt) or prompt))
             # 既知のフィールド名ごとに、意味の近い単語だけへ絞り込む
             # (forge_ai.MockProviderの`_handle_meaning`と同じ発想:
             # 完全な自然言語理解はしないが、明らかに無関係な結果にはしない)。
@@ -330,6 +444,31 @@ class MockLLMAdapter:
 
         if field_type == "object":
             return {}
+
+        # --- Realistic Mock(FORGE-HANDOFF-LOCAL-AI-UX-004 §35)---------
+        # ユーザーの実際の発話から、もっともらしい日本語を組み立てる。
+        # 以前はこれらが全て`"mock_result"`になっており、生成された
+        # Toolのタイトルや会話文へそのまま露出していた(実機で確認)。
+        utterance = _extract_user_utterance(prompt)
+        if utterance:
+            topic = _topic_of(utterance)
+            if name == "problem":
+                return utterance
+            if name == "build_brief":
+                return f"{topic}を記録・管理するための道具。思いついた時に追加して、あとから見返せる。"
+            if name == "question":
+                # Mockは本当の意味で「聞くべきこと」を判断できない。
+                # ただし空文字を返すとEngineが質問なしと解釈するため、
+                # 会話として成立する一般的な確認文を返す。
+                return f"{topic}について、自分だけで使う感じですか？"
+            # 名前として使われるフィールドは、説明文ではなく**短い名詞句**を
+            # 返す(`_title_for`参照)。話題キーワードの照合は`example_items`
+            # と同様にプロンプト全体に対して行う——compile段のプロンプトには
+            # 生の発話が無く、`build_brief`経由でしか話題が現れないため。
+            if name in ("entity_label", "app_title"):
+                return _title_for(prompt, topic)
+            if name in ("goal", "title", "purpose") and name not in labeled_values:
+                return _title_for(prompt, topic)
 
         # デフォルトは文字列。フィールド名に応じて、多少意味のある値を返す。
         if name in ("goal", "title", "purpose"):

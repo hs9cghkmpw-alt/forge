@@ -139,6 +139,7 @@ def run_cognitive_pipeline(
     clarification_answers: tuple[str, ...] = (),
     domain_registry: DomainRegistry | None = None,
     dependencies: CognitiveDependencies | None = None,
+    title_seed: str | None = None,
 ) -> CognitivePipelineOutcome:
     """**M007 Phase 1 Minimal Cognitive Slice**のFacade。
 
@@ -188,6 +189,19 @@ def run_cognitive_pipeline(
     判定には引き続き全文(ノイズ含む)を使いながら、生成されるアプリの
     タイトル(`Intent.goal`経由)には、意味の無い元入力が混ざらないように
     する(`_compute_title_seed()`参照)。
+
+    **会話経由のタイトル(FORGE-HANDOFF-LOCAL-AI-UX-004、2026-08-13)**:
+    `title_seed`を明示的に渡せるようにした。`/converse`が導入されて以降、
+    `raw_input`はユーザーの一言ではなく**会話全体を要約した`build_brief`
+    (数十〜百数十文字の説明文)**になった。`Intent.goal`はこの入力から
+    導出されるため、生成されるアプリのタイトルが
+    「買い物で何買うかを記録・管理するための道具」のような**説明文**に
+    なっていた(実機で確認)。App Storeに並ぶアプリの名前は説明文では
+    なく短い名詞句である。呼び出し側(`/converse`)が、ユーザー自身の
+    短い言葉(`NeedModel.problem`)を`title_seed`として渡すことで、
+    Domain判定には引き続き`build_brief`全体を使いながら、タイトルだけを
+    ユーザーの言葉から導出する。Providerの種類に依存しない修正である
+    (Mockでも実Geminiでも同じ問題が起きていた)。
     """
     if provider is None:
         provider = MockProvider()
@@ -195,8 +209,12 @@ def run_cognitive_pipeline(
     dependencies = dependencies or _default_cognitive_dependencies(provider)
     orchestrator = CognitiveOrchestrator(domain_registry, dependencies)
     effective_input = _combine_with_answers(raw_input, clarification_answers)
-    title_seed = _compute_title_seed(raw_input, clarification_answers)
-    return orchestrator.run(effective_input, title_seed=title_seed)
+    # 呼び出し側が明示した`title_seed`を最優先する
+    # (FORGE-HANDOFF-LOCAL-AI-UX-004対応、下記docstring「会話経由の
+    # タイトル」参照)。指定が無い場合のみ、従来のノイズ入力対策
+    # ヒューリスティック(`_compute_title_seed()`)へ委ねる。
+    effective_title_seed = title_seed or _compute_title_seed(raw_input, clarification_answers)
+    return orchestrator.run(effective_input, title_seed=effective_title_seed)
 
 
 def _combine_with_answers(raw_input: str, clarification_answers: tuple[str, ...]) -> str:

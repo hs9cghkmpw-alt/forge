@@ -34,6 +34,7 @@ Registryを注入できるようにすれば、より正確な動的リストに
 
 from __future__ import annotations
 
+from forge_ai.core.domain_model import DomainCategory
 from forge_ai.core.orchestration.cognitive_types import ConfirmationRequest
 
 # 指示書P0 3章の例("家計・買い物・予定・子どもの成長")と、既存の
@@ -151,11 +152,26 @@ def _build_domain_candidate_message(domain_classification) -> str | None:
     if subtype_question is not None:
         return subtype_question
 
-    positive_candidates = [c for c in domain_classification.candidates if c.raw_score > 0]
+    # FORGE-HANDOFF-LOCAL-AI-UX-004 §9対応(2026-08-13)。実機で
+    # 「「Shopping」「Diary」「Generic」のどちらに近いか」という確認文が
+    # そのまま出ていた。3つの問題があった:
+    #
+    # 1. `display_name`は**プロンプト用の内部識別子(英語)**であり、
+    #    ユーザーへ見せる語ではない → `user_facing_name`(日本語)を使う。
+    # 2. GENERICは「どれにも当てはまらなかった」という**内部の受け皿**で
+    #    あって、ユーザーが選べる選択肢ではない → 候補から除外する。
+    # 3. 「どちら」は2択の語。3候補並べて「どちら」は日本語として不自然
+    #    → 候補数で「どちら」「どれ」を切り替える。
+    positive_candidates = [
+        c
+        for c in domain_classification.candidates
+        if c.raw_score > 0 and c.domain.category != DomainCategory.GENERIC
+    ]
     if len(positive_candidates) < 2:
         return None
-    names = [c.domain.display_name for c in positive_candidates[:3]]
-    return f"「{'」「'.join(names)}」のどちらに近いか、もう少し具体的に教えていただけますか。"
+    names = [c.domain.user_facing_name for c in positive_candidates[:3]]
+    pronoun = "どちら" if len(names) == 2 else "どれ"
+    return f"「{'」「'.join(names)}」の{pronoun}に近いか、もう少し具体的に教えていただけますか。"
 
 
 def _build_revision_exhausted_message(critic_report) -> str:

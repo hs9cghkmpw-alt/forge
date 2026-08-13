@@ -237,6 +237,7 @@ class PromptPipeline:
         provider: str | None = None,
         clarification_answers: tuple[str, ...] = (),
         injection_report: dict[str, Any] | None = None,
+        title_seed: str | None = None,
     ) -> PromptPipelineOutcome:
         """フロー全体を1回実行する。
 
@@ -256,6 +257,14 @@ class PromptPipeline:
         `run_cognitive_pipeline()`へ両方を別引数として渡し、内部で
         ラベル無しの結合を1箇所(`forge_ai.core.pipeline._combine_
         with_answers()`)だけで行う。
+
+        `title_seed`(FORGE-HANDOFF-LOCAL-AI-UX-004、2026-08-13):
+        生成されるアプリのタイトルを導出する元にする短いテキスト。
+        `/converse`経由の場合、`natural_language`は会話全体を要約した
+        `build_brief`(説明文)であり、そこからタイトルを作ると
+        「〜を記録・管理するための道具」という説明文がそのまま
+        アプリ名になる(実機で確認)。ユーザー自身の短い言葉を
+        ここへ渡す。Domain判定等は引き続き`natural_language`全体を使う。
 
         戻り値は`PipelineRunResult`(成功)または
         `PipelineNeedsConfirmationResult`(確認要求、正式な結果型として
@@ -292,7 +301,17 @@ class PromptPipeline:
         # `NotImplementedError`を意図的に捕捉せず伝播させるため
         # (Blueprint 6.2節)、ここでの捕捉は既存の挙動と同じ。
         try:
-            outcome = run_cognitive_pipeline(natural_language, bridge, clarification_answers=clarification_answers)
+            outcome = run_cognitive_pipeline(
+                natural_language,
+                bridge,
+                clarification_answers=clarification_answers,
+                # FORGE-HANDOFF-LOCAL-AI-UX-004(2026-08-13): `/converse`が
+                # ユーザー自身の短い言葉を渡す。アプリのタイトルを
+                # `build_brief`(説明文)ではなくユーザーの言葉から導出する
+                # ため(`forge_ai.core.pipeline.run_cognitive_pipeline()`の
+                # docstring参照)。`None`の場合は従来どおりの挙動。
+                title_seed=title_seed,
+            )
         except NotImplementedError as exc:
             # Mock以外の未実装Providerを実際に呼んだ場合、ここでNotImplementedErrorが
             # 発生する(foundation/providers.pyの_UnimplementedProvider)。

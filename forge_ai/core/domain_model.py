@@ -97,6 +97,21 @@ class Domain:
     display_name: str
     typical_concepts: tuple[DomainConcept, ...]
     typical_actions: tuple[str, ...]
+    # FORGE-HANDOFF-LOCAL-AI-UX-004 §9対応(2026-08-13)。`display_name`は
+    # LLMプロンプト内で使う内部識別子(英語)であり、**ユーザーへ見せる語では
+    # ない**。実機で「「Shopping」「Diary」「Generic」のどちらに近いか」
+    # という確認文がそのまま日本語UIへ出ていた——内部識別子の露出であり、
+    # 指示書の「内部JSONっぽい画面を出さない」に反する。
+    #
+    # ユーザーへ見せる文言はここから取る(`user_facing_name`)。空文字の
+    # 場合は`display_name`へフォールバックするため、Domain定義を追加する
+    # 際にこのフィールドを忘れても壊れない(英語が出るだけ)。
+    label_ja: str = ""
+
+    @property
+    def user_facing_name(self) -> str:
+        """ユーザーへ提示してよい名前。プロンプト用の`display_name`とは別。"""
+        return self.label_ja or self.display_name
 
 
 class DomainRegistry:
@@ -140,6 +155,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.SHOPPING,
         display_name="Shopping",
+        label_ja="買い物",
         typical_concepts=(
             DomainConcept("item", "購入・記録の対象となる品目"),
             DomainConcept("price", "品目の価格"),
@@ -151,6 +167,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.HOSPITAL,
         display_name="Hospital",
+        label_ja="通院・診察",
         typical_concepts=(
             DomainConcept("patient", "診療・記録の対象となる人物"),
             DomainConcept("appointment", "診察の予定"),
@@ -162,6 +179,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.ATTENDANCE,
         display_name="Attendance",
+        label_ja="出欠",
         typical_concepts=(
             DomainConcept("member", "出欠管理の対象となる人物"),
             DomainConcept("session", "出欠を記録する単位(授業・会議等)"),
@@ -172,6 +190,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.DIARY,
         display_name="Diary",
+        label_ja="日記",
         typical_concepts=(
             DomainConcept("entry", "1回分の記録"),
             DomainConcept("date", "記録の日付"),
@@ -182,6 +201,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.INVENTORY,
         display_name="Inventory",
+        label_ja="在庫",
         typical_concepts=(
             DomainConcept("stock", "在庫として管理される品目"),
             DomainConcept("location", "保管場所"),
@@ -192,6 +212,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.TASK_MANAGEMENT,
         display_name="Task Management",
+        label_ja="やること",
         typical_concepts=(
             DomainConcept("task", "管理・記録の対象となる作業項目"),
             DomainConcept("deadline", "作業の期限"),
@@ -203,6 +224,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.SURVEY,
         display_name="Survey",
+        label_ja="アンケート",
         typical_concepts=(
             DomainConcept("question", "アンケートの設問"),
             DomainConcept("answer", "回答内容"),
@@ -214,6 +236,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.SCHEDULE,
         display_name="Schedule",
+        label_ja="予定",
         typical_concepts=(
             DomainConcept("event", "管理対象となる予定"),
             DomainConcept("time", "予定の日時"),
@@ -225,6 +248,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.HOUSEHOLD_BUDGET,
         display_name="Household Budget",
+        label_ja="家計簿",
         typical_concepts=(
             DomainConcept("transaction", "収入・支出の1件の記録"),
             DomainConcept("category", "費目(食費・光熱費等)"),
@@ -236,6 +260,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.CHILD_GROWTH,
         display_name="Child Growth",
+        label_ja="こどもの成長",
         typical_concepts=(
             DomainConcept("child", "記録対象となる子ども"),
             DomainConcept("measurement", "身長・体重等の測定値"),
@@ -247,6 +272,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.FISHING_LOG,
         display_name="Fishing Log",
+        label_ja="釣果",
         typical_concepts=(
             DomainConcept("catch", "釣った魚1件の記録"),
             DomainConcept("species", "魚の種類"),
@@ -259,6 +285,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.HABIT_TRACKING,
         display_name="Habit Tracking",
+        label_ja="習慣",
         typical_concepts=(
             DomainConcept("habit", "継続したい習慣"),
             DomainConcept("streak", "継続日数の記録"),
@@ -269,6 +296,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.STUDY,
         display_name="Study",
+        label_ja="学習",
         typical_concepts=(
             DomainConcept("subject", "学習する科目・分野"),
             DomainConcept("material", "教材・参考書"),
@@ -280,6 +308,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.TRAVEL,
         display_name="Travel",
+        label_ja="旅行",
         typical_concepts=(
             # FORGE-AI-QUALITY-001(2026-08-11): "destination"はDomain判定の
             # トリガーとしては典型的だが(「旅行」という語自体がこの概念に
@@ -301,6 +330,7 @@ _BUILTIN_DOMAINS: tuple[Domain, ...] = (
     Domain(
         category=DomainCategory.GENERIC,
         display_name="Generic",
+        label_ja="その他",
         typical_concepts=(DomainConcept("item", "汎用的な記録対象"),),
         typical_actions=("add_item", "remove_item"),
     ),

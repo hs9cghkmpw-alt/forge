@@ -849,10 +849,65 @@ class TestEscalationHandler(unittest.TestCase):
             raw_input="x", started_at="2026-01-01T00:00:00", domain_classification=dc,
         )
         request = self.handler.build_confirmation_request(context, reason="priority2_low_domain_confidence")
-        self.assertIn("Shopping", request.message)
-        self.assertIn("Task Management", request.message)
+        # FORGE-HANDOFF-LOCAL-AI-UX-004(2026-08-13): 候補名は**ユーザー向けの
+        # 日本語**(`Domain.user_facing_name`)で出す。以前は`display_name`
+        # (プロンプト用の内部識別子=英語)がそのまま日本語UIへ露出しており、
+        # 実機で「「Shopping」「Diary」「Generic」のどちらに近いか」という
+        # 確認文が表示されていた。
+        self.assertIn("買い物", request.message)
+        self.assertIn("やること", request.message)
+        self.assertNotIn("Shopping", request.message)
+        self.assertNotIn("Task Management", request.message)
         # sub-type質問固有の文言(例: household_budget用)が紛れ込んでいないこと。
         self.assertNotIn("個人用", request.message)
+
+    def test_generic_is_never_offered_as_a_user_choice(self) -> None:
+        """GENERICは「どれにも当てはまらなかった」という内部の受け皿であり、
+        ユーザーが選べる選択肢ではない。候補として提示してはならない。"""
+        registry = DomainRegistry()
+        shopping = registry.get(DomainCategory.SHOPPING)
+        diary = registry.get(DomainCategory.DIARY)
+        generic = registry.get(DomainCategory.GENERIC)
+        dc = DomainClassification(
+            primary_domain=shopping,
+            candidates=(
+                DomainCandidate(domain=shopping, raw_score=1.0, normalized_score=0.4,
+                                 matched_concepts=("item",), matched_actions=()),
+                DomainCandidate(domain=diary, raw_score=1.0, normalized_score=0.4,
+                                 matched_concepts=("entry",), matched_actions=()),
+                DomainCandidate(domain=generic, raw_score=1.0, normalized_score=0.2,
+                                 matched_concepts=("item",), matched_actions=()),
+            ),
+            confidence=0.4, score_margin=0.0, rationale="test",
+        )
+        context = CognitiveContext(
+            raw_input="x", started_at="2026-01-01T00:00:00", domain_classification=dc,
+        )
+        request = self.handler.build_confirmation_request(context, reason="priority2_low_domain_confidence")
+        self.assertNotIn("Generic", request.message)
+        self.assertNotIn("その他", request.message)
+        # 残った候補は2件なので、「どれ」ではなく「どちら」になる。
+        self.assertIn("どちら", request.message)
+
+    def test_three_candidates_use_dore_not_dochira(self) -> None:
+        """「どちら」は2択の語。3候補を並べて「どちら」と聞くのは
+        日本語として不自然なので、「どれ」へ切り替える。"""
+        registry = DomainRegistry()
+        dc = DomainClassification(
+            primary_domain=registry.get(DomainCategory.SHOPPING),
+            candidates=tuple(
+                DomainCandidate(domain=registry.get(category), raw_score=1.0, normalized_score=0.33,
+                                 matched_concepts=("item",), matched_actions=())
+                for category in (DomainCategory.SHOPPING, DomainCategory.DIARY, DomainCategory.INVENTORY)
+            ),
+            confidence=0.33, score_margin=0.0, rationale="test",
+        )
+        context = CognitiveContext(
+            raw_input="x", started_at="2026-01-01T00:00:00", domain_classification=dc,
+        )
+        request = self.handler.build_confirmation_request(context, reason="priority2_low_domain_confidence")
+        self.assertIn("どれ", request.message)
+        self.assertNotIn("どちら", request.message)
 
 
 if __name__ == "__main__":
