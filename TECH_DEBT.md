@@ -2794,3 +2794,59 @@ Compilerがこの合成を選ぶ経路(Solution Shape)が無いため、定義�
 `tests/test_capability_definition.py::test_not_yet_verified_end_to_end`が、
 未接続であること自体をテストとして固定している(接続できたら、この
 テストを本物のE2Eへ置き換えること)。
+
+---
+
+## TD59. Model Gatewayが本番から一度も呼ばれていなかった → **解消(2026-08-13)**
+
+FORGE-QUOTA-AWARE-AI-ROUTER-008 Phase Bの監査で発見。
+
+```
+$ grep -rn "ModelGateway" app/ | grep -v app/ai/gateway/
+→ コメント2件のみ。**呼び出しゼロ**
+```
+
+`_DEFAULT_ROUTES`も空だった。つまりTask別Routingもfallbackも
+**一度も起きていなかった**。`ForgeTask`は分類として存在するだけだった。
+
+**007 §10でご指摘いただいた「`classify_correction`がテストからしか
+呼ばれていない」と同じ形の問題である。** 基盤を作って配線を忘れると、
+テストは通るのに製品は何も変わらない。同じ失敗を2回している。
+
+**対応**: `AIRouter`を新設し、`/converse`を実際にRouter経由へ配線した。
+配線の確認方法も残した(`tests/test_ai_router.py`の
+`TestRouterIsActuallyWired`ではなく、実際にHTTP経由で枠切れを
+再現して確認済み)。
+
+---
+
+## TD60. Privacy Policyが未完成(Routerは外部送信を内容で判定しない)
+
+FORGE-QUOTA-AWARE-AI-ROUTER-008 §25・§26。
+
+`TaskProfile.sensitivity`(`CLOUD_ALLOWED` / `LOCAL_ONLY`)を**型として**
+用意し、`LOCAL_ONLY`のTaskがCloudを選べないことはテストで固定した。
+
+**しかし現状、すべてのTaskが`CLOUD_ALLOWED`である。** 健康情報・
+家族情報・financial data等を**内容から自動判定していない**。
+つまり「血圧を記録したい」という会話も、そのままCloud Providerへ送られる。
+
+**なぜ今やらないか**: 内容によるsensitivity判定は、誤分類の両方向が
+害になる(過剰判定=Localしか使えず品質が落ちる、過少判定=送ってはいけない
+ものを送る)。判定基準をユーザーと合意しないまま実装すると、
+どちらの間違いも「Forgeが勝手に決めた」ことになる。
+
+**次にやるべきこと**: Privacy Policyをユーザー向けに定義し、
+`local_only` / `cloud_allowed` / `sensitive_local_preferred`の
+選択をユーザーが持てるようにする(§31のPreferenceと接続)。
+
+---
+
+## TD61. Provider状態がプロセス内メモリのみ
+
+`ProviderStateStore`は枠切れ・Circuit Breakerの状態をプロセス内で持つ。
+複数ワーカー構成では共有されないため、**各ワーカーが別々に枠切れを
+学習する**(その分だけ無駄なAPI呼び出しが起きる)。
+
+`ConversationStore`・`ConfirmationStore`と同じ制限(TD41)。
+外部ストア(Redis等)へ移すなら3つまとめて行うべきである。

@@ -36,7 +36,8 @@
 | Flutter Runtime | 動作 | Widget 19種、v1.9(集計付きbar_chart) |
 | 「はい、どうぞ」UX | 動作 | `conversation_flow_screen.dart` |
 | Conversation Metrics | 記録のみ | プロセス内メモリ。外部送出は未実装 |
-| Model Gateway | 動作 | Task単位のRouting・計測・fallback |
+| AI Router | 動作 | Quota/健全性/Circuit Breaker。**`/converse`へ配線済み** |
+| Model Gateway | 動作(未配線) | Task単位のRouting。本番からは未使用(TD59) |
 | Local Provider | 実装済/未実測 | OpenAI互換。実モデル未実行(環境制約) |
 | Provider Benchmark | 動作 | Impact分類16ケース。harness実行確認済み |
 | Scripted Conversation Set | 動作 | 50セッション。平均質問1.20/繰り返し0/未決着0 |
@@ -56,7 +57,7 @@
 | 対象 | 件数 | 状態 |
 |---|---|---|
 | `forge_ai/tests` | 521 | 全green |
-| `backend/tests` | 870 | 全green(skip 13) |
+| `backend/tests` | 897 | 全green(skip 13) |
 | `frontend`(Flutter) | 476 | 全green |
 | `flutter analyze` | 0件 | 2026-08-13にwarning/info含めて0へ(以前は77件) |
 
@@ -89,6 +90,11 @@
   作れる)/ `BLOCKED`(有用な代替も無い)。ただし判定は分解表の粒度に
   依存しており、`view.calendar`のようにCapability側には代替(一覧)が
   あるのにSemantic側では`BLOCKED`になる例が残っている(既知の不一致)。
+* AI Routerは**Quota残量の実測をしていない**。枠切れは「429を受けたら
+  学習する」という事後的な方法であり、事前の残量把握はしていない。
+* Routerの候補は`gemini`・`local`の2つのみ。Groq等は未実装
+  (動かないProviderを候補に並べない方針、§36)。
+* **内容によるPrivacy判定をしていない**(TD60)。健康情報等もCloudへ送られる。
 * 共有・通知などのEffect Capabilityは**確認は取るが、実装が無い**。
   確認文を「できないこと」に合わせて書き換えるのは、指示書001 §4で
   定めたCONFIRMの意味を変えるため、今回のVertical Sliceの範囲外とした

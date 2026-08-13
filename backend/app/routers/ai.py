@@ -37,6 +37,8 @@ from app.ai.runtime.confirmation_store import (
     ConfirmationRoundExceededError,
     default_confirmation_store,
 )
+from app.ai.gateway.ai_router import NoProviderAvailableError, default_router
+from app.ai.gateway.model_gateway import ForgeTask
 from app.ai.runtime.conversation_engine import ConversationEngine
 from app.ai.runtime.conversation_metrics import record_conversation_event
 from app.ai.runtime.conversation_policy import classify_build_failure
@@ -360,7 +362,23 @@ def converse(request: ConverseRequest):
     router = ProviderRouter()
     provider_name = request.provider or router.default_provider_name()
     simulated = router.is_simulated(provider_name)
-    provider = router.resolve(provider_name)
+
+    # FORGE-QUOTA-AWARE-AI-ROUTER-008(2026-08-13): Provider解決を
+    # `AIRouter`経由にする。**これが「配線」である** ——前回作った
+    # `ModelGateway`は本番から一度も呼ばれておらず、Task別Routingも
+    # fallbackも実際には起きていなかった(レビュー §3.1)。基盤を
+    # 作って繋がないと、テストは通るのに製品は何も変わらない。
+    #
+    # `bind()`が返すのは`LLMAdapter`と同じ形なので、
+    # `ConversationEngine`は1行も変わらない——Provider名を知らないまま
+    # でよい(§1・§46)。
+    #
+    # `request.provider`が明示されている場合はRoutingを迂回する
+    # (利用者の選択をRouterが上書きしない。Mockが使えるのもこの経路だけ)。
+    provider = default_router().bind(
+        ForgeTask.CONVERSATION_STEP,
+        provider=request.provider,
+    )
     try:
         step_result = ConversationEngine(provider).step(
             session, has_existing_tool=request.current_document is not None
@@ -374,6 +392,14 @@ def converse(request: ConverseRequest):
         # 素通りしてしまい、`GeminiProvider`自身が用意した親切な日本語
         # メッセージ(TD31対応)が失われていた。
         message = str(exc)
+        # Routerが「使えるProviderが無い」と言った場合、**理由込みで**
+        # 伝える(§33 graceful degradation)。ここで偽のToolを作らない。
+        if isinstance(exc, NoProviderAvailableError):
+            raise ProviderError(
+                "今どのAIも利用できませんでした。しばらく待ってからもう一度お試しください。"
+                f"(内訳: {message})",
+                sub_reason="unavailable", stage="conversation",
+            ) from exc
         sub_reason = "rate_limited" if ("429" in message or "利用上限" in message) else "unavailable"
         raise ProviderError(message, sub_reason=sub_reason, stage="conversation") from exc
     need_model_dto = NeedModelDTO(**step_result.need_model.to_dict())
