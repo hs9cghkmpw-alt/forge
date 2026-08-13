@@ -27,7 +27,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.ai.gateway.model_gateway import ForgeTask, ModelGateway
+from app.ai.gateway.ai_router import AIRouter
+from app.ai.gateway.tasks import ForgeTask
 
 __all__ = [
     "BenchmarkCase",
@@ -142,7 +143,7 @@ class BenchmarkReport:
 
 
 def run_benchmark(
-    gateway: ModelGateway,
+    router: AIRouter,
     task: ForgeTask,
     cases: list[BenchmarkCase],
     providers: list[str],
@@ -153,6 +154,14 @@ def run_benchmark(
     いう測定結果である)。**片方が落ちたからBenchmarkが取れない、
     という事態を避ける**——指示書27章「Geminiの枠が尽きても進める」の
     実装上の担保でもある。
+
+    `provider`を必ず明示して呼ぶ。Benchmarkは「このProviderはこの
+    Taskをどれだけ出来るか」を測るものなので、**Routerに選ばせては
+    ならない**——選ばせると、測った相手が誰なのか分からなくなる。
+
+    FORGE-AI-FOUNDATION-010 Phase B: 引数を`ModelGateway`から
+    `AIRouter`へ移した(`ModelGateway`は削除。同じ責務の層を2つ
+    残さない)。
     """
     report = BenchmarkReport(task=task)
     for provider in providers:
@@ -160,7 +169,7 @@ def run_benchmark(
         for case in cases:
             score.total += 1
             try:
-                result = gateway.generate(
+                result = router.generate(
                     task, case.prompt, case.response_schema, provider=provider,
                 )
             except Exception as exc:  # noqa: BLE001 — 失敗率も測定対象

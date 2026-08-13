@@ -1,8 +1,16 @@
-"""Model Gateway / Local Provider のテスト
-(FORGE-QUALITY-AI-INDEPENDENCE-003 Phase F・G、2026-08-12)。
+"""Provider境界 / Local Provider / Benchmark のテスト
+(FORGE-QUALITY-AI-INDEPENDENCE-003 Phase F・G、2026-08-12。
+FORGE-AI-FOUNDATION-010 Phase Bで`ModelGateway`削除に伴い整理)。
 
 指示書1章「ForgeをGeminiを使うアプリにしてはならない」の、
 実装上の境界を固定する。
+
+**Routing/Fallbackそのもののテストはここには無い**。`AIRouter`
+(`tests/test_ai_router.py`)が担当する。以前ここにあった
+`ModelGateway`のRouting/Fallbackテストは、同じ責務の実装が2つ
+あったために存在していたもので、実装の削除と共に落とした
+(`test_ai_router.py`が同じ性質をより厳密に——失敗種別・Quota・
+Circuit Breaker込みで——検査している)。
 """
 
 from __future__ import annotations
@@ -21,12 +29,8 @@ from app.ai.foundation.local_provider import (  # noqa: E402
     LocalModelProvider,
     extract_json_object,
 )
-from app.ai.gateway.model_gateway import (  # noqa: E402
-    ForgeTask,
-    ModelGateway,
-    ModelGatewayError,
-    TaskRoute,
-)
+from app.ai.gateway.ai_router import AIRouter, ModelDescriptor  # noqa: E402
+from app.ai.gateway.tasks import ForgeTask  # noqa: E402
 
 
 class _FakeAdapter:
@@ -42,101 +46,73 @@ class _FakeAdapter:
         return self._value
 
 
-def _gateway(adapters: dict[str, Any], **kwargs) -> ModelGateway:
-    return ModelGateway(lambda name: adapters[name], **kwargs)
+def _router(adapters: dict[str, Any]) -> AIRouter:
+    """名前付きのFake Adapter群を候補に持つ`AIRouter`。
+
+    Benchmarkは常に`provider`を明示して呼ぶので、catalogの中身は
+    候補選びには使われない。それでも実際の名前で登録しておくのは、
+    明示指定が無い呼び方に変わったときに気付けるようにするため。
+    """
+    return AIRouter(
+        resolve=lambda name: adapters[name],
+        catalog=tuple(
+            ModelDescriptor(provider=name, is_local=True) for name in adapters
+        ),
+    )
 
 
-class TestGatewayRouting(unittest.TestCase):
-    def test_it_uses_the_default_provider_when_nothing_is_configured(self) -> None:
-        adapter = _FakeAdapter({"problem": "x"})
-        gateway = _gateway({"mock": adapter}, default_provider="mock")
-        result = gateway.generate(ForgeTask.CONVERSATION_STEP, "p", {})
-        self.assertEqual(result.provider_used, "mock")
-        self.assertEqual(result.value, {"problem": "x"})
-
-    def test_a_task_route_overrides_the_default(self) -> None:
-        """指示書20章: Task単位のRouting。"""
-        gateway = _gateway(
-            {"mock": _FakeAdapter({"a": 1}), "local": _FakeAdapter({"b": 2})},
-            default_provider="mock",
-            routes={ForgeTask.CONVERSATION_STEP: TaskRoute(primary="local")},
-        )
-        self.assertEqual(
-            gateway.generate(ForgeTask.CONVERSATION_STEP, "p", {}).provider_used, "local"
-        )
-        # 別Taskは既定のまま。
-        self.assertEqual(
-            gateway.generate(ForgeTask.ENTITY_SYNTHESIS, "p", {}).provider_used, "mock"
-        )
-
-    def test_an_explicit_request_beats_the_route(self) -> None:
-        """HTTP APIの`generation_options.provider`(利用者の選択)を、
-        Routing表が勝手に上書きしてはならない。"""
-        gateway = _gateway(
-            {"mock": _FakeAdapter(), "local": _FakeAdapter()},
-            default_provider="mock",
-            routes={ForgeTask.CONVERSATION_STEP: TaskRoute(primary="local")},
-        )
-        result = gateway.generate(ForgeTask.CONVERSATION_STEP, "p", {}, provider="mock")
-        self.assertEqual(result.provider_used, "mock")
-
-
-class TestGatewayFallback(unittest.TestCase):
-    """指示書21章: Local失敗でForge全体を壊さない。"""
-
-    def test_it_falls_back_when_the_primary_fails(self) -> None:
-        primary = _FakeAdapter(error=RuntimeError("local runtime down"))
-        secondary = _FakeAdapter({"rescued": True})
-        gateway = _gateway(
-            {"local": primary, "gemini": secondary},
-            routes={ForgeTask.CONVERSATION_STEP: TaskRoute(primary="local", fallback=("gemini",))},
-        )
-        result = gateway.generate(ForgeTask.CONVERSATION_STEP, "p", {})
-        self.assertEqual(result.provider_used, "gemini")
-        self.assertEqual(result.value, {"rescued": True})
-        self.assertTrue(result.used_fallback)
-
-    def test_it_records_every_attempt_for_benchmarking(self) -> None:
-        """指示書19章: failure_rate / latencyを取れること。"""
-        gateway = _gateway(
-            {"local": _FakeAdapter(error=RuntimeError("boom")), "gemini": _FakeAdapter()},
-            routes={ForgeTask.CONVERSATION_STEP: TaskRoute(primary="local", fallback=("gemini",))},
-        )
-        result = gateway.generate(ForgeTask.CONVERSATION_STEP, "p", {})
-        self.assertEqual([a.provider for a in result.attempts], ["local", "gemini"])
-        self.assertEqual([a.ok for a in result.attempts], [False, True])
-        self.assertIn("boom", result.attempts[0].error or "")
-        self.assertGreaterEqual(result.latency_ms, 0.0)
-
-    def test_all_providers_failing_raises_with_every_reason(self) -> None:
-        gateway = _gateway(
-            {"local": _FakeAdapter(error=RuntimeError("down")),
-             "gemini": _FakeAdapter(error=RuntimeError("quota"))},
-            routes={ForgeTask.CONVERSATION_STEP: TaskRoute(primary="local", fallback=("gemini",))},
-        )
-        with self.assertRaises(ModelGatewayError) as caught:
-            gateway.generate(ForgeTask.CONVERSATION_STEP, "p", {})
-        self.assertIn("down", str(caught.exception))
-        self.assertIn("quota", str(caught.exception))
-
-    def test_no_fallback_configured_means_the_error_surfaces(self) -> None:
-        gateway = _gateway({"mock": _FakeAdapter(error=RuntimeError("x"))}, default_provider="mock")
-        with self.assertRaises(ModelGatewayError):
-            gateway.generate(ForgeTask.CONVERSATION_STEP, "p", {})
-
-
-class TestGatewayKnowsNoProviders(unittest.TestCase):
+class TestRouterKnowsNoProviders(unittest.TestCase):
     """指示書1章: 上位ロジックはProviderを知らない。"""
 
-    def test_the_gateway_module_does_not_import_any_concrete_provider(self) -> None:
-        """Gatewayが特定Providerをimportしていたら、その時点で
-        「交換可能な推論部品」という前提が崩れる。"""
-        import app.ai.gateway.model_gateway as module
+    def test_the_router_module_does_not_import_any_concrete_provider(self) -> None:
+        """Routerが特定Providerをimportしていたら、その時点で
+        「交換可能な推論部品」という前提が崩れる。
+
+        FORGE-AI-FOUNDATION-010 Phase B: 検査対象を`model_gateway.py`
+        (削除済み)から`ai_router.py`へ移すと同時に、**判定方法を
+        文字列検索からimport解析へ変えた**。
+
+        以前は`assertNotIn("GeminiProvider", source)`だった。`ai_router.py`
+        にはCatalogの設計判断を説明するコメントがあり、そこで
+        「`GeminiProvider`が実装済みだから候補に載せている」と述べた
+        だけで落ちた。**依存しているのか、依存について書いているのか**を
+        区別できない検査だったということである。散文で落ちる検査は、
+        いずれコメントを削って通される。
+
+        測るべきは「具体的なProvider実装をimportしているか」なので、
+        ASTのimport文だけを見る。
+        """
+        import ast
+
+        import app.ai.gateway.ai_router as module
 
         with open(module.__file__, encoding="utf-8") as handle:
-            source = handle.read()
-        for forbidden in ("GeminiProvider", "LocalModelProvider", "MockLLMAdapter", "genai"):
-            self.assertNotIn(forbidden, source, f"Gatewayが{forbidden}を知ってしまっている")
+            tree = ast.parse(handle.read())
+
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imported.add(node.module or "")
+                imported.update(alias.name for alias in node.names)
+
+        forbidden_names = {"GeminiProvider", "LocalModelProvider", "MockLLMAdapter"}
+        forbidden_modules = {
+            "google.generativeai", "google.genai", "genai", "openai", "anthropic",
+            "app.ai.foundation.providers", "app.ai.foundation.local_provider",
+        }
+        self.assertEqual(
+            imported & (forbidden_names | forbidden_modules), set(),
+            f"Routerが具体的なProvider実装をimportしている: {imported & (forbidden_names | forbidden_modules)}",
+        )
+        # `ProviderRouter`(名前→Adapterの解決表)だけは`default_router()`が
+        # 遅延importしてよい。Router本体はそれも知らずに動く
+        # (`AIRouter.__init__`は`resolve`関数を受け取るだけ)。
+        self.assertNotIn(
+            "app.ai.foundation.interfaces", imported,
+            "Router本体はAdapterの具体型にも依存しない(resolve関数を受け取るだけ)",
+        )
 
 
 class TestExtractJsonObject(unittest.TestCase):
@@ -245,9 +221,6 @@ class TestGeminiIsJustOneProvider(unittest.TestCase):
         self.assertEqual(result.build_brief, "買い物リストを作る")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class TestBenchmarkHarness(unittest.TestCase):
     """指示書19章: 同一Task・同一Datasetで比較できること。"""
@@ -267,13 +240,13 @@ class TestBenchmarkHarness(unittest.TestCase):
     def test_it_measures_accuracy_schema_rate_and_failures_separately(self) -> None:
         from app.ai.gateway.benchmark import run_benchmark
 
-        gateway = _gateway({
+        router = _router({
             "good": _FakeAdapter({"impact": "high"}),
             "malformed": _FakeAdapter({"nothing": 1}),
             "broken": _FakeAdapter(error=RuntimeError("down")),
         })
         report = run_benchmark(
-            gateway, ForgeTask.CONVERSATION_STEP, self._cases(),
+            router, ForgeTask.CONVERSATION_STEP, self._cases(),
             ["good", "malformed", "broken"],
         )
         by_provider = {s.provider: s for s in report.scores}
@@ -286,12 +259,12 @@ class TestBenchmarkHarness(unittest.TestCase):
         """指示書27章: 片方が落ちてもBenchmarkは取れる。"""
         from app.ai.gateway.benchmark import run_benchmark
 
-        gateway = _gateway({
+        router = _router({
             "broken": _FakeAdapter(error=RuntimeError("quota")),
             "good": _FakeAdapter({"impact": "high"}),
         })
         report = run_benchmark(
-            gateway, ForgeTask.CONVERSATION_STEP, self._cases(), ["broken", "good"],
+            router, ForgeTask.CONVERSATION_STEP, self._cases(), ["broken", "good"],
         )
         self.assertEqual(len(report.scores), 2)
         self.assertEqual(report.winner(), "good")
@@ -305,9 +278,9 @@ class TestBenchmarkHarness(unittest.TestCase):
         """
         from app.ai.gateway.benchmark import run_benchmark
 
-        gateway = _gateway({"formal": _FakeAdapter({"impact": "mock_result"})})
+        router = _router({"formal": _FakeAdapter({"impact": "mock_result"})})
         report = run_benchmark(
-            gateway, ForgeTask.CONVERSATION_STEP, self._cases(), ["formal"],
+            router, ForgeTask.CONVERSATION_STEP, self._cases(), ["formal"],
         )
         score = report.scores[0]
         self.assertEqual(score.schema_valid_rate, 1.0)
@@ -328,3 +301,7 @@ class TestBenchmarkHarness(unittest.TestCase):
 
         levels = {c.name.split(":", 1)[0] for c in build_impact_cases()}
         self.assertEqual(levels, {"blocking", "high", "low", "cosmetic"})
+
+
+if __name__ == "__main__":
+    unittest.main()

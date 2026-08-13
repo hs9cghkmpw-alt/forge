@@ -49,6 +49,8 @@ from forge_ai.quality.quality_engine import QualityEngine
 from forge_ai.repair.repair_engine import RepairEngine
 
 from app.ai.foundation.interfaces import CriticResult
+from app.ai.gateway.ai_router import AIRouter, NoProviderAvailableError, default_router
+from app.ai.gateway.tasks import ForgeTask
 from app.ai.runtime.forge_ai_adapter import (
     intent_ir_from_forge_ai_intent,
     plan_ir_from_application_plan,
@@ -64,7 +66,7 @@ from app.ai.runtime.pipeline_errors import (
     ProviderError,
     UnsupportedEngineError,
 )
-from app.ai.runtime.provider_router import ProviderNotAvailableError, ProviderRouter
+from app.ai.runtime.provider_router import ProviderRouter
 from app.ai.validators.schema_validator import ValidationResult, validate_forge_document
 
 # 共通指示書6.5節「修正回数には上限を設ける。推奨は最大2回。無限修正
@@ -160,6 +162,19 @@ class PipelineNeedsConfirmationResult:
     injection_report`と同じ(呼び出し側が事前計算した結果をそのまま
     保持するだけ)。"""
 
+    requested_provider: str | None = None
+    """利用者が**明示的に要求した**Provider名(通常は`None`)。
+
+    FORGE-AI-FOUNDATION-010 Phase Bで追加。`provider_used`とは意味が
+    違う——`provider_used`は「実際に応答を返したのは誰か」という観測
+    結果であり、確認往復の再開時に**そのまま指定し直してよい値では
+    ない**(そもそも何も呼ばれていなければ`"none"`になる)。
+
+    `/generate/confirm`はこの値を`ConfirmationStore`へ保存して再開時に
+    渡す。再現すべきなのは「利用者の指定」であって「たまたま選ばれた
+    Provider」ではない。`None`のまま保存すれば、再開時も同じように
+    Routingが働く。"""
+
 
 PromptPipelineOutcome = PipelineRunResult | PipelineNeedsConfirmationResult
 
@@ -224,10 +239,22 @@ class PromptPipeline:
         self,
         *,
         provider_router: ProviderRouter | None = None,
+        ai_router: AIRouter | None = None,
         max_repair_attempts: int = MAX_REPAIR_ATTEMPTS,
     ) -> None:
         self._provider_router = provider_router or ProviderRouter()
+        self._ai_router = ai_router
         self._max_repair_attempts = max_repair_attempts
+
+    @property
+    def ai_router(self) -> AIRouter:
+        """AI呼び出しの唯一の出口(FORGE-AI-FOUNDATION-010 Phase B)。
+
+        遅延解決にしているのは、`default_router()`のCatalogが環境変数を
+        読むためである。import時に固定すると、テストが環境を差し替えても
+        古いCatalogを見続ける。
+        """
+        return self._ai_router or default_router()
 
     def run(
         self,
@@ -287,14 +314,47 @@ class PromptPipeline:
                 stage="engine_validation",
             )
 
-        # 2. Provider解決
-        provider_name = provider or self._provider_router.default_provider_name()
-        try:
-            llm_adapter = self._provider_router.resolve(provider_name)
-        except ProviderNotAvailableError as exc:
-            raise ProviderError(str(exc), sub_reason="unavailable", stage="provider_resolution") from exc
+        # 2. Provider解決 — **AIRouter経由**
+        # (FORGE-AI-FOUNDATION-010 Phase B、2026-08-13)。
+        #
+        # 以前はここで`ProviderRouter.resolve()`を直接呼んでおり、
+        # `/generate`・`/generate/confirm`・`/converse`のBUILD経路は
+        # **Routerを一度も通っていなかった**。Quota切れのfallbackも
+        # Circuit Breakerも、製品の主要生成経路には効いていなかった
+        # ——「基盤はあるのに製品では使っていない」の3例目である。
+        #
+        # `provider`が明示されている場合だけ、その名前が実在するかを
+        # 先に検証する(既存契約: 未登録名は`ProviderError`)。
+        #
+        # **`resolve()`ではなく`is_registered()`を使う**。名前の確認に
+        # Adapterを取り出す必要は無く、取り出してしまうと「確認しただけ」
+        # と「Routerを迂回してAIを呼んだ」がコード上区別できなくなる
+        # (Anti-Bypass Regressionが誤検知する。実際に誤検知させて
+        # 気付いた)。
+        if provider is not None and not self._provider_router.is_registered(provider):
+            raise ProviderError(
+                f"Provider '{provider}' is not registered. "
+                f"Available: {', '.join(self._provider_router.available_providers())}",
+                sub_reason="unavailable",
+                stage="provider_resolution",
+            )
 
-        bridge = ForgeAIProviderBridge(llm_adapter)
+        bound = self.ai_router.bind(ForgeTask.COGNITIVE_STAGE, provider=provider)
+        bridge = ForgeAIProviderBridge(bound)
+
+        # 実際に応答を返したProvider名は**実行後**にしか分からない。
+        # 明示指定が無い場合、ここで名前を確定させない
+        # (`_provider_used()`が実行後の事実を読む)。
+        def _provider_used() -> str:
+            """実際に応答を返したProvider名。
+
+            `"none"`は「**まだ一度もAIを呼んでいない**」という事実である
+            (Ambiguity Detectionのような決定的な段階だけで確認要求へ
+            抜けた場合に起きる)。以前ここは「既定として選ばれるはずの
+            名前」を返しており、AIを呼んでいなくても`"mock"`と報告して
+            いた。呼んでいないなら、呼んでいないと言う。
+            """
+            return bound.last_provider_used or provider or "none"
 
         # 3. M004 run_cognitive_pipeline()を1回だけ呼ぶ(個別コンポーネントは
         # 呼ばない、Blueprint v1.3 Task1.2)。`CognitiveOrchestrator`は
@@ -312,6 +372,21 @@ class PromptPipeline:
                 # docstring参照)。`None`の場合は従来どおりの挙動。
                 title_seed=title_seed,
             )
+        except NoProviderAvailableError as exc:
+            # Routerが候補を使い切った(枠切れ・Circuit Breaker・鍵なし・
+            # 未実装スタブ等)。**理由込みで**伝える(§33)。ここでMockへ
+            # 倒して偽のToolを作らない。
+            #
+            # `stage`を2つに分けているのは、**起きたことが違う**ため:
+            #
+            # * `provider`明示あり → その1つを呼んで失敗した。以前
+            #   (Router導入前)は`NotImplementedError`として
+            #   `forge_ir_compilation`を返していた経路であり、
+            #   同じ意味の失敗なのでstageも保つ(既存契約)。
+            # * `provider`指定なし → 候補を選ぶ段階で全滅した。
+            #   IRの生成には一度も到達していない。
+            stage = "forge_ir_compilation" if provider is not None else "provider_resolution"
+            raise ProviderError(str(exc), sub_reason="unavailable", stage=stage) from exc
         except NotImplementedError as exc:
             # Mock以外の未実装Providerを実際に呼んだ場合、ここでNotImplementedErrorが
             # 発生する(foundation/providers.pyの_UnimplementedProvider)。
@@ -334,7 +409,8 @@ class PromptPipeline:
                 open_questions=request.open_questions,
                 reached_stage=outcome.reached_stage,
                 engine_used=engine,
-                provider_used=provider_name,
+                provider_used=_provider_used(),
+                requested_provider=provider,
                 decision_trace=_decision_trace_to_dicts(outcome.decision_trace),
                 ambiguity_report=_ambiguity_report_to_dict(partial.ambiguity_report) if partial is not None else None,
                 domain_classification=(
@@ -425,7 +501,7 @@ class PromptPipeline:
         }
         diagnostics = Diagnostics(
             engine_used=engine,
-            provider_used=provider_name,
+            provider_used=_provider_used(),
             repair_attempts=repair_attempts,
             intent_ir=_intent_ir_to_dict(intent_ir),
             plan_ir=_plan_ir_to_dict(plan_conversion.plan_ir),

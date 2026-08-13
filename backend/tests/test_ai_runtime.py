@@ -570,7 +570,14 @@ class TestPromptPipelineFacade(unittest.TestCase):
         self.assertEqual(result.reached_stage, "ambiguity_detection")
         self.assertEqual(result.open_questions, ("誰の情報を記録しますか？",))
         self.assertEqual(result.engine_used, "forge_ai")
-        self.assertEqual(result.provider_used, "mock")
+        # FORGE-AI-FOUNDATION-010 Phase B: `provider_used`は「実際に応答を
+        # 返したProvider」という**観測結果**になった。このテストは
+        # `run_cognitive_pipeline`をまるごとmockしており、AIは一度も
+        # 呼ばれていない。以前はここで既定解決の結果("mock")を返して
+        # いたが、それは「呼ばれるはずだった名前」であって事実ではない。
+        self.assertEqual(result.provider_used, "none")
+        # 確認往復の再開に使うのは利用者の指定(このテストでは未指定)。
+        self.assertIsNone(result.requested_provider)
 
     @patch("app.ai.runtime.prompt_pipeline.run_cognitive_pipeline")
     def test_cognitive_pipeline_failed_raises_planning_error(self, mock_run_cognitive_pipeline: MagicMock) -> None:

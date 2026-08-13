@@ -27,8 +27,9 @@ from app.ai.gateway.ai_router import (  # noqa: E402
     Sensitivity,
     TASK_PROFILES,
     TaskProfile,
+    default_catalog,
 )
-from app.ai.gateway.model_gateway import ForgeTask  # noqa: E402
+from app.ai.gateway.tasks import ForgeTask  # noqa: E402
 from app.ai.gateway.provider_state import Availability, ProviderStateStore  # noqa: E402
 
 _TASK = ForgeTask.CONVERSATION_STEP
@@ -439,6 +440,86 @@ class TestErrorClassification(unittest.TestCase):
     def test_already_classified_errors_pass_through(self) -> None:
         original = ProviderError(ErrorKind.QUOTA_EXHAUSTED, "p", "枠切れ")
         self.assertIs(classify_exception(original, "p"), original)
+
+
+class TestDefaultCatalogFollowsTheEnvironment(unittest.TestCase):
+    """FORGE-AI-FOUNDATION-010 Phase Bで見つけた実バグの回帰テスト。
+
+    Catalogが固定リストだったため、運用者が`FORGE_DEFAULT_PROVIDER`で
+    Providerを指定していてもRouterはそれを読まず、実機で
+    **`simulated: true`と返しながら実Geminiを呼んでいた**。
+    """
+
+    def setUp(self) -> None:
+        self._saved = {
+            key: os.environ.get(key)
+            for key in ("FORGE_DEFAULT_PROVIDER", "GEMINI_API_KEY")
+        }
+
+    def tearDown(self) -> None:
+        for key, value in self._saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def _set(self, **env: str) -> None:
+        for key in ("FORGE_DEFAULT_PROVIDER", "GEMINI_API_KEY"):
+            os.environ.pop(key, None)
+        os.environ.update(env)
+
+    def test_an_operator_pin_is_the_only_candidate(self) -> None:
+        """運用者が名指ししたら、Routerはそれ以外を候補にしない。
+
+        鍵があっても**Geminiへは行かない**——これが実際に起きていた
+        「指定を無視して外部Cloudへ送る」の再発防止である。
+        """
+        self._set(FORGE_DEFAULT_PROVIDER="mock", GEMINI_API_KEY="dummy-value-not-a-real-key")
+        self.assertEqual([m.provider for m in default_catalog()], ["mock"])
+
+    def test_a_pinned_mock_is_selectable(self) -> None:
+        """名指しされたMockは`test_only`を解かれる。
+
+        「黙って選ばれない」(§22)のであって、「名指しでも使えない」
+        のではない。鍵の無い開発環境でForgeが起動しなくなる。
+        """
+        self._set(FORGE_DEFAULT_PROVIDER="mock")
+        self.assertFalse(default_catalog()[0].test_only)
+
+    def test_gemini_is_not_a_candidate_without_a_key(self) -> None:
+        """必ず認証エラーになる候補を並べない(試行予算の無駄)。"""
+        self._set()
+        self.assertNotIn("gemini", [m.provider for m in default_catalog()])
+
+    def test_gemini_leads_when_a_key_is_present(self) -> None:
+        self._set(GEMINI_API_KEY="dummy-value-not-a-real-key")
+        self.assertEqual(default_catalog()[0].provider, "gemini")
+
+    def test_mock_is_never_auto_selected_without_a_pin(self) -> None:
+        """Catalogには居るが`test_only`。全Cloud失敗 → Mock → 偽のTool、
+        という経路を構造で塞ぐ(§22)。"""
+        self._set()
+        mock = [m for m in default_catalog() if m.provider == "mock"]
+        self.assertEqual(len(mock), 1)
+        self.assertTrue(mock[0].test_only)
+
+    def test_no_key_and_no_pin_leaves_nothing_auto_selectable_but_local(self) -> None:
+        """鍵もpinも無い環境の候補は`local`だけになる。
+
+        Localが動いていなければ`NoProviderAvailableError`になる
+        ——**それが正しい失敗**であって、Mockで偽のToolを作らない。
+        """
+        self._set()
+        auto = [m.provider for m in default_catalog() if not m.test_only]
+        self.assertEqual(auto, ["local"])
+
+    def test_an_unknown_pinned_name_is_treated_as_cloud(self) -> None:
+        """知らない名前をLocalと決めつけない。`LOCAL_ONLY`のTaskへ
+        誤って載せる方が、候補を1つ失うより悪い。"""
+        self._set(FORGE_DEFAULT_PROVIDER="some-new-provider")
+        descriptor = default_catalog()[0]
+        self.assertEqual(descriptor.provider, "some-new-provider")
+        self.assertFalse(descriptor.is_local)
 
 
 if __name__ == "__main__":

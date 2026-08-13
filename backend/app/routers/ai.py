@@ -38,7 +38,7 @@ from app.ai.runtime.confirmation_store import (
     default_confirmation_store,
 )
 from app.ai.gateway.ai_router import NoProviderAvailableError, default_router
-from app.ai.gateway.model_gateway import ForgeTask
+from app.ai.gateway.tasks import ForgeTask
 from app.ai.runtime.conversation_engine import ConversationEngine
 from app.ai.runtime.conversation_metrics import record_conversation_event
 from app.ai.runtime.conversation_policy import classify_build_failure
@@ -199,7 +199,11 @@ def _needs_confirmation_response_with_input(
     session = default_confirmation_store.create(
         original_natural_language=natural_language,
         engine=result.engine_used,
-        provider=result.provider_used,
+        # Phase B: 保存するのは**利用者の指定**(通常None)であって、
+        # 観測された`provider_used`ではない。`provider_used`を保存すると、
+        # 再開時にその名前で固定されてしまい(何も呼ばれていなければ
+        # `"none"`という存在しない名前になり)Routingが働かなくなる。
+        provider=result.requested_provider,
         reached_stage=result.reached_stage,
         reason=result.reason,
         round_count=round_count,
@@ -354,14 +358,20 @@ def converse(request: ConverseRequest):
         session.session_id, ConversationTurn(role="user", text=request.message)
     )
 
-    # FORGE-HANDOFF-LOCAL-AI-UX-004 §9(2026-08-13):「Silent Mock fallbackは
-    # 禁止」。以前はここが`request.provider or "mock"`で、Provider名を
-    # 送らないクライアント(Flutterは送っていない)へ、実Providerが
-    # 設定済みでも黙ってMock出力を返していた。既定の決定は
-    # `ProviderRouter.default_provider_name()`が一元的に行う。
+    # FORGE-AI-FOUNDATION-010 Phase B(2026-08-13)で修正した実バグ。
+    #
+    # 以前はここで`ProviderRouter.default_provider_name()`が返す名前を
+    # `provider_name`として確定させ、それをそのままレスポンスの
+    # `provider`/`simulated`として返していた。これは「既定として選ばれる
+    # **はず**の名前」であって、実際に応答を生成したProviderではない。
+    #
+    # 実機で確認した結果(Router state: `gemini available successes=1`):
+    # `FORGE_DEFAULT_PROVIDER=mock`を設定していても、Routerはそれを読まず
+    # 実Geminiを呼び、レスポンスは`provider: "mock", simulated: true`と
+    # 返していた。**利用者の入力が外部Cloudへ出ているのにMockだと
+    # 表示していた**。Catalog側を環境依存へ直し(`default_catalog()`)、
+    # ここでは**実際に使われた名前を実行後に読む**。
     router = ProviderRouter()
-    provider_name = request.provider or router.default_provider_name()
-    simulated = router.is_simulated(provider_name)
 
     # FORGE-QUOTA-AWARE-AI-ROUTER-008(2026-08-13): Provider解決を
     # `AIRouter`経由にする。**これが「配線」である** ——前回作った
@@ -402,6 +412,11 @@ def converse(request: ConverseRequest):
             ) from exc
         sub_reason = "rate_limited" if ("429" in message or "利用上限" in message) else "unavailable"
         raise ProviderError(message, sub_reason=sub_reason, stage="conversation") from exc
+
+    # **実行後**に確定する。Routerがfallbackした場合も正しい名前になる。
+    provider_name = provider.last_provider_used or request.provider or "unknown"
+    simulated = router.is_simulated(provider_name)
+
     need_model_dto = NeedModelDTO(**step_result.need_model.to_dict())
 
     # Stateful User Correction の状態を永続化する
@@ -457,7 +472,25 @@ def converse(request: ConverseRequest):
     if step_result.action == ConversationAction.UPDATE:
         assert request.current_document is not None  # noqa: S101 — has_existing_tool=Trueの場合のみConversationEngineがUPDATEを選ぶ(conversation_engine.py参照)
         change_request = step_result.build_brief or ""
-        update_result = ForgeOperationEngine(provider).apply_update(request.current_document, change_request)
+        # Phase B: UPDATEは会話ステップとは**別のTask**である
+        # (Forge Language JSONの書き換え。要求する能力も失敗の意味も違う)。
+        # 以前は会話ステップ用に束ねたAdapterを再利用しており、Task別の
+        # profile(構造化出力要求・時間予算・試行上限)が効いていなかった。
+        update_provider = default_router().bind(
+            ForgeTask.FORGE_LANGUAGE_UPDATE, provider=request.provider
+        )
+        try:
+            update_result = ForgeOperationEngine(update_provider).apply_update(
+                request.current_document, change_request
+            )
+        except NoProviderAvailableError as exc:
+            raise ProviderError(
+                "今どのAIも利用できませんでした。しばらく待ってからもう一度お試しください。"
+                f"(内訳: {exc})",
+                sub_reason="unavailable", stage="forming_operation",
+            ) from exc
+        provider_name = update_provider.last_provider_used or provider_name
+        simulated = router.is_simulated(provider_name)
         default_conversation_store.discard(session.session_id)
         if not update_result.success:
             raise UpdateOperationError(
@@ -487,8 +520,12 @@ def converse(request: ConverseRequest):
     build_brief = step_result.build_brief or ""
     injection_report = scan_for_injection(build_brief)
     try:
+        # Phase B: `provider_name`(既定解決の結果)ではなく
+        # **`request.provider`(利用者の明示指定、通常はNone)**を渡す。
+        # 以前は解決済みの名前を渡していたため、`PromptPipeline`側では
+        # 常に「明示指定あり」となり、Routingが一度も働かなかった。
         result = PromptPipeline().run(
-            build_brief, engine="forge_ai", provider=provider_name, injection_report=injection_report,
+            build_brief, engine="forge_ai", provider=request.provider, injection_report=injection_report,
             # FORGE-HANDOFF-LOCAL-AI-UX-004(2026-08-13): アプリのタイトルは
             # `build_brief`(Forgeが書いた説明文)ではなく、**ユーザー自身の
             # 言葉**から作る。実機で「買い物で何買うかを記録・管理する
@@ -535,10 +572,13 @@ def converse(request: ConverseRequest):
     )
     default_conversation_store.discard(session.session_id)
 
+    # 生成本体を実行したProviderを報告する(会話ステップとは別のProviderに
+    # なりうる——Routerは各Taskで独立にfallbackする)。
+    build_provider_name = result.diagnostics.provider_used or provider_name
     return ConverseBuildResponse(
         session_id=session.session_id, need_model=need_model_dto, build_brief=build_brief,
         result=_result_dto(result), readiness=step_result.readiness.value,
-        provider=provider_name, simulated=simulated,
+        provider=build_provider_name, simulated=router.is_simulated(build_provider_name),
     )
 
 
@@ -557,11 +597,21 @@ def update(request: UpdateRequest):
     しなければ、`UpdateOperationError`(422相当)として失敗を返す
     ——不正なJSONを「成功」として返すことは絶対にしない。
     """
-    # §9「Silent Mock fallbackは禁止」(上記`/converse`と同じ理由)。
-    router = ProviderRouter()
-    provider_name = request.provider or router.default_provider_name()
-    provider = router.resolve(provider_name)
-    result = ForgeOperationEngine(provider).apply_update(request.forge_document, request.change_request)
+    # FORGE-AI-FOUNDATION-010 Phase B(2026-08-13): この経路も
+    # **AIRouterを通す**。以前は`ProviderRouter.resolve()`を直接呼んで
+    # おり、`/update`だけQuota切れのfallbackもCircuit Breakerも
+    # 効いていなかった(Routerを作った後も繋いでいなかった箇所)。
+    provider = default_router().bind(ForgeTask.FORGE_LANGUAGE_UPDATE, provider=request.provider)
+    try:
+        result = ForgeOperationEngine(provider).apply_update(
+            request.forge_document, request.change_request
+        )
+    except NoProviderAvailableError as exc:
+        raise ProviderError(
+            "今どのAIも利用できませんでした。しばらく待ってからもう一度お試しください。"
+            f"(内訳: {exc})",
+            sub_reason="unavailable", stage="forming_operation",
+        ) from exc
 
     if not result.success:
         raise UpdateOperationError(

@@ -102,6 +102,18 @@ class ProviderRouter:
         """登録済みProvider名の一覧を返す(エイリアス含め8件)。"""
         return tuple(self._providers.keys())
 
+    def is_registered(self, provider_name: str) -> bool:
+        """その名前のProviderが登録されているか。**Adapterは渡さない**
+        (FORGE-AI-FOUNDATION-010 Phase B)。
+
+        名前の存在確認に`resolve()`を使うと、「名前を確かめただけ」と
+        「Adapterを取ってAIを呼んだ」が区別できなくなる。Anti-Bypass
+        Regression(`tests/test_router_anti_bypass.py`)は
+        `resolve()`の呼び出しを迂回の証拠として扱うので、**確認だけの
+        用途にはこちらを使うこと**。
+        """
+        return provider_name in self._providers
+
     def resolve(self, provider_name: str) -> AIProvider:
         """provider_nameに対応するAIProviderを返す。未登録の名前なら
         `ProviderNotAvailableError`を送出する(クラッシュではなく、

@@ -35,19 +35,16 @@ Mockは**自動Routingの候補にならない**。明示的に要求された�
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any
 
-from app.ai.gateway.ai_errors import ErrorKind, ProviderError, classify_exception
-from app.ai.gateway.model_gateway import ForgeTask
-from app.ai.gateway.provider_state import (
-    Availability,
-    ProviderState,
-    ProviderStateStore,
-)
+from app.ai.gateway.ai_errors import ErrorKind, classify_exception
+from app.ai.gateway.tasks import ForgeTask
+from app.ai.gateway.provider_state import Availability, ProviderStateStore
 
 __all__ = [
     "AIRouter",
@@ -60,6 +57,7 @@ __all__ = [
     "ModelDescriptor",
     "default_catalog",
     "default_router",
+    "reset_default_router",
 ]
 
 
@@ -156,6 +154,15 @@ class RoutedResult:
     @property
     def used_fallback(self) -> bool:
         return len(self.attempts) > 1
+
+    @property
+    def latency_ms(self) -> float:
+        """この結果を得るまでに掛かった合計時間。
+
+        **失敗した試行も含む**。利用者が待った時間はfallbackを含めた
+        合計であり、成功した1回だけを報告すると体感より速く見える。
+        """
+        return sum(a.latency_ms for a in self.attempts)
 
 
 class NoProviderAvailableError(RuntimeError):
@@ -374,9 +381,24 @@ class AIRouter:
         return _BoundAdapter(self, task, provider)
 
 
-@dataclass(frozen=True)
+@dataclass
 class _BoundAdapter:
-    """`LLMAdapter`と同じ形をした、Router経由の実行口。"""
+    """`LLMAdapter`と同じ形をした、Router経由の実行口。
+
+    **`last_provider_used`を持つ理由**(FORGE-AI-FOUNDATION-010 Phase B)。
+
+    以前`/converse`は、`ProviderRouter.default_provider_name()`が返した
+    名前をそのままHTTPレスポンスの`provider`として返していた。これは
+    「既定として選ばれるはずの名前」であって、**実際に応答を生成した
+    Providerではない**。Routerがfallbackした場合も、運用者の指定を
+    Routerが無視した場合も、レスポンスは嘘をつく。
+
+    実際に使われた名前はRouterだけが知っている。呼び出し側が
+    正直に報告できるよう、束ねたAdapter自身に記録させる。
+
+    frozenを外しているのはこの記録のためである。インスタンスは
+    リクエストごとに`bind()`で作られるので、共有されない。
+    """
 
     router: AIRouter
     task: ForgeTask
@@ -384,45 +406,104 @@ class _BoundAdapter:
 
     provider_name: str = "router"
 
+    last_provider_used: str | None = field(default=None, init=False)
+    """直近の`complete_structured()`で**実際に**応答を返したProvider名。
+    まだ呼ばれていなければ`None`。"""
+
     def complete_structured(self, prompt: str, response_schema: dict[str, Any]) -> dict[str, Any]:
-        return self.router.generate(
+        result = self.router.generate(
             self.task, prompt, response_schema, provider=self.provider
-        ).value
+        )
+        self.last_provider_used = result.provider_used
+        return result.value
 
 
 # ---------------------------------------------------------------------------
-# 既定Catalog(FORGE-QUOTA-AWARE-AI-ROUTER-008 §36)
+# 既定Catalog(FORGE-QUOTA-AWARE-AI-ROUTER-008 §36、
+#             FORGE-AI-FOUNDATION-010 Phase Bで環境依存へ修正)
 # ---------------------------------------------------------------------------
 #
 # **Providerを増やせば良くなるとは限らない**(§36)。Adapter保守・API変更・
 # Secrets・Observabilityが増える。MVPは「実際に動く実装があるもの」だけを
 # 載せ、Router Contractの正しさを証明することを優先する。
 #
-# 現在ここに載せられるのは2つだけである:
+# 現在Adapterが実在するのは2つだけである:
 #
 #   gemini — 実装済み(`GeminiProvider`)
 #   local  — 実装済み(`LocalModelProvider`、OpenAI互換)
 #
 # `openai`/`claude`/`oss`等は`NotImplementedError`を投げるスタブであり、
 # 候補に入れると必ず失敗して試行予算を食う。**動かないものを候補に
-# 並べない。** Groq/OpenRouter等を足すのは、実際にAdapterを書いてからである。
+# 並べない。**
+
+_KNOWN_MODELS: dict[str, ModelDescriptor] = {
+    "gemini": ModelDescriptor(provider="gemini", is_local=False, supports_structured_output=True),
+    "local": ModelDescriptor(provider="local", is_local=True, supports_structured_output=True),
+    "mock": ModelDescriptor(provider="mock", is_local=True, test_only=True),
+}
+
+
+def _descriptor_for(provider: str) -> ModelDescriptor:
+    """未知の名前は**Cloud・構造化出力あり**として扱う。
+
+    Localと決めつけると`LOCAL_ONLY`のTaskへ誤って載せてしまう。
+    分からないものは「外部かもしれない」側へ倒す。
+    """
+    known = _KNOWN_MODELS.get(provider)
+    if known is not None:
+        return known
+    return ModelDescriptor(provider=provider, is_local=False, supports_structured_output=True)
 
 
 def default_catalog() -> tuple[ModelDescriptor, ...]:
-    """実運用の候補一覧。
+    """実運用の候補一覧を、**その環境で実際に使えるものから**組み立てる。
 
-    順序が優先順位である(`AIRouter._order()`参照)。Geminiを先に
-    置いているのは、**現時点で唯一品質を実測済みのProvider**だから
-    であって、Cloudが本質的に優れているからではない。Localの品質が
-    Benchmarkで確認できたら、この順序を見直すこと。
+    順序が優先順位である(`AIRouter._order()`参照)。
+
+    ---
+
+    ## なぜ固定リストを止めたか(Phase Bで見つけた実バグ)
+
+    以前ここは`(gemini, local, mock)`のハードコードだった。その結果、
+    運用者が`FORGE_DEFAULT_PROVIDER=mock`と明示していても**Routerは
+    それを読まず**、`/converse`の会話ステップを実Geminiへ送っていた。
+    HTTPレスポンスは`provider: "mock"`, `simulated: true`と返しており、
+    **利用者の入力が外部Cloudへ出ているのに、Mockだと表示していた**。
+    実機で再現・確認した(Router state: `gemini available successes=1`)。
+
+    「Silent Mock fallbackは禁止」(FORGE-HANDOFF-LOCAL-AI-UX-004 §9)の
+    裏返しで、**Silent Cloud送信**の方が害が大きい。Providerの決定は
+    1箇所でなければならない。
+
+    ## 決定順序(すべて決定的、AI判断は入らない)
+
+    1. `FORGE_DEFAULT_PROVIDER`があれば**それだけ**を候補にする。
+       運用者の明示指定をRouterが上書きしない。このとき`test_only`は
+       解除する——Mockが自動選択されないのは「黙って選ばれない」ため
+       (§22)であって、名指しされた場合はその限りではない。
+       ただし利用者へは`simulated: true`として必ず伝える。
+    2. `GEMINI_API_KEY`があれば`gemini`を載せる。**無ければ載せない**
+       ——認証エラーで必ず失敗する候補は、試行予算を食うだけである。
+    3. `local`は常に載せる。Runtime(Ollama等)が起動しているかは
+       環境変数からは判定できない。起動していなければ
+       `LOCAL_RESOURCE_ERROR`となり、Circuit Breakerが学習する。
+    4. `mock`は`test_only`として末尾に置く。自動選択されないが、
+       `provider`を明示したリクエストの解決先としては残る。
+
+    候補が`local`と`mock`だけの環境(鍵なし・Runtimeなし)では、
+    `NoProviderAvailableError`になる。これは**正しい失敗**である
+    ——偽のToolをMockで作って「できました」と言わない(§33)。
     """
-    return (
-        ModelDescriptor(provider="gemini", is_local=False, supports_structured_output=True),
-        ModelDescriptor(provider="local", is_local=True, supports_structured_output=True),
-        # Mockは候補に入れるが`test_only`により**自動選択されない**(§22)。
-        # 明示要求されたときだけ使える経路を残すために列挙している。
-        ModelDescriptor(provider="mock", is_local=True, test_only=True),
-    )
+    pinned = os.environ.get("FORGE_DEFAULT_PROVIDER", "").strip()
+    if pinned:
+        return (replace(_descriptor_for(pinned), test_only=False),)
+
+    catalog: list[ModelDescriptor] = []
+    if os.environ.get("GEMINI_API_KEY", "").strip():
+        catalog.append(_KNOWN_MODELS["gemini"])
+    catalog.append(_KNOWN_MODELS["local"])
+    catalog.append(_KNOWN_MODELS["mock"])
+    return tuple(catalog)
 
 
 _default_router: AIRouter | None = None
@@ -436,7 +517,9 @@ def default_router() -> AIRouter:
     しまい、Quotaを無駄にする。
 
     既知の制限: 複数ワーカー構成では共有されない(`ConversationStore`と
-    同じ、TD41)。
+    同じ、TD41)。Catalogは**最初の呼び出し時の環境**で固定される
+    (プロセス起動後に環境変数を変える運用は想定していない。テストは
+    `reset_default_router()`で作り直すこと)。
     """
     global _default_router  # noqa: PLW0603 — プロセス内Singleton(既存のStoreと同じ方針)
     if _default_router is None:
@@ -447,3 +530,13 @@ def default_router() -> AIRouter:
             catalog=default_catalog(),
         )
     return _default_router
+
+
+def reset_default_router() -> None:
+    """共有Routerを破棄する(テスト用)。
+
+    Catalogが環境変数に依存するようになったため、環境を差し替える
+    テストは**Routerも作り直さなければ**古いCatalogを見続ける。
+    """
+    global _default_router  # noqa: PLW0603
+    _default_router = None

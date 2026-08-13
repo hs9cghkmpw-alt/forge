@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from app.ai.gateway.ai_router import NoProviderAvailableError
 from app.ai.runtime.provider_router import AIProvider
 from app.ai.validators.schema_validator import ValidationResult, validate_forge_document
 
@@ -88,6 +89,18 @@ class ForgeOperationEngine:
             )
             try:
                 candidate = self._provider.complete_structured(prompt, {})
+            except NoProviderAvailableError:
+                # FORGE-AI-FOUNDATION-010 Phase B: **「AIが無い」と
+                # 「AIの出力が悪い」を混ぜない**。
+                #
+                # `UpdateResult(success=False)`は「AIには聞けたが、
+                # 使える更新結果を得られなかった」という意味であり、
+                # HTTP層はこれを`UpdateOperationError`(利用者の要求の
+                # 問題でありうる)へ変換する。枠切れ・Circuit Breakerで
+                # **1つも呼べなかった**場合は種類が違う失敗であり、
+                # 利用者へ伝えるべき言葉も対処も違う。そのまま通して、
+                # HTTP層でProviderErrorとして扱わせる。
+                raise
             except Exception as exc:  # noqa: BLE001 — Provider呼び出し失敗を、成功/失敗が明確なUpdateResultへ変換する
                 return UpdateResult(
                     success=False, forge_document=None, validation=None, attempts=attempt,
