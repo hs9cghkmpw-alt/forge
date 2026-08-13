@@ -21,6 +21,7 @@ import dataclasses
 from datetime import datetime, timezone
 
 from forge_ai.core.domain_model import DomainRegistry
+from forge_ai.core.ir.domain_resolution import SolutionSource, resolve_domain_source
 from forge_ai.core.ir.forge_language_compiler import ForgeLanguageCompiler
 from forge_ai.core.ir.ir_generator import SUPPORTED_DOMAIN_CATEGORIES, IRGenerator
 from forge_ai.core.orchestration.cognitive_context import CognitiveContext
@@ -307,12 +308,36 @@ class CognitiveOrchestrator:
             # 不正、Provider未注入等)は、従来どおりChecklistへ安全に
             # フォールバックする——この機能が失敗しても以前より悪くは
             # ならない、という形にしている。
-            domain_category_value = context.domain_classification.primary_domain.category.value
+            #
+            # **FORGE-QUALITY-AI-INDEPENDENCE-003 Phase B(TD45の解決)**:
+            # 以前は「Curated定義が存在する」というだけで無条件に採用して
+            # いた。そのため「毎日の血圧を記録したい」が、概念語が1つも
+            # 一致していないにもかかわらず`diary`のCurated定義(タイトル/
+            # 本文/気分/日付)で作られていた。`resolve_domain_source()`が、
+            # **既にここにある事実**(どの概念語が実際に一致したか)を見て
+            # CuratedとGeneratedを選ぶ(`domain_resolution.py`参照)。
+            classification = context.domain_classification
+            domain_category_value = classification.primary_domain.category.value
+            primary_candidate = next(
+                (c for c in classification.candidates if c.domain is classification.primary_domain),
+                None,
+            )
+            resolution = resolve_domain_source(
+                domain_category_value,
+                is_curated=domain_category_value in SUPPORTED_DOMAIN_CATEGORIES,
+                matched_concepts=primary_candidate.matched_concepts if primary_candidate else (),
+                matched_actions=primary_candidate.matched_actions if primary_candidate else (),
+                can_generate=deps.entity_synthesizer is not None,
+            )
+            context = context.with_decision(_trace(
+                "domain_resolution", resolution.source.value, resolution.reason,
+            ))
+
             ir = None
             entity_source = "curated"
-            if domain_category_value in SUPPORTED_DOMAIN_CATEGORIES:
+            if resolution.source is SolutionSource.CURATED:
                 ir = IRGenerator().generate(context.plan, domain_category=domain_category_value)
-                assert ir is not None  # SUPPORTED_DOMAIN_CATEGORIESに含まれる場合は必ず生成される
+                assert ir is not None  # CURATEDを選ぶのはSUPPORTED_DOMAIN_CATEGORIESに含まれる場合だけ
             elif deps.entity_synthesizer is not None:
                 synthesized_spec = deps.entity_synthesizer.synthesize(
                     context.plan,
@@ -322,6 +347,10 @@ class CognitiveOrchestrator:
                 if synthesized_spec is not None:
                     ir = IRGenerator().build_from_spec(synthesized_spec)
                     entity_source = "synthesized"
+                elif domain_category_value in SUPPORTED_DOMAIN_CATEGORIES:
+                    # 合成に失敗した場合、Curatedが存在するなら
+                    # Checklistへ落ちるより手作り定義の方がまだ良い。
+                    ir = IRGenerator().generate(context.plan, domain_category=domain_category_value)
 
             if ir is not None:
                 context = context.with_decision(_trace(

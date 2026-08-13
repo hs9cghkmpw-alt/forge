@@ -30,6 +30,7 @@ from app.ai.runtime.conversation_types import (
     ConversationReadiness,
     DecisionContext,
     NeedModel,
+    QuestionStrategy,
     SafeAssumption,
     UnknownImpact,
     UnknownItem,
@@ -37,6 +38,9 @@ from app.ai.runtime.conversation_types import (
 
 __all__ = [
     "ConfirmationDecision",
+    "escalate_question_strategy",
+    "shrink_assumption_for",
+    "user_delegated_decision",
     "ReadinessDecision",
     "classify_build_failure",
     "detect_risk_signals",
@@ -194,6 +198,13 @@ class ReadinessDecision:
     readiness: ConversationReadiness
     question: UnknownItem | None = None
     confirm_reason: str | None = None
+    strategy: QuestionStrategy = QuestionStrategy.ASK
+    """FORGE-QUALITY-AI-INDEPENDENCE-003 §15。`NEEDS_QUESTION`/
+    `INSUFFICIENT_INFORMATION`のとき、どう聞くか(段)。"""
+
+    shrink_assumption: SafeAssumption | None = None
+    """`SHRINK_SOLUTION`のとき、そのUnknownを必要としない最小の解へ
+    落とすために採用する既定(指示書14章)。"""
 
 
 def evaluate_readiness(need_model: NeedModel, context: DecisionContext) -> ReadinessDecision:
@@ -225,18 +236,134 @@ def evaluate_readiness(need_model: NeedModel, context: DecisionContext) -> Readi
     if question is not None:
         return ReadinessDecision(ConversationReadiness.NEEDS_QUESTION, question=question)
 
-    # ここへ来た時点で「今このターンで聞くべきものは無い」。ただし
-    # BLOCKINGが残っているなら、それは「質問済みなのに解消していない」
-    # ということであり、作ってはならない(指示書16章の完了条件)。
+    # ここへ来た時点で「今このターンで**通常の質問として**聞くべきもの
+    # は無い」。ただしBLOCKINGが残っているなら、それは「質問済みなのに
+    # 解消していない」ということであり、勝手に作ってはならない
+    # (指示書16章の完了条件)。
+    #
+    # **FORGE-QUALITY-AI-INDEPENDENCE-003 §15**: ここで従来は無条件に
+    # `INSUFFICIENT_INFORMATION`(=同じことをまた聞く)へ倒しており、
+    # ユーザーが「分からない」「任せる」と答え続けた場合に**無限ASK**へ
+    # 陥る経路が残っていた。Strategy Escalationで段を上げる。
     unresolved_blocking = need_model.blocking_unknowns()
     if unresolved_blocking:
+        target = unresolved_blocking[0]
+        strategy = escalate_question_strategy(
+            target,
+            ask_count=context.ask_count_for(target.key),
+            delegated=context.user_delegated,
+            context=context,
+        )
+        if strategy is QuestionStrategy.SHRINK_SOLUTION:
+            # そのUnknownを必要としない最小の解へ落として作る
+            # (指示書14章 Smallest Useful Tool)。
+            return ReadinessDecision(
+                ConversationReadiness.SAFE_TO_ASSUME,
+                strategy=strategy,
+                shrink_assumption=shrink_assumption_for(target),
+            )
+        if strategy is QuestionStrategy.STOP:
+            # 高リスクなUnknownは、縮退も既定採用もしない。
+            # 勝手に仮定せず、確認として返す(指示書31章 最低条件C)。
+            return ReadinessDecision(
+                ConversationReadiness.NEEDS_CONFIRMATION,
+                question=target, strategy=strategy,
+                confirm_reason=(
+                    f"{target.key}が決まらないまま進めると、取り返しのつかない"
+                    "操作になる可能性があるため"
+                ),
+            )
         return ReadinessDecision(
-            ConversationReadiness.INSUFFICIENT_INFORMATION, question=unresolved_blocking[0]
+            ConversationReadiness.INSUFFICIENT_INFORMATION,
+            question=target, strategy=strategy,
         )
 
     if any(u.status == "unknown" for u in need_model.unknowns):
         return ReadinessDecision(ConversationReadiness.SAFE_TO_ASSUME)
     return ReadinessDecision(ConversationReadiness.BUILD_READY)
+
+
+# ---------------------------------------------------------------------------
+# Strategy Escalation / Unresolvable Unknown(指示書12〜15章)
+# ---------------------------------------------------------------------------
+
+# 同じUnknownについて、通常の質問(ASK)→聞き直し(REPHRASE)→既定の
+# 提示(OFFER_DEFAULT)→縮退(SHRINK_SOLUTION)と段を上げる境界。
+# **MAX_CONVERSATION_TURNSとは別物**である: あちらは会話全体の長さ、
+# こちらは「この1つのUnknownに何回向き合ったか」。
+_REPHRASE_AFTER_ASKS = 1
+_OFFER_DEFAULT_AFTER_ASKS = 2
+_SHRINK_AFTER_ASKS = 3
+
+# ユーザーが「決めてくれ」と委ねたことを示す表現(指示書12章の
+# `user_delegated_decision`)。これが出たら、同じことを聞き続けるのは
+# 会話として失礼であり、既定を提示する段へ即座に進む。
+_DELEGATION_PHRASES: tuple[str, ...] = (
+    "わからない", "分からない", "わかんない", "任せる", "まかせる",
+    "おまかせ", "お任せ", "どっちでもいい", "どちらでも", "なんでもいい",
+    "何でもいい", "決めて", "きめて", "特にない", "とくにない",
+)
+
+
+def user_delegated_decision(text: str) -> bool:
+    """ユーザーが判断をForgeへ委ねたか(指示書12章)。
+
+    「分からない」「任せる」「どっちでもいい」に対して同じ質問を
+    繰り返すのは、`repeated_question`以前に会話として成立していない。
+    """
+    lowered = (text or "").strip()
+    return any(phrase in lowered for phrase in _DELEGATION_PHRASES)
+
+
+def escalate_question_strategy(
+    unknown: UnknownItem,
+    *,
+    ask_count: int,
+    delegated: bool,
+    context: DecisionContext,
+) -> QuestionStrategy:
+    """同じUnknownに対して、次にどう振る舞うかを決める(指示書15章)。
+
+    **`MAX_CONVERSATION_TURNS`による強制BUILDへは戻さない**。ここで
+    上がるのは「聞き方の段」であって、「作ってしまう」判断ではない。
+
+    高リスク(外部作用・不可逆操作)の場合だけ、`OFFER_DEFAULT`や
+    `SHRINK_SOLUTION`を**飛ばして`STOP`**にする。「共有範囲が分からない
+    から、とりあえず全体公開にしておきますね」のような既定は、
+    取り返しがつかないためである(指示書13章 HARD_BLOCKING)。
+    """
+    high_risk = context.external_effect or context.destructive
+
+    if delegated:
+        # 委ねられた以上、聞き直しは飛ばす。ただし高リスクなら
+        # 「任せる」と言われても勝手に決めない(指示書31章 最低条件C)。
+        return QuestionStrategy.STOP if high_risk else QuestionStrategy.OFFER_DEFAULT
+
+    if ask_count <= _REPHRASE_AFTER_ASKS:
+        return QuestionStrategy.ASK if ask_count == 0 else QuestionStrategy.REPHRASE
+    if ask_count <= _OFFER_DEFAULT_AFTER_ASKS:
+        return QuestionStrategy.STOP if high_risk else QuestionStrategy.OFFER_DEFAULT
+    if ask_count <= _SHRINK_AFTER_ASKS:
+        return QuestionStrategy.STOP if high_risk else QuestionStrategy.SHRINK_SOLUTION
+    return QuestionStrategy.STOP if high_risk else QuestionStrategy.SHRINK_SOLUTION
+
+
+def shrink_assumption_for(unknown: UnknownItem) -> SafeAssumption:
+    """縮退時に採用する既定を、理由付きで組み立てる(指示書14章)。
+
+    「作れない」と言う代わりに、**そのUnknownを必要としない最小の解**
+    へ落とす。Forgeの製品思想「まず小さく作る → 会話で育てる」を
+    ここで守る——後から`UPDATE`で広げられるため、この既定は
+    取り返しがつく。
+    """
+    return SafeAssumption(
+        key=unknown.key,
+        value="minimal",
+        reason=(
+            f"{unknown.key}が決まらなかったため、これを必要としない"
+            "最小の形でまず作る(後から会話で広げられる)"
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

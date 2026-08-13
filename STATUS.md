@@ -36,22 +36,29 @@
 | Flutter Runtime | 動作 | Widget 19種、v1.8 |
 | 「はい、どうぞ」UX | 動作 | `conversation_flow_screen.dart` |
 | Conversation Metrics | 記録のみ | プロセス内メモリ。外部送出は未実装 |
+| Model Gateway | 動作 | Task単位のRouting・計測・fallback |
+| Local Provider | 実装済/未実測 | OpenAI互換。実モデル未実行(環境制約) |
+| Provider Benchmark | 動作 | Impact分類16ケース。harness実行確認済み |
 | Voice(STT/TTS) | 未接続 | Adapterとして後から足せる構造は維持 |
 
 ## テスト
 
 | 対象 | 件数 | 状態 |
 |---|---|---|
-| `forge_ai/tests` | 510 | 全green |
-| `backend/tests` | 733 | 全green(skip 13) |
+| `forge_ai/tests` | 519 | 全green |
+| `backend/tests` | 762 | 全green(skip 13) |
 | `frontend`(Flutter) | 451 | 全green、`flutter analyze` 0エラー |
 
 ## 分かっている制限
 
 * `ConversationStore`・`ConversationMetrics`はプロセス内メモリのみ
   (再起動で消える。TD41)。
-* Domain分類が緩くCurated Domainへ寄ると、AI合成より品質の低い
-  既製定義が使われる場合がある(TD45、例: 「血圧を記録したい」→ diary)。
+* ~~Domain分類が緩くCurated Domainへ寄る問題(TD45)~~ → **解消**(TD49)。
+* **Local Modelを実モデルで一度も動かせていない**(TD51)。サンドボックスは
+  `huggingface.co`がネットワークポリシーで拒否・GPU無しのため、モデル重みを
+  取得できない。手順は`docs/development/LOCAL_MODEL_SETUP.md`。
+* Gemini依存が`schemas/ai.py`の`Literal["mock","gemini"]`(3箇所)に残る
+  (HTTP APIの許可リスト。Local公開はBenchmark後の判断)。
 * `todo`・`reading_log`はDomainCategory enumに無く、分類から到達不可能
   (TD39。ただし合成経路が同等のアプリを作るため影響は限定的)。
 * Gemini無料枠のレート制限(429)に当たると生成が失敗する。

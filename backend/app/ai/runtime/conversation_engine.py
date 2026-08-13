@@ -18,6 +18,7 @@ from app.ai.runtime.conversation_policy import (
     detect_risk_signals,
     evaluate_readiness,
     resolve_action,
+    user_delegated_decision,
 )
 from app.ai.runtime.conversation_types import (
     ConversationAction,
@@ -26,6 +27,7 @@ from app.ai.runtime.conversation_types import (
     ConversationStepResult,
     DecisionContext,
     NeedModel,
+    QuestionStrategy,
     SafeAssumption,
     UnknownImpact,
     UnknownItem,
@@ -273,6 +275,10 @@ class ConversationEngine:
             llm_proposed_action=raw.get("next_action") if isinstance(raw.get("next_action"), str) else None,
             external_effect=bool(raw.get("external_effect")) or detected_external,
             destructive=bool(raw.get("destructive")) or detected_destructive,
+            ask_counts=dict(session.ask_counts),
+            # 「分からない」「任せる」と委ねられたら、同じことを
+            # 聞き続けない(§12)。判定は最新の発話に対して行う。
+            user_delegated=user_delegated_decision(latest_user_text),
         )
 
         # ---- ここから先が意思決定。LLMのnext_action/confidenceは、
@@ -284,6 +290,10 @@ class ConversationEngine:
         # NeedModelへ足す(指示書6章: 判断根拠を追えるようにする)。
         if action in (ConversationAction.BUILD, ConversationAction.UPDATE):
             extra = assumptions_for_unasked(need_model, context)
+            if decision.shrink_assumption is not None:
+                # SHRINK_SOLUTION: そのUnknownを必要としない最小の解へ
+                # 落として作ったことを、理由付きで記録する(§14)。
+                extra = extra + (decision.shrink_assumption,)
             if extra:
                 existing = {a.key for a in need_model.assumptions}
                 need_model = NeedModel(
@@ -306,6 +316,16 @@ class ConversationEngine:
         if action == ConversationAction.ASK:
             question = str(raw.get("question") or "").strip()
             target = decision.question
+            if decision.strategy is QuestionStrategy.OFFER_DEFAULT and target is not None:
+                # §15: 聞き直しても情報が増えないなら、質問をやめて
+                # 「こう決めておきますね」と既定を提示する。ユーザーが
+                # 「任せる」と言った場合はここへ直行する。
+                question = (
+                    f"{target.key}について決めかねているようなので、"
+                    "こちらで一般的な形にしておきますね。それで進めて大丈夫ですか？"
+                )
+            elif decision.strategy is QuestionStrategy.REPHRASE and target is not None and not question:
+                question = f"{target.key}について、どちらが近いですか？"
             if not question:
                 # **以前はここでBUILDへ倒していた**(空の質問文を出すより
                 # 作ってしまえ、という判断)。しかしそれは「分からなくても
@@ -320,6 +340,7 @@ class ConversationEngine:
                 action=action, need_model=need_model, readiness=decision.readiness,
                 question=question,
                 question_key=(target.key if target is not None else None),
+                strategy=decision.strategy,
             )
 
         brief = str(raw.get("build_brief") or "").strip() or _fallback_brief(session)

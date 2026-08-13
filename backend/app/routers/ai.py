@@ -382,6 +382,7 @@ def converse(request: ConverseRequest):
         record_conversation_event(
             session.session_id, "ask", readiness=step_result.readiness.value,
             question_key=step_result.question_key,
+            strategy=step_result.strategy.value,
         )
         return ConverseAskResponse(
             session_id=session.session_id, question=step_result.question or "", need_model=need_model_dto,

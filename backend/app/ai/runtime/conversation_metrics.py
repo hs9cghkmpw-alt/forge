@@ -77,7 +77,7 @@ class ConversationMetrics:
 
 @dataclass
 class _SessionRecord:
-    asked_keys: list[str] = field(default_factory=list)
+    asked_keys: list[tuple[str, str]] = field(default_factory=list)
     actions: Counter = field(default_factory=Counter)
     repeated_question_count: int = 0
     blocking_unknowns_at_build: int = 0
@@ -99,6 +99,7 @@ class ConversationMetricsCollector:
         *,
         readiness: str | None = None,
         question_key: str | None = None,
+        strategy: str | None = None,
         blocking_unknowns: int = 0,
         safe_assumptions: int = 0,
     ) -> None:
@@ -113,12 +114,14 @@ class ConversationMetricsCollector:
             if readiness:
                 record.actions[f"readiness:{readiness}"] += 1
             if question_key:
-                if question_key in record.asked_keys:
-                    # 同じUnknownを二度聞いてしまった(指示書5章の違反)。
-                    # Policyが防いでいるはずだが、実際に起きていないかを
-                    # 測れるようにしておく。
+                # FORGE-QUALITY-AI-INDEPENDENCE-003 §15: Strategy
+                # Escalationにより、同じUnknownへ段を変えて聞き直すのは
+                # 正常な進行になった。「繰り返し質問」として数えるのは
+                # **同じkeyを同じ段で**聞いた場合だけである。
+                pair = (question_key, strategy or "ask")
+                if pair in record.asked_keys:
                     record.repeated_question_count += 1
-                record.asked_keys.append(question_key)
+                record.asked_keys.append(pair)
             if action in ("build", "update"):
                 record.blocking_unknowns_at_build = blocking_unknowns
                 record.safe_assumptions_at_build = safe_assumptions
@@ -159,6 +162,7 @@ def record_conversation_event(
     *,
     readiness: str | None = None,
     question_key: str | None = None,
+    strategy: str | None = None,
     blocking_unknowns: int = 0,
     safe_assumptions: int = 0,
 ) -> None:
@@ -166,5 +170,6 @@ def record_conversation_event(
     (`default_conversation_store`と同じパターン)。"""
     default_conversation_metrics.record(
         session_id, action, readiness=readiness, question_key=question_key,
+        strategy=strategy,
         blocking_unknowns=blocking_unknowns, safe_assumptions=safe_assumptions,
     )

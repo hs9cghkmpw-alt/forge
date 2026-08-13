@@ -252,7 +252,7 @@ class TestConversationMetricsAreRecorded(unittest.TestCase):
         signature = inspect.signature(default_conversation_metrics.record)
         self.assertEqual(
             set(signature.parameters) - {"self"},
-            {"session_id", "action", "readiness", "question_key",
+            {"session_id", "action", "readiness", "question_key", "strategy",
              "blocking_unknowns", "safe_assumptions"},
         )
 

@@ -2,6 +2,34 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task067 — TD45解消・ASK Loop対策・Model Gateway(2026-08-12、FORGE-QUALITY-AI-INDEPENDENCE-003)
+
+**Phase B(TD45)**: Domain Resolutionが「Curated定義が存在する」だけで
+採用していた問題を解消。判定材料は既にコード内にあった
+(`matched_concepts`が空=動詞だけで選ばれたDomain)ため、新しい閾値は
+導入していない。血圧・読書等がgeneratedへ、日記・家計簿等はcuratedの
+まま。Regression 20ケース追加(TD49)。
+
+**Phase C(ASK Loop)**: 「分からない」「任せる」への無限ASK経路を、
+Strategy Escalation(ASK→REPHRASE→OFFER_DEFAULT→SHRINK_SOLUTION)で
+解消。高リスクだけはSTOP(勝手に仮定しない)。`repeated_question_count`の
+定義も「同じkeyを同じ段で」へ修正(TD50)。
+
+**Phase E〜I(Gemini非依存化)**: 既存`LLMAdapter`は十分だったため
+作り直さず、不足4点(Task概念・計測・Fallback・Routing)だけを埋める
+`ModelGateway`を追加。`LocalModelProvider`(OpenAI互換、Ollama固定
+ではない)とProvider Benchmark harness、Impact分類データセット16ケースを
+実装(TD51)。
+
+**実行して見つけた実バグ1件**: `BenchmarkReport.winner()`が正答率0%の
+`mock`を勝者に選んでいた(適合率の下限しか見ていなかった)。
+
+**未達**: 実モデルでのLocal実行(§31 最低条件E)。サンドボックスは
+`huggingface.co`がネットワークポリシーで拒否・GPU無しのため、モデル重みを
+取得できない。手順は`docs/development/LOCAL_MODEL_SETUP.md`。
+
+**テスト**: 新規Python 34件。forge_ai 519件・Backend 762件、全green。
+
 ## Task066 — ニーズに合わせて「解の形」を選ぶ(2026-08-12、CEO「常にニーズに合わせた最適解を出せるようにして」)
 
 Conversation Readiness(Task065)で「いつ作るか」は判断できるように

@@ -79,8 +79,8 @@ class TestStubsNeverFakeSuccess(unittest.TestCase):
             StubAIContextBuilder().build_context("s1", "p1", "u1")
 
     def test_all_foundation_provider_stubs_raise(self) -> None:
-        """ProviderRouterが解決する8つの名前のうち、`mock`・`gemini`を除く
-        6つで、実際に呼ぶとNotImplementedErrorになることを確認する
+        """ProviderRouterが解決する8つの名前のうち、`mock`・`gemini`・
+        `local`を除く5つで、実際に呼ぶとNotImplementedErrorになることを確認する
         (ルーティング自体は動くが、推論は`mock`/`gemini`以外一切動かない)。
         FORGE-MILESTONE-005 Task7で`mock`を、FORGE-AI-CONNECT-001
         (2026-08-10)で`gemini`を実装したため、両方をこのテストの対象から
@@ -88,7 +88,11 @@ class TestStubsNeverFakeSuccess(unittest.TestCase):
         `test_gemini_provider.py`で別途検証)。"""
         router = ProviderRouter()
         for name in router.available_providers():
-            if name in ("mock", "gemini"):
+            # `local`はFORGE-QUALITY-AI-INDEPENDENCE-003 Phase Gで
+            # 実装済みProvider(`LocalModelProvider`)になったため除外する
+            # (未実装スタブではなくなった。接続先が無い場合は
+            # `NotImplementedError`ではなく`LocalModelError`になる)。
+            if name in ("mock", "gemini", "local"):
                 continue
             with self.subTest(provider=name):
                 provider = router.resolve(name)
@@ -140,10 +144,21 @@ class TestProviderRouter(unittest.TestCase):
         確認する。"""
         self.assertIs(self.router.resolve("native"), self.router.resolve("forge_ai"))
 
-    def test_local_alias_resolves_to_same_instance_as_oss(self) -> None:
-        """FORGE-MILESTONE-004 PHASE8新規。'local'は既存の'oss'と同じ
-        インスタンスへのエイリアスであることを確認する。"""
-        self.assertIs(self.router.resolve("local"), self.router.resolve("oss"))
+    def test_local_resolves_to_a_real_local_model_provider(self) -> None:
+        """FORGE-QUALITY-AI-INDEPENDENCE-003 Phase G(2026-08-12)で
+        契約が変わった。
+
+        以前の'local'は`OSSProvider`(呼ぶとNotImplementedErrorになる
+        スタブ)への単なるエイリアスだった。今は、ローカル推論Runtime
+        (Ollama等、OpenAI互換)へ実際にHTTPで接続する
+        `LocalModelProvider`である——「Gemini SDKを使わずにForge AI
+        Taskを実行できるProvider境界が存在する」(指示書31章 最低条件D)
+        の実体がこれである。
+        """
+        from app.ai.foundation.local_provider import LocalModelProvider
+
+        self.assertIsInstance(self.router.resolve("local"), LocalModelProvider)
+        self.assertIsNot(self.router.resolve("local"), self.router.resolve("oss"))
 
     def test_default_provider_is_mock(self) -> None:
         """FORGE-MILESTONE-005で`forge_ai`から`mock`へ変更(ADAPTER_CONTRACT_V1.md

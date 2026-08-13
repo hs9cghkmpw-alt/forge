@@ -84,7 +84,9 @@ class ConversationTranscript:
     actions: list[ConversationAction] = field(default_factory=list)
     questions: list[str] = field(default_factory=list)
     question_keys: list[str] = field(default_factory=list)
+    ask_strategies: list[str] = field(default_factory=list)
     readiness: list[str] = field(default_factory=list)
+    strategies: list[str] = field(default_factory=list)
     final_assumptions: tuple[str, ...] = ()
 
     @property
@@ -93,8 +95,19 @@ class ConversationTranscript:
 
     @property
     def repeated_question_count(self) -> int:
-        keys = [k for k in self.question_keys if k]
-        return len(keys) - len(set(keys))
+        """**同じUnknownを、同じ聞き方で**繰り返した回数。
+
+        FORGE-QUALITY-AI-INDEPENDENCE-003 §15でStrategy Escalationが
+        入ったため、同じkeyへ再び触れること自体は正常な進行になった
+        (ASK → REPHRASE → OFFER_DEFAULT)。指示書5章が禁じているのは
+        「同じUnknownを**言い換えて**繰り返す」——つまり情報量が増えて
+        いないのに同じ段で聞き直すことなので、keyだけでなく段
+        (strategy)まで一致した場合だけを繰り返しとして数える。
+        """
+        pairs = [
+            (k, s) for k, s in zip(self.question_keys, self.ask_strategies) if k
+        ]
+        return len(pairs) - len(set(pairs))
 
     @property
     def final_action(self) -> ConversationAction:
@@ -131,9 +144,11 @@ def run_conversation(
 
         transcript.actions.append(result.action)
         transcript.readiness.append(result.readiness.value)
+        transcript.strategies.append(result.strategy.value)
         if result.action == ConversationAction.ASK:
             transcript.questions.append(result.question or "")
             transcript.question_keys.append(result.question_key or "")
+            transcript.ask_strategies.append(result.strategy.value)
             session = session.with_turn(ConversationTurn(role="forge", text=result.question or ""))
             if result.question_key:
                 session = session.with_asked_key(result.question_key)
@@ -301,25 +316,77 @@ class TestGoldenNoRepeatedQuestions(unittest.TestCase):
 
 
 class TestGoldenTurnLimitDoesNotCauseBlindBuild(unittest.TestCase):
-    """指示書16章の完了条件を、会話レベルで固定する。"""
+    """FORGE-CONVERSATION-READY-001 §16の完了条件を、会話レベルで固定する。
 
-    def test_a_persistent_blocking_unknown_never_reaches_build(self) -> None:
-        stuck = _llm(
+    **FORGE-QUALITY-AI-INDEPENDENCE-003 §14・§15での契約の進化**:
+    以前このクラスは「blockingが残る限り**永久にBUILDしない**」ことを
+    固定していた。しかしそれは、ユーザーが「分からない」「任せる」と
+    答え続けた場合に**無限ASK**になるということでもあった。
+
+    新しい契約は「ターン数だけを理由にBUILDしない」を維持したまま、
+    同じUnknownへ向き合った回数に応じて**聞き方の段を上げ**、最後は
+    そのUnknownを必要としない**最小の解へ縮退して作る**である
+    (Smallest Useful Tool)。したがってここでは:
+
+    * 段を上げずにいきなりBUILDしないこと
+    * 縮退してBUILDしたときは、必ず理由付きの仮定が残ること
+    * **高リスク(外部作用・不可逆)なら、縮退もせず決してBUILDしない**
+
+    を固定する。
+    """
+
+    STUCK_BLOCKING = _llm(
+        action="ask",
+        unknowns=[_unknown("what_to_track", "blocking", "何を記録するのか決まらない")],
+        question="何を記録したいですか?", question_key="what_to_track",
+        brief="それでも何か作る",
+    )
+
+    def test_it_does_not_build_immediately_while_a_blocking_unknown_stands(self) -> None:
+        transcript = run_conversation(["何か作って", "うーん"], [self.STUCK_BLOCKING])
+        self.assertNotIn(ConversationAction.BUILD, transcript.actions)
+
+    def test_it_escalates_instead_of_repeating_the_same_question(self) -> None:
+        """§15: 同じことを聞き続けない。段が上がる。"""
+        transcript = run_conversation(
+            ["何か作って", "うーん", "わからない"], [self.STUCK_BLOCKING],
+        )
+        self.assertEqual(transcript.repeated_question_count, 0)
+        self.assertGreater(len(set(transcript.strategies)), 1, "戦略が1段も上がっていない")
+
+    def test_it_eventually_shrinks_to_a_smaller_tool_instead_of_asking_forever(self) -> None:
+        """§14: 「作れない」ではなく、Unknownを必要としない最小解へ。"""
+        transcript = run_conversation(
+            ["何か作って", "うーん", "どうかな", "とりあえず", "なんでもいい", "はい"],
+            [self.STUCK_BLOCKING],
+        )
+        self.assertIn(
+            transcript.final_action, (ConversationAction.BUILD, ConversationAction.UPDATE),
+            "縮退せず無限にASKし続けている",
+        )
+        self.assertIn("what_to_track", transcript.final_assumptions)
+
+    def test_delegation_short_circuits_to_offering_a_default(self) -> None:
+        """§12: 「任せる」と言われたら、同じことを聞き続けない。"""
+        transcript = run_conversation(["何か作って", "任せる"], [self.STUCK_BLOCKING])
+        self.assertIn("offer_default", transcript.strategies)
+
+    def test_a_high_risk_blocking_unknown_never_shrinks_into_a_build(self) -> None:
+        """§13 HARD_BLOCKING・§31 最低条件C: 高リスクは勝手に仮定しない。"""
+        risky = _llm(
             action="ask",
-            unknowns=[_unknown("what_to_track", "blocking", "何を記録するのか決まらない")],
-            question="何を記録したいですか?", question_key="what_to_track",
-            brief="それでも何か作る",
+            unknowns=[_unknown("share_scope", "blocking", "誰に公開するか不明")],
+            question="どこまで公開しますか?", question_key="share_scope",
+            brief="公開する", external=True,
         )
         transcript = run_conversation(
-            ["何か作って", "うーん", "わからない", "とりあえず", "なんでもいい", "任せる"], [stuck],
+            ["みんなに公開したい", "わからない", "任せる", "どっちでもいい"], [risky],
         )
         self.assertNotIn(ConversationAction.BUILD, transcript.actions)
         self.assertNotIn(ConversationAction.UPDATE, transcript.actions)
-        self.assertIn("insufficient_information", transcript.readiness)
 
     def test_a_high_impact_unknown_does_reach_build_after_the_threshold(self) -> None:
-        """BLOCKINGでなければ、会話が長引いた時点でSafe Assumptionで進む
-        (指示書1章「まず小さく作る」)。"""
+        """BLOCKINGでなければ、会話が長引いた時点でSafe Assumptionで進む。"""
         stuck = _llm(
             action="ask",
             unknowns=[_unknown("shared_usage", "high", "共有かどうか")],

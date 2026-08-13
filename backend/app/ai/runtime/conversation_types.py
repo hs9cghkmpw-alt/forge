@@ -31,6 +31,35 @@ class ConversationAction(str, Enum):
     CONFIRM = "confirm"
 
 
+class QuestionStrategy(str, Enum):
+    """未解消のUnknownに対して、次に取る手
+    (FORGE-QUALITY-AI-INDEPENDENCE-003 §15 Strategy Escalation)。
+
+    **MAX_TURNSによる強制BUILDへは決して戻さない**。代わりに、同じ
+    Unknownについて情報量が増えていないとき、聞き方そのものを
+    段階的に変える:
+
+        ASK → REPHRASE → OFFER_DEFAULT → SHRINK_SOLUTION → BUILD/CONFIRM/STOP
+    """
+
+    ASK = "ask"
+    """通常の質問(初回)。"""
+
+    REPHRASE = "rephrase"
+    """同じUnknownを、別の角度・短い二択で聞き直す。"""
+
+    OFFER_DEFAULT = "offer_default"
+    """「こう決めておきますね」と既定を提示して合意を取る。"""
+
+    SHRINK_SOLUTION = "shrink_solution"
+    """そのUnknownを**必要としない**、より小さい解へ縮退する
+    (指示書14章 Smallest Useful Tool)。"""
+
+    STOP = "stop"
+    """縮退もできず、勝手に仮定してもいけない(高リスク)。
+    正直に「作れない」と伝える。"""
+
+
 class UnknownImpact(str, Enum):
     """未知情報が「解(作られる道具)」をどれだけ変えるか
     (FORGE-CONVERSATION-READY-001 指示書5章のQuestion Policy)。
@@ -50,6 +79,24 @@ class UnknownImpact(str, Enum):
 
     COSMETIC = "cosmetic"
     """見た目・配置。Design Systemの領分であり、質問してはならない。"""
+
+    @property
+    def is_hard_blocking(self) -> bool:
+        """FORGE-QUALITY-AI-INDEPENDENCE-003 §13。**推測してはならない**
+        種類のBLOCKINGか。
+
+        指示書は`HARD_BLOCKING`/`SOFT_BLOCKING`という別の列挙も許容して
+        いるが、Forgeでは既に「外部作用・不可逆操作」を
+        `DecisionContext.external_effect`/`destructive`という**System
+        Factsとして別途持っている**(指示書3章)。同じ意味の分類を
+        Unknown側にも二重に持つと、両者が食い違ったときにどちらが
+        正なのか決められなくなる。したがってHARD/SOFTの区別は、
+        Unknownのimpact値ではなく`DecisionContext`側の事実で判定する
+        (`conversation_policy.escalate_question_strategy()`参照)。
+        このプロパティは、その判断が「Unknown単体では決まらない」ことを
+        明示するために置いている。
+        """
+        return False
 
 
 _ASKABLE_IMPACTS: frozenset[UnknownImpact] = frozenset({UnknownImpact.BLOCKING, UnknownImpact.HIGH})
@@ -219,6 +266,18 @@ class DecisionContext:
     destructive: bool = False
     """削除・不可逆操作・金銭操作・権限変更を含むか(指示書4章)。"""
 
+    ask_counts: dict[str, int] = field(default_factory=dict)
+    """FORGE-QUALITY-AI-INDEPENDENCE-003 §12。Unknownのkeyごとの質問回数。
+    Strategy Escalationの段を決める(`asked_question_keys`が
+    「聞いたか」の有無であるのに対し、こちらは回数)。"""
+
+    user_delegated: bool = False
+    """ユーザーが「分からない」「任せる」と判断を委ねたか(§12の
+    `user_delegated_decision`)。同じことを聞き続けないための事実。"""
+
+    def ask_count_for(self, key: str) -> int:
+        return self.ask_counts.get(key, 0)
+
     @property
     def at_or_over_turn_threshold(self) -> bool:
         """`MAX_CONVERSATION_TURNS`に達したか。
@@ -257,6 +316,11 @@ class ConversationStepResult:
     """action == ASKの場合のみ。今聞いている未知のkey(繰り返し質問の
     抑止に使う。指示書5章)。"""
 
+    strategy: QuestionStrategy = QuestionStrategy.ASK
+    """FORGE-QUALITY-AI-INDEPENDENCE-003 §15。この質問がEscalationの
+    どの段か(ASK/REPHRASE/OFFER_DEFAULT)。Metricsと Golden Testで
+    「同じことを繰り返していないか」を測るために載せる。"""
+
 
 @dataclass(frozen=True)
 class ConversationSession:
@@ -270,16 +334,37 @@ class ConversationSession:
     """FORGE-CONVERSATION-READY-001(2026-08-12)新設。既に質問した未知の
     key。同じUnknownを言い換えて繰り返し質問しないため(指示書5章)。"""
 
+    ask_counts: dict[str, int] = field(default_factory=dict)
+    """FORGE-QUALITY-AI-INDEPENDENCE-003 §12新設。Unknownのkeyごとに、
+    何回聞いたか。`asked_question_keys`が「聞いたかどうか」の集合で
+    あるのに対し、こちらは**Strategy Escalationの段数**を決めるための
+    回数である(1回目=ASK、2回目=REPHRASE、…)。"""
+
     def with_turn(self, turn: ConversationTurn) -> ConversationSession:
         return ConversationSession(
             session_id=self.session_id, turns=self.turns + (turn,),
             created_at=self.created_at, asked_question_keys=self.asked_question_keys,
+            ask_counts=dict(self.ask_counts),
         )
 
     def with_asked_key(self, key: str) -> ConversationSession:
-        if not key or key in self.asked_question_keys:
+        """そのUnknownを1回聞いたことを記録する。
+
+        `asked_question_keys`は重複しない集合として保つ一方、
+        `ask_counts`は**呼ばれるたびに増える**(同じUnknownへ聞き直した
+        回数がEscalationの段数になるため)。
+        """
+        if not key:
             return self
+        counts = dict(self.ask_counts)
+        counts[key] = counts.get(key, 0) + 1
+        keys = self.asked_question_keys
+        if key not in keys:
+            keys = keys + (key,)
         return ConversationSession(
             session_id=self.session_id, turns=self.turns, created_at=self.created_at,
-            asked_question_keys=self.asked_question_keys + (key,),
+            asked_question_keys=keys, ask_counts=counts,
         )
+
+    def ask_count_for(self, key: str) -> int:
+        return self.ask_counts.get(key, 0)

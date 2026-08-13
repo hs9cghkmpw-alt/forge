@@ -38,6 +38,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from app.ai.foundation.interfaces import LLMAdapter
+from app.ai.foundation.local_provider import LocalModelProvider
 from app.ai.foundation.providers import (
     ClaudeProvider,
     ForgeAIProvider,
@@ -85,7 +86,13 @@ class ProviderRouter:
             "forge_ai": forge_ai_provider,
             # FORGE-MILESTONE-004 PHASE8で追加したエイリアス。
             "native": forge_ai_provider,
-            "local": oss_provider,
+            # FORGE-QUALITY-AI-INDEPENDENCE-003 Phase G(2026-08-12):
+            # `"local"`は以前`OSSProvider`(未実装スタブ)のエイリアス
+            # だった。ローカル推論Runtime(Ollama等、OpenAI互換)へ実際に
+            # 接続する`LocalModelProvider`へ差し替える。Runtimeが起動して
+            # いない環境では、呼び出し時に`LocalModelError`となり
+            # `ModelGateway`がfallbackする(登録自体は常に安全)。
+            "local": LocalModelProvider(),
             # FORGE-MILESTONE-005 Task8で追加。唯一実際に動作するProvider。
             "mock": MockLLMAdapter(),
         }

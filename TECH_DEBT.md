@@ -2452,3 +2452,112 @@ Actionが入るまでは`RECORD_CRUD`のまま扱う。**これが次に効く1�
 日次チェック(カレンダー状)・単発フォームなど、まだ「ニーズに対して
 最適とは言えないが、情報は落とさないのでRECORD_CRUDで代用している」
 ケースが残っている。
+
+## TD49. Domain Resolutionが「Curatedが存在する」だけで採用していた(TD45の根本原因) → **解消(2026-08-12)**
+
+FORGE-QUALITY-AI-INDEPENDENCE-003 Phase B。
+
+**根本原因**: `pipeline_orchestrator.py`は
+`domain_category in SUPPORTED_DOMAIN_CATEGORIES`という条件だけで
+Curated定義を採用していた。「そのDomainの手作り定義がこのNeedを
+満たせるか」を一度も見ていなかった。
+
+**判定に必要な情報は既にコード内にあった**。`domain_classifier.py`の
+`_ACTION_ONLY_CONFIDENCE_CAP = 0.5`は「Conceptが1件も一致せず、
+Actionだけが一致した」場合にconfidenceを制限する仕組みで、実測すると:
+
+| 入力 | matched_concepts | conf |
+|---|---|---|
+| 日記をつけたい | ["日記"] | 1.00 |
+| 出費を記録したい | [...] | 0.67 |
+| 毎日の血圧を記録したい | **[]** | 0.50 |
+| 読んだ本を記録したい | **[]** | 0.50 |
+
+つまり「そのDomainの概念語が1つも出ていないのに、『記録する』という
+**動詞だけ**で選ばれた」状態が誤解決そのものだった。
+
+**新しい閾値(マジックナンバー)は導入していない**。`matched_concepts`が
+空かどうかという、既にある意味をそのまま使う(`domain_resolution.py`)。
+
+**採用しなかった案**: Curatedと合成の両方を作って比較する(指示書10章の
+ADAPT_CURATED含む)。妥当性を測るためだけに毎回LLM呼び出しが1回増え、
+「どちらが良いか」を機械判定する基準も別途要る。既存の信号だけで誤解決を
+止められることが実測で分かったため導入しなかった(指示書10章
+「複雑化するだけなら導入しない」)。
+
+**結果**: 血圧・体温・脈拍・読書・映画・水やり・給油等がgenerated側へ。
+日記・家計簿・在庫・釣果・習慣はcuratedのまま。副次的にTD39
+(reading_log到達不可)の実害も消えた。Regression 20ケース
+(`test_domain_resolution.py`)で両方向を固定。
+
+## TD50. 「分からない」「任せる」への無限ASK経路 → **解消(2026-08-12)**
+
+FORGE-QUALITY-AI-INDEPENDENCE-003 Phase C(§12〜15)。
+
+TD46でターン数による強制BUILDを廃止した結果、**blockingが解消しない限り
+永久にASKし続ける**という反対側の穴が残っていた。ユーザーが「分からない」
+「任せる」「どっちでもいい」と答え続けると会話が終わらない。
+
+**Strategy Escalation**(`QuestionStrategy`)を導入した:
+
+    ASK → REPHRASE → OFFER_DEFAULT → SHRINK_SOLUTION
+
+段は**そのUnknown1件に何回向き合ったか**(`ConversationSession.
+ask_counts`)で上がる。会話全体の長さ(`MAX_CONVERSATION_TURNS`)とは
+別物である——「ターン数だけを理由にBUILDしない」(TD46)は維持している。
+
+* 「任せる」等を検出したら、聞き直しを飛ばして`OFFER_DEFAULT`へ。
+* 最終的に`SHRINK_SOLUTION`= そのUnknownを**必要としない最小の解**へ
+  縮退して作る(指示書14章 Smallest Useful Tool)。理由付きの
+  SafeAssumptionが必ず残る。
+* **高リスク(外部作用・不可逆)の場合だけ`STOP`**。「共有範囲が
+  分からないから、とりあえず全体公開にしておく」ような既定は
+  取り返しがつかないため、縮退も既定採用もせずCONFIRMへ倒す
+  (指示書31章 最低条件C)。
+
+**`repeated_question_count`の定義も直した**: 段を上げた聞き直しは
+「繰り返し」ではない。`(key, strategy)`が両方一致した場合だけを
+繰り返しとして数える(Golden Test・Metricsの両方)。
+
+## TD51. Model Gateway / Local Provider(Gemini非依存化) — 実装済み、**実モデル未実行**
+
+FORGE-QUALITY-AI-INDEPENDENCE-003 Phase E〜I。
+
+**監査結果(Phase A・E)**: 既存の`LLMAdapter.complete_structured(
+prompt, response_schema) -> dict`は既にProvider非依存であり、
+`ConversationEngine`・`ForgeOperationEngine`はProvider実装を一切
+知らなかった。**したがって作り直していない**(指示書4章)。
+
+見つかった実際の不足は4点だけだった:
+
+1. Task概念が無い(Task単位のRouting・評価ができない)
+2. 計測が無い(latency・失敗率が取れずBenchmarkが成立しない)
+3. Fallbackが無い
+4. Routingが無い
+
+`ModelGateway`はこの4つだけを埋める薄い層であり、Provider実装を
+一切importしない(テストで固定: `TestGatewayKnowsNoProviders`)。
+
+**Gemini依存の残存箇所**: `schemas/ai.py`の
+`Literal["mock","gemini"]`(3箇所)。HTTP APIの許可リストであり、
+Provider名がDTOに直接書かれている。**今回は変更していない**——
+公開APIの型を緩めると、未検証のProvider名を外部から指定できてしまう。
+Localを外部公開する判断はBenchmark結果を見てからで良い。
+
+**`LocalModelProvider`**: OpenAI互換`/v1/chat/completions`を叩く。
+Ollama固定ではない(llama.cpp・LM Studio・vLLMでも`base_url`変更のみ)。
+小さいモデルがコードフェンス付きで返す等に耐えるJSON抽出と、
+`json_schema`を守れなかった場合の`json_object`再試行を持つ。
+**パースできなければ例外**であり、空dictを返して成功に見せかけない
+(TD40の教訓)。
+
+**実行できていないこと(指示書31章 最低条件E — 未達)**:
+サンドボックスは`huggingface.co`がCONNECT 403(ネットワークポリシー
+拒否)、Ollama未インストール、GPU無し。**モデル重みを取得できないため、
+実モデルに対して一度も動かしていない**。手順と必要条件は
+`docs/development/LOCAL_MODEL_SETUP.md`に記載した。
+
+**Benchmark harness自体は実行して確認済み**であり、その過程で実バグを
+1件見つけた: `BenchmarkReport.winner()`が適合率の下限しか見ておらず、
+`mock`(常に`"mock_result"`を返す=適合率100%・正答率0%)を「勝者」に
+選んでいた。正答率の下限を追加して修正(回帰テスト化済み)。
