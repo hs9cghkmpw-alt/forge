@@ -937,3 +937,59 @@ Forge側のキーワード検出の**OR**を取る。LLMが「無い」と言っ
 Forge側が検出したならCONFIRMする。一方、単なるローカルTool生成では
 毎回CONFIRMしない(キーワード表には「記録したい」「管理したい」の
 ようなローカルに閉じた語を決して入れない)。
+
+## D69. Curated Domainは「存在するから」ではなく「Needを満たせるから」採用する
+
+**背景**: `domain_category in SUPPORTED_DOMAIN_CATEGORIES`という条件
+だけでCurated定義を採用していた。「毎日の血圧を記録したい」が`diary`
+と分類され、手作りの日記定義(タイトル/本文/気分/日付)で血圧記録アプリが
+作られていた(TD45)。
+
+**決定**: 分類時に**そのDomainの概念語が実際に一致したか**
+(`matched_concepts`)を見る。動詞だけで選ばれたDomainのCurated定義は
+使わず、発話から合成する。
+
+**新しい閾値を導入していない**: `domain_classifier.py`には既に
+`_ACTION_ONLY_CONFIDENCE_CAP = 0.5`(Concept一致0件ならconfidenceを
+制限)という仕組みがあった。判定に必要な情報は最初からあり、
+Orchestratorがそれを見ていなかっただけである。
+
+**却下した案**: Curatedと合成の両方を生成して比較する(ADAPT_CURATED
+含む)。妥当性の測定のためだけにLLM呼び出しが毎回1回増え、「どちらが
+良いか」を機械判定する基準も別途必要になる。既存の信号だけで誤解決を
+止められることが実測で確認できたため、複雑な比較機構は入れなかった。
+
+## D70. 委任(「任せる」)は段を止めるのではなく、段を飛ばす
+
+**背景**: 「分からない」「任せる」を検出したら`OFFER_DEFAULT`を返す、
+という実装にしていた。Scripted Conversation Set 50件を実際に流したところ、
+**段が永久に上がらず**、同じ既定提示を繰り返し続けることが判明した
+(15セッションで繰り返し質問、縮退は一度も発動せず、2セッションが
+未決着)。
+
+**決定**: 委任は`REPHRASE`を1段飛ばすものとして扱い、
+`ask_count`による進行はそのまま続ける。これにより
+`ASK → OFFER_DEFAULT → SHRINK_SOLUTION`と進み、必ず決着する。
+
+**併せて修正した2点**(いずれも同じデータセットが検出):
+
+* BUILD経路で`strategy`を渡しておらず、縮退した事実が記録に残らな
+  かった(`solution_shrink_count`が常に0)。
+* 委任の判定が最新発話のみだったため、「任せる」→「うん」で委任が
+  忘れられていた。一度「決めて」と言われた事実は、その後の相槌で
+  取り消されない——会話全体のユーザー発話を見る。
+
+## D71. Model Gatewayは既存のLLMAdapterを置き換えず、その上に載る
+
+**背景**: 指示書は`generate(task, input, context, constraints)`という
+Provider非依存契約を例示していた。
+
+**決定**: `LLMAdapter.complete_structured(prompt, response_schema)`を
+そのまま活かし、Gatewayは`(task, prompt, response_schema)`を受ける。
+
+**理由**: 監査の結果、既存契約は既にProvider非依存であり、上位ロジックは
+Provider実装を知らなかった。抽象的な`input`/`context`/`constraints`へ
+作り変えると、既存の全呼び出し側とMockの契約を同時に壊す一方、得られる
+のは概念的な綺麗さだけである。実際に足りなかったのはTask概念・計測・
+Fallback・Routingの4点であり、Gatewayはそれだけを足している
+(指示書4章「既存抽象化が十分なら作り直さない」)。

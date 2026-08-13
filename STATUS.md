@@ -39,6 +39,7 @@
 | Model Gateway | 動作 | Task単位のRouting・計測・fallback |
 | Local Provider | 実装済/未実測 | OpenAI互換。実モデル未実行(環境制約) |
 | Provider Benchmark | 動作 | Impact分類16ケース。harness実行確認済み |
+| Scripted Conversation Set | 動作 | 50セッション。平均質問1.20/繰り返し0/未決着0 |
 | Voice(STT/TTS) | 未接続 | Adapterとして後から足せる構造は維持 |
 
 ## テスト
@@ -46,7 +47,7 @@
 | 対象 | 件数 | 状態 |
 |---|---|---|
 | `forge_ai/tests` | 519 | 全green |
-| `backend/tests` | 762 | 全green(skip 13) |
+| `backend/tests` | 773 | 全green(skip 13) |
 | `frontend`(Flutter) | 451 | 全green、`flutter analyze` 0エラー |
 
 ## 分かっている制限

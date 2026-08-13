@@ -177,3 +177,69 @@ Stateの1項目`{id, text, done}`で情報を落とさず表現しきれる場�
 `set_value`(固定値の代入)しか無く、`count + 1`という動的な加算を
 表現できない。作ると「押しても増えないボタン」になるため、Runtimeに
 increment相当が入るまでは`RECORD_CRUD`で代用する。
+
+## 8. Model Gateway / Provider独立性(FORGE-QUALITY-AI-INDEPENDENCE-003)
+
+    Forge Brain → Model Gateway → Provider(Gemini / Local / Mock)
+
+**Geminiは一Providerに過ぎない**。上位ロジック(Conversation Policy /
+Readiness / Validator / Safety)はProviderを一切知らない。
+
+### 8.1 既存抽象を作り直していない
+
+監査の結果、`LLMAdapter.complete_structured(prompt, response_schema)
+-> dict`は既にProvider非依存であり、`ConversationEngine`・
+`ForgeOperationEngine`はProvider実装を知らなかった。Gatewayが埋めたのは
+**足りなかった4点だけ**である:
+
+| 不足 | Gatewayが足したもの |
+|---|---|
+| Task概念が無い | `ForgeTask`(Task単位のRouting・評価) |
+| 計測が無い | latency / 失敗率 / schema適合率 |
+| Fallbackが無い | primary失敗時に次のProviderへ |
+| Routingが無い | `TaskRoute`(Task別のprimary/fallback) |
+
+### 8.2 Task単位でしか評価しない
+
+「GeminiとLocalのどちらが優秀か」という比較は行わない。Benchmarkも
+Routingも`(task, provider)`の組でのみ成立する。
+
+### 8.3 採用条件
+
+`BenchmarkReport.winner()`は、**schema適合率90%以上かつ正答率50%以上**
+のProviderしか勝者にしない。形式が整っているだけのProvider(例:
+`mock`は適合率100%・正答率0%)を採用しないため。
+
+### 8.4 Local Provider
+
+`LocalModelProvider`はOpenAI互換`/v1/chat/completions`を叩く。
+**Ollama固定ではない**(llama.cpp・LM Studio・vLLMも`base_url`変更のみ)。
+小さいモデルがコードフェンス付きで返す等に耐えるJSON抽出を持ち、
+パースできなければ**例外**にする(空dictを返して成功に見せかけない、
+TD40の教訓)。
+
+セットアップと実行手順: `docs/development/LOCAL_MODEL_SETUP.md`
+
+## 9. Scripted Conversation Set(§26)
+
+実ユーザーデータが無くても会話品質を測り続けるための50セッション
+(`backend/app/ai/gateway/conversation_dataset.py`)。
+
+明確な要求10 / 曖昧10 / 分からない5 / 任せる5 / どっちでもいい5 /
+無関係回答5 / 途中変更3 / UPDATE 4 / 高リスク3。
+
+測定項目は§26のとおり(平均質問数・繰り返し質問・縮退回数・
+CONFIRM数・build失敗数等)。`run_session(llm=...)`でLLMを差し替えれば、
+同じ台本のままGemini vs Localの会話品質比較にも再利用できる。
+
+**このデータセットは、最初に走らせた時点でPolicyの実バグを3件検出した**
+(委任検出が段を止めていた・BUILD経路でstrategyを落としていた・
+委任判定が最新発話のみだった)。現在の集計値:
+
+| 指標 | 値 |
+|---|---|
+| 平均質問数 | 1.20 |
+| 繰り返し質問 | 0 |
+| 縮退発動 | 20 |
+| 未決着 | 0 |
+| build失敗 | 0 |

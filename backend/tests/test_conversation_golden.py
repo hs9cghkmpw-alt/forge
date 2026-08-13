@@ -402,3 +402,98 @@ class TestGoldenTurnLimitDoesNotCauseBlindBuild(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestScriptedConversationSet(unittest.TestCase):
+    """Scripted Conversation Set(FORGE-QUALITY-AI-INDEPENDENCE-003 §26)。
+
+    実ユーザーデータが無くても会話品質を測り続けるための50セッション。
+    **このデータセットは、実際に走らせた時点でPolicyの実バグを3件
+    検出した**(下の各テストは、その回帰テストでもある):
+
+    1. 「任せる」検出が`OFFER_DEFAULT`を返し続け、段が上がらなかった
+       (15セッションで繰り返し質問、縮退が一度も発動せず)。
+    2. BUILD経路で`strategy`を渡し忘れており、縮退した事実が記録に
+       残らなかった(`solution_shrink_count`が常に0)。
+    3. 委任の判定が最新発話のみだったため、「任せる」→「うん」で
+       **委任が忘れられ**、同じ既定提示を繰り返した。
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from app.ai.gateway.conversation_dataset import run_all_sessions
+
+        cls.outcomes, cls.metrics = run_all_sessions()
+
+    def test_the_dataset_has_at_least_fifty_sessions(self) -> None:
+        self.assertGreaterEqual(self.metrics.sessions, 50)
+
+    def test_it_covers_every_conversation_kind_the_directive_lists(self) -> None:
+        from app.ai.gateway.conversation_dataset import session_count_by_category
+
+        categories = session_count_by_category()
+        for required in (
+            "clear", "ambiguous", "dont_know", "delegated", "whatever",
+            "irrelevant", "changed_mind", "update", "high_risk",
+        ):
+            self.assertIn(required, categories, f"{required}のセッションが無い")
+
+    def test_no_session_repeats_the_same_question_at_the_same_stage(self) -> None:
+        offenders = [o.name for o in self.outcomes if o.repeated_question_count]
+        self.assertEqual(offenders, [], f"繰り返し質問が発生: {offenders}")
+
+    def test_no_session_ends_unresolved(self) -> None:
+        """無限ASKしない(§12)。全セッションがbuild/update/confirmで決着する。"""
+        stuck = [
+            o.name for o in self.outcomes
+            if o.final_action.value not in ("build", "update", "confirm")
+        ]
+        self.assertEqual(stuck, [], f"決着しなかったセッション: {stuck}")
+
+    def test_unresolvable_sessions_shrink_instead_of_asking_forever(self) -> None:
+        """§14 Smallest Useful Tool が実際に発動していること。"""
+        self.assertGreater(self.metrics.shrinks, 0, "縮退が一度も発動していない")
+
+    def test_clear_requests_are_built_without_any_question(self) -> None:
+        clear = [o for o in self.outcomes if o.category == "clear"]
+        self.assertTrue(clear)
+        for outcome in clear:
+            with self.subTest(session=outcome.name):
+                self.assertEqual(outcome.questions_before_build, 0)
+                self.assertEqual(outcome.final_action, ConversationAction.BUILD)
+
+    def test_high_risk_sessions_always_confirm_and_never_build(self) -> None:
+        """§31 最低条件C: 高リスクを勝手に仮定しない。"""
+        risky = [o for o in self.outcomes if o.category == "high_risk"]
+        self.assertTrue(risky)
+        for outcome in risky:
+            with self.subTest(session=outcome.name):
+                self.assertEqual(outcome.final_action, ConversationAction.CONFIRM)
+                self.assertNotIn(ConversationAction.BUILD, outcome.actions)
+
+    def test_update_sessions_use_update_not_build(self) -> None:
+        for outcome in [o for o in self.outcomes if o.category == "update"]:
+            with self.subTest(session=outcome.name):
+                self.assertEqual(outcome.final_action, ConversationAction.UPDATE)
+
+    def test_the_average_question_count_stays_low(self) -> None:
+        """「質問攻めにしない」(§5)を、データセット全体の平均で固定する。"""
+        self.assertLessEqual(
+            self.metrics.avg_questions_per_session, 2.0,
+            f"平均質問数が多すぎる: {self.metrics.avg_questions_per_session}",
+        )
+
+    def test_no_session_fails_to_build(self) -> None:
+        self.assertEqual(self.metrics.build_failures, 0)
+
+    def test_every_shrunk_build_records_why(self) -> None:
+        """§6: 縮退して作ったなら、その理由が必ず仮定として残る。"""
+        shrunk = [
+            o for o in self.outcomes
+            if "shrink_solution" in o.strategies
+            and o.final_action is ConversationAction.BUILD
+        ]
+        self.assertTrue(shrunk)
+        for outcome in shrunk:
+            with self.subTest(session=outcome.name):
+                self.assertGreater(outcome.safe_assumptions, 0)

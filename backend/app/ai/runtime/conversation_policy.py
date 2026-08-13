@@ -334,18 +334,28 @@ def escalate_question_strategy(
     """
     high_risk = context.external_effect or context.destructive
 
-    if delegated:
-        # 委ねられた以上、聞き直しは飛ばす。ただし高リスクなら
-        # 「任せる」と言われても勝手に決めない(指示書31章 最低条件C)。
-        return QuestionStrategy.STOP if high_risk else QuestionStrategy.OFFER_DEFAULT
+    # 「任せる」と言われたら、**聞き直しの段(REPHRASE)を1つ飛ばす**。
+    #
+    # **Scripted Conversation Set(§26)を実際に流して見つけた実バグの
+    # 修正**: 以前はここで`delegated`なら無条件に`OFFER_DEFAULT`を
+    # 返していた。そのため「任せる」「分からない」と答え続けるユーザーに
+    # 対し、段が永久に上がらず**同じ既定提示を繰り返し続けた**
+    # (50セッション中15セッションでrepeated_question発生、縮退は
+    # 一度も発動せず、2セッションが未決着で終わった)。委任は
+    # 「段を止める」ではなく「段を飛ばす」ものとして扱う。
+    effective = ask_count + _REPHRASE_AFTER_ASKS if delegated else ask_count
 
-    if ask_count <= _REPHRASE_AFTER_ASKS:
-        return QuestionStrategy.ASK if ask_count == 0 else QuestionStrategy.REPHRASE
-    if ask_count <= _OFFER_DEFAULT_AFTER_ASKS:
-        return QuestionStrategy.STOP if high_risk else QuestionStrategy.OFFER_DEFAULT
-    if ask_count <= _SHRINK_AFTER_ASKS:
-        return QuestionStrategy.STOP if high_risk else QuestionStrategy.SHRINK_SOLUTION
-    return QuestionStrategy.STOP if high_risk else QuestionStrategy.SHRINK_SOLUTION
+    if effective <= 0:
+        return QuestionStrategy.ASK
+    if effective <= _REPHRASE_AFTER_ASKS:
+        return QuestionStrategy.REPHRASE
+    # ここから先は「既定で決める」段。高リスクな未知を勝手に埋めては
+    # ならない(指示書13章 HARD_BLOCKING・31章 最低条件C)。
+    if high_risk:
+        return QuestionStrategy.STOP
+    if effective <= _OFFER_DEFAULT_AFTER_ASKS:
+        return QuestionStrategy.OFFER_DEFAULT
+    return QuestionStrategy.SHRINK_SOLUTION
 
 
 def shrink_assumption_for(unknown: UnknownItem) -> SafeAssumption:

@@ -28,7 +28,22 @@ Strategy Escalation(ASK→REPHRASE→OFFER_DEFAULT→SHRINK_SOLUTION)で
 `huggingface.co`がネットワークポリシーで拒否・GPU無しのため、モデル重みを
 取得できない。手順は`docs/development/LOCAL_MODEL_SETUP.md`。
 
-**テスト**: 新規Python 34件。forge_ai 519件・Backend 762件、全green。
+**Phase D(Scripted Conversation Set、§26)**: 50セッションのデータ
+セットを追加(明確10/曖昧10/分からない5/任せる5/どっちでもいい5/
+無関係5/途中変更3/UPDATE 4/高リスク3)。**実行した時点でPolicyの
+実バグを3件検出**した:
+
+1. 委任(「任せる」)検出が`OFFER_DEFAULT`を返し続け、段が永久に
+   上がらなかった(15セッションで繰り返し質問、縮退が一度も発動せず、
+   2セッション未決着)。
+2. BUILD経路で`strategy`を渡し忘れ、縮退した事実が記録に残らなかった
+   (`solution_shrink_count`が常に0)。
+3. 委任判定が最新発話のみで、「任せる」→「うん」で委任が忘れられていた。
+
+修正後: 平均質問数1.54→**1.20**、繰り返し質問17→**0**、縮退0→**20**、
+未決着2→**0**。
+
+**テスト**: 新規Python 45件。forge_ai 519件・Backend 773件、全green。
 
 ## Task066 — ニーズに合わせて「解の形」を選ぶ(2026-08-12、CEO「常にニーズに合わせた最適解を出せるようにして」)
 

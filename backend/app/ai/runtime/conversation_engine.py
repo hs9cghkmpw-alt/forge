@@ -277,8 +277,16 @@ class ConversationEngine:
             destructive=bool(raw.get("destructive")) or detected_destructive,
             ask_counts=dict(session.ask_counts),
             # 「分からない」「任せる」と委ねられたら、同じことを
-            # 聞き続けない(§12)。判定は最新の発話に対して行う。
-            user_delegated=user_delegated_decision(latest_user_text),
+            # 聞き続けない(§12)。
+            #
+            # **会話全体のユーザー発話を見る**(最新の1件だけではない)。
+            # Scripted Conversation Setで見つけた実バグ: 最新発話だけを
+            # 見ていたため、「任せる」→「うん」と続くと**委任が忘れられ**、
+            # 段が上がらず同じ既定提示を繰り返していた。一度「決めて」と
+            # 言われた事実は、その後の相槌で取り消されない。
+            user_delegated=any(
+                user_delegated_decision(t.text) for t in session.turns if t.role == "user"
+            ),
         )
 
         # ---- ここから先が意思決定。LLMのnext_action/confidenceは、
@@ -346,4 +354,10 @@ class ConversationEngine:
         brief = str(raw.get("build_brief") or "").strip() or _fallback_brief(session)
         return ConversationStepResult(
             action=action, need_model=need_model, readiness=decision.readiness, build_brief=brief,
+            # 縮退して作った場合、その事実(SHRINK_SOLUTION)を必ず載せる。
+            # Scripted Conversation Setを流して見つけた実バグ: ここで
+            # strategyを渡し忘れていたため既定のASKになり、
+            # `solution_shrink_count`が常に0になっていた(縮退が
+            # 実際には起きているのに、測定上まったく見えなかった)。
+            strategy=decision.strategy,
         )
