@@ -2696,3 +2696,89 @@ Flutterは動的コード実行ができない(Web/AOTとも`dart:mirrors`不可
 * Registryを増やす際は**Validator・Runtime・`capability.py`の3箇所**を
   同時に更新する必要がある(テストで機械的に検出できるのは
   `capability.py`側の嘘だけである)。
+
+---
+
+## TD56. User Correctionが状態を持っていなかった → **解消(2026-08-13)**
+
+FORGE-USER-GUIDED-SELF-EXTENSION-006 §10〜§12でCEOが指摘。
+現物監査の結果、指摘は**3点すべて正しかった**:
+
+1. `classify_correction()` / `revise_hypothesis()`は
+   `tests/test_capability.py`からしか呼ばれておらず、**production
+   codeが1箇所も呼んでいなかった**。
+2. `ConversationSession`に仮説を保持するフィールドが無かった。
+3. `next_capability_turn()`が`build_hypothesis(latest_user_text)`で、
+   **毎回最新発話から作り直していた**。
+
+**実際の症状(再現済み)**:
+
+```
+Turn1「釣った魚とサイズと場所を記録して、地図で見たい」→ data=[data.number]
+Turn2「違う、よく釣れる場所ほど色を濃くしたい」        → data=[]
+```
+
+見せ方だけを訂正したのに、記録項目が消える。「結果が似て見えても構造が
+違う」という§11の指摘は正確だった。
+
+**修正**: Sessionが`current_hypothesis` / `correction_history` /
+`hypothesis_state` / `rewind_count`を持ち、訂正は**前回の仮説に対して**
+適用する。訂正されていない層は保持が既定。
+
+**設計上の判断2つ**:
+
+* **追加と置き換えの区別**。「脈拍**も**記録したい」は追加、
+  「違う、色を濃く」は置き換え。Data層は追加が既定、View/Effectは
+  置き換えが既定(`_is_additive_correction()`)。
+* **PROBLEMとUNCLEARを構造で区別**。§39 Case Cの「そうじゃない」は
+  語彙リストに無く、Case Dの「違う」と同じ扱いになっていた。語を足す
+  修正では次の言い回しでまた落ちるため、**否定 + 目的の言い直し**が
+  あるかどうかという構造で判定するようにした。
+
+**残っている制限**: `/converse`のHTTP経路でACCEPT→BUILDまで通すと、
+Cognitive Pipeline側のdomain confidence判定(mock provider使用時)が
+先に`needs_confirmation`を返す場合がある。これは既存挙動であり訂正
+ループとは独立。ACCEPT→BUILDの接続自体はEngineレベルのE2Eで確認済み。
+
+---
+
+## TD57. Runtimeに派生状態(集計・絞り込み・並べ替え)が無い
+
+FORGE-USER-GUIDED-SELF-EXTENSION-006 §29の検討中に、Runtime監査で発見。
+
+`ForgeRuntimeState`(`frontend/lib/json_ui/renderer/forge_runtime_state.dart`)
+には`derived` / `computed` / `aggregate` / `groupBy`に相当する機構が
+**1つも無い**。また`bar_chart`(`widget_registry_v1_6.dart:81`)は
+**Record 1件につき棒1本**で、グループ化も集計もしない。
+
+**なぜ負債なのか**: これが無いために、「場所ごとの釣果数」「カテゴリごとの
+支出合計」「月ごとの平均体重」のような、**ごく一般的な要求が1つも表現
+できない**。しかも不足の所在が「Widgetが無い」としか言えず、何を作れば
+解決するのかが分からなかった。
+
+**実測(2026-08-13)**: 分解表の6 Semanticのうち、現状で完全に成立するのは
+**0件**。`semantic.ranking_by_group`は`transform.aggregate`**1つだけ**で
+成立する(他は3〜4個必要)。
+
+**次にやるべきこと**: `transform.aggregate`のRuntime実装。これが
+`FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md` §23の最優先項目であり、
+§56の「能力を足した」基準を初めて満たせるようになる地点でもある。
+
+---
+
+## TD58. Declarative Capability定義がCompilerへ接続されていない
+
+FORGE-USER-GUIDED-SELF-EXTENSION-006 §55のPoCとして
+`capability_definition.py`を実装した。定義データを決定的に検証し、
+Trust Level(`CORE` / `COMPOSED` / `CANDIDATE` / `REJECTED`)を返す。
+
+**到達した範囲**: 表現 → 検証。
+**到達していない範囲**: コンパイル → 描画 → 使用。
+
+Compilerがこの合成を選ぶ経路(Solution Shape)が無いため、定義が
+`COMPOSED`と判定されても、実際のToolには反映されない。
+
+**したがって「Forgeが自己拡張した」とは報告していない**(§56の基準)。
+`tests/test_capability_definition.py::test_not_yet_verified_end_to_end`が、
+未接続であること自体をテストとして固定している(接続できたら、この
+テストを本物のE2Eへ置き換えること)。

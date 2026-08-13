@@ -2,6 +2,42 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task069 — Stateful User Correction / Semantic Capability / Declarative Extension(2026-08-13、FORGE-USER-GUIDED-SELF-EXTENSION-006)
+
+**Architecture Review v2**(`docs/spec/FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md`):
+v1は「Flutterが動的コード実行不可 → Self-Extensionは成立しない」と結論して
+いたが、これは**Goal 1(実行中のDart注入)にしか当てはまらない**推論だった。
+Self-Extensionを「安全な方法で自身の能力を増やす」と定義し直した上で、
+Composition / Declarative / Build-Time / Service / Native の5分類で成立可否を
+判定した。任意コード生成は引き続き不採用。
+
+**Stateful User Correction(§53、最優先)**: `classify_correction()`と
+`revise_hypothesis()`は**テストからしか呼ばれておらず**、Sessionに仮説を
+保持する状態も無かった(監査で確認)。訂正のたびに最新発話から作り直して
+いたため、「魚とサイズと場所を記録して地図で見たい」→「違う、色を濃く」で
+**記録項目が消えていた**(再現済み)。Sessionが仮説を持ち、訂正された層
+だけを差し替えるようにした。§39のCase A〜EをE2Eで固定。
+
+**Semantic Capability分解(§29・§54)**: Runtime監査で、`bar_chart`が
+集計しないこと・派生状態の仕組みが無いことを確認した。「heatmapが無い」は
+誤診であり、実際は集計(TRANSFORM)・濃淡(ENCODING)・地理描画(VIEW)の
+3種類が別々に不足していた。v1の3層に`TRANSFORM`と`ENCODING`を足した。
+「地図で濃淡」は4個先だが、同じ困りごとに答える「場所ごとの集計」は1個先。
+
+**自分の主張を1つ訂正**: 「集計Primitiveを足すと表現の族が増える」を実測
+したところ、どのPrimitiveも+1個で、**主張は支持されなかった**。測定が支持
+したのは「ユーザーの要求へ最も安く到達できる道である」という別の事実。
+§22-bisに記録し、測定自体をテストとして残した。
+
+**Declarative Extension PoC(§55)**: 新Capabilityを**コードではなくデータ**
+として追加し、決定的Validatorで検査する仕組み。捏造Primitive・外部作用の
+合成獲得・巨大Capability・未実装Primitiveをすべて拒否する。
+**`CANDIDATE`は`usable=False`**——「作れたふり」をしない。
+Compiler接続(描画・使用)へは到達していないため、**自己拡張したとは
+報告しない**(§56の基準)。
+
+**テスト**: forge_ai 521 / backend 840(skip 13) / Flutter 455、analyze 0件。
+
 ## Task068 — Mock品質・Silent Mock禁止・Capability検出(2026-08-13、FORGE-HANDOFF-LOCAL-AI-UX-004 §9/§35 / FORGE-ARCHITECTURE-REVIEW-AND-IMPLEMENT-005 §32)
 
 **Mock品質(§35)**: `MockLLMAdapter`が全ての文字列を`"mock_result"`で

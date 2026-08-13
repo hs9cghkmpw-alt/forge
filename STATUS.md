@@ -41,6 +41,9 @@
 | Provider Benchmark | 動作 | Impact分類16ケース。harness実行確認済み |
 | Scripted Conversation Set | 動作 | 50セッション。平均質問1.20/繰り返し0/未決着0 |
 | Capability検出 / 仮説提示 | 動作 | `capability.py`。作れないものを名指しし、作れる形を出す |
+| Stateful User Correction | 動作 | 前回の仮説を保持し、訂正された層だけ差し替える |
+| Semantic Capability分解 | 動作 | `semantic_capability.py`。不足を種類ごとに特定する |
+| Declarative Capability定義 | 検証まで | `capability_definition.py`。**Runtime利用は不可**(§17) |
 | Capability自動追加 | **不採用** | Flutterが動的コード実行不可。`FORGE-SELF-EXTENSION-ARCH-REVIEW.md` §5 |
 | 模擬出力の明示 | 動作 | `simulated`フィールド + Flutter側のバナー/バッジ |
 | Voice(STT/TTS) | 未接続 | Adapterとして後から足せる構造は維持 |
@@ -50,7 +53,7 @@
 | 対象 | 件数 | 状態 |
 |---|---|---|
 | `forge_ai/tests` | 521 | 全green |
-| `backend/tests` | 802 | 全green(skip 13) |
+| `backend/tests` | 840 | 全green(skip 13) |
 | `frontend`(Flutter) | 455 | 全green |
 | `flutter analyze` | 0件 | 2026-08-13にwarning/info含めて0へ(以前は77件) |
 
@@ -68,6 +71,12 @@
 * **Local Modelを実モデルで一度も動かせていない**(TD51)。サンドボックスは
   `huggingface.co`がネットワークポリシーで拒否・GPU無しのため、モデル重みを
   取得できない。手順は`docs/development/LOCAL_MODEL_SETUP.md`。
+* Declarative Capability定義は**検証までで、Runtime利用は不可**。
+  `transform.aggregate`がRuntime未実装のため、今描くと「作れたふり」に
+  なる(`FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md` §17・§19)。
+* 地図・カレンダー・集計・並べ替えはPrimitiveとして未実装。ただし
+  **何が足りないかは種類ごとに言える**(「heatmapが無い」ではなく
+  「集計と濃淡と地理描画のうち、地理描画だけが本当に無い」)。
 * 共有・通知などのEffect Capabilityは**確認は取るが、実装が無い**。
   確認文を「できないこと」に合わせて書き換えるのは、指示書001 §4で
   定めたCONFIRMの意味を変えるため、今回のVertical Sliceの範囲外とした
