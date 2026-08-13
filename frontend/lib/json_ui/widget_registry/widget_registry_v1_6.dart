@@ -24,6 +24,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../renderer/forge_runtime_state.dart';
+import '../runtime/forge_aggregate.dart';
 import '../schema/forge_document.dart';
 import 'widget_registry_core.dart';
 
@@ -90,17 +91,31 @@ Widget buildBarChart(
     builder: (context, _) {
       final records = state.getRecordList(n.stateRef);
       final bars = <_BarChartEntry>[];
-      for (final record in records) {
-        final rawValue = record.fields[n.valueField];
-        if (rawValue is! num) {
-          // 非必須Fieldが未入力、またはSchema不整合(Validatorが通常は
-          // 弾くはずだが、多重防御として静かにスキップする——他の
-          // Widget(例: `_RecordCard._buildSchemaDrivenRows`)と同じ
-          // 「無ければ表示しない」方針)。
-          continue;
+      if (n.isAggregating) {
+        // v1.9(2026-08-13)。グループごとに1本。集計そのものは
+        // `runtime/forge_aggregate.dart`が行う——このWidgetは集計を
+        // **所有しない**。他のViewからも同じ関数を呼べるようにするため。
+        for (final group in aggregateRecords(
+          records,
+          groupBy: n.groupBy!,
+          op: n.effectiveAggregate,
+          valueField: n.valueField.isEmpty ? null : n.valueField,
+        )) {
+          bars.add(_BarChartEntry(label: group.label, value: group.value));
         }
-        final rawLabel = record.fields[n.labelField];
-        bars.add(_BarChartEntry(label: rawLabel?.toString() ?? '', value: rawValue.toDouble()));
+      } else {
+        for (final record in records) {
+          final rawValue = record.fields[n.valueField];
+          if (rawValue is! num) {
+            // 非必須Fieldが未入力、またはSchema不整合(Validatorが通常は
+            // 弾くはずだが、多重防御として静かにスキップする——他の
+            // Widget(例: `_RecordCard._buildSchemaDrivenRows`)と同じ
+            // 「無ければ表示しない」方針)。
+            continue;
+          }
+          final rawLabel = record.fields[n.labelField];
+          bars.add(_BarChartEntry(label: rawLabel?.toString() ?? '', value: rawValue.toDouble()));
+        }
       }
 
       if (bars.isEmpty) {

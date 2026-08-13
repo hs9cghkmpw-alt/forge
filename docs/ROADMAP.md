@@ -1,109 +1,139 @@
-# Roadmap
+# Forge 詳細ロードマップ
 
-## Phase 0 — 開発基盤（現在地）
-- [x] フォルダ構成設計（Clean Architecture / Feature First / レイヤードアーキテクチャ）
-- [x] ドキュメント一式（README / Architecture / API / Database / AI / Roadmap）
-- [ ] CI設定（lint / test を回すだけの最小構成） — ワークフロー自体(`ci.yml`)はTask001から存在。
-      Task003でテスト本体(`backend/tests/`)を初めて追加したため、`pytest`は理論上テストを
-      収集できるはずだが、GitHub Actions上での実行そのものはCEO側の初回PR/pushで初めて確認できる。
-      `ruff check`もClaude環境では未実行(ruff未導入)。
-- [ ] `.env.example` の整備
+CEO提示(2026-08-13)。**作業を始める前に必ずこれを見ること。**
 
-## Phase 1 — 最小疎通
-- [ ] FastAPI: ヘルスチェックエンドポイントのみ実装 — コード自体はTask001から存在(`GET /health`)。
-      Claudeはfastapi未導入のため起動確認はできていない(Task003)。
-- [ ] Flutter: 空のMaterial3アプリが起動し、Backendのヘルスチェックを叩けることを確認 —
-      Task003でHomeScreen起動へ進んだため、この「空のプレースホルダー画面」というマイルストーン自体は
-      追い越した形になる。ヘルスチェック疎通そのものは依然未確認。
-- [ ] Supabase: プロジェクト作成・接続情報の確認のみ（テーブルはまだ作らない）
-
-## Phase 2 — 認証
-- [ ] Supabase Authを用いたログイン/サインアップ
-- [ ] FastAPI側でのJWT検証middleware
-
-## Phase 3 — JSON UI レンダリングエンジン
-- [x] `shared/schemas/` にJSON UI Schemaの初版を定義 — v1.0として確定、
-      FORGE-MILESTONE-002 PHASE1でv1.1へ拡張(6→12 Widget)。
-- [x] Flutter `json_ui/` にレンダラーと最小Widget Registry（text, button, columnなど）を実装 —
-      **CEO実機で実測済み**(FORGE-RUNTIME-003完了報告: `flutter analyze` No issues found!、
-      `flutter test` 103/103 PASS、Chrome実機でHome→Confirm→Generated Screen→
-      チェックリスト操作まで成功)。FORGE-MILESTONE-002 PHASE2でRegistry機構と
-      Widget実装を分離し、6 Widget追加(heading/checkbox/card/list/divider/form)。
-      この拡張後の`flutter analyze`/`flutter test`はClaude環境では未実行
-      (Immediate Next Task参照)。
-- [ ] Backendに `apps` / `app_versions` テーブルを作成し、JSON Schemaを保存できるようにする —
-      未着手(Supabase未接続のまま)。
-
-## Phase 3.5 — Template System / Language v1.1（FORGE-MILESTONE-002、新規）
-- [x] Language v1.1(6 Widget追加、Validator多バージョン対応) — Python側135件・
-      Dart側(未検証)のテストを整備。
-- [x] Template System(Checklist/Memo/Form) — Python/Dart双方に実装、
-      `docs/spec/MOCK_GENERATOR_CONTRACT.md`で機械比較済み。
-- [x] Mock Generator v2(12カテゴリ、家事/アンケート/メモを追加)。
-- [ ] CEO実機での`flutter analyze`/`flutter test`/Chrome確認 — 未実施
-      (Immediate Next Task参照)。
-
-## Phase 4 — AI連携
-- [ ] `/api/v1/ai/generate` エンドポイント（会話 → JSON UI Schema） —
-      Task003で実装(ただし本物のAIではなくDeterministic Mock Generator。
-      `backend/app/ai/generators/mock_generator.py`)。ルーター層(FastAPI)は
-      Claude環境で未実行・未検証。呼び出される側の生成ロジック自体は
-      `python -m unittest` で検証済み(26/26件合格、Validatorとの結合含む)。
-- [x] JSON Schemaバリデーション — Task003で実装・検証済み
-      (`backend/app/ai/validators/schema_validator.py`、19/19件合格)。
-- [ ] エラー時のフォールバック処理 — クライアント側の表示Fallback(未知Widget等)は
-      実装済みだがDart未検証。「不合格だったJSONを自動修復して再提示する」
-      Repair Engineそのものは今回のスコープ外(次段階。Migration Plan参照)。
-
-## Phase 5 — CRUD / 実アプリ機能
-- [ ] ユーザーが作ったアプリの一覧・編集・削除
-- [ ] `_template_feature/` を複製して最初の実featureを追加
-
-## Phase 6 以降 — 拡張機能
-- [ ] AI Memory（会話履歴からの長期記憶） — インターフェース設計のみ完了
-      (`backend/app/ai/foundation/interfaces.py` の`Memory` Protocol、
-      FORGE-MILESTONE-002 PHASE6)。実装は未着手。
-- [ ] AI Improve（既存アプリの自動改善提案）
-- [x] Template（雛形の再利用） — FORGE-MILESTONE-002 PHASE4で実装
-      (`docs/spec/TEMPLATE_SPEC.md`参照)。Checklist/Memo/Formの3種。
-- [ ] Marketplace（アプリ/テンプレートの共有・売買） — 未着手(禁止事項)
-- [ ] Plugin（サードパーティ拡張） — `PluginRouter` Protocolの設計のみ完了、実装は未着手
-- [ ] Team（組織・共同編集）
+会話から道具を作るForgeを、自由度・安全性・賢さを両立しながら
+進化させるための計画。図版が原典であり、この文書はセッションを
+またいでも参照できるようにするための転記である。
 
 ---
 
-各フェーズは前フェーズの土台を壊さないことを前提とする。
-特にPhase 3で定義するJSON UI Schemaは、Marketplace/Plugin/Templateが
-将来これに依存するため、破壊的変更は慎重にバージョニングして行う
-（`shared/schemas/` にバージョンごとのSchemaを残す）。
+## 1. 全体方針(4原則)
 
-Task003（Prototype統合・最初の縦の一本）で何が「書かれた」/「検証済み」かの詳細は
-`docs/tasks/task003.md` と `docs/DECISIONS.md` を参照。本ファイルのチェックは、
-Claudeが実際に実行して確認できたものだけに`[x]`を付けている
-（コードが存在するが未実行のものは`[ ]`のまま注記で状況を残した）。
+| # | 原則 | 意味 |
+|---|---|---|
+| 1 | **Conversation is the product** | すべての体験は会話から始まり、会話の連続性と自然さを最優先する |
+| 2 | **Capability ≠ Widget** | 能力を再利用可能な部品として設計し、組み合わせで価値を生む |
+| 3 | **精度のために自由度を捨てない** | 型にはめず、多様な解法と表現を許容する |
+| 4 | **自由度のために安全を捨てない** | Self-Extensionも安全境界・検証・ロールバックを前提に行う |
 
-## Phase 7 — Conversation Readiness(FORGE-CONVERSATION-READY-001、2026-08-12)
+---
 
-「困りごとを話す → 必要最小限だけ質問 → 自然にToolが現れる →
-会話で育てる」を一本通すための、Conversation Engineの意思決定強化。
+## 2. フェーズ別ロードマップ
 
-**完了**:
+### Phase 1 — 現在地の安定化 ✅ 完了(2026-08-13)
 
-* `MAX_CONVERSATION_TURNS`による強制BUILDの廃止(ターン上限は質問戦略の
-  閾値へ変更)。
-* `ConversationReadiness`(5値)とPolicy層(`conversation_policy.py`)の新設。
-* Question Policy(blocking / high / low / cosmeticのimpact分類、
-  繰り返し質問の抑止)。
-* CONFIRMのConversation Policyへの正式統合(外部作用・不可逆操作)。
-* Unknown / Assumptionへの`reason`付与。
-* BUILD失敗時のASKフォールバック(理解段階の失敗のみ)。
-* 「はい、どうぞ」Moment(Frontend)。
-* Conversation Golden Test / Conversation Metrics。
+- [x] 戻るボタン修正(TD53)
+- [x] Mock UX整理(TD54)
+- [x] verify / Python環境改善
+- [x] analyze差分確認(77件 → 0件)
 
-**未着手(次段階)**:
+### Phase 2 — Stateful User Correction ✅ 完了(2026-08-13)
 
-* Voice(STT/TTS)のAdapter接続。Product Logic側は完成しており、
-  Voice未実装でも成立する状態にしてある(指示書11章の優先順位に従い、
-  意図的に後回しにした)。
-* Metricsの外部分析基盤への送出(現状はプロセス内メモリのみ)。
-* Readiness判定の実データによる調整(現在は決定的なルールベース)。
+- [x] `current_hypothesis` 保持
+- [x] `correction_history` 保持
+- [x] 承認 / 訂正 / 問題修正の判定
+- [x] ACCEPT → BUILD 接続
+
+### Phase 3 — Capabilityモデル化 ✅ ほぼ完了(2026-08-13)
+
+- [x] Data / Transform / View / Encoding / Effect
+- [x] Semantic Capability設計
+- [x] Missing Primitive検出
+- [~] Capability依存関係の整理 — 分解表(`_DECOMPOSITION`)まで。
+      本格的なDependency Graphは未着手
+
+### Phase 4 — Vertical Slice検証 ← **現在ここ**
+
+- [x] `transform.aggregate` の実装 — **Runtime描画まで到達**(2026-08-13)
+      - Forge Language v1.9(`bar_chart.group_by` / `aggregate`)
+      - Validator(v1.9、参照整合性・enum・条件付き必須)
+      - Runtime(`forge_aggregate.dart`の純粋関数 + `bar_chart`が利用)
+      - **未達**: Compiler接続(Plannerがこの形を選ぶ経路が無い)
+- [ ] Smallest Useful Tool 代替
+- [ ] 回帰テスト追加 — 集計分は完了(単体14 + Widget 7 + Validator 12)
+- [ ] Conversation E2E検証(Compiler接続後)
+
+**なぜここが次なのか**: `transform.aggregate` は、§56の「能力を足した」
+基準(表現 → 検証 → コンパイル → 描画 → 使用)を**初めて満たせる**地点で
+ある。現状は「表現 → 検証」で止まっている。
+
+### Phase 5 — Local AI強化
+
+- [ ] Need抽出 / Correction分類 / Capability推論 を Local AI へ
+- [ ] Semantic RAG
+- [ ] Geminiなしでも検証可能
+
+### Phase 6 — Safe Self-Extension設計
+
+- [ ] Composition Extension
+- [ ] Declarative Extension PoC(**一部着手済み**: `capability_definition.py`)
+- [ ] Trust / Versioning / Rollback
+- [ ] Sandbox / Security Gate
+
+### Phase 7 — 将来拡張
+
+- [ ] Build-Time Extension
+- [ ] Controlled Promotion
+- [ ] Capability再利用分析
+- [ ] User Feedback を進化へ反映
+
+**期間感**: 短期(〜3ヶ月)/ 中期(3〜9ヶ月)/ 長期(9ヶ月〜)。
+
+---
+
+## 3. 会話から道具になる流れ
+
+```
+ユーザーの困りごと
+  → Problem Discovery      会話から問題を見つけ出す
+  → Need Model             必要な機能と価値を構造化
+  → Solution Hypothesis    解決の仮説(複数案可)
+  → User Correction        修正・追加・削除のフィードバック  ←「違う」は重要な信号
+  → Accepted Product Spec  ユーザー承認済みの仕様
+  → Capability Resolver    必要な能力を特定し既存と照合
+  → 既存能力で作れる？
+       ├ Yes → Product Planner → Compiler → Validator/Repair → Runtime → Usable Tool
+       └ No  → Missing Primitive → Userと仕様確認 → Safe Extension Strategy
+                → Candidate Capability → Validation/Test/Security Gate
+                → 後続フェーズでForgeへ追加
+```
+
+---
+
+## 4. 重要な論点と次の焦点
+
+### A. 今すぐ直すべきポイント ✅ 全件対応済み(2026-08-13)
+
+- [x] Problem理解より先にCapability提案しない → `ConversationPhase`
+- [x] Correctionで他LayerのMissingを消さない → `missing`をプロパティ化
+- [x] 「うん、地図でいい」を承認として扱う → stance判定
+- [x] Documentation drift を減らす → STATUS / TD55 訂正
+
+### B. Self-Extensionで守ること
+
+- Product Spec と Platform Capability を分離
+- User Feedback と Security Approval を分離
+- Global Capability と Tool固有仕様を分離
+- **任意コード実行を許さない**
+
+### C. 最終ゴール
+
+> 会話で仕様を育てる / 足りない能力を見つける / 安全に能力を増やす
+> → **以前は作れなかったToolを作れるようにする**
+
+---
+
+## 横断原則
+
+会話中心 / 安全第一 / 部品化・再利用 / 検証・観測 / 段階的拡張。
+
+**すべての拡張は、安全境界・検証・ロールバックを前提に進める。**
+
+---
+
+## 関連文書
+
+- `docs/spec/FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md` — Self-Extensionの定義と成立条件
+- `STATUS.md` — 今どこまで動くか
+- `TECH_DEBT.md` — TD56(Correction状態)/ TD57(派生状態の不在)/ TD58(Compiler未接続)

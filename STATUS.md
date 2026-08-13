@@ -33,7 +33,7 @@
 | Forge Language生成 | 動作 | Curated 5 Domain + 合成経路 |
 | Solution Shape選択 | 動作 | CHECKLIST / RECORD_CRUD の2形 |
 | Validator / Repair / Critic | 動作 | Validator最大3回・Repair最大2回 |
-| Flutter Runtime | 動作 | Widget 19種、v1.8 |
+| Flutter Runtime | 動作 | Widget 19種、v1.9(集計付きbar_chart) |
 | 「はい、どうぞ」UX | 動作 | `conversation_flow_screen.dart` |
 | Conversation Metrics | 記録のみ | プロセス内メモリ。外部送出は未実装 |
 | Model Gateway | 動作 | Task単位のRouting・計測・fallback |
@@ -43,6 +43,7 @@
 | Capability検出 / 仮説提示 | 動作 | `capability.py`。作れないものを名指しし、作れる形を出す |
 | Stateful User Correction | 動作 | 前回の仮説を保持し、訂正された層だけ差し替える |
 | Semantic Capability分解 | 動作 | `semantic_capability.py`。不足を種類ごとに特定する |
+| `transform.aggregate` | 動作 | グループごとの集計。**Compiler未接続**(会話からは到達しない) |
 | Declarative Capability定義 | 検証まで | `capability_definition.py`。**Runtime利用は不可**(§17) |
 | Self-Extension(能力獲得) | **目標として継続** | 定義は`FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md` §2。到達は「表現→検証」まで |
 | └ 実行中のDartコード注入 | **不採用** | Flutterが動的コード実行不可。これは技術的事実 |
@@ -55,8 +56,8 @@
 | 対象 | 件数 | 状態 |
 |---|---|---|
 | `forge_ai/tests` | 521 | 全green |
-| `backend/tests` | 852 | 全green(skip 13) |
-| `frontend`(Flutter) | 455 | 全green |
+| `backend/tests` | 864 | 全green(skip 13) |
+| `frontend`(Flutter) | 476 | 全green |
 | `flutter analyze` | 0件 | 2026-08-13にwarning/info含めて0へ(以前は77件) |
 
 > 2026-08-13訂正: このセクションは以前「Flutter 451 / analyze 0エラー」と

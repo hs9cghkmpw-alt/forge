@@ -75,7 +75,7 @@ MAX_RECORD_LIST_ITEMS = 500  # checklist/string_listと同じ上限に揃える
 MAX_RECORD_FIELDS = 20  # 1Recordが持てるFieldの上限(既存state.maxProperties: 30より保守的)
 MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)
 
-SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"}
+SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9"}
 
 # バージョン文字列同士を数値として比較するための順序付きタプル。
 # **設計上の注記(このセッションで実際に発見・修正した再発バグへの
@@ -87,7 +87,7 @@ SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1
 # 自身で発見・修正した)。今回、`_version_at_least()`という「以上」
 # 比較のヘルパーへ置き換え、将来のVersion追加(v1.5等)で
 # 同種の見落としが起きないようにした。
-_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8")
+_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9")
 
 
 def _version_at_least(version: str, minimum: str) -> bool:
@@ -196,6 +196,18 @@ WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
         | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
         | WIDGET_TYPES_V1_8_ADDITIONS
     ),
+    # v1.9(FORGE-USER-GUIDED-SELF-EXTENSION-006 Phase 4、2026-08-13)は
+    # **新しいWidget型を追加しない**。`bar_chart`へ`group_by`/`aggregate`を
+    # 足しただけである(v1.2がvalidationプロパティを、v1.5が
+    # record_list_viewへlayout="grid"を足したのと同じ、property-onlyの追加)。
+    #
+    # Widgetを増やさずに表現の幅を増やせたのは、足したものが**表示ではなく
+    # データ変換**だからである(`TRANSFORM`層、v2レビュー §4)。
+    "1.9": (
+        WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
+        | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
+        | WIDGET_TYPES_V1_8_ADDITIONS
+    ),
 }
 WIDGET_TYPES_ALL = (
     WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
@@ -237,6 +249,8 @@ ACTION_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.7": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
     # v1.8。slider追加は新しいAction型を追加しない。
     "1.8": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
+    # v1.9はActionを追加しない(足したのはデータ変換であり操作ではない)。
+    "1.9": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
 }
 ACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS  # 全バージョン合計(未知typeの判定用)
 
@@ -267,6 +281,9 @@ STATE_TYPES_BY_VERSION: dict[str, set[str]] = {
     # v1.8。sliderは既存の"number"型state(v1.2で追加済み)をそのまま
     # 使うため、新しいState型を追加しない。
     "1.8": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
+    # v1.9はState型を追加しない。集計結果は**保存しない**——表示のたびに
+    # 導出する純粋関数であり、保存されるデータは1バイトも増えない。
+    "1.9": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
 }
 STATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS
 
@@ -282,6 +299,12 @@ MAX_CHOICE_OPTIONS = 30
 RECORD_FIELD_VALUE_TYPES = (str, int, float, bool)
 
 VALIDATION_RULE_TYPES = {"required", "min_length", "max_length", "min", "max", "pattern"}
+
+# v1.9新規(2026-08-13)。`bar_chart.aggregate`が取りうる値。
+# Runtime側(`frontend/lib/json_ui/runtime/forge_aggregate.dart`の
+# `ForgeAggregateOp`)と**1:1で一致させること**——ここが食い違うと、
+# Validatorは通るのにRuntimeが解釈できない文書が生まれる(TD37と同じ形の事故)。
+BAR_CHART_AGGREGATES = {"count", "sum", "average"}
 
 IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
@@ -978,14 +1001,46 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
         # (指示書の制約により、月ごとの合計等の集計は行わないPhase1の
         # 最小実装: 1 Record = 1本の棒)。household_budget等の「収支を
         # グラフで見たい」という既存の例文を実現するための追加。
+        # v1.9(2026-08-13)で`group_by`/`aggregate`を追加。指定すると
+        # 1 Record = 1本ではなく**グループごとに1本**になる。
         errors.extend(_check_additional_properties(
-            widget, {"type", "id", "state_ref", "value_field", "label_field", "title"}, path
+            widget,
+            {"type", "id", "state_ref", "value_field", "label_field", "title",
+             "group_by", "aggregate"},
+            path,
         ))
         if not _is_identifier(widget.get("state_ref")):
             errors.append(_err(f"{path}/state_ref", Category.SCHEMA, "required", "bar_chart.state_refは必須です。"))
-        if not _is_identifier(widget.get("value_field")):
+
+        grouping = widget.get("group_by")
+        if grouping is not None and not _is_identifier(grouping):
+            errors.append(_err(
+                f"{path}/group_by", Category.SCHEMA, "identifier",
+                "bar_chart.group_byはField名でなければなりません。",
+            ))
+        aggregate = widget.get("aggregate")
+        if aggregate is not None and aggregate not in BAR_CHART_AGGREGATES:
+            errors.append(_err(
+                f"{path}/aggregate", Category.SCHEMA, "enum",
+                f"bar_chart.aggregateは{sorted(BAR_CHART_AGGREGATES)}のいずれかです。",
+            ))
+        if aggregate is not None and grouping is None:
+            # 集計方法だけ指定してグループ化キーが無いのは、ほぼ確実に
+            # 書き間違いである。黙って「集計しない」に倒すと、利用者は
+            # 指定が効いていないことに気づけない。
+            errors.append(_err(
+                f"{path}/aggregate", Category.SCHEMA, "required",
+                "bar_chart.aggregateを指定する場合、group_byも必要です。",
+            ))
+
+        # **要求を緩める範囲を正確に限定する**。集計する場合:
+        #   * `value_field`は sum/average のときだけ必要(countは数えるだけ)
+        #   * `label_field`は不要(グループ化キーがラベルになる)
+        aggregating = grouping is not None
+        needs_value_field = (not aggregating) or (aggregate or "count") != "count"
+        if needs_value_field and not _is_identifier(widget.get("value_field")):
             errors.append(_err(f"{path}/value_field", Category.SCHEMA, "required", "bar_chart.value_fieldは必須です。"))
-        if not _is_identifier(widget.get("label_field")):
+        if not aggregating and not _is_identifier(widget.get("label_field")):
             errors.append(_err(f"{path}/label_field", Category.SCHEMA, "required", "bar_chart.label_fieldは必須です。"))
         if "title" in widget and (not isinstance(widget["title"], str) or len(widget["title"]) > 80):
             errors.append(_err(f"{path}/title", Category.SCHEMA, "string_length", "titleが不正です。"))
@@ -1311,7 +1366,25 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
                     }
                     value_field = widget.get("value_field")
                     label_field = widget.get("label_field")
-                    if value_field not in fields_by_name:
+
+                    # v1.9(2026-08-13)。集計する場合、value_field/label_fieldは
+                    # 省略できる(`_check_widget_schema`参照)。省略されたものを
+                    # 「存在しないFieldを指している」と誤検出しないようにする。
+                    grouping = widget.get("group_by")
+                    aggregating = grouping is not None
+                    if aggregating:
+                        # グループ化キー自体は実在するFieldでなければならない。
+                        # ここを検査しないと、存在しないFieldで「集計できた
+                        # つもり」になり、実行時は静かに空のグラフが出る。
+                        if grouping not in fields_by_name:
+                            errors.append(_err(
+                                f"{w_path}/group_by", Category.SEMANTIC, "field_reference_exists",
+                                f"group_by '{grouping}' に一致するFieldが"
+                                f"record_schemas['{schema_ref}']にありません。",
+                            ))
+                    if aggregating and value_field is None:
+                        pass  # countではvalue_field不要
+                    elif value_field not in fields_by_name:
                         errors.append(_err(
                             f"{w_path}/value_field", Category.SEMANTIC, "field_reference_exists",
                             f"value_field '{value_field}' に一致するFieldがrecord_schemas['{schema_ref}']にありません。",
@@ -1322,7 +1395,9 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
                             f"value_field '{value_field}' はtype=numberのFieldである必要があります"
                             f"(実際: {fields_by_name[value_field].get('type')!r})。",
                         ))
-                    if label_field not in fields_by_name:
+                    if aggregating and label_field is None:
+                        pass  # 集計時はグループ化キーがラベルになる
+                    elif label_field not in fields_by_name:
                         errors.append(_err(
                             f"{w_path}/label_field", Category.SEMANTIC, "field_reference_exists",
                             f"label_field '{label_field}' に一致するFieldがrecord_schemas['{schema_ref}']にありません。",

@@ -18,6 +18,9 @@ library;
 // 1クラスに限りdart:uiへの依存を許容する、という意図的な判断)。
 import 'dart:ui' show Color;
 
+// v1.9(2026-08-13)。bar_chartのgroup_by/aggregateが参照する。
+import '../runtime/forge_aggregate.dart';
+
 /// 未知の構造・型不一致など、サーバー側Validatorを通過したはずのJSONが
 /// クライアント側で解釈できなかった場合に投げる。Renderer側でこれを捕まえ、
 /// 安全なFallback表示に倒す(素通しでクラッシュさせない)。
@@ -752,26 +755,51 @@ sealed class ForgeWidgetNode {
           placeholder: json['placeholder'] as String?,
         );
       case 'bar_chart':
-        // v1.6新規。record_listの数値Fieldを棒グラフで可視化する
-        // (1 Record = 1本の棒、集計は行わないPhase1最小実装)。
+        // v1.6新規。record_listの数値Fieldを棒グラフで可視化する。
+        //
+        // v1.9(2026-08-13)で`group_by`/`aggregate`を追加した
+        // (FORGE-USER-GUIDED-SELF-EXTENSION-006 Phase 4)。指定すると、
+        // 1 Record = 1本ではなく**グループごとに1本**になる。
+        // 集計そのものは`runtime/forge_aggregate.dart`の純粋関数が行う
+        // ——このWidgetは集計の**最初の利用者**であって、所有者ではない。
         final chartStateRef = json['state_ref'];
         if (chartStateRef is! String || chartStateRef.isEmpty) {
           throw ForgeParseException('$path/state_ref', 'bar_chart.state_ref is required');
         }
+        final groupBy = json['group_by'];
+        if (groupBy != null && (groupBy is! String || groupBy.isEmpty)) {
+          throw ForgeParseException('$path/group_by', 'bar_chart.group_by must be a non-empty string');
+        }
+        final aggregateRaw = json['aggregate'];
+        if (aggregateRaw != null && ForgeAggregateOp.fromJson(aggregateRaw as String?) == null) {
+          throw ForgeParseException(
+            '$path/aggregate', 'bar_chart.aggregate must be count/sum/average');
+        }
+        final aggregate = ForgeAggregateOp.fromJson(aggregateRaw as String?);
+        final grouping = groupBy as String?;
+
+        // 集計する場合、`value_field`は sum/average のときだけ要る
+        // (count は数えるだけなので値Fieldが無くてよい)。`label_field`も
+        // グループ化キーがラベルになるため不要になる。**要求条件を
+        // 緩めた範囲を、意味のある単位で正確に限定している**。
+        final needsValueField =
+            grouping == null || (aggregate ?? ForgeAggregateOp.count) != ForgeAggregateOp.count;
         final valueField = json['value_field'];
-        if (valueField is! String || valueField.isEmpty) {
+        if (needsValueField && (valueField is! String || valueField.isEmpty)) {
           throw ForgeParseException('$path/value_field', 'bar_chart.value_field is required');
         }
         final labelField = json['label_field'];
-        if (labelField is! String || labelField.isEmpty) {
+        if (grouping == null && (labelField is! String || labelField.isEmpty)) {
           throw ForgeParseException('$path/label_field', 'bar_chart.label_field is required');
         }
         return ForgeBarChartWidgetNode(
           id,
           stateRef: chartStateRef,
-          valueField: valueField,
-          labelField: labelField,
+          valueField: valueField as String? ?? '',
+          labelField: labelField as String? ?? '',
           title: json['title'] as String?,
+          groupBy: grouping,
+          aggregate: aggregate,
         );
       case 'date_field':
         // v1.7新規(Widget Vocabulary Expansion第2弾、2026-08-11)。
@@ -1006,13 +1034,28 @@ class ForgeBarChartWidgetNode extends ForgeWidgetNode {
   final String valueField;
   final String labelField;
   final String? title;
+
+  /// v1.9新規。指定するとRecordをこのFieldでまとめ、**グループごとに
+  /// 1本の棒**を描く(`null`なら従来どおり1 Record = 1本)。
+  final String? groupBy;
+
+  /// v1.9新規。`groupBy`があるときの集計方法(既定は件数)。
+  final ForgeAggregateOp? aggregate;
+
   const ForgeBarChartWidgetNode(
     super.id, {
     required this.stateRef,
     required this.valueField,
     required this.labelField,
     this.title,
+    this.groupBy,
+    this.aggregate,
   });
+
+  /// 集計するかどうか。`groupBy`の有無だけで決まる。
+  bool get isAggregating => groupBy != null && groupBy!.isNotEmpty;
+
+  ForgeAggregateOp get effectiveAggregate => aggregate ?? ForgeAggregateOp.count;
 }
 
 /// v1.7新規(Widget Vocabulary Expansion第2弾、2026-08-11)。カレンダー

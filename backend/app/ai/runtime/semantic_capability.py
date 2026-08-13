@@ -151,9 +151,12 @@ _PRIMITIVES: tuple[RuntimePrimitive, ...] = (
     _p("data.image", PrimitiveKind.DATA, "画像", False, note="保存形式と表示Widgetの両方が無い"),
 
     # --- TRANSFORM(Widgetではない。ここが空白地帯だった)---------------
-    _p("transform.aggregate", PrimitiveKind.TRANSFORM, "グループごとの集計", False,
-       note="ForgeRuntimeStateに派生状態の仕組みが無い。"
-            "**これ1つで多くの表現が一斉に可能になる**(v2 §23-1)"),
+    # 2026-08-13 実装(Phase 4)。`frontend/lib/json_ui/runtime/
+    # forge_aggregate.dart`の純粋関数として実装し、`bar_chart`が
+    # `group_by`/`aggregate`(Forge Language v1.9)から利用する。
+    # **Widgetではないので`widget_types`は空である**——集計は特定の
+    # Widgetに属さず、どのViewからでも呼べる。
+    _p("transform.aggregate", PrimitiveKind.TRANSFORM, "グループごとの集計", True),
     _p("transform.filter", PrimitiveKind.TRANSFORM, "条件での絞り込み", False,
        note="同上。派生状態が無い"),
     _p("transform.sort", PrimitiveKind.TRANSFORM, "並べ替え", False,

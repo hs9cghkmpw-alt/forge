@@ -58,11 +58,21 @@ class TestPrimitiveRegistryHonesty(unittest.TestCase):
 class TestDecompositionDiagnosesTheRealGap(unittest.TestCase):
     """§29の核心: 「heatmapが無い」ではなく、何が無いのかを言えること。"""
 
-    def test_heatmap_decomposes_into_four_different_kinds_of_gap(self) -> None:
+    def test_heatmap_decomposes_into_different_kinds_of_gap(self) -> None:
+        """不足が**種類ごとに**現れること。
+
+        2026-08-13にPhase 4で`transform.aggregate`を実装したため、
+        TRANSFORMはもう不足に現れない(4個 → 3個へ減った)。
+        残るのはデータ型・表示パラメータ・描画である。
+        """
         d = decompose("view.heatmap")
         self.assertIsNotNone(d)
         kinds = {p.kind for p in d.missing}
-        self.assertIn(PrimitiveKind.TRANSFORM, kinds, "集計が不足として現れていない")
+        self.assertNotIn(
+            PrimitiveKind.TRANSFORM, kinds,
+            "集計は実装済みなので、もう不足として現れないはず",
+        )
+        self.assertIn(PrimitiveKind.DATA, kinds, "地理座標が不足として現れていない")
         self.assertIn(PrimitiveKind.ENCODING, kinds, "濃淡が不足として現れていない")
         self.assertIn(PrimitiveKind.VIEW, kinds, "地理描画が不足として現れていない")
 
@@ -84,19 +94,17 @@ class TestDecompositionDiagnosesTheRealGap(unittest.TestCase):
         self.assertTrue(trend.fallback_possible)
 
     def test_a_missing_transform_still_means_not_satisfiable(self) -> None:
-        """VIEWが揃っていても、集計が無ければ要求どおりには作れない。
-        ここが以前は空(=問題なし)に見えていた箇所である。"""
-        from app.ai.runtime.semantic_capability import (
-            _DECOMPOSITION,
-            CapabilityDecomposition,
-        )
+        """VIEWが揃っていても、TRANSFORMが無ければ要求どおりには作れない。
+        ここが以前は空(=問題なし)に見えていた箇所である(指摘6)。
 
-        d = CapabilityDecomposition(
-            "semantic.ranking_by_group",
-            tuple(PRIMITIVE_REGISTRY[i] for i in _DECOMPOSITION["semantic.ranking_by_group"]),
-        )
-        self.assertFalse(d.satisfiable_exactly)
-        self.assertTrue(d.renderable_at_all)
+        例を`ranking_by_group`から`trend_over_time`へ替えた——前者は
+        Phase 4で成立するようになったため、この性質の例として使えなく
+        なった。後者は`transform.sort`がまだ無く、同じ形をしている。
+        """
+        d = decompose("view.line_chart")
+        self.assertEqual([p.id for p in d.missing], ["transform.sort"])
+        self.assertFalse(d.satisfiable_exactly, "並べ替えが無いのに要求を満たせると言っている")
+        self.assertTrue(d.renderable_at_all, "棒グラフはあるので何かは出せる")
 
     def test_trend_is_almost_buildable(self) -> None:
         """「推移を見たい」は、実は並べ替えが無いだけである。
@@ -120,12 +128,13 @@ class TestNearestAlternative(unittest.TestCase):
         """「地図で濃淡」は4個先だが、同じ困りごとに答える
         「場所ごとの集計」は1個先である。**この差が分解の実際の効用**。"""
         d = decompose("view.heatmap")
-        self.assertEqual(d.distance, 4)
+        # Phase 4(2026-08-13)で集計が実装され、4個先 → 3個先になった。
+        self.assertEqual(d.distance, 3)
         alternative = d.nearest_alternative()
         self.assertIsNotNone(alternative)
         semantic_id, remaining = alternative
         self.assertEqual(semantic_id, "semantic.ranking_by_group")
-        self.assertEqual(remaining, 1)
+        self.assertEqual(remaining, 0, "集計実装により、代替は**今すぐ作れる**ようになった")
         self.assertLess(remaining, d.distance)
 
     def test_never_suggests_something_further_away(self) -> None:
@@ -156,15 +165,32 @@ class TestLeverageMeasurement(unittest.TestCase):
                 count += 1
         return count
 
-    def test_nothing_is_fully_buildable_today(self) -> None:
-        """現状、分解表のSemanticは1つも完全には成立しない。
-        これは悲観ではなく事実であり、次に何をすべきかの根拠になる。"""
-        self.assertEqual(self._feasible_count(PRIMITIVE_REGISTRY), 0)
+    def test_aggregate_made_the_first_semantic_buildable(self) -> None:
+        """**Phase 4のBefore/After**(2026-08-13)。
+
+        このテストは以前`test_nothing_is_fully_buildable_today`という名前で、
+        「成立数 = 0」を固定していた。`transform.aggregate`を実装した結果
+        意図どおり落ちたので、事実に合わせて書き直した——これが
+        §56の「Before: 表現できない / After: 表現できる」の実測である。
+
+            Before(2026-08-13午前): 成立0 / 6
+            After (transform.aggregate実装後): 成立1 / 6
+        """
+        self.assertEqual(self._feasible_count(PRIMITIVE_REGISTRY), 1)
+
+        required = sc._DECOMPOSITION["semantic.ranking_by_group"]
+        self.assertTrue(
+            all(PRIMITIVE_REGISTRY[i].implemented for i in required),
+            "成立した1件は「場所ごとの集計」であるはず",
+        )
 
     def test_no_single_primitive_unlocks_more_than_one_pattern(self) -> None:
         """当初の「族が増える」という主張が、この指標では成り立たないこと。
         将来この前提が変わったら(分解表が育ったら)ここが落ちるので、
-        そのとき主張を書き直せる。"""
+        そのとき主張を書き直せる。
+
+        実際、`transform.aggregate`の実装でこの測定は一度更新された
+        (成立0→1)。指標そのものの性質は変わっていない。"""
         base = dict(PRIMITIVE_REGISTRY)
         for primitive_id, primitive in PRIMITIVE_REGISTRY.items():
             if primitive.implemented:
@@ -172,17 +198,23 @@ class TestLeverageMeasurement(unittest.TestCase):
             trial = dict(base)
             trial[primitive_id] = replace(primitive, implemented=True)
             with self.subTest(primitive=primitive_id):
-                self.assertLessEqual(self._feasible_count(trial), 1)
+                # 集計実装後は既に1件成立しているため、1つ足して2件を
+                # 超えないことを見る(=どのPrimitiveも+1個のまま)。
+                self.assertLessEqual(self._feasible_count(trial), 2)
 
-    def test_aggregate_is_the_cheapest_path_to_the_fishing_need(self) -> None:
-        """測定が実際に支持した事実。`transform.aggregate`だけを実装すると、
-        「よく釣れる場所を知りたい」に答える形が成立する。"""
+    def test_removing_aggregate_would_break_the_fishing_need(self) -> None:
+        """測定が支持した事実を、逆向きに固定する。
+
+        `transform.aggregate`を未実装へ戻すと、「よく釣れる場所を
+        知りたい」に答える形が成立しなくなる。**この1つが効いている**
+        ことの確認であり、実装が消えたら気づけるようにするためでもある。
+        """
         trial = dict(PRIMITIVE_REGISTRY)
         trial["transform.aggregate"] = replace(
-            PRIMITIVE_REGISTRY["transform.aggregate"], implemented=True
+            PRIMITIVE_REGISTRY["transform.aggregate"], implemented=False
         )
         required = sc._DECOMPOSITION["semantic.ranking_by_group"]
-        self.assertTrue(all(trial[i].implemented for i in required))
+        self.assertFalse(all(trial[i].implemented for i in required))
 
 
 class TestConversationSurface(unittest.TestCase):

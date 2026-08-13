@@ -124,15 +124,18 @@ class TestSafetyGates(unittest.TestCase):
     def test_unimplemented_primitive_yields_candidate_not_usable(self) -> None:
         """**ここが「作れたふり」を防ぐ核心**。定義としては妥当でも、
         必要なPrimitiveが未実装なら使えない。`CANDIDATE`は`usable=False`。"""
+        # 例を`transform.aggregate`から`transform.sort`へ替えた。前者は
+        # Phase 4(2026-08-13)で実装されたため、未実装の例として使えなく
+        # なった——**テストの例が実装状況に追随している**ことの記録でもある。
         outcome = validate_definition(CapabilityDefinition(
-            id="composed.place_ranking", label_ja="場所ごとの多さ",
-            primitive_ids=("transform.aggregate", "view.bars", "encoding.length"),
+            id="composed.sorted_bars", label_ja="並べ替えた棒グラフ",
+            primitive_ids=("transform.sort", "view.bars", "encoding.length"),
         ))
         self.assertIs(outcome.trust, TrustLevel.CANDIDATE)
         self.assertTrue(outcome.definition_valid, "定義そのものは妥当なはず")
         self.assertFalse(outcome.primitives_available, "未実装Primitiveを含むのに利用可能になっている")
         self.assertFalse(outcome.production_usable)
-        self.assertEqual([p.id for p in outcome.missing_primitives], ["transform.aggregate"])
+        self.assertEqual([p.id for p in outcome.missing_primitives], ["transform.sort"])
         self.assertIn("未実装", outcome.explain())
 
     def test_oversized_definition_is_rejected(self) -> None:
