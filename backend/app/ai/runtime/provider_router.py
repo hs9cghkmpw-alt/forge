@@ -39,6 +39,7 @@ import os
 from typing import Protocol
 
 from app.ai.foundation.interfaces import LLMAdapter
+from app.ai.gateway.provider_registry import PROVIDER_REGISTRY
 from app.ai.foundation.local_provider import LocalModelProvider
 from app.ai.foundation.providers import (
     ClaudeProvider,
@@ -70,33 +71,47 @@ class ProviderRouter:
     という区別を明確にしている。
     """
 
+    # 名前 → Adapterを作る関数。**このモジュールが持つのは「実装」だけ**で
+    # あり、「どの名前が存在するか」「鍵はどの環境変数か」「Cloudかどうか」
+    # といった宣言的な情報は`provider_registry.py`が唯一持つ
+    # (FORGE-AI-FOUNDATION-010 Phase C)。
+    #
+    # 以前はこの表自体が事実上のRegistryを兼ねており、`ai_router`の
+    # `_KNOWN_MODELS`・`default_catalog()`と三重に同じことを宣言していた。
+    # Providerを1つ足すのに3箇所の更新が要り、揃え忘れてもテストは通る
+    # ——TD37と同じ形の事故である。
+    _FACTORIES: dict[str, type] = {
+        "openai": OpenAIProvider,
+        "claude": ClaudeProvider,
+        "gemini": GeminiProvider,
+        "oss": OSSProvider,
+        "local": LocalModelProvider,
+        "mock": MockLLMAdapter,
+        "forge_ai": ForgeAIProvider,
+    }
+
     def __init__(self) -> None:
-        """既定で6つのProviderインスタンス(5つの元のスタブ + FORGE-
-        MILESTONE-005で追加したmock)を構築し、8つの名前(6インスタンス +
-        FORGE-MILESTONE-004で追加した2つのエイリアス)で登録する。
-        エイリアスは新しいインスタンスではなく、既存インスタンスへの
-        別名参照である(同一Providerを指す)。
+        """Registryが宣言する名前(別名を含む)をすべて登録する。
+
+        別名は新しいインスタンスではなく、既存インスタンスへの別名参照で
+        ある(同一Providerを指す)。
         """
-        forge_ai_provider = ForgeAIProvider()
-        oss_provider = OSSProvider()
         self._providers: dict[str, AIProvider] = {
-            "openai": OpenAIProvider(),
-            "claude": ClaudeProvider(),
-            "gemini": GeminiProvider(),
-            "oss": oss_provider,
-            "forge_ai": forge_ai_provider,
-            # FORGE-MILESTONE-004 PHASE8で追加したエイリアス。
-            "native": forge_ai_provider,
-            # FORGE-QUALITY-AI-INDEPENDENCE-003 Phase G(2026-08-12):
-            # `"local"`は以前`OSSProvider`(未実装スタブ)のエイリアス
-            # だった。ローカル推論Runtime(Ollama等、OpenAI互換)へ実際に
-            # 接続する`LocalModelProvider`へ差し替える。Runtimeが起動して
-            # いない環境では、呼び出し時に`LocalModelError`となり
-            # `ModelGateway`がfallbackする(登録自体は常に安全)。
-            "local": LocalModelProvider(),
-            # FORGE-MILESTONE-005 Task8で追加。唯一実際に動作するProvider。
-            "mock": MockLLMAdapter(),
+            name: factory() for name, factory in self._FACTORIES.items()
         }
+        # Registryが宣言する別名を反映する(`native` → `forge_ai`等)。
+        # **Registryにあるのにここで解決できない名前は起動時に落とす**
+        # ——「宣言はあるが呼べない」という食い違いを実行時まで
+        # 持ち越さない。
+        for definition in PROVIDER_REGISTRY:
+            target = self._providers.get(definition.provider_id)
+            if target is None:
+                raise ProviderNotAvailableError(
+                    f"Registryが宣言するProvider '{definition.provider_id}' に対応する"
+                    f"実装がありません(provider_router._FACTORIES を確認してください)。"
+                )
+            for alias in definition.aliases:
+                self._providers.setdefault(alias, target)
 
     def available_providers(self) -> tuple[str, ...]:
         """登録済みProvider名の一覧を返す(エイリアス含め8件)。"""

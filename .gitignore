@@ -7,9 +7,18 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
-# Secrets(.env.exampleは対象外。APIキー等の実値は絶対にコミットしない)
+# Secrets(APIキー等の実値は絶対にコミットしない)。
+# FORGE-AI-FOUNDATION-010 §14〜§18: Git追跡対象に置いてよいのは
+# **環境変数名だけ**であり、値は置かない。以前は`.env`と`backend/.env`
+# という2つの完全一致だけを除外していたため、`.env.local`や
+# `backend/.env.production`のような、実際によく作られる名前が
+# 素通りしていた。除外を既定にして、`.env.example`だけを明示的に戻す。
 .env
-backend/.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
 
 # Flutter/Dart
 frontend/.dart_tool/

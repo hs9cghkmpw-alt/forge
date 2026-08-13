@@ -44,6 +44,14 @@ from typing import Any
 
 from app.ai.gateway.ai_errors import ErrorKind, classify_exception
 from app.ai.gateway.tasks import ForgeTask
+from app.ai.gateway.provider_registry import (
+    PROVIDER_REGISTRY,
+    Deployment,
+    ImplementationStatus,
+    ProviderDefinition,
+    configured_providers,
+    definition_for,
+)
 from app.ai.gateway.provider_state import Availability, ProviderStateStore
 
 __all__ = [
@@ -436,11 +444,19 @@ class _BoundAdapter:
 # 候補に入れると必ず失敗して試行予算を食う。**動かないものを候補に
 # 並べない。**
 
-_KNOWN_MODELS: dict[str, ModelDescriptor] = {
-    "gemini": ModelDescriptor(provider="gemini", is_local=False, supports_structured_output=True),
-    "local": ModelDescriptor(provider="local", is_local=True, supports_structured_output=True),
-    "mock": ModelDescriptor(provider="mock", is_local=True, test_only=True),
-}
+def _descriptor_from(definition: ProviderDefinition) -> ModelDescriptor:
+    """宣言(`ProviderDefinition`)からRouting用の性質へ落とす。
+
+    Registryが持つ情報のうち、Routerが**判断に実際に使う**ものだけを
+    取り出す。Registry全体をRouterへ渡さないのは、使わない属性まで
+    見えると、そのうち使い始めてしまうためである(§12)。
+    """
+    return ModelDescriptor(
+        provider=definition.provider_id,
+        is_local=definition.deployment is Deployment.LOCAL,
+        supports_structured_output=definition.supports_structured_output,
+        test_only=definition.test_only,
+    )
 
 
 def _descriptor_for(provider: str) -> ModelDescriptor:
@@ -449,9 +465,9 @@ def _descriptor_for(provider: str) -> ModelDescriptor:
     Localと決めつけると`LOCAL_ONLY`のTaskへ誤って載せてしまう。
     分からないものは「外部かもしれない」側へ倒す。
     """
-    known = _KNOWN_MODELS.get(provider)
+    known = definition_for(provider)
     if known is not None:
-        return known
+        return _descriptor_from(known)
     return ModelDescriptor(provider=provider, is_local=False, supports_structured_output=True)
 
 
@@ -482,27 +498,35 @@ def default_catalog() -> tuple[ModelDescriptor, ...]:
        解除する——Mockが自動選択されないのは「黙って選ばれない」ため
        (§22)であって、名指しされた場合はその限りではない。
        ただし利用者へは`simulated: true`として必ず伝える。
-    2. `GEMINI_API_KEY`があれば`gemini`を載せる。**無ければ載せない**
-       ——認証エラーで必ず失敗する候補は、試行予算を食うだけである。
-    3. `local`は常に載せる。Runtime(Ollama等)が起動しているかは
-       環境変数からは判定できない。起動していなければ
-       `LOCAL_RESOURCE_ERROR`となり、Circuit Breakerが学習する。
-    4. `mock`は`test_only`として末尾に置く。自動選択されないが、
-       `provider`を明示したリクエストの解決先としては残る。
+    2. それ以外は`configured_providers()`——Registryのうち
+       **実装があり・設定が揃っていて・テスト専用でない**もの——を
+       宣言順に並べる(Phase F Auto Discovery)。鍵の無いCloud
+       Providerや未実装スタブは、ここで自動的に落ちる。
+    3. `test_only`のProviderは末尾に残す。自動選択はされないが、
+       `provider`を明示したリクエストの解決先としては必要である。
 
-    候補が`local`と`mock`だけの環境(鍵なし・Runtimeなし)では、
+    候補が`local`だけの環境(鍵なし・Runtimeなし)では
     `NoProviderAvailableError`になる。これは**正しい失敗**である
     ——偽のToolをMockで作って「できました」と言わない(§33)。
+
+    ## Registryが唯一の宣言である(Phase C)
+
+    以前ここには`_KNOWN_MODELS`という独自の表と、`GEMINI_API_KEY`という
+    環境変数名の直書きがあった。Providerを1つ足すには
+    `ProviderRouter._providers`・`_KNOWN_MODELS`・この関数の3箇所を
+    揃える必要があり、揃え忘れてもテストは通った(TD37と同じ形)。
+    今は`provider_registry.py`だけが宣言であり、ここは導出する。
     """
     pinned = os.environ.get("FORGE_DEFAULT_PROVIDER", "").strip()
     if pinned:
         return (replace(_descriptor_for(pinned), test_only=False),)
 
-    catalog: list[ModelDescriptor] = []
-    if os.environ.get("GEMINI_API_KEY", "").strip():
-        catalog.append(_KNOWN_MODELS["gemini"])
-    catalog.append(_KNOWN_MODELS["local"])
-    catalog.append(_KNOWN_MODELS["mock"])
+    catalog = [_descriptor_from(d) for d in configured_providers()]
+    catalog.extend(
+        _descriptor_from(d)
+        for d in PROVIDER_REGISTRY
+        if d.test_only and d.implementation_status is ImplementationStatus.IMPLEMENTED
+    )
     return tuple(catalog)
 
 
