@@ -62,7 +62,7 @@ void main() {
           'color_scheme': {'primary': '#5B7C99'},
         },
         'screens': [
-          {'id': 's1', 'title': 'S1', 'state': {}, 'body': {'type': 'text', 'id': 't1', 'value': 'x'}},
+          {'id': 's1', 'title': 'S1', 'state': <String, dynamic>{}, 'body': {'type': 'text', 'id': 't1', 'value': 'x'}},
         ],
       });
       expect(doc.designTokens, isNotNull);
@@ -74,7 +74,7 @@ void main() {
         'version': '1.4',
         'initial_screen_id': 's1',
         'screens': [
-          {'id': 's1', 'title': 'S1', 'state': {}, 'body': {'type': 'text', 'id': 't1', 'value': 'x'}},
+          {'id': 's1', 'title': 'S1', 'state': <String, dynamic>{}, 'body': {'type': 'text', 'id': 't1', 'value': 'x'}},
         ],
       });
       expect(doc.designTokens, isNull);
@@ -86,7 +86,7 @@ void main() {
       final doc = ForgeDocument.fromJson({
         'version': '1.5', 'initial_screen_id': 's1',
         'screens': [
-          {'id': 's1', 'title': 'S1', 'state': {},
+          {'id': 's1', 'title': 'S1', 'state': <String, dynamic>{},
            'body': {'type': 'section_header', 'id': 'sec1', 'title': '記録の追加'}},
         ],
       });
@@ -100,7 +100,7 @@ void main() {
         () => ForgeDocument.fromJson({
           'version': '1.5', 'initial_screen_id': 's1',
           'screens': [
-            {'id': 's1', 'title': 'S1', 'state': {}, 'body': {'type': 'section_header', 'id': 'sec1'}},
+            {'id': 's1', 'title': 'S1', 'state': <String, dynamic>{}, 'body': {'type': 'section_header', 'id': 'sec1'}},
           ],
         }),
         throwsA(isA<ForgeParseException>()),
@@ -115,7 +115,7 @@ void main() {
         'screens': [
           {
             'id': 's1', 'title': 'S1',
-            'state': {'records': {'type': 'record_list', 'value': []}},
+            'state': {'records': {'type': 'record_list', 'value': <dynamic>[]}},
             'body': {'type': 'record_list_view', 'id': 'rlv1', 'state_ref': 'records', 'layout': 'grid'},
           },
         ],
@@ -130,7 +130,7 @@ void main() {
         'screens': [
           {
             'id': 's1', 'title': 'S1',
-            'state': {'records': {'type': 'record_list', 'value': []}},
+            'state': {'records': {'type': 'record_list', 'value': <dynamic>[]}},
             'body': {'type': 'record_list_view', 'id': 'rlv1', 'state_ref': 'records'},
           },
         ],

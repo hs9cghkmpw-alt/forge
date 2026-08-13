@@ -111,7 +111,12 @@ class ApiConversationRepository implements ConversationRepository {
         message: 'サーバーからの応答を解釈できませんでした。',
       );
     }
-    return ConversationAsk(sessionId: sessionId, question: question, needModel: _parseNeedModel(body));
+    return ConversationAsk(
+      sessionId: sessionId,
+      question: question,
+      needModel: _parseNeedModel(body),
+      simulated: _parseSimulated(body),
+    );
   }
 
   /// FORGE-CONVERSATION-READY-001(2026-08-12)。`ask`と同じ形
@@ -131,6 +136,7 @@ class ApiConversationRepository implements ConversationRepository {
       question: question,
       reason: body['reason'] as String? ?? '',
       needModel: _parseNeedModel(body),
+      simulated: _parseSimulated(body),
     );
   }
 
@@ -145,6 +151,7 @@ class ApiConversationRepository implements ConversationRepository {
     return ConversationBuilt(
       buildBrief: body['build_brief'] as String? ?? '',
       result: parseGenerationSuccessResult(result),
+      simulated: _parseSimulated(body),
     );
   }
 
@@ -163,8 +170,15 @@ class ApiConversationRepository implements ConversationRepository {
       forgeDocument: document,
       valid: validation?['valid'] as bool? ?? false,
       attempts: result['attempts'] as int? ?? 1,
+      simulated: _parseSimulated(body),
     );
   }
+
+  /// FORGE-HANDOFF-LOCAL-AI-UX-004 §9(2026-08-13)。この応答が模擬出力
+  /// かどうか。フィールドが無い古いBackendに対しては`false`
+  /// (=本物として扱う)ではなく、**存在しない場合のみ**`false`にする
+  /// ——新旧どちらのBackendでもクラッシュしないための後方互換。
+  bool _parseSimulated(Map<String, dynamic> body) => body['simulated'] as bool? ?? false;
 
   NeedModelSummary _parseNeedModel(Map<String, dynamic> body) {
     final needModel = body['need_model'] as Map<String, dynamic>?;

@@ -72,10 +72,10 @@ void main() {
                 'forge_document': {
                   'version': '1.0',
                   'app': {'title': '買い物リスト'},
-                  'screens': [],
+                  'screens': <dynamic>[],
                 },
-                'validation': {'valid': true, 'errors': [], 'warnings': []},
-                'quality': {'score': 80, 'release_ready': true, 'issues': [], 'required_fixes': []},
+                'validation': {'valid': true, 'errors': <dynamic>[], 'warnings': <dynamic>[]},
+                'quality': {'score': 80, 'release_ready': true, 'issues': <dynamic>[], 'required_fixes': <dynamic>[]},
                 'diagnostics': {
                   'engine_used': 'forge_ai',
                   'provider_used': 'mock',
@@ -126,8 +126,8 @@ void main() {
           'version': '1.0',
           'status': 'success',
           'result': {
-            'forge_document': {'version': '1.0', 'app': {'title': 't'}, 'screens': []},
-            'validation': {'valid': true, 'errors': [], 'warnings': []},
+            'forge_document': {'version': '1.0', 'app': {'title': 't'}, 'screens': <dynamic>[]},
+            'validation': {'valid': true, 'errors': <dynamic>[], 'warnings': <dynamic>[]},
             'diagnostics': {'engine_used': 'forge_ai', 'provider_used': 'gemini', 'repair_attempts': 0},
           },
         };
@@ -295,7 +295,7 @@ void main() {
               'status': 'success',
               'result': {
                 // forge_document欠落
-                'validation': {'valid': true, 'errors': [], 'warnings': []},
+                'validation': {'valid': true, 'errors': <dynamic>[], 'warnings': <dynamic>[]},
               },
             }),
       ]);
@@ -346,8 +346,8 @@ void main() {
               'version': '1.0',
               'status': 'success',
               'result': {
-                'forge_document': {'version': '1.0', 'app': {'title': 'T'}, 'screens': []},
-                'validation': {'valid': true, 'errors': [], 'warnings': []},
+                'forge_document': {'version': '1.0', 'app': {'title': 'T'}, 'screens': <dynamic>[]},
+                'validation': {'valid': true, 'errors': <dynamic>[], 'warnings': <dynamic>[]},
                 'quality': null,
                 'diagnostics': {'engine_used': 'forge_ai', 'provider_used': 'mock', 'repair_attempts': 0},
               },

@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))  # forge_ai/ はrepoルート直下
@@ -163,8 +164,45 @@ class TestProviderRouter(unittest.TestCase):
     def test_default_provider_is_mock(self) -> None:
         """FORGE-MILESTONE-005で`forge_ai`から`mock`へ変更(ADAPTER_CONTRACT_V1.md
         4.0節、Engine/Provider分離のCEOレビュー対応)。`forge_ai`は
-        Cognitive Engine名であり、Provider既定名として使うべきではなかった。"""
+        Cognitive Engine名であり、Provider既定名として使うべきではなかった。
+
+        テスト実行時の既定は`tests/conftest.py`が`FORGE_DEFAULT_PROVIDER=mock`
+        で固定している(テストが実APIを呼ばないため)。"""
         self.assertEqual(self.router.default_provider_name(), "mock")
+
+    def test_no_real_provider_configured_falls_back_to_mock(self) -> None:
+        """FORGE-HANDOFF-LOCAL-AI-UX-004 §9(2026-08-13)。実Providerが
+        1つも設定されていない場合のみ、Mockが既定になる。この場合の
+        Mockは「唯一動く選択肢」であって、隠れたfallbackではない。"""
+        with mock.patch.dict(os.environ, {"FORGE_DEFAULT_PROVIDER": "", "GEMINI_API_KEY": ""}, clear=False):
+            self.assertEqual(self.router.default_provider_name(), "mock")
+
+    def test_configured_gemini_key_makes_gemini_the_default_not_mock(self) -> None:
+        """実バグの回帰テスト: 既定が無条件に`"mock"`だったため、
+        `GEMINI_API_KEY`を設定済みの環境でも、Provider名を送らない
+        クライアント(Flutterは送っていない)には**黙ってMockの出力**が
+        返っていた。CEO実機で「mock resultがあると楽そう」という会話が
+        出たのはこれが原因。指示書:「Silent Mock fallbackは禁止」。"""
+        with mock.patch.dict(os.environ, {"FORGE_DEFAULT_PROVIDER": "", "GEMINI_API_KEY": "dummy-key"}, clear=False):
+            self.assertEqual(self.router.default_provider_name(), "gemini")
+
+    def test_explicit_configuration_wins_over_key_detection(self) -> None:
+        with mock.patch.dict(
+            os.environ, {"FORGE_DEFAULT_PROVIDER": "local", "GEMINI_API_KEY": "dummy-key"}, clear=False
+        ):
+            self.assertEqual(self.router.default_provider_name(), "local")
+
+    def test_unknown_configured_default_fails_loudly(self) -> None:
+        """未登録の名前を設定された場合、黙って別のProviderへ倒れない。"""
+        with mock.patch.dict(os.environ, {"FORGE_DEFAULT_PROVIDER": "does_not_exist"}, clear=False):
+            with self.assertRaises(ProviderNotAvailableError):
+                self.router.default_provider_name()
+
+    def test_only_mock_is_reported_as_simulated(self) -> None:
+        """模擬出力かどうかの判定は1箇所(`is_simulated`)に置く。"""
+        self.assertTrue(self.router.is_simulated("mock"))
+        for name in ("gemini", "claude", "openai", "local", "native", "forge_ai", "oss"):
+            self.assertFalse(self.router.is_simulated(name), name)
 
     def test_resolve_known_provider_succeeds(self) -> None:
         provider = self.router.resolve("claude")

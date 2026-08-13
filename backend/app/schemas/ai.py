@@ -276,7 +276,26 @@ class NeedModelDTO(BaseModel):
     assumptions: list[SafeAssumptionDTO] = Field(default_factory=list)
 
 
-class ConverseAskResponse(BaseModel):
+class SimulatedOutputMixin(BaseModel):
+    """FORGE-HANDOFF-LOCAL-AI-UX-004 §9(2026-08-13)新設。
+
+    指示書:「Silent Mock fallbackは禁止」「Mockだから内部JSONっぽい画面が
+    出てもいい、という考えは禁止」。**どのProviderが答えたのか**と、
+    **その出力が模擬かどうか**を、レスポンスが必ず自己申告する。
+
+    Flutter側はこれを見て、模擬出力であることを画面上に明示する
+    (黙って本物のように見せない)。既定値を持つ追加フィールドなので、
+    このフィールドを知らない既存クライアントは影響を受けない(後方互換)。
+    """
+
+    provider: str = "mock"
+    """実際に使われたProvider名。"""
+
+    simulated: bool = False
+    """`True`なら、この結果は実際の推論ではなくMockが組み立てた模擬出力。"""
+
+
+class ConverseAskResponse(SimulatedOutputMixin):
     version: Literal["1.0"] = "1.0"
     status: Literal["ask"] = "ask"
     session_id: str
@@ -288,7 +307,7 @@ class ConverseAskResponse(BaseModel):
     Golden Test・Debugのために返す(指示書2章)。"""
 
 
-class ConverseConfirmResponse(BaseModel):
+class ConverseConfirmResponse(SimulatedOutputMixin):
     """FORGE-CONVERSATION-READY-001(2026-08-12)新設(指示書4章)。
 
     外部作用・不可逆操作を含む依頼に対し、**実行する前に**会話の中で
@@ -310,7 +329,7 @@ class ConverseConfirmResponse(BaseModel):
     readiness: str = "needs_confirmation"
 
 
-class ConverseBuildResponse(BaseModel):
+class ConverseBuildResponse(SimulatedOutputMixin):
     """BUILDと判定された場合、既存の`PromptPipeline.run()`をそのまま
     通した結果(`GenerateResultDTO`)を、会話の文脈と一緒に返す
     (ADR-014: Conversation EngineはForge Language知識を持たず、既存の
@@ -353,7 +372,7 @@ class UpdateSuccessResponse(BaseModel):
     result: UpdateResultDTO
 
 
-class ConverseUpdateResponse(BaseModel):
+class ConverseUpdateResponse(SimulatedOutputMixin):
     """`/converse`がConversationSessionから`update`と判定した場合の
     レスポンス(FORGE-PRODUCT-VISION-002続き、2026-08-11新設)。中身は
     `UpdateSuccessResponse`と同じ`ForgeOperationEngine`の結果だが、会話

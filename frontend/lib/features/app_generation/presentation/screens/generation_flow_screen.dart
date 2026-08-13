@@ -267,12 +267,12 @@ class _GeneratingViewState extends State<_GeneratingView> with SingleTickerProvi
                       if (controller != null)
                         RotationTransition(
                           turns: controller,
-                          child: SizedBox(
+                          child: const SizedBox(
                             width: 148,
                             height: 148,
                             child: CircularProgressIndicator(
                               strokeWidth: 3,
-                              valueColor: const AlwaysStoppedAnimation(ForgeTheme.gradientEnd),
+                              valueColor: AlwaysStoppedAnimation(ForgeTheme.gradientEnd),
                               backgroundColor: ForgeTheme.consoleSurface,
                               value: 0.72,
                             ),

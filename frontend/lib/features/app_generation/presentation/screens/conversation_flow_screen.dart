@@ -6,6 +6,7 @@ import '../../../../json_ui/schema/forge_document.dart';
 import '../../../../shared_widgets/forge_sparkle_mark.dart';
 import '../../../../shared_widgets/generated_app_host_shell.dart';
 import '../../../../shared_widgets/responsive_app_shell.dart';
+import '../../../../shared_widgets/simulated_output_banner.dart';
 import '../../../app_library/domain/entities/generation_history_entry.dart';
 import '../../../app_library/domain/entities/saved_forge_app.dart';
 import '../../../app_library/presentation/providers/app_library_provider.dart';
@@ -97,6 +98,11 @@ class _ConversationFlowScreenState extends ConsumerState<ConversationFlowScreen>
 
   bool _savedForCurrentResult = false;
 
+  /// FORGE-HANDOFF-LOCAL-AI-UX-004 §9(2026-08-13)。直近の応答が
+  /// Mockの模擬出力だったかどうか。`true`の間、画面上部に
+  /// `SimulatedOutputBanner`を出す——「Silent Mock fallbackは禁止」。
+  bool _simulated = false;
+
   @override
   void initState() {
     super.initState();
@@ -181,6 +187,11 @@ class _ConversationFlowScreenState extends ConsumerState<ConversationFlowScreen>
   }
 
   void _handleConversationOutcome(ConversationOutcome outcome) {
+    // 模擬出力かどうかは、どの結果種別でも同じように記録する
+    // (§9: Mockであることを黙って隠さない)。
+    if (outcome.simulated != _simulated) {
+      setState(() => _simulated = outcome.simulated);
+    }
     switch (outcome) {
       case ConversationAsk(:final sessionId, :final question):
         setState(() {
@@ -328,6 +339,8 @@ class _ConversationFlowScreenState extends ConsumerState<ConversationFlowScreen>
           child: GeneratedAppHostShell(
             forgeDocument: result.forgeDocument,
             onBack: () => Navigator.of(routeContext).pop(),
+            // §9: 生成されたTool側でも、模擬データであることを隠さない。
+            simulated: _simulated,
             provider: widget.provider,
             onDocumentUpdated: (updated) => repository.saveApp(SavedForgeApp(
               id: id, title: title, originalPrompt: _originalPrompt, forgeDocument: updated,
@@ -389,6 +402,7 @@ class _ConversationFlowScreenState extends ConsumerState<ConversationFlowScreen>
         body: SafeArea(
           child: Column(
             children: [
+              SimulatedOutputBanner(simulated: _simulated),
               Expanded(
                 child: _errorMessage != null || streamError != null
                     ? _ConversationErrorView(

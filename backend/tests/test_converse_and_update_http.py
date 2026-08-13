@@ -129,5 +129,38 @@ class TestUpdateEndpoint(unittest.TestCase):
         self.assertEqual(body["error"]["category"], "validation_error")
 
 
+@unittest.skipUnless(_FASTAPI_AVAILABLE, "fastapi/pydanticがインストールされていない環境ではスキップする")
+class TestSimulatedOutputIsDeclared(unittest.TestCase):
+    """FORGE-HANDOFF-LOCAL-AI-UX-004 §9(2026-08-13)。
+    指示書:「Silent Mock fallbackは禁止」。
+
+    CEO実機確認では、Mockの出力に**それがMockである手がかりが1つも無く**、
+    「mock resultがあると楽そう」という会話がそのまま本物として表示された。
+    Mockの品質を上げること自体はこの問題の解決ではない——「模擬である
+    ことが分かる」ことが解決である。レスポンスが必ず自己申告する。
+    """
+
+    def setUp(self) -> None:
+        self.client = TestClient(app)
+
+    def test_mock_responses_declare_themselves_as_simulated(self) -> None:
+        response = self.client.post(
+            "/api/v1/ai/converse", json={"message": "買い物で何を買うか忘れる", "provider": "mock"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["provider"], "mock")
+        self.assertTrue(body["simulated"])
+
+    def test_no_internal_placeholder_reaches_the_user_facing_payload(self) -> None:
+        """`mock_result`のような内部の穴埋め文字列が、レスポンスの
+        どこにも出てはならない(実機ではこれがチェックリストの項目・
+        会話文としてそのまま表示されていた)。"""
+        response = self.client.post(
+            "/api/v1/ai/converse", json={"message": "買い物で何を買うか忘れる", "provider": "mock"},
+        )
+        self.assertNotIn("mock_result", response.text)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -352,8 +352,15 @@ def converse(request: ConverseRequest):
         session.session_id, ConversationTurn(role="user", text=request.message)
     )
 
-    provider_name = request.provider or "mock"
-    provider = ProviderRouter().resolve(provider_name)
+    # FORGE-HANDOFF-LOCAL-AI-UX-004 §9(2026-08-13):「Silent Mock fallbackは
+    # 禁止」。以前はここが`request.provider or "mock"`で、Provider名を
+    # 送らないクライアント(Flutterは送っていない)へ、実Providerが
+    # 設定済みでも黙ってMock出力を返していた。既定の決定は
+    # `ProviderRouter.default_provider_name()`が一元的に行う。
+    router = ProviderRouter()
+    provider_name = request.provider or router.default_provider_name()
+    simulated = router.is_simulated(provider_name)
+    provider = router.resolve(provider_name)
     try:
         step_result = ConversationEngine(provider).step(
             session, has_existing_tool=request.current_document is not None
@@ -387,6 +394,7 @@ def converse(request: ConverseRequest):
         return ConverseAskResponse(
             session_id=session.session_id, question=step_result.question or "", need_model=need_model_dto,
             readiness=step_result.readiness.value,
+            provider=provider_name, simulated=simulated,
         )
 
     if step_result.action == ConversationAction.CONFIRM:
@@ -406,6 +414,7 @@ def converse(request: ConverseRequest):
             session_id=session.session_id, question=confirm_text,
             reason=step_result.confirm_reason or "確認が必要な操作を含むため",
             need_model=need_model_dto, readiness=step_result.readiness.value,
+            provider=provider_name, simulated=simulated,
         )
 
     if step_result.action == ConversationAction.UPDATE:
@@ -425,6 +434,7 @@ def converse(request: ConverseRequest):
         assert update_result.forge_document is not None and update_result.validation is not None  # noqa: S101 — successなら両方Non-None(forge_operation.pyの契約)
         return ConverseUpdateResponse(
             session_id=session.session_id, need_model=need_model_dto, change_request=change_request,
+            provider=provider_name, simulated=simulated,
             result=UpdateResultDTO(
                 forge_document=update_result.forge_document,
                 validation=ValidationResultDTO(
@@ -472,6 +482,7 @@ def converse(request: ConverseRequest):
         return ConverseAskResponse(
             session_id=session.session_id, question=question, need_model=need_model_dto,
             readiness=ConversationReadiness.INSUFFICIENT_INFORMATION.value,
+            provider=provider_name, simulated=simulated,
         )
 
     if isinstance(result, PipelineNeedsConfirmationResult):
@@ -490,6 +501,7 @@ def converse(request: ConverseRequest):
     return ConverseBuildResponse(
         session_id=session.session_id, need_model=need_model_dto, build_brief=build_brief,
         result=_result_dto(result), readiness=step_result.readiness.value,
+        provider=provider_name, simulated=simulated,
     )
 
 
@@ -508,8 +520,10 @@ def update(request: UpdateRequest):
     しなければ、`UpdateOperationError`(422相当)として失敗を返す
     ——不正なJSONを「成功」として返すことは絶対にしない。
     """
-    provider_name = request.provider or "mock"
-    provider = ProviderRouter().resolve(provider_name)
+    # §9「Silent Mock fallbackは禁止」(上記`/converse`と同じ理由)。
+    router = ProviderRouter()
+    provider_name = request.provider or router.default_provider_name()
+    provider = router.resolve(provider_name)
     result = ForgeOperationEngine(provider).apply_update(request.forge_document, request.change_request)
 
     if not result.success:

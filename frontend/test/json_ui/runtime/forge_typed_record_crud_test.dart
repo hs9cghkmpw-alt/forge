@@ -62,8 +62,8 @@ void main() {
     test('update: 数値Fieldを再入力すると、新しい数値型で置き換わる', () {
       final store = ForgeStateStore(
         {
-          'records': ForgeRecordListState(
-            [const ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ', 'size': 30})],
+          'records': const ForgeRecordListState(
+            [ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ', 'size': 30})],
             schemaRef: 'fish',
           ),
           'selected': const ForgeSelectedRecordState(ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ', 'size': 30})),
@@ -98,8 +98,8 @@ void main() {
     test('select: boolean Fieldがboolean型の編集stateへ正しく反映される(過去に発見したバグの回帰)', () {
       final store = ForgeStateStore(
         {
-          'records': ForgeRecordListState(
-            [const ForgeRecordItem(id: 'rec_1', fields: {'name': '水を飲む', 'completed': true})],
+          'records': const ForgeRecordListState(
+            [ForgeRecordItem(id: 'rec_1', fields: {'name': '水を飲む', 'completed': true})],
             schemaRef: 'habit',
           ),
           'selected': const ForgeSelectedRecordState(null),
@@ -118,8 +118,8 @@ void main() {
     test('update: booleanを反転させて更新できる', () {
       final store = ForgeStateStore(
         {
-          'records': ForgeRecordListState(
-            [const ForgeRecordItem(id: 'rec_1', fields: {'name': '水を飲む', 'completed': false})],
+          'records': const ForgeRecordListState(
+            [ForgeRecordItem(id: 'rec_1', fields: {'name': '水を飲む', 'completed': false})],
             schemaRef: 'habit',
           ),
           'selected': const ForgeSelectedRecordState(
@@ -140,8 +140,8 @@ void main() {
     test('delete: booleanを含むRecordも他Fieldと同様に削除できる', () {
       final store = ForgeStateStore(
         {
-          'records': ForgeRecordListState(
-            [const ForgeRecordItem(id: 'rec_1', fields: {'name': '水を飲む', 'completed': true})],
+          'records': const ForgeRecordListState(
+            [ForgeRecordItem(id: 'rec_1', fields: {'name': '水を飲む', 'completed': true})],
             schemaRef: 'habit',
           ),
           'selected': const ForgeSelectedRecordState(
@@ -215,8 +215,8 @@ void main() {
     test('update: 編集時にoptions外の値へ変更しようとすると、既存値を黙って上書きしない', () {
       final store = ForgeStateStore(
         {
-          'records': ForgeRecordListState(
-            [const ForgeRecordItem(id: 'rec_1', fields: {'category': '食費'})],
+          'records': const ForgeRecordListState(
+            [ForgeRecordItem(id: 'rec_1', fields: {'category': '食費'})],
             schemaRef: 'budget',
           ),
           'selected': const ForgeSelectedRecordState(ForgeRecordItem(id: 'rec_1', fields: {'category': '食費'})),
@@ -255,8 +255,8 @@ void main() {
     test('update後もrecord_listのschemaRefが失われない', () {
       final store = ForgeStateStore(
         {
-          'records': ForgeRecordListState(
-            [const ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ'})],
+          'records': const ForgeRecordListState(
+            [ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ'})],
             schemaRef: 'fish',
           ),
           'selected': const ForgeSelectedRecordState(ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ'})),
@@ -271,10 +271,10 @@ void main() {
     test('delete後もrecord_listのschemaRefが失われない', () {
       final store = ForgeStateStore(
         {
-          'records': ForgeRecordListState(
+          'records': const ForgeRecordListState(
             [
-              const ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ'}),
-              const ForgeRecordItem(id: 'rec_2', fields: {'species': 'サバ'}),
+              ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ'}),
+              ForgeRecordItem(id: 'rec_2', fields: {'species': 'サバ'}),
             ],
             schemaRef: 'fish',
           ),
@@ -304,10 +304,10 @@ void main() {
     test('選択失敗後に前Recordを誤更新しない(v0.8.1のAtomicity保証を型検証下でも維持)', () {
       final store = ForgeStateStore(
         {
-          'records': ForgeRecordListState(
+          'records': const ForgeRecordListState(
             [
-              const ForgeRecordItem(id: 'rec_a', fields: {'species': 'アジ', 'size': 30}),
-              const ForgeRecordItem(id: 'rec_b', fields: {'species': 'サバ'}), // sizeを持たない
+              ForgeRecordItem(id: 'rec_a', fields: {'species': 'アジ', 'size': 30}),
+              ForgeRecordItem(id: 'rec_b', fields: {'species': 'サバ'}), // sizeを持たない
             ],
             schemaRef: 'fish',
           ),
@@ -332,8 +332,8 @@ void main() {
     test('update後にlist/selected/edit statesが一致する(型検証下でも)', () {
       final store = ForgeStateStore(
         {
-          'records': ForgeRecordListState(
-            [const ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ', 'size': 30})],
+          'records': const ForgeRecordListState(
+            [ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ', 'size': 30})],
             schemaRef: 'fish',
           ),
           'selected': const ForgeSelectedRecordState(
@@ -355,8 +355,8 @@ void main() {
     test('delete後にselected/edit statesクリア(型検証下でも維持)', () {
       final store = ForgeStateStore(
         {
-          'records': ForgeRecordListState(
-            [const ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ'})],
+          'records': const ForgeRecordListState(
+            [ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ'})],
             schemaRef: 'fish',
           ),
           'selected': const ForgeSelectedRecordState(ForgeRecordItem(id: 'rec_1', fields: {'species': 'アジ'})),

@@ -49,7 +49,7 @@ void main() {
                 'problem': '買い物で忘れる',
                 'known': ['店で消す'],
                 'unknown_important': ['家族も使うか'],
-                'safe_assumptions': [],
+                'safe_assumptions': <dynamic>[],
                 'confidence': 0.5,
               },
             }),
@@ -78,12 +78,12 @@ void main() {
               'readiness': 'needs_confirmation',
               'need_model': {
                 'problem': '家族へ共有したい',
-                'known': [],
-                'unknown_important': [],
-                'safe_assumptions': [],
+                'known': <dynamic>[],
+                'unknown_important': <dynamic>[],
+                'safe_assumptions': <dynamic>[],
                 'confidence': 0.8,
-                'unknowns': [],
-                'assumptions': [],
+                'unknowns': <dynamic>[],
+                'assumptions': <dynamic>[],
               },
             }),
       ]);
@@ -140,11 +140,11 @@ void main() {
               'session_id': 'sess-2',
               'build_brief': '買い物リストを作る',
               'need_model': {
-                'problem': 'p', 'known': [], 'unknown_important': [], 'safe_assumptions': [], 'confidence': 0.9,
+                'problem': 'p', 'known': <dynamic>[], 'unknown_important': <dynamic>[], 'safe_assumptions': <dynamic>[], 'confidence': 0.9,
               },
               'result': {
-                'forge_document': {'version': '1.0', 'app': {'title': '買い物リスト'}, 'screens': []},
-                'validation': {'valid': true, 'errors': [], 'warnings': []},
+                'forge_document': {'version': '1.0', 'app': {'title': '買い物リスト'}, 'screens': <dynamic>[]},
+                'validation': {'valid': true, 'errors': <dynamic>[], 'warnings': <dynamic>[]},
                 'diagnostics': {'engine_used': 'forge_ai', 'provider_used': 'mock', 'repair_attempts': 0},
               },
             }),
@@ -167,11 +167,11 @@ void main() {
               'session_id': 'sess-3',
               'change_request': 'カテゴリ分けしたい',
               'need_model': {
-                'problem': 'p', 'known': [], 'unknown_important': [], 'safe_assumptions': [], 'confidence': 0.9,
+                'problem': 'p', 'known': <dynamic>[], 'unknown_important': <dynamic>[], 'safe_assumptions': <dynamic>[], 'confidence': 0.9,
               },
               'result': {
-                'forge_document': {'version': '1.0', 'app': {'title': '更新済み'}, 'screens': []},
-                'validation': {'valid': true, 'errors': [], 'warnings': []},
+                'forge_document': {'version': '1.0', 'app': {'title': '更新済み'}, 'screens': <dynamic>[]},
+                'validation': {'valid': true, 'errors': <dynamic>[], 'warnings': <dynamic>[]},
                 'attempts': 2,
               },
             }),
@@ -200,7 +200,7 @@ void main() {
                 'question': '記録する情報の範囲を教えてください。',
                 'reason': 'priority1_privacy_safety_permission',
                 'reached_stage': 'ambiguity_detection',
-                'open_questions': [],
+                'open_questions': <dynamic>[],
                 'rounds_remaining': 2,
               },
             }),
@@ -245,7 +245,7 @@ void main() {
           await _resolveJson(options, handler, 200, {
             'version': '1.0', 'status': 'ask', 'session_id': 's', 'question': 'q?',
             'need_model': {
-              'problem': 'p', 'known': [], 'unknown_important': ['x'], 'safe_assumptions': [], 'confidence': 0.1,
+              'problem': 'p', 'known': <dynamic>[], 'unknown_important': ['x'], 'safe_assumptions': <dynamic>[], 'confidence': 0.1,
             },
           });
         },

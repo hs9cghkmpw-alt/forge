@@ -11,7 +11,16 @@ import 'generation_outcome.dart';
 /// 知識を一切持たず、既存の`/generate`と同じ結果をそのまま横流しする、
 /// というBackendの設計をFrontend側でも踏襲し、型の重複を避ける)。
 sealed class ConversationOutcome {
-  const ConversationOutcome();
+  /// この結果が、実際の推論ではなく**Mockが組み立てた模擬出力**かどうか
+  /// (FORGE-HANDOFF-LOCAL-AI-UX-004 §9、2026-08-13)。
+  ///
+  /// Backendの`simulated`フィールドをそのまま持つ。指示書:
+  /// 「Silent Mock fallbackは禁止」——模擬出力を本物のように黙って
+  /// 見せない。UI側はこれが`true`のとき、画面上に明示する
+  /// (`conversation_flow_screen.dart`の`SimulatedOutputBanner`)。
+  final bool simulated;
+
+  const ConversationOutcome({this.simulated = false});
 }
 
 /// もう1問だけ聞かれた状態。
@@ -20,7 +29,12 @@ class ConversationAsk extends ConversationOutcome {
   final String question;
   final NeedModelSummary needModel;
 
-  const ConversationAsk({required this.sessionId, required this.question, required this.needModel});
+  const ConversationAsk({
+    required this.sessionId,
+    required this.question,
+    required this.needModel,
+    super.simulated,
+  });
 }
 
 /// Forgeが実行前に確認を求めている(FORGE-CONVERSATION-READY-001、
@@ -45,6 +59,7 @@ class ConversationConfirm extends ConversationOutcome {
     required this.question,
     required this.reason,
     required this.needModel,
+    super.simulated,
   });
 }
 
@@ -53,7 +68,7 @@ class ConversationBuilt extends ConversationOutcome {
   final String buildBrief;
   final GenerationSuccess result;
 
-  const ConversationBuilt({required this.buildBrief, required this.result});
+  const ConversationBuilt({required this.buildBrief, required this.result, super.simulated});
 }
 
 /// 既存ツールが更新された(Held→Forming→Held、TD40)。
@@ -68,6 +83,7 @@ class ConversationUpdated extends ConversationOutcome {
     required this.forgeDocument,
     required this.valid,
     required this.attempts,
+    super.simulated,
   });
 }
 

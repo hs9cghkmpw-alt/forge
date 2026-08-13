@@ -35,6 +35,7 @@ FORGE-MILESTONE-004 PHASE8は、Provider名の語彙として
 
 from __future__ import annotations
 
+import os
 from typing import Protocol
 
 from app.ai.foundation.interfaces import LLMAdapter
@@ -115,13 +116,52 @@ class ProviderRouter:
         return provider
 
     def default_provider_name(self) -> str:
-        """既定のProvider名を返す。FORGE-MILESTONE-005で`"forge_ai"`から
-        `"mock"`へ修正した(`docs/spec/ADAPTER_CONTRACT_V1.md` 4.0節、
-        CEOレビュー対応)。`forge_ai`はCognitive Engine名であり、
-        Providerの既定名として使うべきではなかった。現在無料・未接続段階で
-        実際に動作するProviderは`mock`のみであるため、これが正確な既定値。
+        """既定のProvider名を返す。
+
+        FORGE-MILESTONE-005で`"forge_ai"`から`"mock"`へ修正した
+        (`docs/spec/ADAPTER_CONTRACT_V1.md` 4.0節、CEOレビュー対応)。
+        `forge_ai`はCognitive Engine名であり、Providerの既定名として
+        使うべきではなかった。
+
+        **FORGE-HANDOFF-LOCAL-AI-UX-004 §9(2026-08-13)で修正した実バグ**:
+        既定が無条件に`"mock"`だったため、`GEMINI_API_KEY`を設定済みの
+        環境でも、Provider名を送らないクライアント(Flutterは送っていない)
+        には**黙ってMockの出力が返っていた**。CEOの実機確認で
+        「mock resultがあると楽そう」という会話が出たのはこれが原因である。
+        指示書は「Silent Mock fallbackは禁止」と明示している。
+
+        解決順序(全て決定的、AI判断は入らない):
+
+        1. `FORGE_DEFAULT_PROVIDER`が設定されていればそれを使う
+           (運用側の明示的な指定を最優先する)。未登録の名前なら
+           `ProviderNotAvailableError`——黙って別のProviderへ倒れない。
+        2. `GEMINI_API_KEY`があれば`"gemini"`。実際に動く実Providerが
+           あるなら、それが既定であるべき。
+        3. どちらも無ければ`"mock"`。この場合Mockは**唯一動く選択肢**で
+           あって、隠れたfallbackではない。呼び出し側はレスポンスの
+           `simulated`フィールドで、これがMock出力であることを必ず
+           利用者へ伝える(`app/routers/ai.py`参照)。
         """
+        configured = os.environ.get("FORGE_DEFAULT_PROVIDER", "").strip()
+        if configured:
+            if configured not in self._providers:
+                raise ProviderNotAvailableError(
+                    f"FORGE_DEFAULT_PROVIDER='{configured}' は未登録のProvider名です。"
+                    f"利用可能: {', '.join(self.available_providers())}"
+                )
+            return configured
+        if os.environ.get("GEMINI_API_KEY", "").strip():
+            return "gemini"
         return "mock"
+
+    def is_simulated(self, provider_name: str) -> bool:
+        """そのProviderの出力が「実際の推論結果」ではなく**模擬**かどうか。
+
+        FORGE-HANDOFF-LOCAL-AI-UX-004 §9対応。Mockの出力をProduction UXへ
+        本物として出さないため、呼び出し側がこれを見て利用者へ明示する。
+        Provider名の文字列比較を各所へ散らかさないよう、判定はここに1つだけ置く。
+        """
+        return provider_name == "mock"
 
 
 class AIProviderFactory(Protocol):

@@ -52,7 +52,7 @@ Widget buildChoiceField(
         // Flutterバージョンで動く`value`を使う(`flutter analyze`を
         // このサンドボックスで実行できないため、確実に存在する方の
         // パラメータ名を選ぶ安全側の判断)。
-        value: resolvedValue,
+        initialValue: resolvedValue,
         decoration: InputDecoration(
           labelText: n.label,
           hintText: n.placeholder,

@@ -88,19 +88,100 @@ Write-Host "==================================================================" 
 # back to "python". Detected once here and reused everywhere below instead
 # of hardcoding either name.
 # ---------------------------------------------------------------------------
-$PythonCmd = $null
-if (Get-Command "py" -ErrorAction SilentlyContinue) {
-    $PythonCmd = "py"
-}
-elseif (Get-Command "python" -ErrorAction SilentlyContinue) {
-    $PythonCmd = "python"
+#
+# FORGE-HANDOFF-LOCAL-AI-UX-004 (2026-08-13): version selection, not just
+# presence. Picking the first interpreter that exists is not enough. The
+# backend pins pydantic 2.7.4 and supabase 2.5.1, neither of which ships
+# wheels for Python 3.13; on a machine whose default interpreter is 3.13,
+# `pip install -r requirements.txt` tries to build them from source and
+# fails. The supported range is Python >= 3.11 and < 3.13 (see
+# backend/requirements.txt and GETTING_STARTED.md).
+#
+# So: enumerate the candidate interpreters, ask each one for its version,
+# and use the first one inside the supported range. If only an unsupported
+# interpreter is present, say so explicitly rather than running it and
+# letting the failure surface as a confusing pip error.
+# ---------------------------------------------------------------------------
+$PythonMinMinor = 11
+$PythonMaxMinorExclusive = 13
+
+function Get-PythonVersionTuple {
+    <#
+        Returns "major.minor" for a candidate command, or $null if the
+        command cannot be run at all. Any failure is treated as "not a
+        usable interpreter" rather than an error.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Command,
+        [string[]]$Arguments = @()
+    )
+    try {
+        $VersionArgs = $Arguments + @("-c", "import sys; print('%d.%d' % sys.version_info[:2])")
+        $Output = (& $Command @VersionArgs 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0) { return $null }
+        if ($Output -match "^\d+\.\d+$") { return $Output }
+        return $null
+    }
+    catch {
+        return $null
+    }
 }
 
+function Test-PythonVersionSupported {
+    param([Parameter(Mandatory = $true)][string]$Version)
+    $Parts = $Version.Split(".")
+    $Major = [int]$Parts[0]
+    $Minor = [int]$Parts[1]
+    if ($Major -ne 3) { return $false }
+    if ($Minor -lt $PythonMinMinor) { return $false }
+    if ($Minor -ge $PythonMaxMinorExclusive) { return $false }
+    return $true
+}
+
+# Candidates in preference order. The "py -3.12" / "py -3.11" forms let the
+# Windows Python Launcher select a specific version even when the default
+# one it would pick is unsupported - that is the whole point of trying them
+# before falling back to a bare launcher invocation.
+$PythonCandidates = @(
+    @{ Command = "py"; Arguments = @("-3.12"); Label = "py -3.12" },
+    @{ Command = "py"; Arguments = @("-3.11"); Label = "py -3.11" },
+    @{ Command = "py"; Arguments = @(); Label = "py" },
+    @{ Command = "python3"; Arguments = @(); Label = "python3" },
+    @{ Command = "python"; Arguments = @(); Label = "python" }
+)
+
+$PythonCmd = $null
+$PythonArgs = @()
+$PythonLabel = $null
+$PythonRejected = @()
+
+foreach ($Candidate in $PythonCandidates) {
+    if (-not (Get-Command $Candidate.Command -ErrorAction SilentlyContinue)) { continue }
+    $Version = Get-PythonVersionTuple -Command $Candidate.Command -Arguments $Candidate.Arguments
+    if ($null -eq $Version) { continue }
+    if (Test-PythonVersionSupported -Version $Version) {
+        $PythonCmd = $Candidate.Command
+        $PythonArgs = $Candidate.Arguments
+        $PythonLabel = "$($Candidate.Label) (Python $Version)"
+        break
+    }
+    $PythonRejected += "$($Candidate.Label) = Python $Version"
+}
+
+$PythonSkipReason = $null
 if ($null -eq $PythonCmd) {
-    Write-Host "[WARN] Neither 'py' nor 'python' was found on PATH. Python Test steps will be skipped." -ForegroundColor Yellow
+    if ($PythonRejected.Count -gt 0) {
+        $PythonSkipReason = "no supported Python found (need >= 3.$PythonMinMinor and < 3.$PythonMaxMinorExclusive); found: " + ($PythonRejected -join ", ")
+        Write-Host "[WARN] $PythonSkipReason" -ForegroundColor Yellow
+        Write-Host "[WARN] Install Python 3.12 from python.org, then re-run this script." -ForegroundColor Yellow
+    }
+    else {
+        $PythonSkipReason = "no 'py', 'python3' or 'python' command found on PATH"
+        Write-Host "[WARN] $PythonSkipReason Python Test steps will be skipped." -ForegroundColor Yellow
+    }
 }
 else {
-    Write-Host " Python command detected: $PythonCmd" -ForegroundColor Cyan
+    Write-Host " Python command detected: $PythonLabel" -ForegroundColor Cyan
 }
 
 if (-not (Test-Path $FrontendDir)) {
@@ -199,8 +280,8 @@ function Skip-Step {
 # ---------------------------------------------------------------------------
 if (-not $SkipPython) {
     if ($null -eq $PythonCmd) {
-        Skip-Step -Name "Python Test (backend)" -Reason "no 'py' or 'python' command found on PATH"
-        Skip-Step -Name "Python Test (forge_ai)" -Reason "no 'py' or 'python' command found on PATH"
+        Skip-Step -Name "Python Test (backend)" -Reason $PythonSkipReason
+        Skip-Step -Name "Python Test (forge_ai)" -Reason $PythonSkipReason
     }
     else {
         if (Test-Path $BackendDir) {
@@ -209,24 +290,36 @@ if (-not $SkipPython) {
             # _FASTAPI_AVAILABLE check). Installing requirements.txt here means the
             # CEO's real environment actually exercises those tests instead of
             # silently skipping them for a missing-dependency reason.
-            Invoke-Step -Name "pip install -r requirements.txt (backend)" -Action {
+            $InstallStepName = "pip install -r requirements.txt (backend)"
+            Invoke-Step -Name $InstallStepName -Action {
                 Push-Location $BackendDir
                 try {
-                    & $PythonCmd -m pip install -r requirements.txt
+                    & $PythonCmd @PythonArgs -m pip install -r requirements.txt
                 }
                 finally {
                     Pop-Location
                 }
             }
 
-            Invoke-Step -Name "Python Test (backend)" -Action {
-                Push-Location $BackendDir
-                try {
-                    & $PythonCmd -m unittest discover -s tests -p "test_*.py"
+            # FORGE-HANDOFF-LOCAL-AI-UX-004 (2026-08-13): do NOT run the
+            # backend tests when the install failed. Previously the script
+            # continued regardless, so a dependency problem surfaced as a
+            # wall of import errors from the test run - which reads like a
+            # code failure and buries the actual cause several screens up.
+            # One failing step, named for what actually broke, is clearer.
+            if ($Results[$InstallStepName].Status -eq "PASS") {
+                Invoke-Step -Name "Python Test (backend)" -Action {
+                    Push-Location $BackendDir
+                    try {
+                        & $PythonCmd @PythonArgs -m unittest discover -s tests -p "test_*.py"
+                    }
+                    finally {
+                        Pop-Location
+                    }
                 }
-                finally {
-                    Pop-Location
-                }
+            }
+            else {
+                Skip-Step -Name "Python Test (backend)" -Reason "dependency install failed; fix that first (see the step above)"
             }
         }
         else {
@@ -235,10 +328,12 @@ if (-not $SkipPython) {
 
         $ForgeAiDir = Join-Path $RepoRoot "forge_ai"
         if (Test-Path $ForgeAiDir) {
+            # forge_ai has no third-party dependencies (standard library
+            # only), so it runs even when the backend install failed.
             Invoke-Step -Name "Python Test (forge_ai)" -Action {
                 Push-Location $RepoRoot
                 try {
-                    & $PythonCmd -m unittest discover -s forge_ai/tests -p "test_*.py"
+                    & $PythonCmd @PythonArgs -m unittest discover -s forge_ai/tests -p "test_*.py"
                 }
                 finally {
                     Pop-Location

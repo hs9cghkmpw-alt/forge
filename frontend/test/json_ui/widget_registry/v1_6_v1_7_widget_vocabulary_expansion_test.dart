@@ -52,7 +52,7 @@ Map<String, dynamic> _budgetDoc() {
       {
         'id': 's1', 'title': '家計簿',
         'state': {
-          'records': {'type': 'record_list', 'value': [], 'schema_ref': 'transaction'},
+          'records': {'type': 'record_list', 'value': <dynamic>[], 'schema_ref': 'transaction'},
           'field_category': {'type': 'string', 'value': ''},
           'field_amount': {'type': 'string', 'value': ''},
           'field_date': {'type': 'string', 'value': ''},

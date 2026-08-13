@@ -264,12 +264,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 18),
-                      Row(
+                      const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.lock_outline_rounded, size: 14, color: ForgeTheme.consoleInkSoft),
-                          const SizedBox(width: 6),
-                          const Text(
+                          Icon(Icons.lock_outline_rounded, size: 14, color: ForgeTheme.consoleInkSoft),
+                          SizedBox(width: 6),
+                          Text(
                             '会話内容は安全に保護されます',
                             style: TextStyle(fontSize: 13, color: ForgeTheme.consoleInkSoft),
                           ),

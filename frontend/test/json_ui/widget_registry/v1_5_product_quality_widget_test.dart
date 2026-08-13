@@ -53,7 +53,7 @@ Map<String, dynamic> _todoDoc() {
       {
         'id': 's1', 'title': 'TODO',
         'state': {
-          'records': {'type': 'record_list', 'value': []},
+          'records': {'type': 'record_list', 'value': <dynamic>[]},
           'field_title': {'type': 'string', 'value': ''},
         },
         'body': {

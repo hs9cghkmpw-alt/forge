@@ -78,7 +78,7 @@ Map<String, dynamic> _fishRecordDoc() {
       ],
     },
     state: {
-      'records': {'type': 'record_list', 'value': []},
+      'records': {'type': 'record_list', 'value': <dynamic>[]},
       'field_species': {'type': 'string', 'value': ''},
       'field_size': {'type': 'string', 'value': ''},
     },
@@ -90,7 +90,7 @@ void main() {
     testWidgets('空のrecord_listではempty_state_textが表示される', (tester) async {
       final doc = _screenDoc(
         {'type': 'record_list_view', 'id': 'rlv1', 'state_ref': 'records', 'empty_state_text': 'まだ記録がないよ'},
-        state: {'records': {'type': 'record_list', 'value': []}},
+        state: {'records': {'type': 'record_list', 'value': <dynamic>[]}},
       );
       await tester.pumpWidget(_wrap(doc));
       await tester.pumpAndSettle();

@@ -1,3 +1,15 @@
+# Supported Python: >= 3.11, < 3.13
+#
+# FORGE-HANDOFF-LOCAL-AI-UX-004 (2026-08-13). This is not a preference, it
+# is a hard constraint of the pins below: pydantic 2.7.4 and supabase 2.5.1
+# publish no wheels for Python 3.13, so pip falls back to building them from
+# source and the install fails on a machine whose default interpreter is
+# 3.13. `scripts/verify.ps1` selects an interpreter inside this range
+# (and refuses to run the backend tests if the install failed, rather than
+# reporting the resulting import errors as test failures).
+#
+# Raising this ceiling means bumping pydantic/supabase first, and re-running
+# the full backend suite - not editing this comment.
 fastapi==0.111.0
 uvicorn[standard]==0.30.1
 pydantic==2.7.4

@@ -109,7 +109,11 @@ class VoiceInputController {
     _listening = true;
     onStatusChange(VoiceInputStatus.listening, null);
     await _speech.listen(
-      localeId: 'ja_JP',
+      // FORGE-HANDOFF-LOCAL-AI-UX-004(2026-08-13): `localeId`の直接指定は
+      // speech_to_text 7.x で非推奨になった(`SpeechListenOptions`へ移動)。
+      // 渡している値・意味は同じ(日本語で認識する)であり、挙動を変える
+      // 変更ではない——非推奨APIの置き換えのみ。
+      listenOptions: stt.SpeechListenOptions(localeId: 'ja_JP'),
       onResult: (SpeechRecognitionResult result) {
         onResult(result.recognizedWords);
         if (result.finalResult) {

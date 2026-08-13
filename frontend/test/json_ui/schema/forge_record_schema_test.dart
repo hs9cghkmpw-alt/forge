@@ -120,7 +120,7 @@ void main() {
         'screens': [
           {
             'id': 's1', 'title': 'S1',
-            'state': {'records': {'type': 'record_list', 'value': [], 'schema_ref': 'fish_record'}},
+            'state': {'records': {'type': 'record_list', 'value': <dynamic>[], 'schema_ref': 'fish_record'}},
             'body': {'type': 'record_list_view', 'id': 'rlv1', 'state_ref': 'records'},
           },
         ],
@@ -137,7 +137,7 @@ void main() {
         'screens': [
           {
             'id': 's1', 'title': 'S1',
-            'state': {'records': {'type': 'record_list', 'value': []}},
+            'state': {'records': {'type': 'record_list', 'value': <dynamic>[]}},
             'body': {'type': 'record_list_view', 'id': 'rlv1', 'state_ref': 'records'},
           },
         ],
@@ -153,7 +153,7 @@ void main() {
         'screens': [
           {
             'id': 's1', 'title': 'S1',
-            'state': {'records': {'type': 'record_list', 'value': [], 'schema_ref': 'fish_record'}},
+            'state': {'records': {'type': 'record_list', 'value': <dynamic>[], 'schema_ref': 'fish_record'}},
             'body': {'type': 'record_list_view', 'id': 'rlv1', 'state_ref': 'records'},
           },
         ],
@@ -170,7 +170,7 @@ void main() {
         'screens': [
           {
             'id': 's1', 'title': 'S1',
-            'state': {'records': {'type': 'record_list', 'value': []}},
+            'state': {'records': {'type': 'record_list', 'value': <dynamic>[]}},
             'body': {'type': 'record_list_view', 'id': 'rlv1', 'state_ref': 'records'},
           },
         ],

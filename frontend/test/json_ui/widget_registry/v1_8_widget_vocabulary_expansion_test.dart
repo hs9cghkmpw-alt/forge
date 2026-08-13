@@ -35,7 +35,7 @@ Map<String, dynamic> _readingLogDoc() {
       {
         'id': 's1', 'title': '読書ログ',
         'state': {
-          'records': {'type': 'record_list', 'value': [], 'schema_ref': 'book'},
+          'records': {'type': 'record_list', 'value': <dynamic>[], 'schema_ref': 'book'},
           'field_title': {'type': 'string', 'value': ''},
           'field_rating': {'type': 'number', 'value': 1},
         },

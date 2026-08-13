@@ -35,7 +35,7 @@ Map<String, dynamic> _fishRecordDoc() {
       {
         'id': 's1', 'title': '釣果記録',
         'state': {
-          'records': {'type': 'record_list', 'value': [], 'schema_ref': 'fish_record'},
+          'records': {'type': 'record_list', 'value': <dynamic>[], 'schema_ref': 'fish_record'},
           'field_species': {'type': 'string', 'value': ''},
           'field_size': {'type': 'string', 'value': ''},
           'field_catch_date': {'type': 'string', 'value': ''},
@@ -145,7 +145,7 @@ Map<String, dynamic> _budgetDoc() {
       {
         'id': 's1', 'title': '家計簿記録',
         'state': {
-          'records': {'type': 'record_list', 'value': [], 'schema_ref': 'transaction'},
+          'records': {'type': 'record_list', 'value': <dynamic>[], 'schema_ref': 'transaction'},
           'field_category': {'type': 'string', 'value': ''},
           'field_amount': {'type': 'string', 'value': ''},
           'field_date': {'type': 'string', 'value': ''},
@@ -371,7 +371,7 @@ void main() {
           {
             'id': 's1', 'title': 'テスト',
             'state': {
-              'records': {'type': 'record_list', 'value': []},
+              'records': {'type': 'record_list', 'value': <dynamic>[]},
               'field_species': {'type': 'string', 'value': ''},
             },
             'body': {

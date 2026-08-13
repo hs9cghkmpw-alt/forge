@@ -15,7 +15,7 @@ ForgeRecordSchema _fishRecordSchema() {
 }
 
 void main() {
-  final validator = const ForgeRecordValidator();
+  const validator = ForgeRecordValidator();
 
   test('全Fieldが有効な場合、型付き済みのfieldsを返す', () {
     final result = validator.validate(_fishRecordSchema(), {'species': 'アジ', 'size': '30'});

@@ -18,7 +18,7 @@ ForgeRecordSchemaField _field({
 }
 
 void main() {
-  final parser = const ForgeFieldValueParser();
+  const parser = ForgeFieldValueParser();
 
   group('valid number', () {
     test('整数はintとして保持される', () {
@@ -181,7 +181,7 @@ void main() {
 
   group('unknown type fallback', () {
     test('未知の型は文字列としてそのまま受け入れる(安全側のフォールバック)', () {
-      final field = ForgeRecordSchemaField(
+      const field = ForgeRecordSchemaField(
         name: 'f', type: ForgeRecordFieldType.unknown, label: 'F', required: false,
       );
       final result = parser.parse('何かの値', field);

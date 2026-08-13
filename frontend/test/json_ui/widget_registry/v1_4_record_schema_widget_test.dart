@@ -66,7 +66,7 @@ Map<String, dynamic> _bodyAndState() {
       ],
     },
     'state': {
-      'records': {'type': 'record_list', 'value': []},
+      'records': {'type': 'record_list', 'value': <dynamic>[]},
       'field_species': {'type': 'string', 'value': ''},
     },
   };
@@ -86,7 +86,7 @@ Map<String, dynamic> _docWithoutSchema() {
 Map<String, dynamic> _docWithSchema() {
   final parts = _bodyAndState();
   final state = Map<String, dynamic>.from(parts['state'] as Map<String, dynamic>);
-  state['records'] = {'type': 'record_list', 'value': [], 'schema_ref': 'fish_record'};
+  state['records'] = {'type': 'record_list', 'value': <dynamic>[], 'schema_ref': 'fish_record'};
   return {
     'version': '1.4',
     'initial_screen_id': 's1',

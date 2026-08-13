@@ -104,7 +104,7 @@ Map<String, dynamic> _fishRecordCrudDoc() {
       ],
     },
     state: {
-      'records': {'type': 'record_list', 'value': []},
+      'records': {'type': 'record_list', 'value': <dynamic>[]},
       'selected': {'type': 'selected_record', 'value': null},
       'field_species': {'type': 'string', 'value': ''},
       'edit_field_species': {'type': 'string', 'value': ''},
