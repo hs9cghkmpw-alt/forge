@@ -378,6 +378,17 @@ def converse(request: ConverseRequest):
         raise ProviderError(message, sub_reason=sub_reason, stage="conversation") from exc
     need_model_dto = NeedModelDTO(**step_result.need_model.to_dict())
 
+    # Stateful User Correction の状態を永続化する
+    # (FORGE-USER-GUIDED-SELF-EXTENSION-006 §13、2026-08-13)。
+    # Engineは純粋関数なので、状態を書くのはここ1箇所だけ。これが無いと
+    # 「違う」を正しく解釈しても次のターンで忘れる(§11の問題そのもの)。
+    default_conversation_store.record_hypothesis_event(
+        session.session_id,
+        event=step_result.hypothesis_event,
+        hypothesis=step_result.hypothesis,
+        correction_target=step_result.correction_target,
+    )
+
     if step_result.action == ConversationAction.ASK:
         default_conversation_store.add_turn(
             session.session_id, ConversationTurn(role="forge", text=step_result.question or "")

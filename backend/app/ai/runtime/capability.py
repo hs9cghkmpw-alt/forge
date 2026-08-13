@@ -55,7 +55,9 @@ __all__ = [
     "detect_capabilities",
     "has_buildable_gap",
     "missing_capabilities",
-    "next_capability_turn",
+    "CapabilityTurn",
+    "CapabilityTurnKind",
+    "resolve_capability_turn",
     "revise_hypothesis",
 ]
 
@@ -263,6 +265,25 @@ class SolutionHypothesis:
         parts.append("この形で進めますか？違うところがあれば教えてください。")
         return "".join(parts)
 
+    def to_build_note(self) -> str:
+        """BUILDへ渡す`build_brief`へ追記する一文
+        (FORGE-USER-GUIDED-SELF-EXTENSION-006 §16、2026-08-13)。
+
+        **これが無いと、ユーザーが「それでいい」と言って合意した内容が
+        生成へ一切反映されない**。訂正の往復で仕様を育てても、Compilerへ
+        届かなければProductとしては未完成である(§16はこの接続をE2Eで
+        確認せよと明示している)。
+
+        `to_message()`と別にしているのは、宛先が違うから:
+        `to_message()`はユーザーへの問いかけ、こちらは生成器への指示である。
+        作れないもの(`missing`)は**書かない**——Compilerに作れないものを
+        指示しても、実現できないか、実現したふりになるだけである。
+        """
+        buildable = [c.label_ja for c in (self.data + self.view)]
+        if not buildable:
+            return ""
+        return "ユーザーと合意した形: " + "・".join(buildable) + "。"
+
 
 _MAX_HYPOTHESIS_REVISIONS = 3
 
@@ -360,6 +381,30 @@ _NEGATION_KEYWORDS: tuple[str, ...] = (
 )
 
 
+# 「〜したい」「〜だけ」等、**目的を述べ直している**ことを示す語。
+# Capabilityが1つも検出できなかった否定文が、これらを含むなら、
+# ユーザーは見せ方ではなく**やりたいこと自体**を言い直している。
+_GOAL_RESTATEMENT_MARKERS: tuple[str, ...] = (
+    "したい", "しよう", "ほしい", "欲しい", "たいのは", "だけ", "ではなくて",
+    "本当は", "やりたい", "決めたい", "知りたい",
+)
+
+# 否定語そのものを除いた残りが、この文字数未満なら「情報が無い」と扱う。
+# 「違う」「ちがう」だけの返事を、目的の言い直しと誤認しないため。
+_MIN_RESTATEMENT_LENGTH = 6
+
+
+def _restates_a_goal(lowered: str) -> bool:
+    """否定に加えて、やりたいことの言い直しが含まれているか。"""
+    remainder = lowered
+    for negation in _NEGATION_KEYWORDS:
+        remainder = remainder.replace(negation, "")
+    remainder = remainder.strip("、。 　.")
+    if len(remainder) < _MIN_RESTATEMENT_LENGTH:
+        return False
+    return any(marker in remainder for marker in _GOAL_RESTATEMENT_MARKERS)
+
+
 def classify_correction(text: str, hypothesis: SolutionHypothesis) -> CorrectionTarget:
     """ユーザーの返答を、仮説のどの部分への訂正かに分類する。
 
@@ -393,12 +438,55 @@ def classify_correction(text: str, hypothesis: SolutionHypothesis) -> Correction
                 return target
 
     if any(k in lowered for k in _NEGATION_KEYWORDS):
+        # 否定はあったが、Capabilityは1つも検出できなかった。ここで
+        # `PROBLEM`と`UNCLEAR`を分ける必要がある(§39 Case C と Case D)。
+        #
+        # **語彙リストに「そうじゃない」を足すのでは解けない**。
+        # 「違う」も「そうじゃない」も、それ単体では同じ強さの否定である。
+        # 実際に両者を分けているのは語ではなく**構造**である:
+        #
+        #   Case C「そうじゃない。子供の送り迎えの担当だけ決めたい」
+        #       → 否定 + **やりたいことの言い直し**
+        #   Case D「違う」
+        #       → 否定のみ。何が違うのかの情報が無い
+        #
+        # 前者はProblem理解そのものへの訂正であり、後者は聞き返すしかない。
+        # この判定を構造で行うことで、想定外の言い回しにも効く
+        # (実際にCase Cは「そうじゃない」が語彙に無くて落ちた——
+        # 語を足す修正では、次の言い回しでまた落ちる)。
+        if _restates_a_goal(lowered):
+            return CorrectionTarget.PROBLEM
         return CorrectionTarget.UNCLEAR
 
     if any(k in lowered for k in _ACCEPT_KEYWORDS):
         return CorrectionTarget.ACCEPTED
 
     return CorrectionTarget.UNCLEAR
+
+
+# 「も」「追加」等は**足したい**という意味であり、置き換えではない。
+# 「違う」「じゃなくて」は置き換えである。この区別が無いと、
+# 「脈拍も記録したい」で既存の項目が全部消える(§39 Case B)。
+_ADDITIVE_MARKERS: tuple[str, ...] = ("も記録", "も残", "も入れ", "も見", "も欲しい", "追加", "足して", "increase")
+_REPLACING_MARKERS: tuple[str, ...] = ("違う", "ちがう", "じゃなくて", "ではなく", "でなく", "やめて", "いらない")
+
+
+def _is_additive_correction(text: str, layer: CapabilityLayer) -> bool:
+    """この訂正が「追加」か「置き換え」か。
+
+    明示的な語があればそれに従う。無い場合は層ごとの既定へ倒す:
+
+    * `DATA`は**追加**が既定。記録したい項目を1つ挙げたからといって、
+      他の項目を捨てたい人はまずいない。
+    * `VIEW`は**置き換え**が既定。見せ方は普通どちらか一方である。
+    * `EFFECT`は**置き換え**が既定(安全側。作用を勝手に増やさない)。
+    """
+    lowered = (text or "").lower()
+    if any(marker in lowered for marker in _REPLACING_MARKERS):
+        return False
+    if any(marker in lowered for marker in _ADDITIVE_MARKERS):
+        return True
+    return layer is CapabilityLayer.DATA
 
 
 def revise_hypothesis(
@@ -433,6 +521,7 @@ def revise_hypothesis(
     replacements = tuple(c for c in detected if c.layer is layer)
     if not replacements:
         return hypothesis
+    additive = _is_additive_correction(text, layer)
 
     supported_replacements = tuple(c for c in replacements if c.supported)
     new_missing = tuple(c for c in replacements if not c.supported)
@@ -449,13 +538,27 @@ def revise_hypothesis(
             substitutes.append(alternative)
 
     updated = supported_replacements + tuple(substitutes)
+    existing = {
+        CapabilityLayer.DATA: hypothesis.data,
+        CapabilityLayer.VIEW: hypothesis.view,
+        CapabilityLayer.EFFECT: hypothesis.effects,
+    }[layer]
+    if additive:
+        # 「脈拍**も**記録したい」は追加であって置き換えではない。既にある
+        # ものを消さずに足す(§39 Case B)。重複は定義順を保ったまま除く。
+        merged: list[Capability] = list(existing)
+        for capability in updated:
+            if capability not in merged:
+                merged.append(capability)
+        updated = tuple(merged)
+
     changes: dict[str, object] = {"missing": new_missing, "revision": hypothesis.revision + 1}
     if layer is CapabilityLayer.DATA:
         changes["data"] = updated
     elif layer is CapabilityLayer.VIEW:
         changes["view"] = updated
     else:
-        changes["effects"] = replacements
+        changes["effects"] = tuple(updated) if additive else replacements
     return replace(hypothesis, **changes)  # type: ignore[arg-type]
 
 
@@ -466,38 +569,140 @@ def revise_hypothesis(
 CAPABILITY_QUESTION_KEY_PREFIX = "capability_gap:"
 
 
-def next_capability_turn(
-    latest_user_text: str, asked_question_keys: tuple[str, ...]
-) -> tuple[str, str] | None:
-    """会話の1ターンとして出すべきCapabilityの話があれば`(文面, key)`を返す。
+class CapabilityTurnKind(str, Enum):
+    """Capability層が、この会話ターンで何をすべきか
+    (FORGE-USER-GUIDED-SELF-EXTENSION-006 §13のState Machine)。"""
 
-    無ければ`None`——その場合、呼び出し側は**今までどおりの経路**へ進む
-    (レビュー §6「既存経路に一切触れない」)。
+    NONE = "none"
+    """何もしない。通常の会話へそのまま進む(既存経路は無変更)。"""
 
-    `question_key`に不足Capability名を含めるのが要点である。既存の
-    `asked_question_keys`(同じUnknownを繰り返し聞かないための仕組み、
-    指示書001 §5)をそのまま再利用できる:
+    PRESENT = "present"
+    """仮説を提示する(初回、または訂正を反映した改訂版)。"""
 
-    * 同じ不足(例: 地図)を二度提示しない。
-    * ユーザーが「違う、色を濃く」と訂正すると、不足が
-      `view.heatmap`へ変わる=**別のkey**になるため、訂正後の仮説は
-      ちゃんと1回提示される。
-    * 提示回数が`_MAX_HYPOTHESIS_REVISIONS`に達したら打ち切る
-      (レビュー F2:「違う」ループが終わらない事態を防ぐ)。無理に
-      正解へ辿り着こうとせず、通常の会話へ戻す。
+    CLARIFY = "clarify"
+    """「違う」とだけ言われた。仮説は**捨てずに**保持し、短く1問だけ聞く(§14)。"""
 
-    判定は最新の発話のみを見る。会話全体を見ると、訂正後も最初の
-    「地図」という語が残っているため、訂正が反映されない。
+    REWIND = "rewind"
+    """「そもそも違う」。Problem理解まで巻き戻す(§15)。"""
+
+    ACCEPT = "accept"
+    """合意。BUILDへ進む(§16)。"""
+
+
+@dataclass(frozen=True)
+class CapabilityTurn:
+    """`resolve_capability_turn()`の戻り値。
+
+    Engine(`conversation_engine.py`)はこれを`ConversationStepResult`へ
+    翻訳し、Router(`routers/ai.py`)がSessionへ永続化する。この層自体は
+    Sessionを書き換えない(純粋関数のままにしておくため)。
     """
-    hypothesis = build_hypothesis(latest_user_text)
-    if not has_buildable_gap(hypothesis):
-        return None
 
-    presented = [k for k in asked_question_keys if k.startswith(CAPABILITY_QUESTION_KEY_PREFIX)]
-    if len(presented) >= _MAX_HYPOTHESIS_REVISIONS:
-        return None
+    kind: CapabilityTurnKind
+    message: str = ""
+    question_key: str = ""
+    hypothesis: SolutionHypothesis | None = None
+    target: CorrectionTarget | None = None
 
-    key = CAPABILITY_QUESTION_KEY_PREFIX + ",".join(c.id for c in hypothesis.missing)
-    if key in asked_question_keys:
-        return None
-    return hypothesis.to_message(), key
+
+def _missing_key(hypothesis: SolutionHypothesis) -> str:
+    return CAPABILITY_QUESTION_KEY_PREFIX + ",".join(c.id for c in hypothesis.missing)
+
+
+def _clarify_question(hypothesis: SolutionHypothesis) -> str:
+    """「違う」だけのときに聞く、短い1問(§14)。
+
+    「どこが違いますか？」という丸投げにしない——それはユーザーに
+    Forgeの内部構造を考えさせている。**こちらが出した仮説の軸**を
+    そのまま二択にして返す。答えるのに考える必要がないのが良い質問である。
+
+    質問攻めにも戻さない: 聞くのは1問だけで、その後は
+    `asked_question_keys`に記録されるため繰り返さない。
+    """
+    has_data = bool(hypothesis.data)
+    has_view = bool(hypothesis.view)
+    if has_data and has_view:
+        return "記録する内容と、見せ方だと、どちらを変えたいですか？"
+    if has_view:
+        return "見せ方を変えたいですか？それとも記録する内容の方ですか？"
+    return "どんなふうに変えたいか、一言で教えてもらえますか？"
+
+
+CLARIFY_QUESTION_KEY = CAPABILITY_QUESTION_KEY_PREFIX + "clarify"
+
+
+def resolve_capability_turn(
+    latest_user_text: str,
+    current_hypothesis: SolutionHypothesis | None,
+    asked_question_keys: tuple[str, ...],
+) -> CapabilityTurn:
+    """Stateful User Correction Loopの中核
+    (FORGE-USER-GUIDED-SELF-EXTENSION-006 §13、2026-08-13)。
+
+    **これが以前の`next_capability_turn()`と決定的に違う点**:
+    前回の仮説(`current_hypothesis`)を受け取り、**それに対する訂正**
+    として解釈する。以前は毎回`build_hypothesis(latest_user_text)`で
+    最新発話から作り直していたため、訂正されていない層の文脈が失われて
+    いた(§11-12の指摘。実測で再現済み:「魚とサイズと場所を記録して
+    地図で見たい」→「違う、色を濃く」で`data`が空になった)。
+
+    Sessionは書き換えない。何をすべきかを返すだけで、永続化は呼び出し側
+    (Router)が行う——`conversation_policy.py`と同じく、この層は
+    純粋関数の集まりに保つ。
+    """
+    # --- 仮説がまだ無い: 初回提示するかどうか --------------------------
+    if current_hypothesis is None:
+        hypothesis = build_hypothesis(latest_user_text)
+        if not has_buildable_gap(hypothesis):
+            return CapabilityTurn(CapabilityTurnKind.NONE)
+        presented = [k for k in asked_question_keys if k.startswith(CAPABILITY_QUESTION_KEY_PREFIX)]
+        if len(presented) >= _MAX_HYPOTHESIS_REVISIONS:
+            return CapabilityTurn(CapabilityTurnKind.NONE)
+        key = _missing_key(hypothesis)
+        if key in asked_question_keys:
+            return CapabilityTurn(CapabilityTurnKind.NONE)
+        return CapabilityTurn(
+            CapabilityTurnKind.PRESENT, message=hypothesis.to_message(),
+            question_key=key, hypothesis=hypothesis,
+        )
+
+    # --- 仮説を提示済み: 今の発話は「それへの返事」である --------------
+    target = classify_correction(latest_user_text, current_hypothesis)
+
+    if target is CorrectionTarget.ACCEPTED:
+        # §39 Case E: 同じ仮説を再提示せず、BUILDへ進む。
+        return CapabilityTurn(
+            CapabilityTurnKind.ACCEPT, hypothesis=current_hypothesis, target=target
+        )
+
+    if target is CorrectionTarget.PROBLEM:
+        # §15: Capabilityの差し替えではなく、困りごとの理解から作り直す。
+        return CapabilityTurn(CapabilityTurnKind.REWIND, target=target)
+
+    if target is CorrectionTarget.UNCLEAR:
+        # §14: 仮説を**捨てない**。既に一度聞いていれば、もう聞かない
+        # (質問攻めにしない)——その場合は通常の会話へ戻す。
+        if CLARIFY_QUESTION_KEY in asked_question_keys:
+            return CapabilityTurn(CapabilityTurnKind.NONE, target=target)
+        return CapabilityTurn(
+            CapabilityTurnKind.CLARIFY, message=_clarify_question(current_hypothesis),
+            question_key=CLARIFY_QUESTION_KEY, hypothesis=current_hypothesis, target=target,
+        )
+
+    revised = revise_hypothesis(current_hypothesis, latest_user_text, target)
+    if revised is None:
+        # 訂正上限。無理に正解へ辿り着こうとせず、通常の会話へ戻す(F2)。
+        return CapabilityTurn(CapabilityTurnKind.NONE, target=target)
+    if revised is current_hypothesis:
+        # その層に新しい要求が見つからなかった。聞き返す。
+        if CLARIFY_QUESTION_KEY in asked_question_keys:
+            return CapabilityTurn(CapabilityTurnKind.NONE, target=target)
+        return CapabilityTurn(
+            CapabilityTurnKind.CLARIFY, message=_clarify_question(current_hypothesis),
+            question_key=CLARIFY_QUESTION_KEY, hypothesis=current_hypothesis, target=target,
+        )
+
+    return CapabilityTurn(
+        CapabilityTurnKind.PRESENT, message=revised.to_message(),
+        question_key=_missing_key(revised), hypothesis=revised, target=target,
+    )

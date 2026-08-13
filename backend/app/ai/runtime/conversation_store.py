@@ -16,7 +16,11 @@ import time
 import uuid
 from threading import Lock
 
-from app.ai.runtime.conversation_types import ConversationSession, ConversationTurn
+from app.ai.runtime.conversation_types import (
+    ConversationSession,
+    ConversationTurn,
+    CorrectionRecord,
+)
 
 # **FORGE-CONVERSATION-READY-001(2026-08-12)で意味が変わった定数**。
 #
@@ -98,6 +102,54 @@ class ConversationStore:
         updated = session.with_asked_key(key)
         if updated is not session:
             self.save(updated)
+        return updated
+
+    def record_hypothesis_event(
+        self, session_id: str, *, event: str | None, hypothesis: object | None,
+        correction_target: str | None,
+    ) -> ConversationSession:
+        """Stateful User Correctionの状態遷移を永続化する
+        (FORGE-USER-GUIDED-SELF-EXTENSION-006 §13、2026-08-13)。
+
+        **これが無いと、Engineがどれだけ正しく訂正を解釈しても、
+        次のターンには忘れている**。Engineは純粋関数のままにしておきたい
+        ので(`conversation_policy.py`と同じ方針)、状態を書くのは
+        Store側のこの1メソッドに集約する。
+
+        `event`が`None`(Capability層が何もしなかったターン)なら、
+        既存の仮説状態には**一切触れない**。従来どおりの会話が仮説を
+        壊さないようにするため。
+        """
+        session = self.get(session_id)
+        if event is None:
+            return session
+
+        if event == "rewind":
+            updated = session.rewound()
+        elif event == "accept":
+            updated = session.with_acceptance()
+        elif event == "clarify":
+            # 仮説は保持したまま、訂正があったことだけ記録する(§14)。
+            updated = session.with_correction(
+                CorrectionRecord(target=correction_target or "unclear"), None
+            )
+        elif event == "present" and hypothesis is not None:
+            previous = session.current_hypothesis
+            if previous is None:
+                updated = session.with_hypothesis(hypothesis)
+            else:
+                updated = session.with_correction(
+                    CorrectionRecord(
+                        target=correction_target or "unknown",
+                        from_missing=tuple(c.id for c in getattr(previous, "missing", ())),
+                        to_missing=tuple(c.id for c in getattr(hypothesis, "missing", ())),
+                    ),
+                    hypothesis,
+                ).with_hypothesis(hypothesis)
+        else:
+            return session
+
+        self.save(updated)
         return updated
 
     def size(self) -> int:

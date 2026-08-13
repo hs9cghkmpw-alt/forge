@@ -13,7 +13,7 @@ ARCHITECTURE.md` Phase B)・ADR-014の実装。`has_existing_tool=True`
 
 from __future__ import annotations
 
-from app.ai.runtime.capability import next_capability_turn
+from app.ai.runtime.capability import CapabilityTurnKind, resolve_capability_turn
 from app.ai.runtime.conversation_policy import (
     assumptions_for_unasked,
     detect_risk_signals,
@@ -340,15 +340,52 @@ class ConversationEngine:
         latest_user_text = next(
             (t.text for t in reversed(session.turns) if t.role == "user"), ""
         )
-        capability_turn = next_capability_turn(latest_user_text, session.asked_question_keys)
-        if capability_turn is not None:
-            message, capability_key = capability_turn
+        # **Stateful**であることが前回との決定的な違いである
+        # (FORGE-USER-GUIDED-SELF-EXTENSION-006 §11-13)。以前は毎回
+        # 最新発話だけから仮説を作り直しており、訂正されていない層の
+        # 文脈が失われていた(実測で再現済み)。今は前回の仮説を渡し、
+        # 「それへの訂正」として解釈する。
+        capability_turn = resolve_capability_turn(
+            latest_user_text,
+            session.current_hypothesis,  # type: ignore[arg-type] — SolutionHypothesis | None
+            session.asked_question_keys,
+        )
+        correction_target = (
+            capability_turn.target.value if capability_turn.target is not None else None
+        )
+
+        if capability_turn.kind in (CapabilityTurnKind.PRESENT, CapabilityTurnKind.CLARIFY):
             return ConversationStepResult(
                 action=ConversationAction.ASK, need_model=need_model,
                 readiness=ConversationReadiness.NEEDS_QUESTION,
-                question=message, question_key=capability_key,
+                question=capability_turn.message, question_key=capability_turn.question_key,
                 strategy=QuestionStrategy.ASK,
+                hypothesis=capability_turn.hypothesis,
+                hypothesis_event=capability_turn.kind.value,
+                correction_target=correction_target,
             )
+
+        if capability_turn.kind is CapabilityTurnKind.REWIND:
+            # §15: Capabilityを差し替えるのではなく、困りごとの理解から
+            # やり直す。**仮説を捨てるだけでは不十分**で、ユーザーへ
+            # 「何をしたいのか」を聞き直すところまでが巻き戻しである。
+            return ConversationStepResult(
+                action=ConversationAction.ASK, need_model=need_model,
+                readiness=ConversationReadiness.INSUFFICIENT_INFORMATION,
+                question="こちらの受け取り方が違っていました。何にいちばん困っているか、もう一度教えてもらえますか？",
+                question_key=None, strategy=QuestionStrategy.REPHRASE,
+                hypothesis=None, hypothesis_event=capability_turn.kind.value,
+                correction_target=correction_target,
+            )
+
+        # ACCEPT / NONE はここで止めず、通常の判断へ落とす。ACCEPTの場合、
+        # 合意した内容を`build_brief`へ載せる必要がある(§16)——下の
+        # BUILD経路で`accepted_hypothesis`を使う。
+        accepted_hypothesis = (
+            capability_turn.hypothesis
+            if capability_turn.kind is CapabilityTurnKind.ACCEPT
+            else None
+        )
 
         if action == ConversationAction.ASK:
             question = str(raw.get("question") or "").strip()
@@ -381,6 +418,12 @@ class ConversationEngine:
             )
 
         brief = str(raw.get("build_brief") or "").strip() or _fallback_brief(session)
+        if accepted_hypothesis is not None:
+            # §16: 「それでいい」で合意した内容が生成へ届かなければ、
+            # 訂正の往復で仕様を育てた意味が無い。合意内容をbriefへ載せる。
+            note = accepted_hypothesis.to_build_note()
+            if note:
+                brief = f"{brief} {note}".strip()
         return ConversationStepResult(
             action=action, need_model=need_model, readiness=decision.readiness, build_brief=brief,
             # 縮退して作った場合、その事実(SHRINK_SOLUTION)を必ず載せる。
@@ -389,4 +432,9 @@ class ConversationEngine:
             # `solution_shrink_count`が常に0になっていた(縮退が
             # 実際には起きているのに、測定上まったく見えなかった)。
             strategy=decision.strategy,
+            hypothesis=accepted_hypothesis,
+            hypothesis_event=(
+                CapabilityTurnKind.ACCEPT.value if accepted_hypothesis is not None else None
+            ),
+            correction_target=correction_target,
         )

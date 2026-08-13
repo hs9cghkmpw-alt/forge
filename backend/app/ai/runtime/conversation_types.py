@@ -12,7 +12,7 @@ Engineは既存Cognitive Pipelineの「外」に立つ、薄い意思決定層)�
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Literal
 
@@ -321,6 +321,64 @@ class ConversationStepResult:
     どの段か(ASK/REPHRASE/OFFER_DEFAULT)。Metricsと Golden Testで
     「同じことを繰り返していないか」を測るために載せる。"""
 
+    # --- Stateful User Correction(§13、2026-08-13)----------------------
+    hypothesis: object | None = None
+    """このターンで提示・改訂・合意した`SolutionHypothesis`。
+    Router がSessionへ永続化する(Engineは状態を持たない)。"""
+
+    hypothesis_event: str | None = None
+    """`CapabilityTurnKind`の値(present / clarify / rewind / accept)。
+    `None`ならCapability層は何もしていない=従来どおりの会話。"""
+
+    correction_target: str | None = None
+    """このターンでユーザーが訂正した層(`CorrectionTarget`の値)。
+    Metricsと Golden Testのために載せる。"""
+
+
+class HypothesisState(str, Enum):
+    """提示済みSolution Hypothesisの状態
+    (FORGE-USER-GUIDED-SELF-EXTENSION-006 §13、2026-08-13)。"""
+
+    NONE = "none"
+    """まだ仮説を出していない(通常の会話)。"""
+
+    PENDING = "pending"
+    """仮説を提示し、ユーザーの返事を待っている。"""
+
+    ACCEPTED = "accepted"
+    """ユーザーが受け入れた。BUILDへ進んでよい(§16)。"""
+
+    REWOUND = "rewound"
+    """「そもそも違う」と言われ、Problem理解まで巻き戻した(§15)。"""
+
+
+@dataclass(frozen=True)
+class CorrectionRecord:
+    """ユーザーの訂正1件の記録(指示書§17)。
+
+    **単なるログにしない**。用途は2つに限定する:
+
+    1. 同じ提案を繰り返さない(一度否定されたものを再提案しない)。
+    2. 同じ層を何度も外し続けていないかを見て、打ち切る。
+
+    そのため保持するのは「どの層が」「何から何へ」だけである。
+    発話全文は`ConversationSession.turns`に既にあるので二重に持たない
+    ——Storage肥大化とPrivacyの両方への配慮(§17末尾)。
+    """
+
+    target: str
+    """`CorrectionTarget`の値(data / view / effect / problem / unclear / accepted)。"""
+
+    from_missing: tuple[str, ...] = ()
+    to_missing: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict:
+        return {
+            "target": self.target,
+            "from_missing": list(self.from_missing),
+            "to_missing": list(self.to_missing),
+        }
+
 
 @dataclass(frozen=True)
 class ConversationSession:
@@ -340,12 +398,37 @@ class ConversationSession:
     あるのに対し、こちらは**Strategy Escalationの段数**を決めるための
     回数である(1回目=ASK、2回目=REPHRASE、…)。"""
 
+    # --- Stateful User Correction(§13、2026-08-13新設)------------------
+    #
+    # これが無かったために、訂正のたびに**最新発話だけから仮説を作り直して
+    # いた**(§11の指摘は現物確認の結果すべて正しかった)。実測した症状:
+    #
+    #   Turn1「魚とサイズと場所を記録して地図で見たい」→ data=[number]
+    #   Turn2「違う、色を濃くしたい」                  → data=[]
+    #                                                          ^^ 消失
+    #
+    # 訂正されていない層は保持し、指示された層だけを差し替えるために、
+    # 「今どの仮説を提示中か」をセッションが覚えている必要がある。
+    current_hypothesis: object | None = None
+    """提示中の`SolutionHypothesis`。型注釈が`object`なのは、この
+    ファイルが`capability.py`へ依存しないようにするため(このファイルは
+    Conversation層の最下層で、他のruntimeモジュールをimportしない)。"""
+
+    hypothesis_state: HypothesisState = HypothesisState.NONE
+
+    correction_history: tuple[CorrectionRecord, ...] = ()
+    """訂正の履歴。§17の2用途にのみ使う。"""
+
+    rewind_count: int = 0
+    """PROBLEM訂正でNeed理解まで巻き戻した回数。無限に巻き戻さないため。"""
+
     def with_turn(self, turn: ConversationTurn) -> ConversationSession:
-        return ConversationSession(
-            session_id=self.session_id, turns=self.turns + (turn,),
-            created_at=self.created_at, asked_question_keys=self.asked_question_keys,
-            ask_counts=dict(self.ask_counts),
-        )
+        # `dataclasses.replace()`を使う(FORGE-USER-GUIDED-SELF-EXTENSION-006、
+        # 2026-08-13)。以前は全フィールドを手で書き並べて再構築していたため、
+        # **新しいフィールドを足すたびに、ここへ書き忘れると黙って消える**
+        # という壊れ方をした。今回`current_hypothesis`等を追加するにあたり、
+        # その事故が起きない形へ先に直しておく。
+        return replace(self, turns=self.turns + (turn,), ask_counts=dict(self.ask_counts))
 
     def with_asked_key(self, key: str) -> ConversationSession:
         """そのUnknownを1回聞いたことを記録する。
@@ -361,10 +444,45 @@ class ConversationSession:
         keys = self.asked_question_keys
         if key not in keys:
             keys = keys + (key,)
-        return ConversationSession(
-            session_id=self.session_id, turns=self.turns, created_at=self.created_at,
-            asked_question_keys=keys, ask_counts=counts,
-        )
+        return replace(self, asked_question_keys=keys, ask_counts=counts)
 
     def ask_count_for(self, key: str) -> int:
         return self.ask_counts.get(key, 0)
+
+    # --- Stateful User Correction のための遷移(§13)---------------------
+
+    def with_hypothesis(self, hypothesis: object) -> ConversationSession:
+        """仮説を提示した状態にする。"""
+        return replace(
+            self, current_hypothesis=hypothesis, hypothesis_state=HypothesisState.PENDING
+        )
+
+    def with_correction(
+        self, record: CorrectionRecord, hypothesis: object | None
+    ) -> ConversationSession:
+        """訂正を1件記録し、改訂後の仮説へ差し替える。
+
+        `hypothesis`が`None`の場合、仮説は保持したまま記録だけ残す
+        (「違う」だけで、どこがか分からない場合——§14。**勝手に捨てない**)。
+        """
+        return replace(
+            self,
+            current_hypothesis=hypothesis if hypothesis is not None else self.current_hypothesis,
+            correction_history=self.correction_history + (record,),
+        )
+
+    def with_acceptance(self) -> ConversationSession:
+        return replace(self, hypothesis_state=HypothesisState.ACCEPTED)
+
+    def rewound(self) -> ConversationSession:
+        """Problem理解が違った(§15)。仮説を捨て、Need側から作り直す。
+
+        `asked_question_keys`は**残す**。ユーザーが既に答えたことを、
+        巻き戻したからといってもう一度聞くのは失礼である。
+        """
+        return replace(
+            self,
+            current_hypothesis=None,
+            hypothesis_state=HypothesisState.REWOUND,
+            rewind_count=self.rewind_count + 1,
+        )
