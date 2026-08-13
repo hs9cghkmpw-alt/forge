@@ -304,12 +304,30 @@ class _ConversationFlowScreenState extends ConsumerState<ConversationFlowScreen>
     // ここから先は演出だけなので、途中で失敗しても道具は失われない。
     await _playHandoffMoment(title);
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
-      builder: (_) => Scaffold(
+    // **FORGE-HANDOFF-LOCAL-AI-UX-004 §31 / -005 §25 で報告された実機バグの修正**。
+    //
+    // 症状: 生成されたToolの左上「戻る」を押しても何も起きない。
+    //
+    // 原因は2つ重なっていた。
+    //
+    // 1. `pushReplacement`でConversationFlowScreenを**破棄**していた。
+    //    §32の期待仕様「Tool → 戻る → Conversation」は、Conversationが
+    //    スタックから消えている以上、原理的に成立しない。
+    // 2. `onBack`が`Navigator.of(context)`の`context`として、
+    //    **この画面(ConversationFlowScreen)自身のcontext**を捕捉して
+    //    いた。`pushReplacement`直後にこのElementはunmountされるため、
+    //    押しても解決先のNavigatorが得られず、実機では「無反応」に
+    //    見えていた。
+    //
+    // したがって`push`へ変え、`onBack`は**新しいRouteのcontext**
+    // (`routeContext`)から解決する。これで戻り先はConversationになり、
+    // 会話の続き(さらに戻ればHome)も維持される。
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (routeContext) => Scaffold(
         body: SafeArea(
           child: GeneratedAppHostShell(
             forgeDocument: result.forgeDocument,
-            onBack: () => Navigator.of(context).pop(),
+            onBack: () => Navigator.of(routeContext).pop(),
             provider: widget.provider,
             onDocumentUpdated: (updated) => repository.saveApp(SavedForgeApp(
               id: id, title: title, originalPrompt: _originalPrompt, forgeDocument: updated,

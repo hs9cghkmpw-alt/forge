@@ -161,6 +161,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Back Navigation: Tool → 戻る → Conversation が復帰する', (tester) async {
+    // FORGE-HANDOFF-LOCAL-AI-UX-004 §31-34 / -005 §25 で実機報告された
+    // High Priority bugの回帰テスト。
+    //
+    // 旧実装は(1)`pushReplacement`でConversationを破棄し、(2)`onBack`が
+    // 破棄済み画面のcontextを掴んでいたため、実機で「戻るを押しても
+    // 何も起きない」状態だった。
+    final repository = _FakeConversationRepository([
+      ConversationBuilt(buildBrief: '買い物リストを作る', result: _buildResult('買い物リスト')),
+    ]);
+
+    await tester.pumpWidget(await _wrap(
+      const ConversationFlowScreen(initialMessage: '買い物で忘れる'), repository,
+    ));
+    await tester.pump();
+    for (var i = 0; i < 4; i++) {
+      await tester.pump();
+    }
+    await tester.pump(ConversationFlowScreen.handoffMomentDuration);
+    await tester.pumpAndSettle();
+
+    // Toolが開いている。
+    expect(find.byType(GeneratedAppHostShell), findsOneWidget);
+
+    // 戻るボタンが存在し、押すとConversationへ戻る。
+    final backButton = find.byIcon(Icons.arrow_back_rounded);
+    expect(backButton, findsOneWidget, reason: '生成Toolに戻るボタンが無い');
+    await tester.tap(backButton);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(GeneratedAppHostShell), findsNothing, reason: 'Toolから戻れていない');
+    // Conversationが破棄されず、会話の内容が残っていること(§32)。
+    expect(find.byType(ConversationFlowScreen), findsOneWidget);
+    expect(find.text('買い物で忘れる'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('UPDATE mode: initialMessageがnullだとForgeから先に聞き、送信するとpopで新しいDocumentを返す', (tester) async {
     final repository = _FakeConversationRepository([
       const ConversationUpdated(

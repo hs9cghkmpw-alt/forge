@@ -2596,3 +2596,31 @@ Policyの実バグを3件検出した。いずれもUnit Test・Golden Test(18�
 同じ台本のままGemini vs Localの会話品質比較に使える(§26末尾)。
 **ただし実Providerでの実行は未了**(Gemini無料枠上限・Localモデル
 取得不可、TD51)。
+
+## TD53. 生成Toolの「戻る」が実機で無反応だった → **解消(2026-08-12)**
+
+FORGE-HANDOFF-LOCAL-AI-UX-004 §31-34 / -005 §25 で実機報告された
+High Priority bug。再現: Mockでtool生成 → Tool画面 → 左上の戻る → 無反応。
+
+**原因は2つ重なっていた**(どちらか一方だけでは説明がつかない):
+
+1. `_finishBuild()`が`pushReplacement`を使い、**ConversationFlowScreenを
+   破棄**していた。§32の期待仕様「Tool → 戻る → Conversation」は、
+   戻り先がスタックから消えている以上そもそも成立しない。
+2. `onBack: () => Navigator.of(context).pop()`の`context`が、
+   **ConversationFlowScreen自身のcontext**だった。`pushReplacement`直後に
+   このElementはunmountされるため、`Navigator.of()`が解決できず、
+   実機では押しても「無反応」に見えていた。
+
+**修正**: `push`へ変更し、`onBack`は**新しいRouteのcontext**から
+Navigatorを解決する。戻り先がConversationになり(§32)、さらに戻れば
+Homeへ抜ける。会話内容も保持される。
+
+**他4箇所は健全だった**(`home_screen`・`my_apps_screen`・
+`history_screen`・`generation_flow_screen`)。いずれも`push`であり
+呼び出し元が生存し続けるため、captureしたcontextが有効なまま。
+`pushReplacement`と組み合わさっていた会話BUILD経路だけの問題であり、
+実機の再現手順(会話→生成→Tool)と正確に一致する。
+
+**Regression test**: `conversation_flow_screen_test.dart`へ
+「Tool → 戻る → Conversation復帰 + 会話内容保持」を追加(§34)。
