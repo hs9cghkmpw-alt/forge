@@ -231,13 +231,44 @@ class SolutionHypothesis:
     否定がどこに向いているかを分類できる(`classify_correction()`)。
     """
 
+    # 各層は「その層で検討対象になっているCapability全部」を持つ。
+    # 実装済みかどうかで分けずに1つのタプルへ入れるのが要点である。
     data: tuple[Capability, ...] = ()
     view: tuple[Capability, ...] = ()
     effects: tuple[Capability, ...] = ()
-    missing: tuple[Capability, ...] = ()
     revision: int = 0
     """User Correctionによって作り直された回数。無限ループ防止に使う
     (レビュー F2: 仮説も3回で打ち切る)。"""
+
+    @property
+    def missing(self) -> tuple[Capability, ...]:
+        """まだ作れないもの。**全層から毎回導出する**。
+
+        FORGE-USER-GUIDED-SELF-EXTENSION-006 指摘2で見つかった実バグの
+        修正(2026-08-13)。以前`missing`は**フィールドとして保存**されて
+        おり、`revise_hypothesis()`が訂正対象層のMissingで全体を置換して
+        いた。その結果:
+
+            初期「写真を記録して地図で見たい」→ missing=[data.photo, view.map]
+            訂正「違う、色の濃さで見たい」    → missing=[view.heatmap]
+                                                       ^^ data.photo が消滅
+
+        原因は「導出できる値をフィールドとして保存し、部分的に更新した」
+        ことであり、`missing`の更新漏れではない。**保存をやめれば、
+        更新漏れという不具合の形そのものが無くなる**。層を差し替えれば
+        Missingは自動的に整合する。
+
+        「保持が既定」という原則を、層の中身だけでなくMissing状態にも
+        成立させるための構造上の担保である。
+        """
+        return tuple(
+            c for c in (self.data + self.view + self.effects) if not c.supported
+        )
+
+    @property
+    def buildable(self) -> tuple[Capability, ...]:
+        """今すぐ作れるもの(Data + View)。ユーザーへ提示する形はこれ。"""
+        return tuple(c for c in (self.data + self.view) if c.supported)
 
     def is_empty(self) -> bool:
         return not (self.data or self.view or self.effects)
@@ -254,7 +285,7 @@ class SolutionHypothesis:
             names = "・".join(c.label_ja for c in self.missing)
             parts.append(f"{names}は、今のForgeではまだ作れません。")
 
-        buildable = [c.label_ja for c in (self.data + self.view)]
+        buildable = [c.label_ja for c in self.buildable]
         if buildable:
             parts.append("代わりに、" + "・".join(buildable) + "ができる形なら作れます。")
 
@@ -310,7 +341,7 @@ class SolutionHypothesis:
         作れないもの(`missing`)は**書かない**——Compilerに作れないものを
         指示しても、実現できないか、実現したふりになるだけである。
         """
-        buildable = [c.label_ja for c in (self.data + self.view)]
+        buildable = [c.label_ja for c in self.buildable]
         if not buildable:
             return ""
         return "ユーザーと合意した形: " + "・".join(buildable) + "。"
@@ -358,22 +389,21 @@ def build_hypothesis(text: str) -> SolutionHypothesis | None:
     if not missing:
         return None
 
-    supported = tuple(c for c in detected if c.supported)
-    # 未実装のものについて、代替として提案できる実装済みCapabilityを補う。
+    # 各層には「検出されたもの(未実装含む)+ 代替」をまとめて入れる。
+    # `missing`は保存せず、層から導出する(指摘2の修正、上記docstring参照)。
     substitutes: list[Capability] = []
     for gap in missing:
         if gap.nearest_supported_id is None:
             continue
         alternative = CAPABILITY_REGISTRY.get(gap.nearest_supported_id)
-        if alternative is not None and alternative not in supported and alternative not in substitutes:
+        if alternative is not None and alternative not in detected and alternative not in substitutes:
             substitutes.append(alternative)
 
-    combined = supported + tuple(substitutes)
+    combined = detected + tuple(substitutes)
     return SolutionHypothesis(
         data=tuple(c for c in combined if c.layer is CapabilityLayer.DATA),
         view=tuple(c for c in combined if c.layer is CapabilityLayer.VIEW),
-        effects=tuple(c for c in detected if c.layer is CapabilityLayer.EFFECT),
-        missing=missing,
+        effects=tuple(c for c in combined if c.layer is CapabilityLayer.EFFECT),
     )
 
 
@@ -400,7 +430,16 @@ class CorrectionTarget(str, Enum):
 
 
 _ACCEPT_KEYWORDS: tuple[str, ...] = (
-    "それでいい", "それで良い", "でいい", "で良い", "いいよ", "お願い", "はい", "うん", "ok", "オッケー", "進めて",
+    "それでいい", "それで良い", "でいい", "で良い", "いいね", "いいよ", "お願い",
+    "はい", "うん", "ええ", "そうそう", "その感じ", "そんな感じ", "大丈夫",
+    "ok", "オッケー", "進めて", "それで",
+)
+
+# 肯定の中に**変更意図**が混ざっていることを示す語。
+# 「うん、地図でいい」は合意だが、「うん、でも地図じゃなくて一覧がいい」は
+# 訂正である。この差を作っているのは肯定語ではなく、この対比語である。
+_CONTRAST_MARKERS: tuple[str, ...] = (
+    "でも", "けど", "けれど", "ただ", "しかし", "その代わり", "かわりに", "代わりに",
 )
 
 _PROBLEM_KEYWORDS: tuple[str, ...] = (
@@ -439,26 +478,48 @@ def _restates_a_goal(lowered: str) -> bool:
 def classify_correction(text: str, hypothesis: SolutionHypothesis) -> CorrectionTarget:
     """ユーザーの返答を、仮説のどの部分への訂正かに分類する。
 
-    判定順序に意味がある:
+    **判定は「語の出現」ではなく「態度(stance)」から始める**
+    (FORGE-USER-GUIDED-SELF-EXTENSION-006 指摘3の修正、2026-08-13)。
 
-    1. `PROBLEM`(困りごとの理解自体が違う)を最優先で見る。ここが
-       違うなら、data/viewをいくら差し替えても無駄だから。
-    2. 次に、発話から**新しいCapabilityが検出できるか**を見る。
-       検出できた層が、訂正の対象である——ユーザーは「違う」だけでなく
-       「こうしたい」を言っていることが多く、そちらの方が情報量が多い。
-    3. 否定語だけで、どこがかが分からない場合は`UNCLEAR`。聞き返す。
-    4. 否定語も新Capabilityも無ければ`ACCEPTED`。
+    以前は`detect_capabilities()`を先に見ていたため、肯定文にCapability語が
+    含まれるだけで訂正へ倒れていた。実測した誤分類:
 
-    `hypothesis`を引数に取るのは、将来「提示した内容と照らして判定する」
-    余地を残すため。現時点では層の特定にのみ使う。
+        「うん、地図でいい」      → VIEW(訂正)   ← 本当は合意
+        「はい、その地図の感じで」  → VIEW(訂正)   ← 本当は合意
+        「そうそう、一覧で大丈夫」  → VIEW(訂正)   ← 本当は合意
+
+    原因は**語の出現と変更意図を同一視していた**ことである。
+    「うん、地図でいい」の「地図」は**合意の対象**であって変更要求では
+    ない。ACCEPT判定を先頭へ動かすだけでは足りない——それだと
+    「うん、でも地図じゃなくて一覧がいい」まで合意になってしまう。
+
+    したがって3段階で判定する:
+
+        1. 態度   : 否定か、肯定か、どちらでもないか
+        2. 対比   : 肯定の中に変更意図(「でも」等)があるか
+        3. 対象   : 変更意図があるとき、どの層への訂正か
+
+    否定を肯定より先に見るのは、「そうじゃない」のように**肯定語を
+    部分文字列として含む否定**があるためである。
     """
     lowered = (text or "").lower()
 
+    # 明示的なProblem語は最優先(態度以前に、話の対象が違う)。
     if any(k in lowered for k in _PROBLEM_KEYWORDS):
         return CorrectionTarget.PROBLEM
 
+    negated = any(k in lowered for k in _NEGATION_KEYWORDS)
+    affirmed = any(k in lowered for k in _ACCEPT_KEYWORDS)
+    contrasted = any(k in lowered for k in _CONTRAST_MARKERS)
+
+    # 肯定のみ(対比なし)。Capability語が含まれていても、それは
+    # **合意の対象**であって変更要求ではない。
+    if affirmed and not negated and not contrasted:
+        return CorrectionTarget.ACCEPTED
+
     detected = detect_capabilities(text)
     if detected:
+        # 変更意図がある(否定・対比・あるいは単に別のことを言っている)。
         # 複数層が検出された場合、外側(影響が大きい方)を優先する。
         for layer, target in (
             (CapabilityLayer.EFFECT, CorrectionTarget.EFFECT),
@@ -468,29 +529,25 @@ def classify_correction(text: str, hypothesis: SolutionHypothesis) -> Correction
             if any(c.layer is layer for c in detected):
                 return target
 
-    if any(k in lowered for k in _NEGATION_KEYWORDS):
+    if negated:
         # 否定はあったが、Capabilityは1つも検出できなかった。ここで
         # `PROBLEM`と`UNCLEAR`を分ける必要がある(§39 Case C と Case D)。
         #
         # **語彙リストに「そうじゃない」を足すのでは解けない**。
-        # 「違う」も「そうじゃない」も、それ単体では同じ強さの否定である。
         # 実際に両者を分けているのは語ではなく**構造**である:
         #
         #   Case C「そうじゃない。子供の送り迎えの担当だけ決めたい」
         #       → 否定 + **やりたいことの言い直し**
         #   Case D「違う」
         #       → 否定のみ。何が違うのかの情報が無い
-        #
-        # 前者はProblem理解そのものへの訂正であり、後者は聞き返すしかない。
-        # この判定を構造で行うことで、想定外の言い回しにも効く
-        # (実際にCase Cは「そうじゃない」が語彙に無くて落ちた——
-        # 語を足す修正では、次の言い回しでまた落ちる)。
         if _restates_a_goal(lowered):
             return CorrectionTarget.PROBLEM
         return CorrectionTarget.UNCLEAR
 
-    if any(k in lowered for k in _ACCEPT_KEYWORDS):
-        return CorrectionTarget.ACCEPTED
+    if affirmed:
+        # 肯定 + 対比だが、変更先のCapabilityが分からない
+        # (例:「うん、でもちょっと違うんだよね」)。聞き返す。
+        return CorrectionTarget.UNCLEAR
 
     return CorrectionTarget.UNCLEAR
 
@@ -554,21 +611,19 @@ def revise_hypothesis(
         return hypothesis
     additive = _is_additive_correction(text, layer)
 
-    supported_replacements = tuple(c for c in replacements if c.supported)
-    new_missing = tuple(c for c in replacements if not c.supported)
-
     # 差し替え先も未実装だった場合(§33の「地図」→「色を濃く」=ヒートマップ)、
-    # **できないものが1つ減ったふりをしない**。新しいMISSINGとして扱い、
-    # 代替があればそれを提案する。
+    # **できないものが1つ減ったふりをしない**。未実装のものも層へ残し、
+    # 代替があればそれも並べる。`missing`は層から導出されるので、
+    # ここで別途更新する必要は無い(指摘2の修正)。
     substitutes: list[Capability] = []
-    for gap in new_missing:
+    for gap in (c for c in replacements if not c.supported):
         if gap.nearest_supported_id is None:
             continue
         alternative = CAPABILITY_REGISTRY.get(gap.nearest_supported_id)
-        if alternative is not None and alternative not in substitutes:
+        if alternative is not None and alternative not in replacements and alternative not in substitutes:
             substitutes.append(alternative)
 
-    updated = supported_replacements + tuple(substitutes)
+    updated = replacements + tuple(substitutes)
     existing = {
         CapabilityLayer.DATA: hypothesis.data,
         CapabilityLayer.VIEW: hypothesis.view,
@@ -583,13 +638,13 @@ def revise_hypothesis(
                 merged.append(capability)
         updated = tuple(merged)
 
-    changes: dict[str, object] = {"missing": new_missing, "revision": hypothesis.revision + 1}
+    changes: dict[str, object] = {"revision": hypothesis.revision + 1}
     if layer is CapabilityLayer.DATA:
         changes["data"] = updated
     elif layer is CapabilityLayer.VIEW:
         changes["view"] = updated
     else:
-        changes["effects"] = tuple(updated) if additive else replacements
+        changes["effects"] = updated
     return replace(hypothesis, **changes)  # type: ignore[arg-type]
 
 

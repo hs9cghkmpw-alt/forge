@@ -2669,7 +2669,19 @@ Flutter側が会話バナーと生成Toolのバッジで明示する。
 
 ---
 
-## TD55. Capability自動追加は採用しない(代わりにMissing Capability検出を実装) → **判断確定(2026-08-13)**
+## TD55. Capability自動追加は採用しない(代わりにMissing Capability検出を実装) → **一部撤回(2026-08-13)**
+
+> **2026-08-13 追記(重要)**: この項目の見出しは、後日の
+> `FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md`により**範囲を限定して読むべき**
+> ものになった。撤回していないのは「**実行中に任意のDartコードを生成・
+> 注入する方式**は採用しない」という部分だけである。
+>
+> 一方、「Self-Extension(Forgeが自身の能力を獲得すること)という
+> Product Goalそのものを捨てる」という含意は**誤りだった**。Goal 1
+> (実行中のDart注入)とGoal 2(安全な方法で能力を増やす)を混同していた。
+> 現在は宣言的Capability定義(`capability_definition.py`)という形で、
+> **コードを生成せずに**能力を追加する経路を実装している(TD58)。
+> 詳細はv2レビュー §2 を参照。
 
 FORGE-ARCHITECTURE-REVIEW-AND-IMPLEMENT-005 §12 / §32。
 詳細は`docs/spec/FORGE-SELF-EXTENSION-ARCH-REVIEW.md`。

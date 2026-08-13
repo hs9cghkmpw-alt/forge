@@ -271,8 +271,16 @@ class TestCaseE_Acceptance(unittest.TestCase):
         result = c.say("それでいい")
 
         self.assertIs(result.action, ConversationAction.BUILD)
-        for label in [cap.label_ja for cap in (revised.data + revised.view)]:
-            self.assertIn(label, result.build_brief)
+        # **作れるものだけ**がbriefへ載ること。作れないもの(この時点では
+        # ヒートマップ)をCompilerへ指示すると、実現できないか、実現した
+        # ふりになる。段の分離ができてから初めて意味を持つ確認である。
+        for capability in revised.buildable:
+            self.assertIn(capability.label_ja, result.build_brief)
+        for capability in revised.missing:
+            self.assertNotIn(
+                capability.label_ja, result.build_brief,
+                "作れないものを生成指示へ載せている",
+            )
 
 
 class TestCorrectionHistory(unittest.TestCase):
@@ -310,3 +318,167 @@ class TestExistingBehaviourUnchanged(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPhaseOrdering(unittest.TestCase):
+    """指摘1の回帰テスト(2026-08-13)。
+
+    Capability層は「CONFIRMの後、ASKの前」という**行の位置**で差し込まれて
+    いたため、Problem/NeedにBLOCKINGな未知が残っていても仮説提示が先に
+    出ていた。Problem Discovery → Need → Solution という順序に反する。
+
+    優先順位は`conversation_policy.select_phase()`が決める。
+    """
+
+    def _engine_with_blocking_unknown(self):
+        class _BlockingLLM:
+            def complete_structured(self, prompt: str, schema: dict) -> dict:
+                return {
+                    "problem": "地図で見たい", "known": [],
+                    "unknowns": [{
+                        "key": "what_to_record", "impact": "blocking",
+                        "reason": "何を記録するのか分からないと作れない",
+                    }],
+                    "assumptions": [], "confidence": 0.3, "next_action": "ask",
+                    "question": "何を記録したいですか？", "question_key": "what_to_record",
+                    "build_brief": "", "external_effect": False, "destructive": False,
+                }
+
+        c = _Conversation()
+        c.engine = ConversationEngine(_BlockingLLM())
+        return c
+
+    def test_blocking_need_is_asked_before_any_capability_hypothesis(self) -> None:
+        c = self._engine_with_blocking_unknown()
+        result = c.say("地図で見たい")
+
+        self.assertEqual(result.question, "何を記録したいですか？")
+        self.assertIsNone(
+            result.hypothesis_event,
+            "BLOCKINGな未知が残っているのに仮説を提示している(指摘1の再発)",
+        )
+        self.assertIsNone(c.state.current_hypothesis)
+
+    def test_pending_hypothesis_reply_still_wins_over_a_blocking_need(self) -> None:
+        """既に仮説を提示している場合、その返事の処理が先である。
+
+        Forge自身が直前に問いを出しているのだから、答えを聞かずに
+        別の質問へ移るのは会話として破綻している。
+        """
+        c = _Conversation("釣果を記録したい")
+        c.say("釣った魚とサイズを地図で見たい")
+        self.assertIsNotNone(c.hypothesis())
+
+        # ここからBLOCKINGな未知を報告するProviderへ差し替える。
+        class _BlockingLLM:
+            def complete_structured(self, prompt: str, schema: dict) -> dict:
+                return {
+                    "problem": "釣果", "known": [],
+                    "unknowns": [{"key": "what_to_record", "impact": "blocking", "reason": "x"}],
+                    "assumptions": [], "confidence": 0.3, "next_action": "ask",
+                    "question": "何を記録したいですか？", "question_key": "what_to_record",
+                    "build_brief": "", "external_effect": False, "destructive": False,
+                }
+
+        c.engine = ConversationEngine(_BlockingLLM())
+        result = c.say("違う、色を濃くして分布が見たい")
+
+        self.assertEqual(result.correction_target, "view", "仮説への返事が無視されている")
+        self.assertEqual(result.hypothesis_event, "present")
+
+    def test_safety_still_outranks_everything(self) -> None:
+        """CONFIRMは何よりも先。会話の都合で後回しにしない。"""
+        class _RiskyLLM:
+            def complete_structured(self, prompt: str, schema: dict) -> dict:
+                return {
+                    "problem": "共有したい", "known": [], "unknowns": [], "assumptions": [],
+                    "confidence": 0.9, "next_action": "build", "question": "",
+                    "question_key": "", "build_brief": "共有する道具",
+                    "external_effect": True, "destructive": False,
+                }
+
+        c = _Conversation()
+        c.engine = ConversationEngine(_RiskyLLM())
+        result = c.say("地図で見たいものを家族に共有したい")
+
+        self.assertIs(result.action, ConversationAction.CONFIRM)
+        self.assertIsNone(result.hypothesis_event, "安全確認より先に仮説が出ている")
+
+
+class TestAcceptanceIsNotMisreadAsCorrection(unittest.TestCase):
+    """指摘3の回帰テスト(2026-08-13)。
+
+    肯定文にCapability語が含まれるだけで訂正へ倒れていた。
+    「うん、地図でいい」の「地図」は**合意の対象**であって変更要求ではない。
+    """
+
+    def _pending(self) -> _Conversation:
+        c = _Conversation("釣果を記録したい")
+        c.say("釣った魚を地図で見たい")
+        self.assertIsNotNone(c.hypothesis())
+        return c
+
+    def test_natural_acceptances_with_capability_words_proceed_to_build(self) -> None:
+        for utterance in (
+            "うん、地図でいい",
+            "はい、その地図の感じで",
+            "いいよ、地図で",
+            "そうそう、一覧で大丈夫",
+            "うん、そのカレンダーでいい",
+        ):
+            with self.subTest(utterance=utterance):
+                c = self._pending()
+                result = c.say(utterance)
+                self.assertIs(
+                    result.action, ConversationAction.BUILD,
+                    f"{utterance!r} が訂正として扱われている(指摘3の再発)",
+                )
+                self.assertIs(c.state.hypothesis_state, HypothesisState.ACCEPTED)
+
+    def test_affirmation_with_a_contrast_marker_is_still_a_correction(self) -> None:
+        """「うん、でも地図じゃなくて一覧がいい」は肯定語を含むが訂正である。
+        ACCEPT判定を単に最上位へ動かすだけでは、これを取りこぼす。"""
+        c = self._pending()
+        result = c.say("うん、でも地図じゃなくて一覧がいい")
+        self.assertEqual(result.correction_target, "view")
+        self.assertIsNot(c.state.hypothesis_state, HypothesisState.ACCEPTED)
+
+    def test_plain_negation_with_a_capability_is_still_a_correction(self) -> None:
+        c = self._pending()
+        result = c.say("違う、色の濃さで見たい")
+        self.assertEqual(result.correction_target, "view")
+
+
+class TestMissingSurvivesUnrelatedCorrections(unittest.TestCase):
+    """指摘2の回帰テスト(2026-08-13)。
+
+    `missing`をフィールドとして保存し、訂正対象層のMissingで全体を置換して
+    いたため、訂正していない層のMissingが消えていた。導出値は保存しない。
+    """
+
+    def test_photo_gap_survives_a_view_correction(self) -> None:
+        c = _Conversation("釣果を記録したい")
+        c.say("写真を記録して地図で見たい")
+        v1 = c.hypothesis()
+        self.assertEqual(ids(v1.missing), ["data.photo", "view.map"])
+
+        c.say("違う、色の濃さで見たい")
+        v2 = c.hypothesis()
+
+        self.assertIn(
+            "data.photo", ids(v2.missing),
+            "訂正していない層のMissingが消えている(指摘2の再発)",
+        )
+        self.assertIn("view.heatmap", ids(v2.missing), "訂正した層が反映されていない")
+        self.assertNotIn("view.map", ids(v2.missing), "古いMissingが残っている")
+
+    def test_missing_is_always_derived_never_stored(self) -> None:
+        """構造としての担保。`missing`がフィールドに戻ったら落ちる。"""
+        from dataclasses import fields
+
+        from app.ai.runtime.capability import SolutionHypothesis
+
+        self.assertNotIn(
+            "missing", {f.name for f in fields(SolutionHypothesis)},
+            "missingがフィールドとして保存されている(部分更新で壊れる形に戻っている)",
+        )

@@ -15,14 +15,16 @@
 * `ForgeRuntimeState`に派生状態(derived / computed / aggregate)の仕組みが
   **1つも無い**。
 
-つまり「場所ごとの釣れやすさを濃淡で」に足りないものは1つではなく3つで、
+つまり「場所ごとの釣れやすさを濃淡で」に足りないものは1つではなく4つで、
 しかも**種類が違う**:
 
+    場所を座標として持つ      → データ型      → 無い
     場所ごとにまとめて数える  → データ変換    → 無い
     数の大小を色の濃さにする  → 表示パラメータ → 無い
     地理座標を投影して描く    → 新しい描画     → 無い
 
-このうち**本当に新しいDartが要るのは3番目だけ**である。1番目は汎用の
+4つとも未実装である。ただし**新しい描画の実装が要るのは4番目だけ**で、
+残る3つは既存の描画(`bar_chart`等)の上で成立する。1番目は汎用の
 データPrimitiveであり、一度作れば「場所ごとの釣果数」「カテゴリごとの
 支出合計」「月ごとの平均体重」が**すべて既存の`bar_chart`で描ける**。
 
@@ -194,8 +196,8 @@ def primitive_by_id(primitive_id: str) -> RuntimePrimitive | None:
 #
 # **ここが「意味」と「実行できるもの」の境界である**(v2 §4)。
 # ユーザーは「ヒートマップ」と言うが、それは3つのPrimitiveの合成である。
-# この表があることで、「heatmapが無い」ではなく「集計と濃淡は作れる。
-# 地理描画だけが無い」と言えるようになる。
+# この表があることで、「heatmapが無い」ではなく「不足は4つで、うち
+# 新しい描画が要るのは地理描画だけ」と言えるようになる。
 #
 # 過剰抽象化しない(§54末尾): 分解するのは、**分解すると不足箇所の
 # 特定が変わるもの**だけである。`view.list`のように1対1のものは
@@ -257,14 +259,42 @@ class CapabilityDecomposition:
         """**本当に足りないもの**。ここが「heatmapが無い」との違いである。"""
         return tuple(p for p in self.required if not p.implemented)
 
-    @property
-    def blocking_missing(self) -> tuple[RuntimePrimitive, ...]:
-        """欠けると代替がまったく成立しないPrimitive。
+    # --- 「要求どおり作れない」と「何も出せない」を混ぜない -------------
+    #
+    # 指摘6の修正(2026-08-13)。以前は`blocking_missing`が
+    # 「MissingのうちVIEWだけ」を返していたため、
+    # `semantic.ranking_by_group`(transform.aggregateが未実装、VIEWは既存)
+    # で**空になり**、あたかも問題が無いように読めた。
+    # 実際には要求どおりには作れない。2つは別の問いである。
 
-        `VIEW`が欠けると何も描けないので致命的。`ENCODING`や
-        `TRANSFORM`が欠けても、より単純な表示へ落とせることが多い。
+    @property
+    def satisfiable_exactly(self) -> bool:
+        """**要求どおりに**作れるか。Missingが1つでもあれば`False`。
+
+        ユーザーの要求を満たせるかどうかは、種類に関係なく
+        「必要なものが全部あるか」で決まる。`transform.aggregate`が
+        無ければ「場所ごとの集計」は要求どおりには作れない——
+        描画手段があることは、その事実を変えない。
         """
-        return tuple(p for p in self.missing if p.kind is PrimitiveKind.VIEW)
+        return not self.missing
+
+    @property
+    def renderable_at_all(self) -> bool:
+        """**何かは画面に出せる**か。
+
+        `VIEW`が1つでも実装済みなら、より単純な形へ縮退して見せられる。
+        `satisfiable_exactly`が`False`でもこちらが`True`なら、
+        「要求どおりではないが、これなら今すぐ出せます」と提案できる
+        ——§59の「Smallest Useful Tool」を判断する材料である。
+        """
+        return any(
+            p.kind is PrimitiveKind.VIEW and p.implemented for p in self.required
+        )
+
+    @property
+    def fallback_possible(self) -> bool:
+        """縮退案を出せるか(要求どおりではないが、何かは見せられる)。"""
+        return not self.satisfiable_exactly and self.renderable_at_all
 
     @property
     def distance(self) -> int:

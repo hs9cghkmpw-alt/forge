@@ -66,11 +66,37 @@ class TestDecompositionDiagnosesTheRealGap(unittest.TestCase):
         self.assertIn(PrimitiveKind.ENCODING, kinds, "濃淡が不足として現れていない")
         self.assertIn(PrimitiveKind.VIEW, kinds, "地理描画が不足として現れていない")
 
-    def test_only_the_view_gap_is_blocking(self) -> None:
-        """`ENCODING`や`TRANSFORM`が無くても、より単純な表示へ落とせる。
-        描画そのものが無い場合だけが致命的である。"""
-        d = decompose("view.heatmap")
-        self.assertEqual([p.id for p in d.blocking_missing], ["view.spatial"])
+    def test_exact_satisfaction_and_renderability_are_separate_questions(self) -> None:
+        """指摘6の回帰テスト(2026-08-13)。
+
+        以前の`blocking_missing`は「MissingのうちVIEWだけ」を返していた
+        ため、`semantic.ranking_by_group`(集計が未実装・VIEWは既存)で
+        **空になり**、問題が無いように読めた。「要求どおり作れない」と
+        「何も出せない」は別の問いである。
+        """
+        heatmap = decompose("view.heatmap")
+        self.assertFalse(heatmap.satisfiable_exactly)
+        self.assertFalse(heatmap.renderable_at_all, "地理描画が無いので何も出せない")
+
+        trend = decompose("view.line_chart")
+        self.assertFalse(trend.satisfiable_exactly, "並べ替えが無いので要求どおりではない")
+        self.assertTrue(trend.renderable_at_all, "棒グラフはあるので何かは出せる")
+        self.assertTrue(trend.fallback_possible)
+
+    def test_a_missing_transform_still_means_not_satisfiable(self) -> None:
+        """VIEWが揃っていても、集計が無ければ要求どおりには作れない。
+        ここが以前は空(=問題なし)に見えていた箇所である。"""
+        from app.ai.runtime.semantic_capability import (
+            _DECOMPOSITION,
+            CapabilityDecomposition,
+        )
+
+        d = CapabilityDecomposition(
+            "semantic.ranking_by_group",
+            tuple(PRIMITIVE_REGISTRY[i] for i in _DECOMPOSITION["semantic.ranking_by_group"]),
+        )
+        self.assertFalse(d.satisfiable_exactly)
+        self.assertTrue(d.renderable_at_all)
 
     def test_trend_is_almost_buildable(self) -> None:
         """「推移を見たい」は、実は並べ替えが無いだけである。
@@ -78,7 +104,7 @@ class TestDecompositionDiagnosesTheRealGap(unittest.TestCase):
         d = decompose("view.line_chart")
         self.assertEqual(d.distance, 1)
         self.assertEqual([p.id for p in d.missing], ["transform.sort"])
-        self.assertEqual(d.blocking_missing, (), "描画は既にある(view.bars)")
+        self.assertTrue(d.renderable_at_all, "描画は既にある(view.bars)")
 
     def test_unknown_capability_is_not_guessed(self) -> None:
         """分解表に無いものを推測で分解しない。知らないことは知らないまま

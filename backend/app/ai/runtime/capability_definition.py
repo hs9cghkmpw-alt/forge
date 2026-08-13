@@ -62,8 +62,12 @@ class TrustLevel(str, Enum):
     """人間が実装し、長期運用されているもの。"""
 
     COMPOSED = "composed"
-    """既存Primitiveの合成のみ。**新しい実行コードを1行も含まない**ため、
-    検証を通れば利用してよい。"""
+    """既存Primitiveの合成のみで、必要なPrimitiveがすべて実装済み。
+
+    **これは「定義として成立した」という意味であって、「本番で使える」
+    という意味ではない**(指摘5)。本番利用の可否は
+    `ValidationOutcome.production_usable`が答える——Compiler接続と
+    描画確認まで揃って初めて`True`になる。""" 
 
     CANDIDATE = "candidate"
     """定義は妥当だが、必要なPrimitiveがまだ実装されていない。
@@ -106,14 +110,59 @@ class ValidationOutcome:
     missing_primitives: tuple[RuntimePrimitive, ...] = ()
     widget_types: tuple[str, ...] = field(default_factory=tuple)
 
-    @property
-    def usable(self) -> bool:
-        """Toolの生成に使ってよいか。
+    # --- 状態を1つのbooleanで表さない(指摘5の修正、2026-08-13)--------
+    #
+    # 以前は`usable`という1つのプロパティで
+    # 「定義として妥当」と「実際のTool生成に使える」を同時に表していた。
+    # `COMPOSED`なら`usable=True`になるため、**Compiler未接続・描画未確認の
+    # ものが「利用可能」と読める契約**になっていた。テスト自身が
+    # `compile_definition`の不在を確認しているのに、契約はそれと矛盾していた。
+    #
+    # 段階を分けて、それぞれ**別の根拠で**答えられるようにする。
+    # 曖昧な1語より、答えられないことを答えられないと示す方が安全である。
 
-        **`CANDIDATE`は`False`である**。必要なPrimitiveが実装されて
-        いないのに使えると答えると、「作れたふり」になる(§56)。
+    @property
+    def definition_valid(self) -> bool:
+        """定義の形式・参照が妥当か(拒否理由が無いか)。"""
+        return not self.rejections
+
+    @property
+    def primitives_available(self) -> bool:
+        """必要なRuntime Primitiveがすべて実装済みか。"""
+        return self.definition_valid and not self.missing_primitives
+
+    @property
+    def compiler_supported(self) -> bool:
+        """Compilerがこの定義を選んでForge Languageへ落とせるか。
+
+        **現時点では常に`False`**。定義を消費する経路(Solution Shape)が
+        まだ無い。ここを`True`にしてよいのは、実際に接続して
+        E2Eで確認した時だけである(TD58)。
         """
-        return self.trust is TrustLevel.COMPOSED
+        return False
+
+    @property
+    def runtime_verified(self) -> bool:
+        """この合成で実際に描画されることを確認したか。
+
+        **現時点では常に`False`**。個々のWidget(`bar_chart`等)の
+        描画実績はあるが、**この合成としての**描画は確認していない。
+        「部品が動くから合成も動くはず」は確認ではない。
+        """
+        return False
+
+    @property
+    def production_usable(self) -> bool:
+        """本番のTool生成に使ってよいか。
+
+        全段が揃って初めて`True`になる。**今はどの定義もここへ到達しない**
+        ——それが正しい状態である(§56の基準に照らして未達だから)。
+        """
+        return (
+            self.primitives_available
+            and self.compiler_supported
+            and self.runtime_verified
+        )
 
     def explain(self) -> str:
         if self.rejections:
@@ -121,7 +170,10 @@ class ValidationOutcome:
         if self.missing_primitives:
             names = "・".join(p.label_ja for p in self.missing_primitives)
             return f"定義は妥当だが、{names}がRuntimeに未実装のため使用できない"
-        return "既存Primitiveの合成として成立する"
+        return (
+            "既存Primitiveの合成として成立する"
+            "(ただしCompiler未接続・合成としての描画未確認のため、本番利用は不可)"
+        )
 
 
 # 1つの定義が参照してよいPrimitiveの上限。Capability爆発(§28)と、

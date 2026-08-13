@@ -24,6 +24,7 @@ Confirm判定が要る)。ファイルを3つに割ると、共有する型と�
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
 from app.ai.runtime.conversation_types import (
     ConversationAction,
@@ -38,6 +39,8 @@ from app.ai.runtime.conversation_types import (
 
 __all__ = [
     "ConfirmationDecision",
+    "ConversationPhase",
+    "select_phase",
     "escalate_question_strategy",
     "shrink_assumption_for",
     "user_delegated_decision",
@@ -435,3 +438,80 @@ def classify_build_failure(*, stage: str | None, sub_reason: str | None) -> bool
         # Provider側の一時障害。ユーザーに聞いても直らない。
         return False
     return bool(stage) and stage in _QUESTION_RECOVERABLE_STAGES
+
+
+# ---------------------------------------------------------------------------
+# Conversation Phase(FORGE-USER-GUIDED-SELF-EXTENSION-006 指摘1、2026-08-13)
+# ---------------------------------------------------------------------------
+
+
+class ConversationPhase(str, Enum):
+    """この会話ターンが、どの責任範囲に属するか。
+
+    **なぜ型として必要だったか(実バグの原因)**
+
+    Capability層を`ConversationEngine.step()`へ足したとき、優先順位を
+    「CONFIRMの後、ASKの前」という**コードの行の位置**で表現した。
+    その結果、Problem/NeedにBLOCKINGな未知が残っていても、Missing
+    Capabilityが検出されると仮説提示が先に出てしまった:
+
+        User    : 「地図で見たい」(what_to_record が BLOCKING)
+        期待    : 「何を記録したいですか？」
+        実際    : 「地図はまだ作れません。代わりに一覧なら…」
+
+    これは Problem Discovery → Need → Solution という Forge の順序に
+    反する。**まだ何を記録するかも分かっていない相手に、見せ方の
+    代替案を出していた。**
+
+    原因は「if文の順序を間違えた」ことではなく、**会話の局面という
+    概念がコード上に存在しなかった**ことである。位置に依存した優先順位は、
+    層が増えるたびに壊れる。順序をデータとして書けるようにする。
+
+    **優先順位の根拠**(単なる並び順ではない):
+
+    1. `SAFETY` — 危険な操作は、他の何よりも先に確認する。
+       会話の都合で後回しにしてよい理由が無い。
+    2. `HYPOTHESIS_REPLY` — 仮説を提示した直後の発話は、**その仮説への
+       返事**である。これを他の解釈に回すと、ユーザーは自分の「違う」が
+       無視されたと感じる。Needの不足より優先するのは、Forge自身が
+       直前に問いを出しているからである(問うた側が答えを聞かないのは
+       会話として破綻している)。
+    3. `PROBLEM_DISCOVERY` — 何を作るかが決まっていないなら、まず問題を
+       理解する。**解の話をする資格がまだ無い**。
+    4. `CAPABILITY_RESOLUTION` — 問題が分かって初めて、作れるかどうかを
+       確認する。
+    5. `BUILD` — 作る。
+    """
+
+    SAFETY = "safety"
+    HYPOTHESIS_REPLY = "hypothesis_reply"
+    PROBLEM_DISCOVERY = "problem_discovery"
+    CAPABILITY_RESOLUTION = "capability_resolution"
+    BUILD = "build"
+
+
+def select_phase(
+    readiness: ConversationReadiness,
+    *,
+    has_pending_hypothesis: bool,
+    has_blocking_unknown: bool,
+) -> ConversationPhase:
+    """この局面を決定的に選ぶ。LLMは関与しない。
+
+    `has_blocking_unknown`は`NeedModel.blocking_unknowns()`が空でないこと。
+    `readiness`が`NEEDS_QUESTION`でも、BLOCKINGでない未知(HIGH)なら
+    Capability解決を先に進めてよい——「何を記録するか」は決まっていて、
+    「家族と共有するか」だけが未決、という状況で見せ方の話を止める理由は
+    無いからである。
+    """
+    if readiness is ConversationReadiness.NEEDS_CONFIRMATION:
+        return ConversationPhase.SAFETY
+    if has_pending_hypothesis:
+        return ConversationPhase.HYPOTHESIS_REPLY
+    if has_blocking_unknown or readiness is ConversationReadiness.INSUFFICIENT_INFORMATION:
+        return ConversationPhase.PROBLEM_DISCOVERY
+    if readiness is ConversationReadiness.NEEDS_QUESTION:
+        # BLOCKINGではない未知が残っている状態。Capability解決を先に
+        # 通した上で、必要なら通常のASKへ落ちる。
+        return ConversationPhase.CAPABILITY_RESOLUTION
+    return ConversationPhase.CAPABILITY_RESOLUTION

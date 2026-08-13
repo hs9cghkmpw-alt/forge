@@ -13,12 +13,18 @@ ARCHITECTURE.md` Phase B)・ADR-014の実装。`has_existing_tool=True`
 
 from __future__ import annotations
 
-from app.ai.runtime.capability import CapabilityTurnKind, resolve_capability_turn
+from app.ai.runtime.capability import (
+    CapabilityTurn,
+    CapabilityTurnKind,
+    resolve_capability_turn,
+)
 from app.ai.runtime.conversation_policy import (
+    ConversationPhase,
     assumptions_for_unasked,
     detect_risk_signals,
     evaluate_readiness,
     resolve_action,
+    select_phase,
     user_delegated_decision,
 )
 from app.ai.runtime.conversation_types import (
@@ -340,15 +346,33 @@ class ConversationEngine:
         latest_user_text = next(
             (t.text for t in reversed(session.turns) if t.role == "user"), ""
         )
+        # どの局面のターンかを**先に決める**(指摘1の修正、2026-08-13)。
+        # 以前はCapability層を「CONFIRMの後、ASKの前」という**行の位置**で
+        # 差し込んでいたため、Problem/NeedにBLOCKINGな未知が残っていても
+        # 仮説提示が先に出ていた(「地図で見たい」だけで何を記録するかが
+        # 未定なのに、見せ方の代替案を返していた)。優先順位はコードの
+        # 位置ではなく`select_phase()`が決める。
+        phase = select_phase(
+            decision.readiness,
+            has_pending_hypothesis=session.current_hypothesis is not None,
+            has_blocking_unknown=bool(need_model.blocking_unknowns()),
+        )
+
         # **Stateful**であることが前回との決定的な違いである
         # (FORGE-USER-GUIDED-SELF-EXTENSION-006 §11-13)。以前は毎回
         # 最新発話だけから仮説を作り直しており、訂正されていない層の
         # 文脈が失われていた(実測で再現済み)。今は前回の仮説を渡し、
         # 「それへの訂正」として解釈する。
-        capability_turn = resolve_capability_turn(
-            latest_user_text,
-            session.current_hypothesis,  # type: ignore[arg-type] — SolutionHypothesis | None
-            session.asked_question_keys,
+        capability_turn = (
+            resolve_capability_turn(
+                latest_user_text,
+                session.current_hypothesis,  # type: ignore[arg-type] — SolutionHypothesis | None
+                session.asked_question_keys,
+            )
+            if phase in (
+                ConversationPhase.HYPOTHESIS_REPLY, ConversationPhase.CAPABILITY_RESOLUTION
+            )
+            else CapabilityTurn(CapabilityTurnKind.NONE)
         )
         correction_target = (
             capability_turn.target.value if capability_turn.target is not None else None

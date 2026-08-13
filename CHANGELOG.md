@@ -2,6 +2,42 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task070 — CEOレビュー指摘6件の修正(2026-08-13、FORGE-USER-GUIDED-SELF-EXTENSION-006 レビュー)
+
+いずれも**再現してから**原因を特定した。5件は「症状」ではなく
+**構造上の誤り**が原因だった。
+
+1. **会話Phaseの不在**: Capability層を「CONFIRMの後、ASKの前」という
+   **行の位置**で差し込んでいたため、BLOCKINGな未知が残っていても仮説が
+   先に出た。`ConversationPhase` + `select_phase()`を新設し、優先順位を
+   SAFETY → HYPOTHESIS_REPLY → PROBLEM_DISCOVERY → CAPABILITY → BUILD
+   としてデータで表現した。
+2. **導出値をフィールドに保存していた**: `missing`を保存し部分更新して
+   いたため、訂正していない層のMissingが消えた。プロパティ化して層から
+   毎回導出する——更新漏れという不具合の形そのものを無くした。
+3. **語の出現と変更意図の混同**: 「うん、地図でいい」の「地図」は合意の
+   対象であって変更要求ではない。stance(否定/肯定)→ 対比 → 対象、の
+   3段階へ再設計。ACCEPT判定を先頭へ動かすだけでは
+   「うん、でも地図じゃなくて一覧がいい」を取りこぼす。
+4. **Semantic Architectureの状態表記**: TRANSFORM/ENCODINGは分解にのみ
+   使われ、訂正の対象にできない。「移行済み」ではなく
+   「補助的PoCとして接続済み」へ訂正(v2 §21-bis)。
+5. **`usable`が強すぎた**: 「定義として妥当」と「本番で使える」を1語で
+   表していた。`definition_valid` / `primitives_available` /
+   `compiler_supported` / `runtime_verified` / `production_usable`へ分離。
+   **今はどの定義もproduction_usableへ到達しない**。
+6. **`blocking_missing`の混同**: 「要求どおり作れない」と「何も出せない」を
+   混ぜていた。`satisfiable_exactly` / `renderable_at_all` /
+   `fallback_possible`へ分離。
+
+**Documentation drift**: STATUS/TD55の「Capability自動追加=不採用」は、
+v2の「Product Goalは捨てない」と矛盾していた。撤回対象を
+「実行中のDart注入」に限定して書き直した。「地理描画だけが本当に無い」も
+不正確(4つとも未実装、違うのは種類)だったため精密化した。
+
+**テスト**: forge_ai 521 / backend 852(skip 13) / Flutter 455、analyze 0件。
+指摘1〜3・5・6それぞれに回帰テストを追加した。
+
 ## Task069 — Stateful User Correction / Semantic Capability / Declarative Extension(2026-08-13、FORGE-USER-GUIDED-SELF-EXTENSION-006)
 
 **Architecture Review v2**(`docs/spec/FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md`):

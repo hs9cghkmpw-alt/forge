@@ -44,7 +44,9 @@
 | Stateful User Correction | 動作 | 前回の仮説を保持し、訂正された層だけ差し替える |
 | Semantic Capability分解 | 動作 | `semantic_capability.py`。不足を種類ごとに特定する |
 | Declarative Capability定義 | 検証まで | `capability_definition.py`。**Runtime利用は不可**(§17) |
-| Capability自動追加 | **不採用** | Flutterが動的コード実行不可。`FORGE-SELF-EXTENSION-ARCH-REVIEW.md` §5 |
+| Self-Extension(能力獲得) | **目標として継続** | 定義は`FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md` §2。到達は「表現→検証」まで |
+| └ 実行中のDartコード注入 | **不採用** | Flutterが動的コード実行不可。これは技術的事実 |
+| └ 宣言的Capability定義 | 検証まで | 既存Primitiveの合成をデータとして追加。Runtime利用は不可 |
 | 模擬出力の明示 | 動作 | `simulated`フィールド + Flutter側のバナー/バッジ |
 | Voice(STT/TTS) | 未接続 | Adapterとして後から足せる構造は維持 |
 
@@ -53,7 +55,7 @@
 | 対象 | 件数 | 状態 |
 |---|---|---|
 | `forge_ai/tests` | 521 | 全green |
-| `backend/tests` | 840 | 全green(skip 13) |
+| `backend/tests` | 852 | 全green(skip 13) |
 | `frontend`(Flutter) | 455 | 全green |
 | `flutter analyze` | 0件 | 2026-08-13にwarning/info含めて0へ(以前は77件) |
 
@@ -74,9 +76,14 @@
 * Declarative Capability定義は**検証までで、Runtime利用は不可**。
   `transform.aggregate`がRuntime未実装のため、今描くと「作れたふり」に
   なる(`FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md` §17・§19)。
-* 地図・カレンダー・集計・並べ替えはPrimitiveとして未実装。ただし
-  **何が足りないかは種類ごとに言える**(「heatmapが無い」ではなく
-  「集計と濃淡と地理描画のうち、地理描画だけが本当に無い」)。
+* 「地図で濃淡」に必要な4つのPrimitive(`data.geo` / `transform.aggregate` /
+  `encoding.color_intensity` / `view.spatial`)は**いずれも未実装**である。
+  ただし性質が違う: **新しい描画の実装が要るのは`view.spatial`だけ**で、
+  残る3つはデータ変換・表示パラメータ・データ型であり、既存の描画
+  (`bar_chart`等)の上で成立する。「何が足りないかを種類ごとに言える」
+  とは、この違いを言えるという意味である。
+* 同じ困りごと(「よく釣れる場所を知りたい」)に対して、地図表現は
+  4個先、集計表現は**1個先**(`transform.aggregate`のみ)。
 * 共有・通知などのEffect Capabilityは**確認は取るが、実装が無い**。
   確認文を「できないこと」に合わせて書き換えるのは、指示書001 §4で
   定めたCONFIRMの意味を変えるため、今回のVertical Sliceの範囲外とした

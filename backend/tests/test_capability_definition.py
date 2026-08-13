@@ -58,7 +58,8 @@ class TestBeforeAndAfter(unittest.TestCase):
         利用可能と判定される。**新しい実行コードは1行も無い**。"""
         outcome = validate_definition(_RANKED_LIST)
         self.assertIs(outcome.trust, TrustLevel.COMPOSED)
-        self.assertTrue(outcome.usable)
+        self.assertTrue(outcome.definition_valid)
+        self.assertTrue(outcome.primitives_available)
         self.assertEqual(outcome.rejections, ())
 
     def test_after_it_names_real_widgets_that_the_runtime_renders(self) -> None:
@@ -107,7 +108,8 @@ class TestSafetyGates(unittest.TestCase):
         ))
         self.assertIs(outcome.trust, TrustLevel.REJECTED)
         self.assertEqual(outcome.rejections[0].code, "unknown_primitive")
-        self.assertFalse(outcome.usable)
+        self.assertFalse(outcome.definition_valid)
+        self.assertFalse(outcome.production_usable)
 
     def test_effects_cannot_be_acquired_by_composition(self) -> None:
         """§8: 外部作用は「合成したら手に入る」ものではない。
@@ -127,7 +129,9 @@ class TestSafetyGates(unittest.TestCase):
             primitive_ids=("transform.aggregate", "view.bars", "encoding.length"),
         ))
         self.assertIs(outcome.trust, TrustLevel.CANDIDATE)
-        self.assertFalse(outcome.usable, "未実装Primitiveを含むのに使用可能になっている")
+        self.assertTrue(outcome.definition_valid, "定義そのものは妥当なはず")
+        self.assertFalse(outcome.primitives_available, "未実装Primitiveを含むのに利用可能になっている")
+        self.assertFalse(outcome.production_usable)
         self.assertEqual([p.id for p in outcome.missing_primitives], ["transform.aggregate"])
         self.assertIn("未実装", outcome.explain())
 
@@ -156,6 +160,46 @@ class TestSafetyGates(unittest.TestCase):
             id="composed.nothing", label_ja="空", primitive_ids=(),
         ))
         self.assertIs(outcome.trust, TrustLevel.REJECTED)
+
+
+class TestStagedContract(unittest.TestCase):
+    """指摘5の回帰テスト(2026-08-13)。
+
+    「定義として妥当」と「本番のTool生成に使える」を、1つの`usable`で
+    表していたため、Compiler未接続・描画未確認のものが「利用可能」と
+    読める契約になっていた。段階を分け、**今はどれも本番利用不可**で
+    あることを固定する。
+    """
+
+    def test_composed_is_not_production_usable(self) -> None:
+        outcome = validate_definition(_RANKED_LIST)
+        self.assertIs(outcome.trust, TrustLevel.COMPOSED)
+        self.assertTrue(outcome.primitives_available)
+        self.assertFalse(outcome.compiler_supported, "Compiler未接続なのにTrueになっている")
+        self.assertFalse(outcome.runtime_verified, "合成としての描画は未確認")
+        self.assertFalse(
+            outcome.production_usable,
+            "COMPOSEDが本番利用可能と読める契約に戻っている(指摘5の再発)",
+        )
+
+    def test_explanation_states_the_limitation(self) -> None:
+        """説明文自体が、本番利用不可であることを述べること。"""
+        self.assertIn("本番利用は不可", validate_definition(_RANKED_LIST).explain())
+
+    def test_no_definition_is_production_usable_yet(self) -> None:
+        """どの定義も、現時点では本番利用へ到達しない。"""
+        from app.ai.runtime.semantic_capability import PRIMITIVE_REGISTRY
+
+        implemented_views = [
+            p.id for p in PRIMITIVE_REGISTRY.values()
+            if p.implemented and p.kind.value == "view"
+        ]
+        for view_id in implemented_views:
+            outcome = validate_definition(CapabilityDefinition(
+                id=f"composed.{view_id}", label_ja="試験", primitive_ids=(view_id,),
+            ))
+            with self.subTest(view=view_id):
+                self.assertFalse(outcome.production_usable)
 
 
 class TestDeterminism(unittest.TestCase):
