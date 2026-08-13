@@ -2624,3 +2624,75 @@ Homeへ抜ける。会話内容も保持される。
 
 **Regression test**: `conversation_flow_screen_test.dart`へ
 「Tool → 戻る → Conversation復帰 + 会話内容保持」を追加(§34)。
+
+---
+
+## TD54. Mockの出力がProduction UXへ、模擬と分からないまま出ていた → **解消(2026-08-13)**
+
+FORGE-HANDOFF-LOCAL-AI-UX-004 §9 / §35 でCEO実機報告。
+
+**症状**: 生成されたチェックリストに`mock_result` `plan` `title` `screens`が
+項目として並び、会話でも「mock resultがあると楽そう」と表示された。
+さらに確認文が「「Shopping」「Diary」「Generic」のどちらに近いか」だった。
+
+**別々の3つの欠陥が重なっていた**(1つの問題に見えていたが違った):
+
+1. **Mockの品質**: `MockLLMAdapter`が文字列フィールドを全て`"mock_result"`で
+   埋めていた。ユーザーの実発話から、決定的にもっともらしい日本語を組み立てる
+   ようにした(買い物→牛乳・卵・パン)。話題キーワードの照合を**プロンプト
+   全体**に対して行うのが要点である——compile段のプロンプトには生の発話が
+   無く、発話だけを見ると常に既定値へ落ちる(実行して確認した)。
+2. **内部識別子の露出**: `Domain.display_name`はプロンプト用の英語IDであり、
+   ユーザーへ見せる語ではなかった。`label_ja` / `user_facing_name`を追加。
+   GENERICは「どれにも当てはまらなかった」という内部の受け皿なので候補から
+   除外し、3候補に対する「どちら」も「どれ」へ直した。
+3. **タイトルが説明文だった(Provider非依存の実バグ)**: `/converse`導入後、
+   Cognitive Pipelineへ渡るのは`build_brief`(Forgeが書いた説明文)である。
+   `Intent.goal`はそこから導出されるため、アプリ名が
+   「買い物で何買うかを記録・管理するための道具」になっていた。**Geminiでも
+   同じ問題が起きていた**。`title_seed`(既にこの目的で存在していた仕組み)へ
+   ユーザー自身の言葉を渡すようにした。Domain判定は引き続き全文を使う。
+
+**Silent Mock fallbackの禁止(§9)**: 既定Providerが無条件に`"mock"`だった
+ため、`GEMINI_API_KEY`設定済みの環境でも、Provider名を送らないクライアント
+(Flutterは送っていない)には黙ってMockが返っていた。**CEOが実機でMockを
+見たのはこれが原因である**。`default_provider_name()`を
+`FORGE_DEFAULT_PROVIDER` → `GEMINI_API_KEY`があれば`gemini` → `mock`
+の順に変更した。加えて、レスポンスが`provider`・`simulated`を自己申告し、
+Flutter側が会話バナーと生成Toolのバッジで明示する。
+**Mockの品質を上げること自体はこの問題の解決ではない——模擬であることが
+分かることが解決である。**
+
+**副作用として見つかったもの**: `app.main`が`backend/.env`を読むため、
+既定変更後はテストが実Gemini APIを呼び始めた(全体110秒・4件失敗)。
+`backend/tests/conftest.py`で`FORGE_DEFAULT_PROVIDER=mock`を固定した(4秒)。
+
+---
+
+## TD55. Capability自動追加は採用しない(代わりにMissing Capability検出を実装) → **判断確定(2026-08-13)**
+
+FORGE-ARCHITECTURE-REVIEW-AND-IMPLEMENT-005 §12 / §32。
+詳細は`docs/spec/FORGE-SELF-EXTENSION-ARCH-REVIEW.md`。
+
+**採用しなかったもの**: AIがCapability(Widget)を生成して自己拡張する方式。
+Flutterは動的コード実行ができない(Web/AOTとも`dart:mirrors`不可、
+生成後の再コンパイルが必須)ため、**現行Runtime構成では物理的に成立しない**。
+成立させるにはValidator・Runtime・Registryの三重同期を毎回AIに任せることに
+なり、TD37(登録漏れで4種のWidgetが描画不能だった実バグ)の再来になる。
+
+**代わりに実装したもの**(`backend/app/ai/runtime/capability.py`):
+静的なCapability Registryを3層(Data / View / Effect)で持ち、
+「地図で見たい」のような**作れないもの**を検出したら、作れないことを
+名指しした上で作れる形を仮説として提示し、訂正を受け取る。
+
+**残っている負債**:
+
+* Effect Capability(共有・通知・カメラ等)は**確認は取るが実装が無い**。
+  確認文自体を「できないこと」に合わせて書き換えるのは指示書001 §4で
+  定めたCONFIRMの意味を変えるため、今回の範囲外とした。
+* `detection_keywords`は手書きの固定リストであり、形態素解析ではない。
+  検出漏れは「今までどおりの経路」に落ちるだけだが、言い回しによっては
+  地図要求を見逃す。
+* Registryを増やす際は**Validator・Runtime・`capability.py`の3箇所**を
+  同時に更新する必要がある(テストで機械的に検出できるのは
+  `capability.py`側の嘘だけである)。

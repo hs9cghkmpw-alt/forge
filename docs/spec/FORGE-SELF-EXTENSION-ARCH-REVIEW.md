@@ -243,3 +243,57 @@ Missing Capability Detection
 **Missing Capability Detection + User Correction Loopは投入可**。
 既存経路に触れず、MISSINGが無ければ現状と同一挙動であるため、
 リスクは「MISSINGの誤検出」に限定され、それは回帰テストで抑えられる。
+
+---
+
+## 11. 実装結果(2026-08-13追記)
+
+§7のVertical Sliceを実装した。実体は
+`backend/app/ai/runtime/capability.py`、テストは
+`backend/tests/test_capability.py`(28件)。
+
+### 実装したもの
+
+| §9のMigration Plan | 状態 |
+|---|---|
+| 1. Capability Registry(静的、3層) | 完了。22定義(実装済み9 / 未実装13) |
+| 2. CapabilityResolver(MISSING検出) | 完了。`detect_capabilities` / `missing_capabilities` |
+| 3. SolutionHypothesis + 会話ターン | 完了。`ConversationEngine.step()`へ接続済み |
+| 4. CorrectionTarget分類 + 更新 | 完了。DATA/VIEW/EFFECT/PROBLEM/ACCEPTED/UNCLEAR |
+| 5. Golden Conversation | 完了。§33(釣果→地図→「色を濃く」→heatmap) |
+
+### 実装して分かったこと(設計の修正)
+
+**安全判定とCapability判定の順序を決める必要があった**(§6には書いて
+いなかった)。50セッションを実際に流したところ、MISSINGが出たのは3件
+(`schedule_shared`・`share_1`・`risky_1`)で、いずれも共有要求だった。
+これらは既存のCONFIRM Policyが捕まえている——Capability層も割り込むと、
+確認と仮説が二重に出て会話が壊れる。
+
+そこで`has_buildable_gap()`を追加し、**MISSINGがEffectだけの場合は
+会話に割り込まない**ようにした。結果として、既存50セッションの挙動は
+**1件も変わらない**(回帰テストで固定済み)。§6の「MISSINGが無ければ
+今と同じ」という要件は、実際には「Data/ViewのMISSINGが無ければ今と同じ」
+だった。
+
+**訂正の再提示をどう1回に抑えるか**も、実装して初めて具体化した。
+既存の`asked_question_keys`(同じUnknownを繰り返し聞かない仕組み)へ
+`capability_gap:view.map`のようなkeyを入れることで解決した。訂正で
+不足が`view.heatmap`へ変わると別keyになるため、訂正後の仮説はちゃんと
+1回だけ提示される。上限3回でF2(「違う」ループ)も塞がる。
+
+### §10(Production投入可否)への回答は変えない
+
+Missing Capability Detection + User Correction Loopは投入可。
+Self-Extension(Capability自動追加)は§5のとおり投入しない。
+
+### 残った正直な制限
+
+* Effect Capabilityは**確認は取るが実装が無い**(共有・通知・カメラ等)。
+  確認文を「できないこと」に合わせて書き換えるのは指示書001 §4で定めた
+  CONFIRMの意味を変えるため、このSliceの範囲外とした(TD55)。
+* `detection_keywords`は手書きの固定リストである。検出漏れは「今までどおり
+  の経路」に落ちるだけだが、言い回しによっては地図要求を見逃す。
+* Registryを増やす際はValidator・Runtime・`capability.py`の3箇所を同時に
+  更新する必要がある。テストが機械的に検出できるのは`capability.py`側の
+  嘘(`supported=True`なのにWidget型が存在しない等)だけである。

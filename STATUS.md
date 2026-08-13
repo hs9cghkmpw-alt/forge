@@ -3,7 +3,7 @@
 現在のForgeが「どこまで動くか」を一枚で示す。詳細な履歴は`CHANGELOG.md`、
 未解消の課題は`TECH_DEBT.md`・`KNOWN_ISSUES.md`を参照。
 
-**最終更新**: 2026-08-12(FORGE-CONVERSATION-READY-001)
+**最終更新**: 2026-08-13(FORGE-HANDOFF-LOCAL-AI-UX-004 / FORGE-ARCHITECTURE-REVIEW-AND-IMPLEMENT-005)
 
 > このファイルはFORGE-CONVERSATION-READY-001指示書15章の要請で新設した。
 > それ以前は同等の役割を`KNOWN_ISSUES.md`と各`*-report.md`が分担しており、
@@ -40,15 +40,25 @@
 | Local Provider | 実装済/未実測 | OpenAI互換。実モデル未実行(環境制約) |
 | Provider Benchmark | 動作 | Impact分類16ケース。harness実行確認済み |
 | Scripted Conversation Set | 動作 | 50セッション。平均質問1.20/繰り返し0/未決着0 |
+| Capability検出 / 仮説提示 | 動作 | `capability.py`。作れないものを名指しし、作れる形を出す |
+| Capability自動追加 | **不採用** | Flutterが動的コード実行不可。`FORGE-SELF-EXTENSION-ARCH-REVIEW.md` §5 |
+| 模擬出力の明示 | 動作 | `simulated`フィールド + Flutter側のバナー/バッジ |
 | Voice(STT/TTS) | 未接続 | Adapterとして後から足せる構造は維持 |
 
 ## テスト
 
 | 対象 | 件数 | 状態 |
 |---|---|---|
-| `forge_ai/tests` | 519 | 全green |
-| `backend/tests` | 773 | 全green(skip 13) |
-| `frontend`(Flutter) | 451 | 全green、`flutter analyze` 0エラー |
+| `forge_ai/tests` | 521 | 全green |
+| `backend/tests` | 802 | 全green(skip 13) |
+| `frontend`(Flutter) | 455 | 全green |
+| `flutter analyze` | 0件 | 2026-08-13にwarning/info含めて0へ(以前は77件) |
+
+> 2026-08-13訂正: このセクションは以前「Flutter 451 / analyze 0エラー」と
+> 書いていた。件数が古かったのに加えて、**「0エラー」は正確ではあっても
+> 誤解を招く書き方**だった——errorは0だが、warning/infoが77件残っていた
+> (CEO実機のFlutter 3.44.7でも77件と報告された)。同じSDK(3.44.9)を
+> 用意して実際に走らせ、77件すべてを解消した上でこの行を書き直している。
 
 ## 分かっている制限
 
@@ -58,6 +68,12 @@
 * **Local Modelを実モデルで一度も動かせていない**(TD51)。サンドボックスは
   `huggingface.co`がネットワークポリシーで拒否・GPU無しのため、モデル重みを
   取得できない。手順は`docs/development/LOCAL_MODEL_SETUP.md`。
+* 共有・通知などのEffect Capabilityは**確認は取るが、実装が無い**。
+  確認文を「できないこと」に合わせて書き換えるのは、指示書001 §4で
+  定めたCONFIRMの意味を変えるため、今回のVertical Sliceの範囲外とした
+  (`capability.py`の`has_buildable_gap()`参照)。
+* 地図・カレンダー・写真・折れ線は**検出できるが作れない**。会話では
+  作れないことを名指しし、作れる形を提示する(黙って別物を作らない)。
 * Gemini依存が`schemas/ai.py`の`Literal["mock","gemini"]`(3箇所)に残る
   (HTTP APIの許可リスト。Local公開はBenchmark後の判断)。
 * `todo`・`reading_log`はDomainCategory enumに無く、分類から到達不可能

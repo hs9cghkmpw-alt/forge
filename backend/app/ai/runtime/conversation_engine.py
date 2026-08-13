@@ -13,6 +13,7 @@ ARCHITECTURE.md` Phase B)・ADR-014の実装。`has_existing_tool=True`
 
 from __future__ import annotations
 
+from app.ai.runtime.capability import next_capability_turn
 from app.ai.runtime.conversation_policy import (
     assumptions_for_unasked,
     detect_risk_signals,
@@ -319,6 +320,34 @@ class ConversationEngine:
                 confirm_reason=decision.confirm_reason,
                 question=str(raw.get("question") or "").strip() or None,
                 build_brief=str(raw.get("build_brief") or "").strip() or _fallback_brief(session),
+            )
+
+        # FORGE-ARCHITECTURE-REVIEW-AND-IMPLEMENT-005 §32 Vertical Slice
+        # (`capability.py`、`docs/spec/FORGE-SELF-EXTENSION-ARCH-REVIEW.md`)。
+        #
+        # 「地図で見たい」のように、**Forgeがまだ作れないもの**を頼まれた
+        # 場合、黙って別のものを作らない。作れないことを名指しした上で、
+        # 作れる形を仮説として提示し、訂正を受け取る。
+        #
+        # 位置が重要である:
+        #
+        # * CONFIRMより**後**。安全判定が先で、Capabilityの話は後
+        #   (共有・削除は既存のCONFIRM Policyが捕まえる。両方が割り込むと
+        #   確認と仮説が二重に出る。`has_buildable_gap()`参照)。
+        # * MISSINGが無ければ`None`が返り、**以降は今までと完全に同じ**。
+        #   50セッションのScripted Conversation Setで、挙動が1件も
+        #   変わらないことを回帰確認している(`tests/test_capability.py`)。
+        latest_user_text = next(
+            (t.text for t in reversed(session.turns) if t.role == "user"), ""
+        )
+        capability_turn = next_capability_turn(latest_user_text, session.asked_question_keys)
+        if capability_turn is not None:
+            message, capability_key = capability_turn
+            return ConversationStepResult(
+                action=ConversationAction.ASK, need_model=need_model,
+                readiness=ConversationReadiness.NEEDS_QUESTION,
+                question=message, question_key=capability_key,
+                strategy=QuestionStrategy.ASK,
             )
 
         if action == ConversationAction.ASK:

@@ -2,6 +2,52 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task068 — Mock品質・Silent Mock禁止・Capability検出(2026-08-13、FORGE-HANDOFF-LOCAL-AI-UX-004 §9/§35 / FORGE-ARCHITECTURE-REVIEW-AND-IMPLEMENT-005 §32)
+
+**Mock品質(§35)**: `MockLLMAdapter`が全ての文字列を`"mock_result"`で
+埋めていたため、生成Toolのチェックリストに`mock_result` `plan` `screens`が
+項目として並んでいた。ユーザーの実発話から決定的にもっともらしい日本語を
+組み立てるようにした(買い物→牛乳・卵・パン)。話題照合は**プロンプト全体**に
+対して行う——compile段のプロンプトには生の発話が無いため(実行して確認)。
+
+**内部識別子の露出**: 確認文が「「Shopping」「Diary」「Generic」のどちらに
+近いか」だった。`Domain.label_ja`/`user_facing_name`を追加し、GENERIC
+(内部の受け皿)を候補から除外、3候補への「どちら」を「どれ」へ修正。
+
+**タイトルが説明文だった(Provider非依存の実バグ)**: `/converse`導入後、
+Pipelineへ渡るのは`build_brief`(Forgeが書いた説明文)なので、`Intent.goal`
+経由でアプリ名が「買い物で何買うかを記録・管理するための道具」になっていた。
+Geminiでも同じ問題が起きていた。既存の`title_seed`へユーザー自身の言葉を
+渡すようにした(Domain判定は引き続き全文を使う)。
+
+**Silent Mock fallbackの禁止(§9)**: 既定Providerが無条件に`"mock"`だった
+ため、`GEMINI_API_KEY`設定済みでもProvider名を送らないクライアント
+(Flutterは送っていない)へ黙ってMockを返していた——**実機でMockが出た
+原因はこれ**。既定解決を`FORGE_DEFAULT_PROVIDER`→`gemini`→`mock`へ変更し、
+レスポンスが`provider`/`simulated`を自己申告、Flutter側がバナーとバッジで
+明示する。Mockの品質向上はこの問題の解決ではなく、**模擬と分かること**が
+解決である(TD54)。
+
+**Capability Vertical Slice(005 §32)**: 「地図で見たい」のような作れない
+要求を検出し、作れないことを名指しした上で作れる形を仮説として提示、訂正を
+CorrectionTarget(DATA/VIEW/EFFECT/PROBLEM)で分類する層を追加
+(`capability.py`)。**Capability自動追加は採用しない**——Flutterが動的
+コード実行不可のため物理的に成立しない(TD55、`FORGE-SELF-EXTENSION-ARCH-REVIEW.md`)。
+安全判定(CONFIRM)が先、Capabilityの話は後という順序を明示的に固定した。
+既存50セッションで挙動が1件も変わらないことを回帰確認済み。
+
+**flutter analyze 77件 → 0件**: 同じSDK(3.44.9)を用意して実際に走らせた。
+`dart fix`で17件、strict-inference由来の未型付けリテラル57件、
+speech_to_text 7.xの`localeId`非推奨1件、他2件。
+
+**Python環境(§004)**: `requirements.txt`に対応Python(>=3.11,<3.13)と
+その理由(pydantic 2.7.4 / supabase 2.5.1が3.13のwheelを出していない)を
+記録。`verify.ps1`は範囲内のインタプリタを選び、依存インストールが失敗
+したらbackendテストへ進まない(import errorの山をテスト失敗として報告しない)。
+
+**テスト**: forge_ai 521 / backend 802(skip 13) / Flutter 455、
+`flutter analyze` 0件。
+
 ## Task067 — TD45解消・ASK Loop対策・Model Gateway(2026-08-12、FORGE-QUALITY-AI-INDEPENDENCE-003)
 
 **Phase B(TD45)**: Domain Resolutionが「Curated定義が存在する」だけで

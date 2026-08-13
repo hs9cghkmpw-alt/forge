@@ -189,8 +189,15 @@ class _ConversationFlowScreenState extends ConsumerState<ConversationFlowScreen>
   void _handleConversationOutcome(ConversationOutcome outcome) {
     // 模擬出力かどうかは、どの結果種別でも同じように記録する
     // (§9: Mockであることを黙って隠さない)。
-    if (outcome.simulated != _simulated) {
-      setState(() => _simulated = outcome.simulated);
+    //
+    // **一度trueになったらfalseへ戻さない**。模擬かどうかは会話の
+    // 1ターンの性質ではなく、そのセッションが使っているProviderの
+    // 性質だからである。実際、Cognitive Pipeline側が確認を求めた場合の
+    // `ConversationFallbackConfirmation`はこのフィールドを持たない
+    // (`/generate`と共有のレスポンス型)ため、素直に代入すると会話の
+    // 途中でバナーが消える——実際にHTTPで流して確認した。
+    if (outcome.simulated && !_simulated) {
+      setState(() => _simulated = true);
     }
     switch (outcome) {
       case ConversationAsk(:final sessionId, :final question):
