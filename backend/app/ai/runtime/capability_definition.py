@@ -49,6 +49,7 @@ from app.ai.runtime.semantic_capability import (
 __all__ = [
     "CapabilityDefinition",
     "DefinitionRejected",
+    "ExecutionReadiness",
     "TrustLevel",
     "ValidationOutcome",
     "validate_definition",
@@ -56,25 +57,54 @@ __all__ = [
 
 
 class TrustLevel(str, Enum):
-    """生成物と長期検証済みCoreを同じ扱いにしない(§25、v2 §10)。"""
+    """**誰が作ったものとして、どれだけ信頼できるか**(§25、v2 §10)。
+
+    FORGE-CONVERSATION-FOUNDATION-007 §17の指摘に対応して、
+    **信頼度と実行可否を別の軸へ分けた**(2026-08-13)。
+
+    以前はこのenumに`CANDIDATE`(=必要なPrimitiveが未実装)が混ざって
+    いた。これは信頼度ではなく**実行可否**である。同じenumへ詰めると、
+    「人間が書いた定義だが実装が足りない」と「AIが生成した定義で実装は
+    揃っている」を1つの値で表せなくなる——実際には独立に起こりうる。
+
+    実行可否は`ExecutionReadiness`が答える。
+    """
 
     CORE = "core"
     """人間が実装し、長期運用されているもの。"""
 
     COMPOSED = "composed"
-    """既存Primitiveの合成のみで、必要なPrimitiveがすべて実装済み。
+    """既存Primitiveの合成のみで表される。**新しい実行コードを1行も
+    含まない**ため、生成物であってもリスクが小さい。
 
-    **これは「定義として成立した」という意味であって、「本番で使える」
-    という意味ではない**(指摘5)。本番利用の可否は
-    `ValidationOutcome.production_usable`が答える——Compiler接続と
-    描画確認まで揃って初めて`True`になる。""" 
-
-    CANDIDATE = "candidate"
-    """定義は妥当だが、必要なPrimitiveがまだ実装されていない。
-    **利用不可**。何が足りないかを記録しておくためだけに存在する。"""
+    **これは信頼度の話であって、「本番で使える」という意味ではない。**
+    実行可否は`ValidationOutcome.readiness`を見ること。"""
 
     REJECTED = "rejected"
-    """検証に落ちた。利用不可。"""
+    """検証に落ちた。信頼できない。"""
+
+
+class ExecutionReadiness(str, Enum):
+    """**どこまで実際に動かせるか**(§16 / §17)。
+
+    信頼度とは独立の軸である。段は積み上がりで、下の段が成立しないと
+    上の段は成立しない。
+    """
+
+    INVALID = "invalid"
+    """定義そのものが妥当でない。"""
+
+    DEFINED = "defined"
+    """定義は妥当。ただし必要なPrimitiveが揃っていない。"""
+
+    PRIMITIVES_READY = "primitives_ready"
+    """必要なPrimitiveがすべて実装済み。**まだCompilerが選べない**。"""
+
+    COMPILABLE = "compilable"
+    """Compilerがこの定義からForge Languageを生成できる。"""
+
+    RUNTIME_VERIFIED = "runtime_verified"
+    """その合成で実際に描画されることを確認した。ここで初めて本番利用可。"""
 
 
 @dataclass(frozen=True)
@@ -106,6 +136,11 @@ class DefinitionRejected:
 class ValidationOutcome:
     definition: CapabilityDefinition
     trust: TrustLevel
+    """**誰が作ったものとしてどれだけ信頼できるか**。実行可否とは別軸。"""
+
+    readiness: ExecutionReadiness = ExecutionReadiness.INVALID
+    """**どこまで実際に動かせるか**。信頼度とは別軸(§17)。"""
+
     rejections: tuple[DefinitionRejected, ...] = ()
     missing_primitives: tuple[RuntimePrimitive, ...] = ()
     widget_types: tuple[str, ...] = field(default_factory=tuple)
@@ -124,22 +159,28 @@ class ValidationOutcome:
     @property
     def definition_valid(self) -> bool:
         """定義の形式・参照が妥当か(拒否理由が無いか)。"""
-        return not self.rejections
+        return self.readiness is not ExecutionReadiness.INVALID
 
     @property
     def primitives_available(self) -> bool:
         """必要なRuntime Primitiveがすべて実装済みか。"""
-        return self.definition_valid and not self.missing_primitives
+        return self.readiness in (
+            ExecutionReadiness.PRIMITIVES_READY,
+            ExecutionReadiness.COMPILABLE,
+            ExecutionReadiness.RUNTIME_VERIFIED,
+        )
 
     @property
     def compiler_supported(self) -> bool:
         """Compilerがこの定義を選んでForge Languageへ落とせるか。
 
-        **現時点では常に`False`**。定義を消費する経路(Solution Shape)が
-        まだ無い。ここを`True`にしてよいのは、実際に接続して
-        E2Eで確認した時だけである(TD58)。
+        **現時点ではどの定義も到達しない**。定義を消費する経路
+        (Solution Shape)がまだ無いためである。ここが`True`になるのは、
+        実際に接続してE2Eで確認した時だけである(TD58)。
         """
-        return False
+        return self.readiness in (
+            ExecutionReadiness.COMPILABLE, ExecutionReadiness.RUNTIME_VERIFIED
+        )
 
     @property
     def runtime_verified(self) -> bool:
@@ -149,7 +190,7 @@ class ValidationOutcome:
         描画実績はあるが、**この合成としての**描画は確認していない。
         「部品が動くから合成も動くはず」は確認ではない。
         """
-        return False
+        return self.readiness is ExecutionReadiness.RUNTIME_VERIFIED
 
     @property
     def production_usable(self) -> bool:
@@ -158,11 +199,7 @@ class ValidationOutcome:
         全段が揃って初めて`True`になる。**今はどの定義もここへ到達しない**
         ——それが正しい状態である(§56の基準に照らして未達だから)。
         """
-        return (
-            self.primitives_available
-            and self.compiler_supported
-            and self.runtime_verified
-        )
+        return self.readiness is ExecutionReadiness.RUNTIME_VERIFIED
 
     def explain(self) -> str:
         if self.rejections:
@@ -203,7 +240,9 @@ def validate_definition(definition: CapabilityDefinition) -> ValidationOutcome:
         rejections.append(DefinitionRejected(
             "unknown_primitive", f"Registryに存在しないPrimitive: {', '.join(unknown)}"
         ))
-        return ValidationOutcome(definition, TrustLevel.REJECTED, tuple(rejections))
+        return ValidationOutcome(
+            definition, TrustLevel.REJECTED, ExecutionReadiness.INVALID, tuple(rejections)
+        )
 
     primitives = tuple(PRIMITIVE_REGISTRY[pid] for pid in definition.primitive_ids)
 
@@ -231,13 +270,21 @@ def validate_definition(definition: CapabilityDefinition) -> ValidationOutcome:
         ))
 
     if rejections:
-        return ValidationOutcome(definition, TrustLevel.REJECTED, tuple(rejections))
+        return ValidationOutcome(
+            definition, TrustLevel.REJECTED, ExecutionReadiness.INVALID, tuple(rejections)
+        )
 
     missing = tuple(p for p in primitives if not p.implemented)
     widget_types = tuple(dict.fromkeys(w for p in primitives for w in p.widget_types))
 
+    # **信頼度と実行可否を独立に決める**(§17)。合成のみで表されている
+    # ことは`COMPOSED`という信頼度であり、実装が揃っているかどうかとは
+    # 別の事実である。実装が足りなければ`DEFINED`で止まる。
     if missing:
         return ValidationOutcome(
-            definition, TrustLevel.CANDIDATE, (), missing, widget_types
+            definition, TrustLevel.COMPOSED, ExecutionReadiness.DEFINED, (), missing, widget_types
         )
-    return ValidationOutcome(definition, TrustLevel.COMPOSED, (), (), widget_types)
+    # Compiler未接続のため、ここから先の段へは到達しない(TD58)。
+    return ValidationOutcome(
+        definition, TrustLevel.COMPOSED, ExecutionReadiness.PRIMITIVES_READY, (), (), widget_types
+    )

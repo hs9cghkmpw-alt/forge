@@ -75,6 +75,7 @@ from enum import Enum
 
 __all__ = [
     "PRIMITIVE_REGISTRY",
+    "CapabilityAvailability",
     "SEMANTIC_LABELS_JA",
     "CapabilityDecomposition",
     "PrimitiveKind",
@@ -246,6 +247,20 @@ SEMANTIC_LABELS_JA: dict[str, str] = {
 }
 
 
+class CapabilityAvailability(str, Enum):
+    """要求に対して、今のForgeが何を返せるか(§19)。"""
+
+    EXACT = "exact"
+    """要求どおりに作れる。"""
+
+    FALLBACK = "fallback"
+    """要求どおりではないが、**有用な代替なら作れる**。
+    Smallest Useful Tool(§59)へ接続する状態。"""
+
+    BLOCKED = "blocked"
+    """有用な代替すら今は作れない。正直にそう言うべき状態。"""
+
+
 @dataclass(frozen=True)
 class CapabilityDecomposition:
     """1つのSemantic Capabilityを分解した結果。"""
@@ -298,6 +313,28 @@ class CapabilityDecomposition:
     def fallback_possible(self) -> bool:
         """縮退案を出せるか(要求どおりではないが、何かは見せられる)。"""
         return not self.satisfiable_exactly and self.renderable_at_all
+
+    @property
+    def availability(self) -> CapabilityAvailability:
+        """「作れない」を**3種類に分ける**(§19)。
+
+        2値では足りない理由: 「要求どおり作れない」だけでは、
+        代替を出せるのか、何も出せないのかが分からない。この2つは
+        ユーザーへ返すべき言葉がまったく違う。
+
+            EXACT     → そのまま作る
+            FALLBACK  → 「これなら今すぐ作れます」と**確認する**(§59)
+            BLOCKED   → 正直に「作れません」と言う
+
+        `FALLBACK`かどうかは、代替が**実際に存在するか**で決める
+        ——「たぶん何か出せる」ではなく、Primitiveが揃っているかで判定する。
+        """
+        if self.satisfiable_exactly:
+            return CapabilityAvailability.EXACT
+        alternative = self.nearest_alternative()
+        if self.renderable_at_all or (alternative is not None and alternative[1] == 0):
+            return CapabilityAvailability.FALLBACK
+        return CapabilityAvailability.BLOCKED
 
     @property
     def distance(self) -> int:

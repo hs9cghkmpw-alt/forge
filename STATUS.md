@@ -42,9 +42,9 @@
 | Scripted Conversation Set | 動作 | 50セッション。平均質問1.20/繰り返し0/未決着0 |
 | Capability検出 / 仮説提示 | 動作 | `capability.py`。作れないものを名指しし、作れる形を出す |
 | Stateful User Correction | 動作 | 前回の仮説を保持し、訂正された層だけ差し替える |
-| Semantic Capability分解 | 動作 | `semantic_capability.py`。不足を種類ごとに特定する |
+| Semantic Capability分解 | **PoC / 部分統合** | 分解・代替提示に使う。TRANSFORM/ENCODINGは訂正対象に**未統合** |
 | `transform.aggregate` | 動作 | グループごとの集計。**Compiler未接続**(会話からは到達しない) |
-| Declarative Capability定義 | 検証まで | `capability_definition.py`。**Runtime利用は不可**(§17) |
+| Declarative Capability定義 | 検証まで | 信頼度(`TrustLevel`)と実行可否(`ExecutionReadiness`)を別軸で持つ。**本番利用は不可** |
 | Self-Extension(能力獲得) | **目標として継続** | 定義は`FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md` §2。到達は「表現→検証」まで |
 | └ 実行中のDartコード注入 | **不採用** | Flutterが動的コード実行不可。これは技術的事実 |
 | └ 宣言的Capability定義 | 検証まで | 既存Primitiveの合成をデータとして追加。Runtime利用は不可 |
@@ -56,7 +56,7 @@
 | 対象 | 件数 | 状態 |
 |---|---|---|
 | `forge_ai/tests` | 521 | 全green |
-| `backend/tests` | 864 | 全green(skip 13) |
+| `backend/tests` | 870 | 全green(skip 13) |
 | `frontend`(Flutter) | 476 | 全green |
 | `flutter analyze` | 0件 | 2026-08-13にwarning/info含めて0へ(以前は77件) |
 
@@ -85,6 +85,10 @@
   とは、この違いを言えるという意味である。
 * 同じ困りごと(「よく釣れる場所を知りたい」)に対して、地図表現は
   4個先、集計表現は**1個先**(`transform.aggregate`のみ)。
+* 「作れない」は3種類に分けて扱う: `EXACT`(作れる)/ `FALLBACK`(代替なら
+  作れる)/ `BLOCKED`(有用な代替も無い)。ただし判定は分解表の粒度に
+  依存しており、`view.calendar`のようにCapability側には代替(一覧)が
+  あるのにSemantic側では`BLOCKED`になる例が残っている(既知の不一致)。
 * 共有・通知などのEffect Capabilityは**確認は取るが、実装が無い**。
   確認文を「できないこと」に合わせて書き換えるのは、指示書001 §4で
   定めたCONFIRMの意味を変えるため、今回のVertical Sliceの範囲外とした

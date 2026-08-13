@@ -1,4 +1,20 @@
-# FORGE-SELF-EXTENSION-ARCH-REVIEW
+# FORGE-SELF-EXTENSION-ARCH-REVIEW(v1 — **一部は v2 で撤回済み**)
+
+> **2026-08-13 追記(必ず先に読むこと)**
+>
+> この文書の**結論は`FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md`が
+> 上書きしている**。歴史的経緯としてのみ残している。
+>
+> * **今も有効**: Flutterは実行中に新しいDartを注入できないという
+>   技術的事実。任意コード生成→即実行を採用しないという判断。
+> * **撤回した**: そこから「Self-Extensionという **Product Goal** 自体が
+>   成立しない」と結論した部分。これはGoal 1(実行中のDart注入)と
+>   Goal 2(安全な方法で能力を増やす)を混同した誤りだった。
+>
+> 現在の正確な立場は次のとおり:
+>
+>     Runtime任意Dart Hot Plug  → 不採用
+>     Controlled Self-Extension → **Product Goalとして継続**
 
 FORGE-ARCHITECTURE-REVIEW-AND-IMPLEMENT-005 §31 への回答。
 2026-08-12。現物のコード・テストを監査した上での批判的レビュー。

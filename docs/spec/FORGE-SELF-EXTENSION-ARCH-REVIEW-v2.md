@@ -553,7 +553,9 @@ Forge: 場所ごとの釣れやすさを、濃さで見たいんだね。
 | `DATA` / `VIEW` / `EFFECT` | **first-class**。`SolutionHypothesis`の層であり、`CorrectionTarget`として訂正できる |
 | `TRANSFORM` / `ENCODING` | **補助的**。`semantic_capability.py`の分解・代替提示にのみ使う。訂正の対象にできない |
 
-したがって現在は「**補助的PoCとして接続済み**」が正しい表現である。
+したがって現在の正確な状態は
+**「Semantic Capability Architecture: PoC / partial integration」**であり、
+**`fully migrated`ではない**(007 §13)。
 
 **この差が具体的に何を意味するか**: 「集計方法が違う(合計じゃなくて
 平均がいい)」「色の濃さではなく大きさで表したい」という訂正は、
@@ -566,6 +568,41 @@ DATA/VIEW/EFFECT/PROBLEMだけであり、TRANSFORM/ENCODINGへの訂正を
 現状で足すと、「集計方法を変えたい」→「集計自体ができません」という
 無意味な会話になる**。`transform.aggregate`のRuntime実装が先である。
 順序を逆にしない。
+
+---
+
+## 21-ter. CorrectionTargetの進化設計(2026-08-13追記、007 §14)
+
+将来受け取る必要がある訂正と、その行き先:
+
+| ユーザーの訂正 | 分類 | 変わるもの |
+|---|---|---|
+| 「地図じゃなくてランキングで見たい」 | `VIEW` | Platform Capability(実装済み) |
+| 「集計の仕方が違う」 | `TRANSFORM` | Platform Capability |
+| 「色じゃなくて丸の大きさで表したい」 | `ENCODING` | Platform Capability |
+| 「場所ごとじゃなく魚種ごとにまとめたい」 | `TRANSFORM`のパラメータ | **Product Spec**(グループ化キー) |
+| 「脈拍も記録したい」 | `DATA` | **Product Spec**(記録する項目) |
+
+**重要な発見**: 下2つは`CorrectionTarget`を増やしても解けない。
+グループ化キーも記録項目も、Forgeの**能力**ではなく**このToolの仕様**
+だからである(§37)。`CorrectionTarget`だけを拡張すると、
+「魚種ごとにまとめたい」を`TRANSFORM`と分類した上で
+「集計は既にできます」と答える、という噛み合わない会話になる。
+
+したがって進化の道筋は2本立てになる:
+
+1. **層の追加**: `CorrectionTarget`へ`TRANSFORM`/`ENCODING`を足す。
+   ただし**訂正先のPrimitiveが実装されてから**。未実装の状態で足すと
+   「集計方法を変えたい」→「集計自体ができません」という無意味な
+   会話になる。順序を逆にしない。
+2. **Product Specの受け皿**: `SolutionHypothesis.spec_notes`
+   (2026-08-13新設)。Platform Capabilityでは表せないユーザーの要望を
+   保持し、`to_build_note()`経由でCompilerへ渡す。グループ化キーの
+   訂正も、当面はここで受ける。
+
+将来的には`spec_notes`(自由文)を構造化する必要があるが、
+**構造を決める前に、実際にどんな訂正が来るかを観測する**方が良い。
+先に構造を決めると、来なかった訂正のための構造を保守することになる。
 
 ---
 

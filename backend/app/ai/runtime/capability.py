@@ -236,6 +236,19 @@ class SolutionHypothesis:
     data: tuple[Capability, ...] = ()
     view: tuple[Capability, ...] = ()
     effects: tuple[Capability, ...] = ()
+
+    spec_notes: tuple[str, ...] = ()
+    """ユーザーが言った、**Platform Capabilityでは表せない仕様の詳細**。
+
+    §37の区別の受け皿である。「脈拍も記録したい」の「脈拍」は、Forgeの
+    能力(数値を記録できる)を1つも増やさない——増えるのは**このToolが
+    何を記録するか**という仕様である。ここへ入れておかないと、
+    ユーザーが確かに言ったことが、BUILDへ届かないまま消える。
+
+    Platform Capabilityと混ぜないために、別のフィールドにしている。
+    ここに何が入っても`missing`は変わらない(能力の不足ではないため)。
+    """
+
     revision: int = 0
     """User Correctionによって作り直された回数。無限ループ防止に使う
     (レビュー F2: 仮説も3回で打ち切る)。"""
@@ -341,10 +354,14 @@ class SolutionHypothesis:
         作れないもの(`missing`)は**書かない**——Compilerに作れないものを
         指示しても、実現できないか、実現したふりになるだけである。
         """
+        parts: list[str] = []
         buildable = [c.label_ja for c in self.buildable]
-        if not buildable:
-            return ""
-        return "ユーザーと合意した形: " + "・".join(buildable) + "。"
+        if buildable:
+            parts.append("ユーザーと合意した形: " + "・".join(buildable) + "。")
+        if self.spec_notes:
+            # ユーザーが言った具体的な要望を、そのままCompilerへ渡す。
+            parts.append("ユーザーの追加要望: " + " / ".join(self.spec_notes) + "。")
+        return "".join(parts)
 
 
 _MAX_HYPOTHESIS_REVISIONS = 3
@@ -433,6 +450,24 @@ _ACCEPT_KEYWORDS: tuple[str, ...] = (
     "それでいい", "それで良い", "でいい", "で良い", "いいね", "いいよ", "お願い",
     "はい", "うん", "ええ", "そうそう", "その感じ", "そんな感じ", "大丈夫",
     "ok", "オッケー", "進めて", "それで",
+)
+
+# 「〜も追加したい」のように、**何かを足したい**ことを示す語。
+# §10が「addition marker」を独立した信号として挙げているとおり、
+# これはCapability語の有無とは別の軸である。
+#
+# **なぜ語彙を足すだけでは解けないか**: 「いいけど脈拍も追加したい」は
+# Correctionだが、「脈拍」はCapability Registryに無い。ここで「脈拍」を
+# キーワードへ足すのは対症療法である——次は「血糖値」で同じことが起きる。
+#
+# 正しい理解は§37の区別にある。「脈拍」は**Product Spec**(記録する項目の
+# 名前)であって、**Platform Capability**(数値を記録できるか)ではない。
+# Forgeは既に数値を記録できるので、必要な能力は増えていない。増えたのは
+# **このToolの仕様**である。したがって、追加マーカーがあれば「Dataへの
+# 訂正」と分類し、名詞そのものは`spec_notes`(下記)へ保持する。
+_ADDITION_MARKERS: tuple[str, ...] = (
+    "も追加", "も記録", "も残", "も入れ", "も見", "も欲しい", "も要る", "も必要",
+    "追加したい", "追加して", "足したい", "足して", "増やしたい",
 )
 
 # 肯定の中に**変更意図**が混ざっていることを示す語。
@@ -529,6 +564,13 @@ def classify_correction(text: str, hypothesis: SolutionHypothesis) -> Correction
             if any(c.layer is layer for c in detected):
                 return target
 
+    if any(marker in lowered for marker in _ADDITION_MARKERS):
+        # 何かを足したいことは分かるが、それがCapability Registryに
+        # 無い場合(「脈拍も追加したい」)。**分からないから聞き返す**の
+        # ではなく、**記録する項目への訂正**だと分かっている。
+        # 名詞はProduct Specとして`revise_hypothesis()`が保持する。
+        return CorrectionTarget.DATA
+
     if negated:
         # 否定はあったが、Capabilityは1つも検出できなかった。ここで
         # `PROBLEM`と`UNCLEAR`を分ける必要がある(§39 Case C と Case D)。
@@ -557,6 +599,33 @@ def classify_correction(text: str, hypothesis: SolutionHypothesis) -> Correction
 # 「脈拍も記録したい」で既存の項目が全部消える(§39 Case B)。
 _ADDITIVE_MARKERS: tuple[str, ...] = ("も記録", "も残", "も入れ", "も見", "も欲しい", "追加", "足して", "increase")
 _REPLACING_MARKERS: tuple[str, ...] = ("違う", "ちがう", "じゃなくて", "ではなく", "でなく", "やめて", "いらない")
+
+
+def _spec_note_from(text: str) -> str:
+    """発話から、Compilerへ渡す仕様メモを取り出す。
+
+    「いいけど脈拍も追加したい」の「いいけど」は、こちらの提案への
+    相槌であって仕様ではない。前置きを落として要望だけ残す。
+    句読点までの相槌を落とすだけの決定的な処理であり、要約ではない
+    (落とせなければ全文をそのまま残す——情報は失わない)。
+    """
+    note = (text or "").strip()
+    for separator in ("、", "。", ","):
+        head, found, tail = note.partition(separator)
+        if not found or not tail.strip():
+            continue
+        lowered = head.lower()
+        is_preamble = any(k in lowered for k in _ACCEPT_KEYWORDS + _CONTRAST_MARKERS + _NEGATION_KEYWORDS)
+        if is_preamble and len(head) <= 8:
+            note = tail.strip()
+            break
+    # 「いいけど〜」のように句読点が無い場合、対比語で切る。
+    for marker in _CONTRAST_MARKERS:
+        prefix, found, tail = note.partition(marker)
+        if found and len(prefix) <= 4 and tail.strip():
+            note = tail.strip()
+            break
+    return note
 
 
 def _is_additive_correction(text: str, layer: CapabilityLayer) -> bool:
@@ -608,6 +677,16 @@ def revise_hypothesis(
     }[target]
     replacements = tuple(c for c in detected if c.layer is layer)
     if not replacements:
+        # Capabilityとしては何も変わらないが、**ユーザーは確かに何かを
+        # 言っている**。Product Specの詳細として保持する(§37)。
+        # これが無いと「脈拍も」がBUILDへ届かず、黙って消える。
+        note = _spec_note_from(text)
+        if layer is CapabilityLayer.DATA and note and note not in hypothesis.spec_notes:
+            return replace(
+                hypothesis,
+                spec_notes=hypothesis.spec_notes + (note,),
+                revision=hypothesis.revision + 1,
+            )
         return hypothesis
     additive = _is_additive_correction(text, layer)
 

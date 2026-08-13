@@ -2,6 +2,41 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task071 — Conversation Foundation 是正(2026-08-13、FORGE-CONVERSATION-FOUNDATION-007)
+
+**再監査の結果、指摘の多くは前回(Task070)で修正済みだった**。現物で1件ずつ
+確認し、本当に残っていた4件を修正した。差異は報告済み。
+
+**残っていた問題1: 追加要求が「分からない」に落ちる**。
+「いいけど脈拍も追加したい」が`UNCLEAR`になっていた。「脈拍」が
+Capability Registryに無いためだが、**語彙へ足すのは対症療法**である
+(次は「血糖値」で同じことが起きる)。正しい理解は§37の区別にある——
+「脈拍」はProduct Spec(記録する項目)であって、Platform Capability
+(数値を記録できるか)ではない。追加マーカーを独立した信号として持ち、
+名詞は`SolutionHypothesis.spec_notes`へ保持して`build_brief`まで運ぶ。
+**能力は増えないが、ユーザーが言ったことは失われない。**
+
+**残っていた問題2: TrustとExecution Readinessが同じenum**(§17)。
+`CANDIDATE`(=Primitive未実装)は信頼度ではなく実行可否だった。
+`TrustLevel`(CORE/COMPOSED/REJECTED)と`ExecutionReadiness`
+(INVALID→DEFINED→PRIMITIVES_READY→COMPILABLE→RUNTIME_VERIFIED)へ分離。
+「合成のみで安全」かつ「まだCompilerが選べない」が同時に表せるようになった。
+
+**残っていた問題3: 「作れない」が2値**(§19)。
+`CapabilityAvailability`(EXACT / FALLBACK / BLOCKED)を追加。
+代替を出せるのか、何も出せないのかで、ユーザーへ返す言葉が変わる。
+
+**残っていた問題4: Golden Flowが1本の流れとして無い**(§23)。
+3ターン(提示 → View訂正 → 承認 → BUILD)をE2Eで固定した。
+
+**Documentation**: v1レビューの冒頭へ「結論はv2が上書きしている」旨を
+明記。撤回したのは「Product Goal自体が成立しない」という部分だけで、
+「Runtime任意Dart Hot Plugは不採用」は今も有効、と区別して書いた。
+Semantic Capability Architectureの状態を`PoC / partial integration`へ訂正。
+
+**テスト(実測)**: backend 870(skip 13)/ forge_ai 521 / Flutter 476、
+`flutter analyze` 0件。
+
 ## Task070 — CEOレビュー指摘6件の修正(2026-08-13、FORGE-USER-GUIDED-SELF-EXTENSION-006 レビュー)
 
 いずれも**再現してから**原因を特定した。5件は「症状」ではなく

@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from app.ai.runtime.capability_definition import (  # noqa: E402
     CapabilityDefinition,
+    ExecutionReadiness,
     TrustLevel,
     validate_definition,
 )
@@ -121,9 +122,14 @@ class TestSafetyGates(unittest.TestCase):
         self.assertIs(outcome.trust, TrustLevel.REJECTED)
         self.assertEqual(outcome.rejections[0].code, "effect_not_composable")
 
-    def test_unimplemented_primitive_yields_candidate_not_usable(self) -> None:
+    def test_unimplemented_primitive_stays_at_the_defined_stage(self) -> None:
         """**ここが「作れたふり」を防ぐ核心**。定義としては妥当でも、
-        必要なPrimitiveが未実装なら使えない。`CANDIDATE`は`usable=False`。"""
+        必要なPrimitiveが未実装なら使えない。
+
+        §17対応(2026-08-13)で、これは`TrustLevel.CANDIDATE`ではなく
+        `ExecutionReadiness.DEFINED`で表すようになった——実装が足りない
+        のは**実行可否**の話であって、信頼度の話ではないため。
+        合成のみで表されている事実(=`COMPOSED`)は変わらない。"""
         # 例を`transform.aggregate`から`transform.sort`へ替えた。前者は
         # Phase 4(2026-08-13)で実装されたため、未実装の例として使えなく
         # なった——**テストの例が実装状況に追随している**ことの記録でもある。
@@ -131,7 +137,8 @@ class TestSafetyGates(unittest.TestCase):
             id="composed.sorted_bars", label_ja="並べ替えた棒グラフ",
             primitive_ids=("transform.sort", "view.bars", "encoding.length"),
         ))
-        self.assertIs(outcome.trust, TrustLevel.CANDIDATE)
+        self.assertIs(outcome.trust, TrustLevel.COMPOSED, "合成のみである事実は変わらない")
+        self.assertIs(outcome.readiness, ExecutionReadiness.DEFINED)
         self.assertTrue(outcome.definition_valid, "定義そのものは妥当なはず")
         self.assertFalse(outcome.primitives_available, "未実装Primitiveを含むのに利用可能になっている")
         self.assertFalse(outcome.production_usable)
@@ -173,6 +180,24 @@ class TestStagedContract(unittest.TestCase):
     読める契約になっていた。段階を分け、**今はどれも本番利用不可**で
     あることを固定する。
     """
+
+    def test_trust_and_readiness_are_independent_axes(self) -> None:
+        """§17: 信頼度と実行可否を同じenumへ詰めない。
+
+        「合成のみで安全(COMPOSED)」かつ「まだCompilerが選べない
+        (PRIMITIVES_READY)」は同時に成り立つ。1つのenumではこれを
+        表現できない。
+        """
+        ready = validate_definition(_RANKED_LIST)
+        self.assertIs(ready.trust, TrustLevel.COMPOSED)
+        self.assertIs(ready.readiness, ExecutionReadiness.PRIMITIVES_READY)
+
+        not_ready = validate_definition(CapabilityDefinition(
+            id="composed.sorted", label_ja="並べ替え",
+            primitive_ids=("transform.sort", "view.bars"),
+        ))
+        self.assertIs(not_ready.trust, TrustLevel.COMPOSED, "信頼度は同じ")
+        self.assertIs(not_ready.readiness, ExecutionReadiness.DEFINED, "実行可否だけが違う")
 
     def test_composed_is_not_production_usable(self) -> None:
         outcome = validate_definition(_RANKED_LIST)

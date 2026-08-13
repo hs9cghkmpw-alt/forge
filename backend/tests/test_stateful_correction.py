@@ -482,3 +482,137 @@ class TestMissingSurvivesUnrelatedCorrections(unittest.TestCase):
             "missing", {f.name for f in fields(SolutionHypothesis)},
             "missingがフィールドとして保存されている(部分更新で壊れる形に戻っている)",
         )
+
+
+class TestAcceptanceVsCorrectionVocabulary(unittest.TestCase):
+    """§11の必須固定テスト(2026-08-13)。
+
+    自然な日本語の相槌を、Capability語が含まれるというだけで訂正へ
+    倒さない。判定は語の有無ではなく**態度・対比・追加**の組み合わせで
+    行う(§10)。
+    """
+
+    def _hypothesis(self):
+        from app.ai.runtime.capability import build_hypothesis
+
+        return build_hypothesis("地図で見たい")
+
+    def test_accepted_phrases(self) -> None:
+        from app.ai.runtime.capability import CorrectionTarget, classify_correction
+
+        for utterance in (
+            "それでいい",
+            "うん、地図でいい",
+            "はい、その地図の感じで",
+            "そうそう、一覧で大丈夫",
+            "そのカレンダーでお願い",
+        ):
+            with self.subTest(utterance=utterance):
+                self.assertIs(
+                    classify_correction(utterance, self._hypothesis()),
+                    CorrectionTarget.ACCEPTED,
+                    f"{utterance!r} が承認として扱われていない",
+                )
+
+    def test_correction_phrases(self) -> None:
+        from app.ai.runtime.capability import CorrectionTarget, classify_correction
+
+        expected = {
+            "うん、でも地図じゃなくて一覧がいい": CorrectionTarget.VIEW,
+            "いいけど脈拍も追加したい": CorrectionTarget.DATA,
+            "そう、ただ色の濃さで見たい": CorrectionTarget.VIEW,
+            "いや地図はいらない": CorrectionTarget.VIEW,
+        }
+        for utterance, target in expected.items():
+            with self.subTest(utterance=utterance):
+                self.assertIs(
+                    classify_correction(utterance, self._hypothesis()), target,
+                    f"{utterance!r} が訂正として扱われていない",
+                )
+
+    def test_addition_of_an_unknown_field_is_a_data_correction(self) -> None:
+        """「脈拍」はCapability Registryに無い。しかしこれは**Product Spec**
+        (記録する項目)であって、Platform Capabilityではない(§37)。
+
+        語彙へ「脈拍」を足すのは対症療法である——次は「血糖値」で同じ
+        ことが起きる。追加マーカーという構造で受け止める。
+        """
+        from app.ai.runtime.capability import (
+            CorrectionTarget,
+            build_hypothesis,
+            classify_correction,
+            revise_hypothesis,
+        )
+
+        h = build_hypothesis("血圧を記録して地図で見たい")
+        missing_before = [c.id for c in h.missing]
+
+        text = "いいけど脈拍も追加したい"
+        target = classify_correction(text, h)
+        self.assertIs(target, CorrectionTarget.DATA)
+
+        revised = revise_hypothesis(h, text, target)
+        # 能力は1つも増えていない(数値は元から記録できる)。
+        self.assertEqual([c.id for c in revised.missing], missing_before)
+        # しかしユーザーが言ったことは失われていない。
+        self.assertIn("脈拍も追加したい", revised.spec_notes)
+        self.assertIn("脈拍", revised.to_build_note())
+
+
+class TestGoldenFlowSection23(unittest.TestCase):
+    """§23のGolden Flow。3ターンをE2Eで固定する。
+
+        User : 釣った魚とサイズと場所を記録して地図で見たい
+        Forge: Solution Hypothesis v1
+        User : 違う、よく釣れるところを色の濃さで見たい
+        Forge: Revised Hypothesis v2(data保持・view訂正・Missing再計算)
+        User : うん、その感じでいい
+        Forge: ACCEPTED → 同じ仮説を再提示せず BUILD へ
+    """
+
+    def test_full_three_turn_flow(self) -> None:
+        c = _Conversation("釣果を記録したい")
+
+        # --- Turn 1: 仮説提示 ---
+        first = c.say("釣った魚とサイズと場所を記録して地図で見たい")
+        self.assertIs(first.action, ConversationAction.ASK)
+        self.assertEqual(first.hypothesis_event, "present")
+        v1 = c.hypothesis()
+        data_v1 = ids(v1.data)
+        self.assertTrue(data_v1, "記録する内容が理解されていない")
+        self.assertIn("view.map", ids(v1.missing))
+
+        # --- Turn 2: View訂正。Dataは保持されること ---
+        second = c.say("違う、よく釣れるところを色の濃さで見たい")
+        self.assertEqual(second.correction_target, "view")
+        self.assertEqual(second.hypothesis_event, "present")
+        v2 = c.hypothesis()
+
+        self.assertEqual(ids(v2.data), data_v1, "Viewの訂正でDataが失われた")
+        self.assertIn("view.heatmap", ids(v2.missing), "訂正が反映されていない")
+        self.assertNotIn("view.map", ids(v2.missing), "古いMissingが残っている")
+        self.assertEqual(v2.revision, 1)
+        self.assertNotEqual(second.question, first.question, "同じ文面を出している")
+
+        # --- Turn 3: 承認 → BUILD ---
+        third = c.say("うん、その感じでいい")
+        self.assertIs(third.action, ConversationAction.BUILD, "ACCEPTがBUILDへ繋がっていない")
+        self.assertIs(c.state.hypothesis_state, HypothesisState.ACCEPTED)
+        self.assertNotEqual(third.question, second.question, "同じ仮説を再提示している")
+
+        # 合意した内容がCompilerへ届いていること。作れないものは載せない。
+        self.assertIn("ユーザーと合意した形", third.build_brief)
+        for capability in v2.missing:
+            self.assertNotIn(capability.label_ja, third.build_brief)
+
+    def test_flow_leaves_a_readable_correction_history(self) -> None:
+        c = _Conversation("釣果を記録したい")
+        c.say("釣った魚とサイズと場所を記録して地図で見たい")
+        c.say("違う、よく釣れるところを色の濃さで見たい")
+        c.say("うん、その感じでいい")
+
+        history = c.state.correction_history
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0].target, "view")
+        self.assertEqual(history[0].from_missing, ("view.map",))
+        self.assertEqual(history[0].to_missing, ("view.heatmap",))

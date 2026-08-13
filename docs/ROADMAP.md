@@ -43,6 +43,16 @@ CEO提示(2026-08-13)。**作業を始める前に必ずこれを見ること。
 - [~] Capability依存関係の整理 — 分解表(`_DECOMPOSITION`)まで。
       本格的なDependency Graphは未着手
 
+### Phase 3.5 — Conversation Foundation 是正 ✅ 完了(2026-08-13、指示書007)
+
+- [x] Problem → Need → Solution の順序(`ConversationPhase`)
+- [x] Pending Hypothesisへの返答を優先
+- [x] Missingを層から導出(単一の真実)
+- [x] Acceptance判定(態度 → 対比 → 追加 → 対象)
+- [x] Trust と Execution Readiness の軸分離
+- [x] EXACT / FALLBACK / BLOCKED の3分類
+- [x] Golden Flow(3ターン)のE2E固定
+
 ### Phase 4 — Vertical Slice検証 ← **現在ここ**
 
 - [x] `transform.aggregate` の実装 — **Runtime描画まで到達**(2026-08-13)
@@ -50,7 +60,7 @@ CEO提示(2026-08-13)。**作業を始める前に必ずこれを見ること。
       - Validator(v1.9、参照整合性・enum・条件付き必須)
       - Runtime(`forge_aggregate.dart`の純粋関数 + `bar_chart`が利用)
       - **未達**: Compiler接続(Plannerがこの形を選ぶ経路が無い)
-- [ ] Smallest Useful Tool 代替
+- [ ] Smallest Useful Tool 代替 — `CapabilityAvailability.FALLBACK`まで。会話への接続は未
 - [ ] 回帰テスト追加 — 集計分は完了(単体14 + Widget 7 + Validator 12)
 - [ ] Conversation E2E検証(Compiler接続後)
 
