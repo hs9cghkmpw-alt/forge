@@ -22,10 +22,19 @@ RouterはTaskを受け取り、Providerを選び、失敗したら次を試す�
 * **並列hedging**(§29): Quota倍消費・cost倍・privacy露出増。逐次。
 * **Quota推定**(§9): `ESTIMATED`は型として持つが値を作らない。
   測っていない推定でRoutingすると、外れたとき原因が分からない。
-* **品質スコアによる選択**(§13): Benchmark未接続。現状の並べ替えは
-  **可用性**による。これを「品質で選んでいる」と表現しない。
 * **Provider/Model二階層**(§11): 型は用意するが1:1で扱う。
   使われない抽象を増やさない。
+
+## 品質による並べ替え(Phase Jで配線済み・データ待ち)
+
+`_order()`は`BenchmarkEvidenceStore`を見る。ただし順位が返るのは、
+**実APIで測った**記録が十分な件数・鮮度で2 Provider以上そろった
+ときだけである。今はその記録が無いので、実際の順序は`catalog`の
+宣言順のままである。
+
+したがって現状を「品質で選んでいる」と表現してはならない。
+効いていないのは**コードが無いからではなくデータが無いから**で
+あり、実測を入れれば自動的に効き始める。
 
 ## Mockの扱い(§22)
 
@@ -43,6 +52,7 @@ from enum import Enum
 from typing import Any
 
 from app.ai.gateway.ai_errors import ErrorKind, classify_exception
+from app.ai.gateway.benchmark_evidence import BenchmarkEvidenceStore, default_evidence_store
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.gateway.provider_registry import (
     PROVIDER_REGISTRY,
@@ -207,12 +217,16 @@ class AIRouter:
         catalog: tuple[ModelDescriptor, ...],
         *,
         state_store: ProviderStateStore | None = None,
+        evidence: BenchmarkEvidenceStore | None = None,
         now: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.perf_counter,
     ) -> None:
         self._resolve = resolve
         self._catalog = catalog
         self._states = state_store or ProviderStateStore(now=now)
+        # Phase J: 実測されたTask別品質。`None`なら宣言順のまま
+        # (テストが並べ替えを意図的に切るために使う)。
+        self._evidence = evidence
         self._now = now
         self._monotonic = monotonic
 
@@ -250,12 +264,12 @@ class AIRouter:
                 continue
             eligible.append(model)
 
-        return tuple(self._order(eligible)), tuple(excluded)
+        return tuple(self._order(eligible, task)), tuple(excluded)
 
-    def _order(self, models: list[ModelDescriptor]) -> list[ModelDescriptor]:
-        """並べ替え……を**しない**。宣言された`catalog`の順を使う。
+    def _order(self, models: list[ModelDescriptor], task: ForgeTask) -> list[ModelDescriptor]:
+        """並べ替えの根拠は**実測されたTask別品質だけ**である。
 
-        **なぜ並べ替えないのか(実装して考え直した点)**
+        **健全性では並べ替えない(実装して考え直した点)**
 
         最初は「Localを先に(Quotaを消費しないから)」「連続失敗が
         少ない順」「latencyが短い順」で並べ替えていた。実際にテストを
@@ -266,19 +280,41 @@ class AIRouter:
            到達しない。健全性を「並べ替え」と「除外」の両方で表すと、
            片方がもう片方を無効化する。
         2. **Local優先は根拠が無い**。§5は「固定ルールで決め打ちせず
-           Benchmarkで決定する」と明示している。Benchmarkが無い現状で
+           Benchmarkで決定する」と明示している。Benchmarkが無いのに
            Localを優先するのは、**測っていない品質を賭けてQuotaを
            節約している**だけで、Product Qualityを壊しうる(§21)。
 
-        したがってMVPでは:
+        したがって:
 
-        * 順序 = `catalog`の宣言順(運用側が意図した優先順位)
         * 健全性 = **除外**でのみ表す(候補に入るか入らないか)
+        * 品質   = **実測があるときだけ**並べ替えに使う
+        * それ以外 = `catalog`の宣言順(運用側が意図した優先順位)
 
-        latencyは記録するが選択には使わない。Task別品質スコアが
-        Benchmarkから入ったとき、初めてここに並べ替えが戻る。
+        **Phase J(FORGE-AI-FOUNDATION-010)で品質側を配線した。**
+        `BenchmarkEvidenceStore.ranking_for()`は、実APIで測った記録が
+        十分な件数・十分な鮮度で2 Provider以上そろったときだけ順位を
+        返す。そろっていなければ`None`で、宣言順のまま動く。
+
+        つまり**今これが効かないのは、コードが無いからではなく
+        データが無いからである**。実測を入れれば自動的に効き始める
+        ——「基盤はあるのに本番では使っていない」を3度繰り返した
+        ので、今回は逆の状態(配線済み・データ待ち)にしてある。
+
+        Test Doubleで測った数字は`ranking_for()`が弾く。Doubleは
+        成功するAdapterをいくらでも作れるので、それがRoutingへ
+        流れ込むと**測っていないもので本番の経路が決まる**。
         """
-        return list(models)
+        if self._evidence is None:
+            return list(models)
+        ranking = self._evidence.ranking_for(task)
+        if not ranking:
+            return list(models)
+        # 順位に載っていないProviderは**後ろへ回すだけで落とさない**。
+        # 測っていないことは、悪いことの証拠ではない。
+        priority = {provider: index for index, provider in enumerate(ranking)}
+        return sorted(
+            models, key=lambda model: priority.get(model.provider, len(priority))
+        )
 
     # -- 実行 -------------------------------------------------------------
 
@@ -552,6 +588,9 @@ def default_router() -> AIRouter:
         _default_router = AIRouter(
             resolve=ProviderRouter().resolve,
             catalog=default_catalog(),
+            # Phase J: 実測がそろえば品質順になる。今は記録が無いので
+            # 宣言順のまま動く(`_order()`参照)。
+            evidence=default_evidence_store(),
         )
     return _default_router
 
