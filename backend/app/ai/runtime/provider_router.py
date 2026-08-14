@@ -40,6 +40,7 @@ from typing import Protocol
 
 from app.ai.foundation.interfaces import LLMAdapter
 from app.ai.gateway.provider_registry import PROVIDER_REGISTRY
+from app.ai.foundation.cloud_provider import CloudCompatibleProvider
 from app.ai.foundation.local_provider import LocalModelProvider
 from app.ai.foundation.providers import (
     ClaudeProvider,
@@ -86,6 +87,8 @@ class ProviderRouter:
         "gemini": GeminiProvider,
         "oss": OSSProvider,
         "local": LocalModelProvider,
+        # Phase H: 2つ目のCloud枠。OpenAI互換なら環境変数だけで載る。
+        "cloud": CloudCompatibleProvider,
         "mock": MockLLMAdapter,
         "forge_ai": ForgeAIProvider,
     }

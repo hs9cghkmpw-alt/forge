@@ -80,21 +80,35 @@ class TestStubsNeverFakeSuccess(unittest.TestCase):
             StubAIContextBuilder().build_context("s1", "p1", "u1")
 
     def test_all_foundation_provider_stubs_raise(self) -> None:
-        """ProviderRouterが解決する8つの名前のうち、`mock`・`gemini`・
-        `local`を除く5つで、実際に呼ぶとNotImplementedErrorになることを確認する
-        (ルーティング自体は動くが、推論は`mock`/`gemini`以外一切動かない)。
-        FORGE-MILESTONE-005 Task7で`mock`を、FORGE-AI-CONNECT-001
-        (2026-08-10)で`gemini`を実装したため、両方をこのテストの対象から
-        除外する(`mock`は`test_mock_provider_actually_works`、`gemini`は
-        `test_gemini_provider.py`で別途検証)。"""
+        """`STUB`と宣言したProviderは、**本当に**`NotImplementedError`を
+        投げること。
+
+        FORGE-AI-FOUNDATION-010 Phase Cで検査対象の決め方を変えた。
+        以前は`("mock", "gemini", "local")`という**除外リストを手で
+        書いて**いたため、Providerを実装するたびにここを直す必要があり、
+        直し忘れると「実装済みなのにスタブとして検査される」形で落ちた
+        (実際、`cloud`を足した時に落ちた)。
+
+        今は`ImplementationStatus.STUB`から導出する。これにより検査の
+        意味も強くなった——「除外リスト以外は未実装のはず」ではなく、
+        **「STUBという宣言が事実と一致していること」**を測っている。
+        Auto Discoveryはこの宣言を信じて候補から外すので、宣言が
+        嘘だと候補選びが壊れる。
+        """
+        from app.ai.gateway.provider_registry import (  # noqa: PLC0415
+            PROVIDER_REGISTRY,
+            ImplementationStatus,
+        )
+
         router = ProviderRouter()
-        for name in router.available_providers():
-            # `local`はFORGE-QUALITY-AI-INDEPENDENCE-003 Phase Gで
-            # 実装済みProvider(`LocalModelProvider`)になったため除外する
-            # (未実装スタブではなくなった。接続先が無い場合は
-            # `NotImplementedError`ではなく`LocalModelError`になる)。
-            if name in ("mock", "gemini", "local"):
-                continue
+        stub_names = [
+            name
+            for definition in PROVIDER_REGISTRY
+            if definition.implementation_status is ImplementationStatus.STUB
+            for name in (definition.provider_id, *definition.aliases)
+        ]
+        self.assertTrue(stub_names, "STUBが1つも宣言されていない(検査が空回りしている)")
+        for name in stub_names:
             with self.subTest(provider=name):
                 provider = router.resolve(name)
                 with self.assertRaises(NotImplementedError):
@@ -133,11 +147,25 @@ class TestProviderRouter(unittest.TestCase):
     def setUp(self) -> None:
         self.router = ProviderRouter()
 
-    def test_all_eight_provider_names_registered(self) -> None:
-        """FORGE-MILESTONE-005 Task8で'mock'を追加したことに合わせて
-        更新(7件→8件)。"""
-        expected = {"openai", "claude", "gemini", "oss", "forge_ai", "native", "local", "mock"}
-        self.assertEqual(set(self.router.available_providers()), expected)
+    def test_names_existing_clients_depend_on_stay_resolvable(self) -> None:
+        """既存クライアントが送ってくる名前が、いつまでも解決できること。
+
+        FORGE-AI-FOUNDATION-010 Phase Cで、このテストの主張を変えた。
+
+        以前は「登録名の集合がちょうどこの8件と一致する」という
+        全件一致だった。Providerを1つ足すたびに落ちるが、**落ちても
+        期待値を書き足すだけで通ってしまう**ので、何も守っていない
+        (実際`cloud`を足した時に落ちた)。しかもRegistryと実装の
+        一致は`test_provider_registry.py`が双方向で検査しており、
+        完全な重複だった。
+
+        守るべきなのは「増えていないこと」ではなく、**既に外へ出した
+        名前が消えないこと**である。`native`のような歴史的な別名は、
+        既存クライアントが送ってくる可能性がある。
+        """
+        for name in ("gemini", "local", "mock", "forge_ai", "native"):
+            with self.subTest(provider=name):
+                self.assertTrue(self.router.is_registered(name))
 
     def test_native_alias_resolves_to_same_instance_as_forge_ai(self) -> None:
         """FORGE-MILESTONE-004 PHASE8新規。'native'は新しいProvider実装では

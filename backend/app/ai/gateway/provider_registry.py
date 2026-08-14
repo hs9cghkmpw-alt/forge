@@ -157,6 +157,24 @@ class ProviderDefinition:
     base_url_env: str | None = None
     model_env: str | None = None
 
+    required_env: tuple[str, ...] | None = None
+    """**設定済みと見なすために必要な**環境変数名。
+
+    `api_key_env`とは意味が違う:
+
+    * `api_key_env` — どの変数が**秘密**か。`.env.example`の検査と
+      診断出力の対象を決める。
+    * `required_env` — 何が揃えば**動くか**。Auto Discoveryが見る。
+
+    分けているのは、両者が一致しないProviderが実在するためである。
+    `local`は鍵が不要だが`base_url`には既定値があるので必須では
+    ない(何も設定しなくても動きうる)。逆に汎用Cloud枠は、鍵に
+    加えてエンドポイントとモデル名が無ければ**どこへ何を投げれば
+    よいのかが決まらない**。
+
+    `None`なら`api_key_env`があればそれだけを必須とする。
+    """
+
     models: tuple[str, ...] = ()
     """既知のモデル名。**Routingの判断には使わない**——公称値を
     大量に固定すると、API変更のたびに嘘になる(§12)。診断と
@@ -175,6 +193,12 @@ class ProviderDefinition:
         return self.api_key_env is not None
 
     @property
+    def required_variables(self) -> tuple[str, ...]:
+        if self.required_env is not None:
+            return self.required_env
+        return (self.api_key_env,) if self.api_key_env else ()
+
+    @property
     def is_configured(self) -> bool:
         """この環境で**設定が揃っているか**。
 
@@ -182,10 +206,21 @@ class ProviderDefinition:
         ——診断には便利だが、ログやレポートへ実値の断片が流れ出す
         経路を作ることになる(§67)。
         """
-        if not self.requires_api_key:
-            return True
-        assert self.api_key_env is not None  # noqa: S101 — requires_api_keyで保証
-        return bool(os.environ.get(self.api_key_env, "").strip())
+        return all(
+            os.environ.get(variable, "").strip() for variable in self.required_variables
+        )
+
+    def missing_variables(self) -> tuple[str, ...]:
+        """設定が足りない場合に、**何が足りないか**を名前で返す。
+
+        「使えるProviderがありません」だけでは運用者が直せない
+        (`NoProviderAvailableError`が理由を必ず持つのと同じ理由)。
+        返すのは変数名であって値ではない。
+        """
+        return tuple(
+            variable for variable in self.required_variables
+            if not os.environ.get(variable, "").strip()
+        )
 
     @property
     def is_usable(self) -> bool:
@@ -208,6 +243,8 @@ class ProviderDefinition:
             "deployment": self.deployment.value,
             "implementation_status": self.implementation_status.value,
             "api_key_env": self.api_key_env,
+            "required_env": list(self.required_variables),
+            "missing_env": list(self.missing_variables()),
             "configured": self.is_configured,
             "usable": self.is_usable,
             "supports_structured_output": self.supports_structured_output,
@@ -259,6 +296,32 @@ PROVIDER_REGISTRY: tuple[ProviderDefinition, ...] = (
             "**鍵が無くても設定済みとして扱う**——Runtimeが起動して"
             "いるかは環境変数からは判定できないので、呼んでみて"
             "`LOCAL_RESOURCE_ERROR`で学習する。"
+        ),
+    ),
+    ProviderDefinition(
+        provider_id="cloud",
+        protocol=Protocol.OPENAI_COMPATIBLE,
+        deployment=Deployment.CLOUD,
+        implementation_status=ImplementationStatus.IMPLEMENTED,
+        supports_structured_output=True,
+        quota_strategy=QuotaStrategy.RATE_LIMIT_HEADERS,
+        error_strategy=ErrorStrategy.STRUCTURED,
+        api_key_env="FORGE_CLOUD_API_KEY",
+        base_url_env="FORGE_CLOUD_BASE_URL",
+        model_env="FORGE_CLOUD_MODEL",
+        required_env=("FORGE_CLOUD_BASE_URL", "FORGE_CLOUD_API_KEY", "FORGE_CLOUD_MODEL"),
+        notes=(
+            "**2つ目のCloud枠**(Phase H)。OpenAI互換の`/v1/chat/completions`を"
+            "話すCloud Providerなら、環境変数3つを設定するだけでRoutingへ"
+            "載る(Groq / OpenRouter / Together / Cerebras / DeepInfra 等)。\n\n"
+            "**特定Providerのbase_urlをここへ書いていない理由**: この開発"
+            "環境はProvider公式ドキュメントのドメインへegress禁止であり、"
+            "エンドポイントやモデル名を公式に確認できなかった。記憶や"
+            "検索結果から定数を書き込むと、間違っていても『実装済み』に"
+            "見えてしまう(§39: 未検証を検証済みとして書かない)。"
+            "運用者が公式ドキュメントを見て設定する形にしてある。\n\n"
+            "Gemini枠が尽きてもForgeが止まらない、という目的(§H)は"
+            "これで満たされる——Providerを1つ足すのにコード変更が要らない。"
         ),
     ),
     ProviderDefinition(
