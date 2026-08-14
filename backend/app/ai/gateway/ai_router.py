@@ -51,6 +51,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any
 
+from app.ai.foundation.deadline import apply_deadline, supports_deadline
 from app.ai.gateway.ai_errors import ErrorKind, classify_exception
 from app.ai.gateway.benchmark_evidence import BenchmarkEvidenceStore, default_evidence_store
 from app.ai.gateway.tasks import ForgeTask
@@ -181,6 +182,19 @@ class RoutedResult:
         合計であり、成功した1回だけを報告すると体感より速く見える。
         """
         return sum(a.latency_ms for a in self.attempts)
+
+
+# 残りがこれ未満なら、新しい試行を**始めない**。始めても意味のある
+# 応答は返らず、待ち時間だけが伸びる(011 §4)。
+_MIN_USEFUL_ATTEMPT_MS = 250.0
+
+
+class _BudgetTooTight(RuntimeError):
+    """残り予算に収まらないので試行を始めなかった(011 §4)。
+
+    **Providerの失敗ではない**ので、Circuit BreakerにもBenchmarkにも
+    記録しない。除外理由としてだけ残す。
+    """
 
 
 class NoProviderAvailableError(RuntimeError):
@@ -345,10 +359,20 @@ class AIRouter:
             if len(attempts) >= profile.max_attempts:
                 excluded = (*excluded, f"試行上限({profile.max_attempts}回)に達した")
                 break
+
+            # **残り予算を実際に計算する**(011 §4)。
+            #
+            # 010は`elapsed >= budget`しか見ていなかったので、
+            # 「まだ0秒しか経っていない」→ Provider呼び出し開始 →
+            # そのProviderのtimeout(60〜120秒)まで待つ、が成立した。
+            # 45秒という宣言が実行を何も拘束していなかった。
             elapsed_ms = (self._monotonic() - started) * 1000.0
-            if elapsed_ms >= profile.latency_budget_ms:
+            remaining_ms = profile.latency_budget_ms - elapsed_ms
+            if remaining_ms <= _MIN_USEFUL_ATTEMPT_MS:
                 # §28: 何回もfallbackして数分待たせない。
-                excluded = (*excluded, f"時間予算({profile.latency_budget_ms:.0f}ms)を超過")
+                # 残りが極端に少ないなら**始めない**——始めても
+                # 意味のある応答は返らず、待ち時間だけが伸びる。
+                excluded = (*excluded, f"時間予算({profile.latency_budget_ms:.0f}ms)を使い切った")
                 break
             if model.provider in attempted:
                 continue  # §20: 同じProviderを二度試さない
@@ -358,7 +382,14 @@ class AIRouter:
             if state.availability is Availability.CIRCUIT_OPEN:
                 self._states.note_half_open(model.provider)
 
-            attempt, result = self._try_one(model.provider, prompt, response_schema)
+            attempt, result = self._try_one(
+                model.provider, prompt, response_schema, remaining_ms=remaining_ms
+            )
+            if attempt is None:
+                # 予算に入りきらないので**始めなかった**。試行として
+                # 数えない(Providerは何も悪くない)が、理由は残す。
+                excluded = (*excluded, str(result))
+                continue
             attempts.append(attempt)
             if result is not None:
                 return RoutedResult(
@@ -374,19 +405,55 @@ class AIRouter:
     def _generate_direct(
         self, task: ForgeTask, prompt: str, response_schema: dict, provider: str
     ) -> RoutedResult:
+        # 明示指定の直接実行。`remaining_ms`は渡さない——Routingを
+        # 迂回する経路であり、候補を巡回しないので配分すべき予算が無い。
         attempt, result = self._try_one(provider, prompt, response_schema)
         if result is None:
+            assert attempt is not None  # noqa: S101 — remaining_ms=Noneなら必ず試行する
             raise NoProviderAvailableError(task, (attempt,), ())
+        assert attempt is not None  # noqa: S101 — 同上
         return RoutedResult(
             value=result, task=task, provider_used=provider, attempts=(attempt,),
         )
 
     def _try_one(
-        self, provider: str, prompt: str, response_schema: dict
-    ) -> tuple[RouteAttempt, dict[str, Any] | None]:
+        self,
+        provider: str,
+        prompt: str,
+        response_schema: dict,
+        *,
+        remaining_ms: float | None = None,
+    ) -> tuple[RouteAttempt | None, dict[str, Any] | None]:
+        """1 Providerを1回試す。
+
+        `remaining_ms`があれば、**Task全体の残り時間で締める**
+        (011 §4)。締められないAdapterの場合、入りきらないと分かって
+        いる試行は**始めない**——始めれば予算を超えることが確定して
+        いるからである。
+
+        戻り値の第1要素が`None`なら「始めなかった」を意味し、
+        第2要素に理由(文字列)が入る。試行として数えないのは、
+        Providerが失敗したわけではないためである(Circuit Breakerや
+        Benchmarkの記録を汚さない)。
+        """
         started = self._monotonic()
         try:
             adapter = self._resolve(provider)
+            adapter = self._fit_to_budget(adapter, provider, remaining_ms)
+        except _BudgetTooTight as tight:
+            return None, str(tight)
+        except Exception as exc:  # noqa: BLE001 — 解決失敗も分類して次へ
+            error = classify_exception(exc, provider)
+            self._states.record_failure(
+                provider, error.kind, retry_after_seconds=error.retry_after_seconds
+            )
+            return RouteAttempt(
+                provider=provider, ok=False,
+                latency_ms=(self._monotonic() - started) * 1000.0,
+                error_kind=error.kind, detail=error.message,
+            ), None
+
+        try:
             value = adapter.complete_structured(prompt, response_schema)
         except Exception as exc:  # noqa: BLE001 — 分類して次の候補へ進むため
             error = classify_exception(exc, provider)
@@ -411,6 +478,44 @@ class AIRouter:
 
         self._states.record_success(provider, latency_ms=latency)
         return RouteAttempt(provider=provider, ok=True, latency_ms=latency), value
+
+    def _fit_to_budget(
+        self, adapter: Any, provider: str, remaining_ms: float | None
+    ) -> Any:
+        """残り予算をAdapterへ反映する(011 §4)。
+
+        2つの場合がある:
+
+        * **deadlineを受け取れるAdapter** — 残り時間で締めた複製を使う。
+          `min(provider_timeout, remaining)`はAdapter側が取る。
+        * **受け取れないAdapter** — Registryの`nominal_timeout_seconds`と
+          比べ、入りきらないなら**始めない**。黙って予算超過を許すと、
+          45秒と宣言しておいて120秒待たせることになる。
+
+        Mockのように即答するものは`nominal_timeout_seconds`が小さいので、
+        残り予算が少なくても通る。
+        """
+        if remaining_ms is None:
+            return adapter
+        remaining_seconds = remaining_ms / 1000.0
+        if supports_deadline(adapter):
+            return apply_deadline(adapter, remaining_seconds)
+
+        definition = definition_for(provider)
+        if definition is None:
+            # Registryに宣言が無い(テストのFake等)。**判断の根拠が無い**。
+            # 根拠なく除外すると、実際には即答するAdapterまで
+            # 締め出すことになる——予算を守るための仕組みが、
+            # 予算内で終わるものを止めるのは本末転倒である。
+            return adapter
+
+        nominal = definition.nominal_timeout_seconds
+        if nominal > remaining_seconds:
+            raise _BudgetTooTight(
+                f"{provider}: 残り時間{remaining_seconds:.1f}秒では足りない"
+                f"(想定{nominal:.0f}秒。このAdapterは締め切りを受け取れない)"
+            )
+        return adapter
 
     # -- 呼び出し側から見た顔 ---------------------------------------------
 

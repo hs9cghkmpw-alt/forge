@@ -35,6 +35,7 @@ Validatorを通過することを確認した(`TECH_DEBT.md` TD15に詳細記録
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -112,6 +113,21 @@ class GeminiProvider:
         self._model = model
         self._client = client  # テスト用にhttpx.MockTransportを注入できるようにする
         self._timeout = timeout
+
+    def with_deadline(self, seconds: float) -> "GeminiProvider":
+        """Task全体の残り時間に締めたProviderを返す
+        (`app/ai/foundation/deadline.py`の`SupportsDeadline`、011 §4)。
+
+        **自分自身を書き換えない。** `ProviderRouter`が保持する共有
+        インスタンスなので、書き換えると同時に走る別のリクエストの
+        予算まで動いてしまう。
+
+        `min`を取るのは、Provider側のtimeoutより長く待つ理由が無い
+        ためである。
+        """
+        clone = copy.copy(self)
+        clone._timeout = max(0.1, min(self._timeout, seconds))
+        return clone
 
     def complete_structured(self, prompt: str, response_schema: dict[str, Any]) -> dict[str, Any]:
         """`response_schema`が空dict(`{}`)の場合、`responseSchema`自体を

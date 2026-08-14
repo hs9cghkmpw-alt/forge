@@ -442,6 +442,7 @@ PROVIDER_REGISTRY: tuple[ProviderDefinition, ...] = (
         quota_strategy=QuotaStrategy.NONE,
         error_strategy=ErrorStrategy.MESSAGE_ONLY,
         api_key_env="GEMINI_API_KEY",
+        nominal_timeout_seconds=30.0,
         models=("gemini-2.0-flash",),
         notes=(
             "`GeminiProvider`が実装済み。`responseSchema`は`$ref`非対応で、"
@@ -460,6 +461,7 @@ PROVIDER_REGISTRY: tuple[ProviderDefinition, ...] = (
         error_strategy=ErrorStrategy.STRUCTURED,
         base_url_env="FORGE_LOCAL_BASE_URL",
         model_env="FORGE_LOCAL_MODEL",
+        nominal_timeout_seconds=120.0,
         notes=(
             "`LocalModelProvider`(Ollama等のOpenAI互換Runtime)。"
             "**鍵が無くても設定済みとして扱う**——Runtimeが起動して"
@@ -488,6 +490,8 @@ PROVIDER_REGISTRY: tuple[ProviderDefinition, ...] = (
         quota_strategy=QuotaStrategy.NOT_APPLICABLE,
         error_strategy=ErrorStrategy.STRUCTURED,
         test_only=True,
+        # プロセス内で即答する。予算がほとんど残っていなくても入る。
+        nominal_timeout_seconds=1.0,
         notes=(
             "決定的な模擬応答。自動Routingには載らない(§22)。"
             "利用者へは必ず`simulated: true`として伝える。"

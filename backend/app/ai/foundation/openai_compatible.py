@@ -53,6 +53,7 @@ API Keyは`api_key_env`で**環境変数名**として受け取り、送信時�
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -361,6 +362,23 @@ class OpenAICompatibleAdapter:
     def base_url(self) -> str:
         """接続先。空文字なら未設定(Auto Discoveryが候補から外す)。"""
         return self._base_url
+
+    # -- Deadline(011 §4) -------------------------------------------------
+
+    def with_deadline(self, seconds: float) -> "OpenAICompatibleAdapter":
+        """Task全体の残り時間に締めたAdapterを返す(`SupportsDeadline`)。
+
+        **自分自身を書き換えない。** `ProviderRouter`が保持する共有
+        インスタンスなので、書き換えると同時に走る別のリクエストの
+        予算まで動いてしまう。
+
+        `min`を取るのは、Provider側のtimeoutより長く待つ理由が無い
+        ためである——残り予算が120秒あっても、Providerが60秒で
+        諦める設定ならそれ以上待っても何も起きない。
+        """
+        clone = copy.copy(self)
+        clone._timeout = max(0.1, min(self._timeout, seconds))  # noqa: SLF001 — 自分自身のコピー
+        return clone
 
     # -- LLMAdapter契約 ----------------------------------------------------
 

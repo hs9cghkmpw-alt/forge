@@ -44,6 +44,19 @@ class _FakeAdapter:
         self._index = 0
         self.calls = 0
         self.latency_ms = latency_ms
+        self.deadline_seconds: float | None = None
+
+    def with_deadline(self, seconds: float) -> "_FakeAdapter":
+        """`SupportsDeadline`(FORGE-AI-FOUNDATION-011 §4)。
+
+        本番のAdapter(`OpenAICompatibleAdapter`・`GeminiProvider`)は
+        いずれも締め切りを受け取れるので、Test Doubleも同じ形にする。
+        受け取れないDoubleにすると、`local`(公称120秒)が既定予算
+        45秒に収まらないという**本番では起きない理由**でテストが
+        落ちる——Doubleが本番より不自由だと、測りたいものが測れない。
+        """
+        self.deadline_seconds = seconds
+        return self
 
     def complete_structured(self, prompt: str, response_schema: dict) -> dict:
         self.calls += 1
