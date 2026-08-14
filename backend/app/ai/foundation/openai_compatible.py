@@ -61,9 +61,18 @@ from typing import Any
 import httpx
 
 from app.ai.gateway.ai_errors import ErrorKind, ProviderError
+from app.ai.gateway.provider_registry import StructuredOutputMode
+from app.ai.gateway.structured_output_capability import (
+    FourHundredReading,
+    default_capability_store,
+    declared_modes_for,
+    next_mode_after_rejection,
+    read_four_hundred,
+)
 
 __all__ = [
     "OpenAICompatibleAdapter",
+    "ResponseFormatError",
     "classify_http_failure",
     "extract_json_object",
 ]
@@ -78,6 +87,28 @@ _JSON_ONLY_SYSTEM_PROMPT = (
     "あなたはJSONのみを出力するAPIです。説明文・前置き・"
     "コードフェンスを一切付けず、有効なJSONオブジェクトだけを返してください。"
 )
+
+
+class _ModeRejected(Exception):
+    """400が返り、それが構造化出力modeのせいかもしれない(011 §2)。
+
+    **Adapter内部の伝達手段**であり、外へは出ない。`_chat()`は
+    分類済みの`ProviderError`をすでに持っているが、
+    「緩めてよいか」の判断は`complete_structured()`の仕事なので、
+    読み分けの結果を添えて渡す。
+    """
+
+    def __init__(
+        self,
+        *,
+        error: ProviderError,
+        reading: "FourHundredReading",
+        mode: "StructuredOutputMode",
+    ) -> None:
+        super().__init__(str(error))
+        self.error = error
+        self.reading = reading
+        self.mode = mode
 
 
 class ResponseFormatError(RuntimeError):
@@ -205,6 +236,8 @@ def classify_http_failure(
     status_code: int,
     headers: dict[str, str] | None = None,
     body_text: str = "",
+    structured_mode: StructuredOutputMode | None = None,
+    mode_confirmed: bool = False,
 ) -> ProviderError:
     """HTTP応答から`ProviderError`を組み立てる(証拠の強い順)。
 
@@ -233,16 +266,26 @@ def classify_http_failure(
             if isinstance(message, str) and message:
                 detail = message[:200]
     if structured_kind is not None:
-        return ProviderError(structured_kind, provider, detail, retry_after)
-
-    # -- 証拠2: HTTPステータス --------------------------------------------
-    kind = _STATUS_KINDS.get(status_code)
-    if kind is None:
-        kind = (
-            ErrorKind.PROVIDER_SERVER_ERROR if status_code >= 500
-            else ErrorKind.UNKNOWN if status_code < 400
-            else ErrorKind.INVALID_REQUEST
-        )
+        kind = structured_kind
+        # **早期returnしない**(011 §2で直した点)。
+        #
+        # `invalid_request_error`という構造化種別は「不正な要求」までしか
+        # 言っておらず、**それがForgeの誤りなのか、送った
+        # `response_format`を相手が知らないだけなのかを区別していない**。
+        # 実際、再現したバグはまさにこの経路を通っていた
+        # (`{"type": "invalid_request_error", "message": "...json_schema
+        # is not supported"}`)。下の§2の読み分けまで進める。
+        if kind is not ErrorKind.INVALID_REQUEST:
+            return ProviderError(kind, provider, detail, retry_after)
+    else:
+        # -- 証拠2: HTTPステータス ----------------------------------------
+        kind = _STATUS_KINDS.get(status_code)
+        if kind is None:
+            kind = (
+                ErrorKind.PROVIDER_SERVER_ERROR if status_code >= 500
+                else ErrorKind.UNKNOWN if status_code < 400
+                else ErrorKind.INVALID_REQUEST
+            )
 
     # -- 証拠4: 本文テキスト(枠切れは429以外でも来る) --------------------
     lowered_body = (body_text or "").lower()
@@ -250,6 +293,26 @@ def classify_http_failure(
         ErrorKind.RATE_LIMITED, ErrorKind.INVALID_REQUEST, ErrorKind.UNKNOWN
     ):
         kind = ErrorKind.QUOTA_EXHAUSTED
+
+    # -- 011 §2: 400を「誰の問題か」で読み分ける --------------------------
+    #
+    # `structured_mode`が渡されているということは、Forgeが
+    # `response_format`を送ったということである。その場合の400は、
+    # **Forgeの誤り**とも**相手の対応範囲**とも取れる。読み分けは
+    # `structured_output_capability.read_four_hundred()`が行う。
+    #
+    # `mode_confirmed`は「このProviderでこのmodeが以前は通った」の意。
+    # 通った実績があるなら、断られたのは中身の問題である。
+    if kind is ErrorKind.INVALID_REQUEST and structured_mode is not None:
+        reading = read_four_hundred(body_text)
+        if reading is FourHundredReading.MODE_UNSUPPORTED:
+            kind = ErrorKind.UNSUPPORTED_OUTPUT_MODE
+        elif reading is FourHundredReading.AMBIGUOUS and not mode_confirmed:
+            # 判別できない。**自分では緩めないが、他のProviderへは進む**
+            # ——緩めればForgeのバグを隠しうるし、止めれば相手の癖1つで
+            # Forge全体が止まる。どちらの害も避ける位置がここである。
+            kind = ErrorKind.UNSUPPORTED_OUTPUT_MODE
+            detail = f"{detail}(400の理由を判別できず、mode非対応の可能性として扱う)"
 
     return ProviderError(kind, provider, detail or f"HTTP {status_code}", retry_after)
 
@@ -307,17 +370,66 @@ class OpenAICompatibleAdapter:
         この「空スキーマ=freeform」という規約は`forge_operation.py`が
         既に依存しているため、Provider間で揃える必要がある
         (`GeminiProvider`も同じ扱い)。
+
+        ---
+
+        ## 2種類のdowngrade(011 §2で整理した)
+
+        1. **mode非対応によるdowngrade** — Providerが`json_schema`を
+           知らずHTTP 400を返した場合。1段だけ緩めて**1回だけ**やり直す。
+           010ではここが`_chat()`内の例外で止まり、到達しなかった
+           (再現済みの実バグ)。
+        2. **出力が壊れていたことによるdowngrade** — 応答は返ったが
+           JSONとして取り出せなかった場合。従来からある挙動。
+
+        どちらも**1回だけ**である。2種類あるからといって2回緩めない
+        ——無限に粘ると、待ち時間だけが伸びる。
         """
-        content = self._chat(prompt, response_schema)
+        store = default_capability_store()
+        mode = store.preferred_mode(
+            self.provider_name, self.model,
+            declared=declared_modes_for(self.provider_name),
+        )
+        if not response_schema:
+            # スキーマを渡していないなら、そもそもschema modeを要求しない。
+            mode = StructuredOutputMode.JSON_OBJECT
+
+        try:
+            content = self._chat(prompt, response_schema, mode)
+        except _ModeRejected as rejected:
+            weaker = next_mode_after_rejection(rejected.mode)
+            if rejected.reading is not FourHundredReading.MODE_UNSUPPORTED or weaker is None:
+                # 明示的な「mode非対応」の証拠が無い場合は**緩めない**。
+                # 緩めるとForge自身のスキーマ不正を黙って回避し、
+                # 検証されていない出力を「成功」として返すことになる。
+                # 分類(他Providerへ進んでよいか)は`classify_http_failure`が
+                # 済ませている。
+                raise rejected.error from None
+            store.note_unsupported(self.provider_name, self.model, rejected.mode)
+            try:
+                content = self._chat(prompt, response_schema, weaker)
+            except _ModeRejected as second:
+                # 緩めても駄目だった。**2段目は緩めない**(§2「1回だけ」)。
+                # このProviderはこのTaskを構造化出力で果たせない、という
+                # 事実を記録して、分類済みのエラーを送出する。
+                # `UNSUPPORTED_OUTPUT_MODE`なら他Providerへは進める
+                # ——「このProviderが対応していない」は、他のProviderに
+                # ついては何も言っていない。
+                store.note_unsupported(self.provider_name, self.model, second.mode)
+                raise second.error from None
+            mode = weaker
+
+        store.note_worked(self.provider_name, self.model, mode)
+
         try:
             return extract_json_object(content, error_type=self._response_format_error_type())
         except Exception:
             if not response_schema:
                 raise
-            # `json_schema`を守れなかった場合の**1回だけ**の再試行。
+            # 応答は返ったが構造が壊れていた場合の**1回だけ**の再試行。
             # 小さいモデルでは頻繁に起きるため即失敗にせず、緩い
-            # `json_object`で取り直す。2回目は無い(無限に粘らない)。
-            retried = self._chat(prompt, {})
+            # `json_object`で取り直す。2回目は無い。
+            retried = self._chat(prompt, {}, StructuredOutputMode.JSON_OBJECT)
             return extract_json_object(retried, error_type=self._response_format_error_type())
 
     # -- 差し替え点 --------------------------------------------------------
@@ -360,7 +472,18 @@ class OpenAICompatibleAdapter:
                 headers["Authorization"] = f"Bearer {key}"
         return headers
 
-    def _payload(self, prompt: str, response_schema: dict[str, Any]) -> dict[str, Any]:
+    def _payload(
+        self,
+        prompt: str,
+        response_schema: dict[str, Any],
+        mode: StructuredOutputMode,
+    ) -> dict[str, Any]:
+        """`mode`に応じて`response_format`を組み立てる(011 §2)。
+
+        `PROMPT_JSON`では`response_format`を**送らない**。これが
+        最後の砦で、`response_format`という語を知らないProviderでも
+        通る(JSONを求めるのはsystem promptだけになる)。
+        """
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
@@ -372,23 +495,34 @@ class OpenAICompatibleAdapter:
             "temperature": 0.0,
             "stream": False,
         }
-        if response_schema:
-            payload["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "forge_result", "schema": response_schema, "strict": False,
-                },
-            }
-        else:
+        if mode in (StructuredOutputMode.STRICT_JSON_SCHEMA, StructuredOutputMode.JSON_SCHEMA):
+            if response_schema:
+                payload["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "forge_result",
+                        "schema": response_schema,
+                        "strict": mode is StructuredOutputMode.STRICT_JSON_SCHEMA,
+                    },
+                }
+            else:
+                payload["response_format"] = {"type": "json_object"}
+        elif mode is StructuredOutputMode.JSON_OBJECT:
             payload["response_format"] = {"type": "json_object"}
+        # PROMPT_JSON / UNSUPPORTED は response_format を送らない。
         return payload
 
-    def _chat(self, prompt: str, response_schema: dict[str, Any]) -> str:
+    def _chat(
+        self,
+        prompt: str,
+        response_schema: dict[str, Any],
+        mode: StructuredOutputMode = StructuredOutputMode.JSON_SCHEMA,
+    ) -> str:
         try:
             with httpx.Client(timeout=self._timeout) as client:
                 response = client.post(
                     f"{self.base_url}/chat/completions",
-                    json=self._payload(prompt, response_schema),
+                    json=self._payload(prompt, response_schema, mode),
                     headers=self._headers(),
                 )
         except httpx.HTTPError as exc:
@@ -397,12 +531,29 @@ class OpenAICompatibleAdapter:
         if response.status_code >= 400:
             # **本文は載せるがリクエストは載せない**——プロンプトは
             # 利用者の入力そのものである。
-            raise classify_http_failure(
+            sent_structured = mode in (
+                StructuredOutputMode.STRICT_JSON_SCHEMA,
+                StructuredOutputMode.JSON_SCHEMA,
+                StructuredOutputMode.JSON_OBJECT,
+            )
+            error = classify_http_failure(
                 provider=self.provider_name,
                 status_code=response.status_code,
                 headers=dict(response.headers),
                 body_text=response.text,
+                structured_mode=mode if sent_structured else None,
+                mode_confirmed=default_capability_store().has_worked(
+                    self.provider_name, self.model, mode
+                ),
             )
+            if response.status_code == 400 and sent_structured:
+                # 上位(`complete_structured`)がdowngradeを判断できるよう、
+                # **読み分けの結果を添えて**渡す。分類済みの`error`は
+                # そのまま持っているので、緩めない場合はこれを送出する。
+                raise _ModeRejected(
+                    error=error, reading=read_four_hundred(response.text), mode=mode
+                )
+            raise error
 
         try:
             body = response.json()

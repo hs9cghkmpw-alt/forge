@@ -70,6 +70,26 @@ class ErrorKind(str, Enum):
     STRUCTURED_OUTPUT_FAILURE = "structured_output_failure"
     """構造化出力が壊れていた。同Providerで1回だけ再試行の価値がある。"""
 
+    UNSUPPORTED_OUTPUT_MODE = "unsupported_output_mode"
+    """**そのProvider/Modelが、要求した構造化出力modeを知らない**
+    (FORGE-AI-FOUNDATION-011 §2)。
+
+    `INVALID_REQUEST`と厳密に分ける。両者はどちらもHTTP 400で来るが、
+    意味が正反対である:
+
+    * `INVALID_REQUEST` — **Forge側の誤り**。相手を変えても直らない
+      ので、巡回を止める。
+    * `UNSUPPORTED_OUTPUT_MODE` — **相手の対応範囲の問題**。
+      緩いmodeなら答えられるかもしれないし、別のProviderなら
+      そのまま答えられる。**巡回を止めてはならない。**
+
+    011以前はこれが`INVALID_REQUEST`へ潰れており、`json_schema`を
+    知らないProviderが1つあるだけで**全Routingが停止**しえた。
+
+    故障ではないのでCircuit Breakerの失敗カウントには数えない
+    ——何度呼んでも同じ結果になるが、それは壊れているのではなく、
+    そういう仕様だというだけである。"""
+
     LOCAL_RESOURCE_ERROR = "local_resource_error"
     """Local固有(Runtime未起動・RAM不足・モデル未取得)。"""
 
@@ -85,6 +105,11 @@ class ErrorKind(str, Enum):
 
         `INVALID_REQUEST`だけが`False`である——これはForge側の誤りなので、
         相手を変えても直らない。
+
+        `UNSUPPORTED_OUTPUT_MODE`は`True`である(011 §2)。同じHTTP 400
+        でも、**相手の対応範囲の問題なら別の相手には効く**。ここを
+        混同していたために、`json_schema`非対応のProviderが1つあると
+        全Routingが止まりえた。
         """
         return self is not ErrorKind.INVALID_REQUEST
 
