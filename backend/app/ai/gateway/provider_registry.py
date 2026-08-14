@@ -41,6 +41,7 @@ Adapter実装だけであり、そこでも`os.environ`から直接読む。
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from enum import Enum
 
@@ -52,9 +53,82 @@ __all__ = [
     "Protocol",
     "ProviderDefinition",
     "QuotaStrategy",
+    "StructuredOutputMode",
     "configured_providers",
+    "extra_providers",
+    "provider_registry",
+    "weaker_mode",
     "definition_for",
 ]
+
+
+class StructuredOutputMode(str, Enum):
+    """構造化出力を**どうやって要求するか**
+    (FORGE-AI-FOUNDATION-011 §2、2026-08-14)。
+
+    ---
+
+    ## なぜ真偽値では足りなかったか(実バグの原因)
+
+    010では`supports_structured_output: bool`しか持っていなかった。
+    そのためAdapterは常に`json_schema`で要求し、Providerが
+    `json_schema`を知らずにHTTP 400を返すと、
+
+        HTTP 400 → INVALID_REQUEST → 「Forge側の誤り」→ 全Routing停止
+
+    となった。実際には**そのProviderがそのmodeを知らないだけ**で、
+    緩いmodeなら答えられたし、他のProviderなら`json_schema`で
+    答えられた。
+
+    「対応しているか」を1bitに潰したことで、**何に対応していないか**が
+    言えなくなっていた、というのが原因である。
+
+    ## 強い順に並んでいる
+
+    上ほど制約が強く、Forgeにとって望ましい。Adapterは対応modeの
+    うち最も強いものから試し、mode非対応が原因の失敗に限り**1段だけ**
+    緩める(§2「安全なdowngradeを1回だけ」)。
+    """
+
+    STRICT_JSON_SCHEMA = "strict_json_schema"
+    """`response_format: json_schema` かつ `strict: true`。
+    スキーマ違反をProvider側が構造的に防ぐ。"""
+
+    JSON_SCHEMA = "json_schema"
+    """`response_format: json_schema`(strictなし)。スキーマは
+    **指示として**渡るが、守られる保証はない。"""
+
+    JSON_OBJECT = "json_object"
+    """`response_format: json_object`。JSONであることだけが保証され、
+    形はプロンプト頼み。"""
+
+    PROMPT_JSON = "prompt_json"
+    """`response_format`を送らず、プロンプトだけでJSONを求める。
+    最も弱いが、**どのProviderでも成立する**最後の手段。"""
+
+    UNSUPPORTED = "unsupported"
+    """構造化出力の概念が無い。Forgeの全Taskが成立しないので、
+    `requires_strict_schema`なTaskの候補から外れる。"""
+
+
+# 弱い方向への並び。downgradeは**この順で1段だけ**進む。
+_DOWNGRADE_ORDER: tuple[StructuredOutputMode, ...] = (
+    StructuredOutputMode.STRICT_JSON_SCHEMA,
+    StructuredOutputMode.JSON_SCHEMA,
+    StructuredOutputMode.JSON_OBJECT,
+    StructuredOutputMode.PROMPT_JSON,
+)
+
+
+def weaker_mode(mode: StructuredOutputMode) -> StructuredOutputMode | None:
+    """1段だけ弱いmode。これ以上緩められなければ`None`。"""
+    try:
+        index = _DOWNGRADE_ORDER.index(mode)
+    except ValueError:
+        return None
+    if index + 1 >= len(_DOWNGRADE_ORDER):
+        return None
+    return _DOWNGRADE_ORDER[index + 1]
 
 
 class Protocol(str, Enum):
@@ -64,6 +138,11 @@ class Protocol(str, Enum):
     1つの値になっているのは、Ollama/vLLM/Groq/OpenRouter等が同じ
     `/v1/chat/completions`契約を共有しており、1つのAdapterで足りる
     ためである(Phase E)。
+
+    **Protocolを共有することと、Identityを共有することは別である**
+    (011 §1)。`groq`と`cerebras`は同じProtocolを話すが、Quota・
+    Circuit Breaker・Benchmark・Provenanceの上では**別のProvider**で
+    なければならない。010の`cloud`という1枠は、この2つを混同していた。
     """
 
     GEMINI_NATIVE = "gemini_native"
@@ -143,12 +222,35 @@ class ProviderDefinition:
     """1 Providerの宣言。**値は持たない**(§14〜§18)。"""
 
     provider_id: str
+    """**このProviderの同一性**。Quota / Circuit Breaker / Benchmark /
+    Experience / Provenance のすべてがこのキーで区別される。
+
+    Protocolを共有していても、これが違えば別のProviderである
+    (011 §1)。`cloud`のような、中身が入れ替わりうる名前を
+    使ってはならない——昨日のGroqと今日のCerebrasが同じ統計へ
+    混ざる。"""
+
     protocol: Protocol
     deployment: Deployment
     implementation_status: ImplementationStatus
     supports_structured_output: bool
     quota_strategy: QuotaStrategy
     error_strategy: ErrorStrategy
+
+    structured_output_modes: tuple[StructuredOutputMode, ...] = ()
+    """このProviderが対応すると**宣言している**構造化出力mode(強い順)。
+
+    空なら`supports_structured_output`から推定する(後方互換)。
+
+    **宣言は仮説である。** 実際に400が返れば、その事実の方を採る
+    (`_LEARNED_MODES`)。Provider公称を検証済みとして扱わない(§46)。"""
+
+    nominal_timeout_seconds: float = 60.0
+    """このProviderが1回の応答に要しうる時間の目安。
+
+    Task全体の予算(§4)を守るために使う。**Adapterがdeadlineを
+    受け付けない場合**、Routerは「残り予算 < これ」なら試行を
+    始めない——始めれば予算を超えることが分かっているからである。"""
 
     api_key_env: str | None = None
     """API Keyを読む環境変数の**名前**。`None`なら鍵不要
@@ -210,6 +312,15 @@ class ProviderDefinition:
             os.environ.get(variable, "").strip() for variable in self.required_variables
         )
 
+    @property
+    def declared_output_modes(self) -> tuple[StructuredOutputMode, ...]:
+        """対応modeを強い順に返す(未宣言なら真偽値から推定)。"""
+        if self.structured_output_modes:
+            return self.structured_output_modes
+        if not self.supports_structured_output:
+            return (StructuredOutputMode.PROMPT_JSON,)
+        return (StructuredOutputMode.JSON_SCHEMA, StructuredOutputMode.JSON_OBJECT)
+
     def missing_variables(self) -> tuple[str, ...]:
         """設定が足りない場合に、**何が足りないか**を名前で返す。
 
@@ -263,6 +374,64 @@ class ProviderDefinition:
 # なのは、**現時点で唯一品質を実測済み**だからであって、Cloudが本質的に
 # 優れているからではない(§5: Benchmarkで決める)。
 
+def env_prefix_for(provider_id: str) -> str:
+    """`groq` → `FORGE_GROQ`。環境変数名の**規約**。
+
+    規約にしているのは、Providerを1つ足すのに覚えることを減らす
+    ためである。`FORGE_<ID>_BASE_URL` / `_API_KEY` / `_MODEL` の3つで
+    どのProviderも設定できる。
+    """
+    return "FORGE_" + provider_id.upper().replace("-", "_")
+
+
+def _openai_compatible_cloud(
+    provider_id: str,
+    *,
+    notes: str = "",
+    implementation_status: ImplementationStatus = ImplementationStatus.IMPLEMENTED,
+) -> ProviderDefinition:
+    """OpenAI互換Cloud Providerの宣言を、規約から組み立てる。
+
+    **HTTP通信実装は増えない**(011 §1)——`Protocol.OPENAI_COMPATIBLE`
+    なので`OpenAICompatibleAdapter`がそのまま使われる。増えるのは
+    宣言1行だけである。
+
+    `base_url`をここに書かないのは010と同じ理由である: この開発環境は
+    Provider公式ドキュメントのドメインへegress禁止であり、
+    エンドポイントを公式に確認できなかった。記憶や検索結果から定数を
+    書くと、未検証のものが「実装済み」の顔で並ぶ(§39)。
+    運用者が公式ドキュメントを見て設定する。
+    """
+    prefix = env_prefix_for(provider_id)
+    return ProviderDefinition(
+        provider_id=provider_id,
+        protocol=Protocol.OPENAI_COMPATIBLE,
+        deployment=Deployment.CLOUD,
+        implementation_status=implementation_status,
+        supports_structured_output=True,
+        # OpenAI互換を名乗るProviderでも`json_schema`の対応度には差が
+        # ある。**宣言は仮説**であり、400が返れば事実の方を採る
+        # (`structured_output_capability.py`)。
+        structured_output_modes=(
+            StructuredOutputMode.JSON_SCHEMA,
+            StructuredOutputMode.JSON_OBJECT,
+            StructuredOutputMode.PROMPT_JSON,
+        ),
+        quota_strategy=QuotaStrategy.RATE_LIMIT_HEADERS,
+        error_strategy=ErrorStrategy.STRUCTURED,
+        api_key_env=f"{prefix}_API_KEY",
+        base_url_env=f"{prefix}_BASE_URL",
+        model_env=f"{prefix}_MODEL",
+        required_env=(f"{prefix}_BASE_URL", f"{prefix}_API_KEY", f"{prefix}_MODEL"),
+        nominal_timeout_seconds=60.0,
+        notes=notes or (
+            f"OpenAI互換Cloud。`{prefix}_BASE_URL` / `{prefix}_API_KEY` / "
+            f"`{prefix}_MODEL` を公式ドキュメントに従って設定すると"
+            "Auto Discoveryが拾う。**Adapter実装は共有**(Protocol駆動)。"
+        ),
+    )
+
+
 PROVIDER_REGISTRY: tuple[ProviderDefinition, ...] = (
     ProviderDefinition(
         provider_id="gemini",
@@ -298,31 +467,17 @@ PROVIDER_REGISTRY: tuple[ProviderDefinition, ...] = (
             "`LOCAL_RESOURCE_ERROR`で学習する。"
         ),
     ),
-    ProviderDefinition(
-        provider_id="cloud",
-        protocol=Protocol.OPENAI_COMPATIBLE,
-        deployment=Deployment.CLOUD,
-        implementation_status=ImplementationStatus.IMPLEMENTED,
-        supports_structured_output=True,
-        quota_strategy=QuotaStrategy.RATE_LIMIT_HEADERS,
-        error_strategy=ErrorStrategy.STRUCTURED,
-        api_key_env="FORGE_CLOUD_API_KEY",
-        base_url_env="FORGE_CLOUD_BASE_URL",
-        model_env="FORGE_CLOUD_MODEL",
-        required_env=("FORGE_CLOUD_BASE_URL", "FORGE_CLOUD_API_KEY", "FORGE_CLOUD_MODEL"),
-        notes=(
-            "**2つ目のCloud枠**(Phase H)。OpenAI互換の`/v1/chat/completions`を"
-            "話すCloud Providerなら、環境変数3つを設定するだけでRoutingへ"
-            "載る(Groq / OpenRouter / Together / Cerebras / DeepInfra 等)。\n\n"
-            "**特定Providerのbase_urlをここへ書いていない理由**: この開発"
-            "環境はProvider公式ドキュメントのドメインへegress禁止であり、"
-            "エンドポイントやモデル名を公式に確認できなかった。記憶や"
-            "検索結果から定数を書き込むと、間違っていても『実装済み』に"
-            "見えてしまう(§39: 未検証を検証済みとして書かない)。"
-            "運用者が公式ドキュメントを見て設定する形にしてある。\n\n"
-            "Gemini枠が尽きてもForgeが止まらない、という目的(§H)は"
-            "これで満たされる——Providerを1つ足すのにコード変更が要らない。"
-        ),
+    # --- OpenAI互換のCloud Provider群 -------------------------------------
+    #
+    # **1つずつ別のIdentityを持つ**(011 §1)。Protocolは共有するので
+    # Adapter実装は1つだが、Quota・Circuit Breaker・Benchmark・
+    # Provenanceはこの`provider_id`で分かれる。
+    #
+    # 010の`cloud`という単一枠は、今日Groq・明日Cerebrasを同じ名前で
+    # 受けてしまい、統計が混ざる構造だった。
+    *(
+        _openai_compatible_cloud(provider_id)
+        for provider_id in ("groq", "cerebras", "openrouter", "together", "deepinfra")
     ),
     ProviderDefinition(
         provider_id="mock",
@@ -389,23 +544,88 @@ PROVIDER_REGISTRY: tuple[ProviderDefinition, ...] = (
 )
 
 
-_BY_ID: dict[str, ProviderDefinition] = {}
-for _definition in PROVIDER_REGISTRY:
-    _BY_ID[_definition.provider_id] = _definition
-    for _alias in _definition.aliases:
-        _BY_ID[_alias] = _definition
+# ---------------------------------------------------------------------------
+# 追加Provider(コード変更なしで増やす、011 §1)
+# ---------------------------------------------------------------------------
+#
+#     FORGE_EXTRA_PROVIDERS=myhost,another
+#     FORGE_MYHOST_BASE_URL=...
+#     FORGE_MYHOST_API_KEY=...
+#     FORGE_MYHOST_MODEL=...
+#
+# 上のRegistryに名前が無いOpenAI互換Providerを載せるための口である。
+#
+# **`provider_id`を必ず名指しさせる**のが要点で、010の`cloud`のような
+# 「中身が入れ替わりうる汎用名」を作らせない。名前を書く手間が、
+# そのままIdentityの分離になる。
+
+_EXTRA_PROVIDERS_ENV = "FORGE_EXTRA_PROVIDERS"
+
+# 予約語。既存Providerを環境変数から上書きさせない——`gemini`を
+# 別のエンドポイントへ向けられると、Benchmarkの記録が意味を失う。
+_RESERVED_IDS = frozenset(
+    {d.provider_id for d in PROVIDER_REGISTRY}
+    | {alias for d in PROVIDER_REGISTRY for alias in d.aliases}
+)
+
+_VALID_ID = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+
+
+def extra_providers() -> tuple[ProviderDefinition, ...]:
+    """`FORGE_EXTRA_PROVIDERS`が宣言するProvider。
+
+    不正な名前(予約語・記号入り)は**黙って捨てる**。ここで例外に
+    するとForge全体が起動しなくなり、追加Providerの設定ミス1つで
+    既存の経路まで止まる。捨てたことは`extra_provider_warnings()`で
+    言えるようにしてある——黙って消えるだけにはしない。
+    """
+    return tuple(
+        definition for definition, _ in _parse_extra_providers() if definition is not None
+    )
+
+
+def extra_provider_warnings() -> tuple[str, ...]:
+    """`FORGE_EXTRA_PROVIDERS`のうち、載せられなかったものの理由。"""
+    return tuple(reason for _, reason in _parse_extra_providers() if reason)
+
+
+def _parse_extra_providers() -> tuple[tuple[ProviderDefinition | None, str], ...]:
+    raw = os.environ.get(_EXTRA_PROVIDERS_ENV, "").strip()
+    if not raw:
+        return ()
+    results: list[tuple[ProviderDefinition | None, str]] = []
+    for token in raw.split(","):
+        provider_id = token.strip().lower()
+        if not provider_id:
+            continue
+        if not _VALID_ID.match(provider_id):
+            results.append((None, f"{provider_id!r}: Provider名の形式が不正"))
+            continue
+        if provider_id in _RESERVED_IDS:
+            results.append((None, f"{provider_id!r}: 既存Providerの名前は上書きできない"))
+            continue
+        results.append((_openai_compatible_cloud(provider_id), ""))
+    return tuple(results)
+
+
+def provider_registry() -> tuple[ProviderDefinition, ...]:
+    """静的な宣言 + 環境が足したProvider。**唯一の一覧**である。"""
+    return (*PROVIDER_REGISTRY, *extra_providers())
 
 
 def definition_for(provider_id: str) -> ProviderDefinition | None:
     """名前(別名を含む)から宣言を引く。未知なら`None`。"""
-    return _BY_ID.get(provider_id)
+    for definition in provider_registry():
+        if provider_id == definition.provider_id or provider_id in definition.aliases:
+            return definition
+    return None
 
 
 def configured_providers() -> tuple[ProviderDefinition, ...]:
     """**この環境で実際に自動Routingへ載せられる**Providerだけを返す。
 
-    Phase Fの Auto Discovery はこれ1本である。実装があり、設定が
+    Auto Discovery(Phase F)はこれ1本である。実装があり、設定が
     揃っていて、テスト専用でないもの——その3条件を満たさないものを
     候補に並べても、失敗を1回増やすだけになる。
     """
-    return tuple(d for d in PROVIDER_REGISTRY if d.is_usable)
+    return tuple(d for d in provider_registry() if d.is_usable)

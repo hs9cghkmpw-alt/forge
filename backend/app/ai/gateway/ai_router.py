@@ -55,12 +55,12 @@ from app.ai.gateway.ai_errors import ErrorKind, classify_exception
 from app.ai.gateway.benchmark_evidence import BenchmarkEvidenceStore, default_evidence_store
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.gateway.provider_registry import (
-    PROVIDER_REGISTRY,
     Deployment,
     ImplementationStatus,
     ProviderDefinition,
     configured_providers,
     definition_for,
+    provider_registry,
 )
 from app.ai.gateway.provider_state import Availability, ProviderStateStore
 
@@ -560,7 +560,7 @@ def default_catalog() -> tuple[ModelDescriptor, ...]:
     catalog = [_descriptor_from(d) for d in configured_providers()]
     catalog.extend(
         _descriptor_from(d)
-        for d in PROVIDER_REGISTRY
+        for d in provider_registry()
         if d.test_only and d.implementation_status is ImplementationStatus.IMPLEMENTED
     )
     return tuple(catalog)

@@ -30,7 +30,7 @@ import httpx
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from app.ai.foundation.cloud_provider import CloudCompatibleProvider  # noqa: E402
+from app.ai.foundation.cloud_provider import OpenAICompatibleCloudProvider  # noqa: E402
 from app.ai.foundation.local_provider import LocalModelError, LocalModelProvider  # noqa: E402
 from app.ai.foundation.openai_compatible import (  # noqa: E402
     OpenAICompatibleAdapter,
@@ -337,8 +337,8 @@ class TestTheSecondCloudSlot(unittest.TestCase):
     """Phase H: 環境変数3つでCloud Providerが1つ増える。"""
 
     _VARS = (
-        "FORGE_CLOUD_BASE_URL", "FORGE_CLOUD_API_KEY",
-        "FORGE_CLOUD_MODEL", "FORGE_CLOUD_EXTRA_HEADERS",
+        "FORGE_GROQ_BASE_URL", "FORGE_GROQ_API_KEY",
+        "FORGE_GROQ_MODEL", "FORGE_GROQ_EXTRA_HEADERS",
         # conftestが`mock`へ固定しているが、pinがあるとCatalogはそれ1つに
         # なる(運用者の明示指定をRouterが上書きしない、Phase B)。
         # Auto Discoveryを見たいのでここでは外す。
@@ -360,7 +360,7 @@ class TestTheSecondCloudSlot(unittest.TestCase):
     def test_it_can_be_constructed_while_unconfigured(self) -> None:
         """`ProviderRouter`は起動時に全Providerを構築する。1つ未設定な
         だけでForge全体が起動しなくなってはならない。"""
-        provider = CloudCompatibleProvider()
+        provider = OpenAICompatibleCloudProvider("groq")
         self.assertEqual(provider.base_url, "")
 
     def test_configuration_is_read_lazily(self) -> None:
@@ -370,59 +370,59 @@ class TestTheSecondCloudSlot(unittest.TestCase):
         焼き付けると「Auto Discoveryは候補に載せるのに、Adapterは
         空のURLへ投げる」というずれが起きる。
         """
-        provider = CloudCompatibleProvider()
-        os.environ["FORGE_CLOUD_BASE_URL"] = "https://example.test/v1/"
-        os.environ["FORGE_CLOUD_MODEL"] = "some-model"
+        provider = OpenAICompatibleCloudProvider("groq")
+        os.environ["FORGE_GROQ_BASE_URL"] = "https://example.test/v1/"
+        os.environ["FORGE_GROQ_MODEL"] = "some-model"
         self.assertEqual(provider.base_url, "https://example.test/v1")
         self.assertEqual(provider.model, "some-model")
 
     def test_extra_headers_are_merged_without_provider_specific_branches(self) -> None:
         """OpenRouterの`HTTP-Referer`等。**if文をProviderごとに増やさない。**"""
-        os.environ["FORGE_CLOUD_BASE_URL"] = "https://example.test/v1"
-        os.environ["FORGE_CLOUD_MODEL"] = "m"
-        os.environ["FORGE_CLOUD_EXTRA_HEADERS"] = json.dumps({"X-Title": "Forge"})
+        os.environ["FORGE_GROQ_BASE_URL"] = "https://example.test/v1"
+        os.environ["FORGE_GROQ_MODEL"] = "m"
+        os.environ["FORGE_GROQ_EXTRA_HEADERS"] = json.dumps({"X-Title": "Forge"})
         capture = _Capture(_response(content="{}"))
         with patch.object(httpx.Client, "post", side_effect=capture):
-            CloudCompatibleProvider().complete_structured("p", {})
+            OpenAICompatibleCloudProvider("groq").complete_structured("p", {})
         self.assertEqual(capture.requests[0]["headers"]["X-Title"], "Forge")
 
     def test_broken_extra_headers_do_not_stop_forge(self) -> None:
         """壊れたJSONで起動を止めない。ヘッダが要るProviderだけが
         401として現れ、分類される。"""
-        os.environ["FORGE_CLOUD_BASE_URL"] = "https://example.test/v1"
-        os.environ["FORGE_CLOUD_MODEL"] = "m"
-        os.environ["FORGE_CLOUD_EXTRA_HEADERS"] = "{ not json"
+        os.environ["FORGE_GROQ_BASE_URL"] = "https://example.test/v1"
+        os.environ["FORGE_GROQ_MODEL"] = "m"
+        os.environ["FORGE_GROQ_EXTRA_HEADERS"] = "{ not json"
         capture = _Capture(_response(content="{}"))
         with patch.object(httpx.Client, "post", side_effect=capture):
-            CloudCompatibleProvider().complete_structured("p", {})
+            OpenAICompatibleCloudProvider("groq").complete_structured("p", {})
         self.assertIn("Content-Type", capture.requests[0]["headers"])
 
     def test_it_needs_all_three_variables_to_be_discovered(self) -> None:
         from app.ai.gateway.provider_registry import definition_for  # noqa: PLC0415
 
-        definition = definition_for("cloud")
+        definition = definition_for("groq")
         self.assertFalse(definition.is_configured)
         self.assertEqual(
             set(definition.missing_variables()),
-            {"FORGE_CLOUD_BASE_URL", "FORGE_CLOUD_API_KEY", "FORGE_CLOUD_MODEL"},
+            {"FORGE_GROQ_BASE_URL", "FORGE_GROQ_API_KEY", "FORGE_GROQ_MODEL"},
         )
-        os.environ["FORGE_CLOUD_BASE_URL"] = "https://example.test/v1"
-        os.environ["FORGE_CLOUD_API_KEY"] = "dummy-value-not-a-real-key"
+        os.environ["FORGE_GROQ_BASE_URL"] = "https://example.test/v1"
+        os.environ["FORGE_GROQ_API_KEY"] = "dummy-value-not-a-real-key"
         self.assertFalse(definition.is_configured, "モデル名が無ければ何を投げるか決まらない")
-        os.environ["FORGE_CLOUD_MODEL"] = "m"
+        os.environ["FORGE_GROQ_MODEL"] = "m"
         self.assertTrue(definition.is_configured)
 
     def test_it_joins_routing_once_configured(self) -> None:
         """**設定するだけでRoutingへ載る**(コード変更が要らない)ことの確認。"""
         from app.ai.gateway.ai_router import default_catalog  # noqa: PLC0415
 
-        self.assertNotIn("cloud", [m.provider for m in default_catalog()])
-        os.environ["FORGE_CLOUD_BASE_URL"] = "https://example.test/v1"
-        os.environ["FORGE_CLOUD_API_KEY"] = "dummy-value-not-a-real-key"
-        os.environ["FORGE_CLOUD_MODEL"] = "m"
+        self.assertNotIn("groq", [m.provider for m in default_catalog()])
+        os.environ["FORGE_GROQ_BASE_URL"] = "https://example.test/v1"
+        os.environ["FORGE_GROQ_API_KEY"] = "dummy-value-not-a-real-key"
+        os.environ["FORGE_GROQ_MODEL"] = "m"
         catalog = {m.provider: m for m in default_catalog()}
-        self.assertIn("cloud", catalog)
-        self.assertFalse(catalog["cloud"].is_local, "Cloudとして扱われていない")
+        self.assertIn("groq", catalog)
+        self.assertFalse(catalog["groq"].is_local, "Cloudとして扱われていない")
 
 
 if __name__ == "__main__":

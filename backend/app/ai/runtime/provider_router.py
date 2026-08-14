@@ -39,8 +39,9 @@ import os
 from typing import Protocol
 
 from app.ai.foundation.interfaces import LLMAdapter
-from app.ai.gateway.provider_registry import PROVIDER_REGISTRY
-from app.ai.foundation.cloud_provider import CloudCompatibleProvider
+from app.ai.gateway.provider_registry import Protocol as ProviderProtocol
+from app.ai.gateway.provider_registry import provider_registry
+from app.ai.foundation.cloud_provider import OpenAICompatibleCloudProvider
 from app.ai.foundation.local_provider import LocalModelProvider
 from app.ai.foundation.providers import (
     ClaudeProvider,
@@ -72,49 +73,69 @@ class ProviderRouter:
     という区別を明確にしている。
     """
 
-    # 名前 → Adapterを作る関数。**このモジュールが持つのは「実装」だけ**で
-    # あり、「どの名前が存在するか」「鍵はどの環境変数か」「Cloudかどうか」
-    # といった宣言的な情報は`provider_registry.py`が唯一持つ
-    # (FORGE-AI-FOUNDATION-010 Phase C)。
+    # **このモジュールが持つのは「実装」だけ**であり、「どの名前が
+    # 存在するか」「鍵はどの環境変数か」「Cloudかどうか」といった
+    # 宣言的な情報は`provider_registry.py`が唯一持つ(010 Phase C)。
     #
-    # 以前はこの表自体が事実上のRegistryを兼ねており、`ai_router`の
-    # `_KNOWN_MODELS`・`default_catalog()`と三重に同じことを宣言していた。
-    # Providerを1つ足すのに3箇所の更新が要り、揃え忘れてもテストは通る
-    # ——TD37と同じ形の事故である。
-    _FACTORIES: dict[str, type] = {
+    # **provider_idごとの専用実装**。ここに名前を書くのは、その名前が
+    # 固有の実装を必要とする場合だけである。
+    _SPECIFIC_FACTORIES: dict[str, type] = {
+        "gemini": GeminiProvider,      # Gemini独自Protocol
+        "local": LocalModelProvider,   # OpenAI互換だが既定値と失敗の言葉が固有
+        "mock": MockLLMAdapter,
+        # 以下は未実装スタブ(呼ぶとNotImplementedError)。
         "openai": OpenAIProvider,
         "claude": ClaudeProvider,
-        "gemini": GeminiProvider,
         "oss": OSSProvider,
-        "local": LocalModelProvider,
-        # Phase H: 2つ目のCloud枠。OpenAI互換なら環境変数だけで載る。
-        "cloud": CloudCompatibleProvider,
-        "mock": MockLLMAdapter,
         "forge_ai": ForgeAIProvider,
     }
 
-    def __init__(self) -> None:
-        """Registryが宣言する名前(別名を含む)をすべて登録する。
+    # **Protocolごとの汎用実装**(FORGE-AI-FOUNDATION-011 §1)。
+    #
+    # 専用実装が無いProviderは、Protocolを見てここから作る。これにより
+    # `groq`・`cerebras`・`openrouter`… が増えても**HTTP通信の実装は
+    # 1つのまま**である(§1「Provider追加ごとにHTTP通信実装を
+    # コピーしないこと」)。
+    #
+    # 増えるのはRegistryの宣言1行だけで、`FORGE_EXTRA_PROVIDERS`を
+    # 使えばコード変更すら要らない。
+    _PROTOCOL_FACTORIES: dict[ProviderProtocol, object] = {
+        ProviderProtocol.OPENAI_COMPATIBLE: OpenAICompatibleCloudProvider,
+    }
 
-        別名は新しいインスタンスではなく、既存インスタンスへの別名参照で
-        ある(同一Providerを指す)。
+    def __init__(self) -> None:
+        """Registryが宣言するProviderをすべて構築する。
+
+        **Registryにあるのに構築できない名前は起動時に落とす**
+        ——「宣言はあるが呼べない」という食い違いを実行時まで
+        持ち越さない。別名は新しいインスタンスではなく、既存
+        インスタンスへの別名参照である(同一Providerを指す)。
         """
-        self._providers: dict[str, AIProvider] = {
-            name: factory() for name, factory in self._FACTORIES.items()
-        }
-        # Registryが宣言する別名を反映する(`native` → `forge_ai`等)。
-        # **Registryにあるのにここで解決できない名前は起動時に落とす**
-        # ——「宣言はあるが呼べない」という食い違いを実行時まで
-        # 持ち越さない。
-        for definition in PROVIDER_REGISTRY:
-            target = self._providers.get(definition.provider_id)
-            if target is None:
-                raise ProviderNotAvailableError(
-                    f"Registryが宣言するProvider '{definition.provider_id}' に対応する"
-                    f"実装がありません(provider_router._FACTORIES を確認してください)。"
-                )
+        self._providers: dict[str, AIProvider] = {}
+        for definition in provider_registry():
+            self._providers[definition.provider_id] = self._build(definition)
+        for definition in provider_registry():
+            target = self._providers[definition.provider_id]
             for alias in definition.aliases:
                 self._providers.setdefault(alias, target)
+
+    def _build(self, definition) -> AIProvider:  # noqa: ANN001 — ProviderDefinition
+        """宣言からAdapterを作る。専用実装 → Protocol汎用実装 の順。"""
+        specific = self._SPECIFIC_FACTORIES.get(definition.provider_id)
+        if specific is not None:
+            return specific()
+        generic = self._PROTOCOL_FACTORIES.get(definition.protocol)
+        if generic is not None:
+            # 汎用実装は`provider_id`を受け取る——**Identityは
+            # Protocolに潰さない**(§1)。読む環境変数も
+            # `FORGE_<ID>_*`とProviderごとに分かれる。
+            return generic(definition.provider_id)
+        raise ProviderNotAvailableError(
+            f"Registryが宣言するProvider '{definition.provider_id}' "
+            f"(protocol={definition.protocol.value}) に対応する実装がありません。"
+            f"専用実装を`_SPECIFIC_FACTORIES`へ、または該当Protocolの"
+            f"汎用実装を`_PROTOCOL_FACTORIES`へ追加してください。"
+        )
 
     def available_providers(self) -> tuple[str, ...]:
         """登録済みProvider名の一覧を返す(エイリアス含め8件)。"""
