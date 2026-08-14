@@ -2,6 +2,100 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task073 — AI Foundation 統合(2026-08-14、FORGE-AI-FOUNDATION-010)
+
+**Phase Bの監査で実バグを発見した。** `FORGE_DEFAULT_PROVIDER=mock`を
+設定した状態で`/converse`を呼ぶと、レスポンスは`provider: "mock"`,
+`simulated: true`と返しながら、**実際には利用者の入力を実Geminiへ
+送っていた**(Router内部の状態`gemini available successes=1`で確認)。
+原因は、Routerが`FORGE_DEFAULT_PROVIDER`を読んでいなかったことと、
+レスポンスの`provider`欄が「選ばれるはずだった名前」から作られていて
+実際に答えたProviderと無関係だったこと。「Silent Mock fallback禁止」の
+裏返しで、**Silent Cloud送信**の方が害が大きい。
+
+**同じ配線漏れの3例目も見つかった。** Router経由になっていたのは
+`/converse`の会話ステップだけで、`/generate`・`/generate/confirm`・
+`/update`・`/converse`のBUILD経路は`ProviderRouter.resolve()`を直接
+呼んでいた。すべて塞ぎ、`ModelGateway`(本番未使用の重複層)を削除した。
+
+回帰テストの作り方も変えた。「Routerを呼んでいるか」ではなく
+**「Routerを通らない経路が存在しないこと」**を測る——前者は
+「Routerも呼び、かつ別経路でも呼んでいる」を見逃す。この回帰テストが
+置物でないことも確認した(迂回を再導入すると4件落ち、戻すと通る)。
+
+**Provider Registry(Phase C)**: Providerの知識が3箇所に散っていたのを
+`provider_registry.py`へ集約。「実装があること」と「設定があること」を
+別に判定するので、鍵を設定しても未実装Providerは候補にならない。
+
+**Secret境界(Phase D)**: `.gitignore`が`.env`と`backend/.env`の完全一致
+2件しか見ておらず、`.env.local`等が素通りしていた。Registryが持つのは
+環境変数の**名前**だけで、値は読まない・保持しない・出力しない。
+実値がソースに混入したら落ちる検査も追加(鍵形式の文字列を仕込んで
+落ちることを確認済み)。
+
+**汎用OpenAI互換Adapter(Phase E)+ 証拠順の失敗分類(Phase G)**:
+HTTP往復・JSON抽出・再試行はLocalに固有ではないので共通化した。
+失敗の分類は**構造化エラー → HTTPステータス → ヘッダ → 本文 →
+文字列マッチ**の順で、文字列は最後にしか使わない。逆順だと
+「429という明確な事実があるのに、文言にrate limitが無いからUNKNOWN」
+が起きる。429 + `insufficient_quota`は枠切れであって流量制限ではない。
+
+**2つ目のCloud枠(Phase H)**: 環境変数3つでOpenAI互換Cloudが
+Routingへ載る。特定Providerのbase_urlを書かなかったのは、この開発環境が
+Provider公式ドキュメントへegress禁止で**公式に確認できなかった**ため
+(未検証のものを「実装済み」として並べない)。TD62として記録した。
+
+**Live API Test(Phase I)**: `FORGE_LIVE_TEST=1`のときだけ走る。
+実API呼び出しは全体で最大2回(§38)。**実行して3件passを確認した
+(実Gemini)。REAL検証である。**
+
+**Benchmark基盤(Phase J)**: 数字は測定条件を必ず携える。とくに
+`Verification`(REAL / DOUBLE / FIXTURE / UNVERIFIED、既定はUNVERIFIED)が
+本番経路への関門で、**Test Doubleで測った数字はRoutingへ流れない**。
+`AIRouter._order()`へ配線済みだが、実測記録が0件のため現状は宣言順
+(TD63)。
+
+**Local AI学習の境界(Phase K)**: `ExperienceRecord`は発話・生成物・
+応答本文を入れられるフィールドが**そもそも無い**。「気を付ける」運用は
+いずれ破られるので型で塞いだ。Shadow Modeは設計のみ、Provenanceの
+既定は`UNKNOWN`。収集も学習も行っていない(TD64)。
+
+**テスト(実測)**: backend 989(skip 16、うち3件はLive)/ forge_ai 521。
+
+## Task072 — Quota-Aware AI Router(2026-08-13、FORGE-QUOTA-AWARE-AI-ROUTER-008)
+
+> このエントリはTask073の作業中に**記載漏れに気付いて追記した**
+> (2026-08-14)。Task072の実装自体は2026-08-13に完了・commit済みで
+> あり、CHANGELOGへの記載だけが抜けていた。
+
+Geminiの無料枠が切れるとForgeが使えなくなる、という問題への対応。
+Providerを増やすだけでは解決せず、「今どれが使えるか」を判断する層が要る。
+
+**失敗を種類で分ける**(`ai_errors.py`): 現行実装は`except Exception`で
+すべての失敗を同じものとして扱っており、400(schema不正)でも全Providerを
+巡回してQuotaだけを減らしていた。`ErrorKind`11種を「次に何をすべきか」で
+分類し、`INVALID_REQUEST`だけは他Providerを試さない(Forge側の誤りなので
+相手を変えても直らない)。
+
+**枠切れは故障ではない**(`provider_state.py`): `QUOTA_EXHAUSTED`を
+Circuit Breakerの失敗カウントに入れない。枠切れは`reset_at`まで待てば
+直るが、故障はcooldown後に試さないと分からない。復帰条件が違うものを
+同じ仕組みで扱うと、どちらの理由で除外されているか分からなくなる。
+
+**Quota不明を無制限と扱わない**: `QuotaKnowledge.UNKNOWN`を正面から持ち、
+楽観にも悲観にも倒さない。
+
+**並べ替えをしない判断**: 当初は「Local優先」「失敗が少ない順」で
+並べ替えていたが、テストを走らせて2つの問題が出た——(1)1回失敗した
+Providerが即座に後回しになるので連続失敗が積み上がらず**Circuit Breakerが
+発動しない**、(2)Benchmarkが無いのにLocalを優先するのは**測っていない
+品質を賭けてQuotaを節約している**だけ。健全性は「除外」でのみ表す形に
+した。
+
+**禁止事項の遵守**(§46): API Key複数化によるRate Limit回避、MockへのSilent
+Production Fallback、全Providerへの無制限Retry、Side Effect処理の
+無条件Retry、いずれも実装していない。
+
 ## Task071 — Conversation Foundation 是正(2026-08-13、FORGE-CONVERSATION-FOUNDATION-007)
 
 **再監査の結果、指摘の多くは前回(Task070)で修正済みだった**。現物で1件ずつ

@@ -3,7 +3,7 @@
 現在のForgeが「どこまで動くか」を一枚で示す。詳細な履歴は`CHANGELOG.md`、
 未解消の課題は`TECH_DEBT.md`・`KNOWN_ISSUES.md`を参照。
 
-**最終更新**: 2026-08-13(FORGE-HANDOFF-LOCAL-AI-UX-004 / FORGE-ARCHITECTURE-REVIEW-AND-IMPLEMENT-005)
+**最終更新**: 2026-08-14(FORGE-AI-FOUNDATION-010)
 
 > このファイルはFORGE-CONVERSATION-READY-001指示書15章の要請で新設した。
 > それ以前は同等の役割を`KNOWN_ISSUES.md`と各`*-report.md`が分担しており、
@@ -36,17 +36,22 @@
 | Flutter Runtime | 動作 | Widget 19種、v1.9(集計付きbar_chart) |
 | 「はい、どうぞ」UX | 動作 | `conversation_flow_screen.dart` |
 | Conversation Metrics | 記録のみ | プロセス内メモリ。外部送出は未実装 |
-| AI Router | 動作 | Quota/健全性/Circuit Breaker。**`/converse`へ配線済み** |
-| Model Gateway | 動作(未配線) | Task単位のRouting。本番からは未使用(TD59) |
-| Local Provider | 実装済/未実測 | OpenAI互換。実モデル未実行(環境制約) |
+| AI Router | 動作 | Quota/健全性/Circuit Breaker。**全AI呼び出しが経由**(迂回を回帰で固定) |
+| Model Gateway | **削除** | `AIRouter`と責務が重複し本番未使用だった(TD59)。同じ層を2つ残さない |
+| Provider Registry | 動作 | Providerの唯一の宣言。名前・鍵の変数名・実装状況・protocol |
+| Provider Auto Discovery | 動作 | 環境変数が揃ったProviderだけが候補になる |
+| Local Provider | 実装済/未実測 | OpenAI互換。実モデル未実行(環境制約、TD51) |
+| 2つ目のCloud枠(`cloud`) | 実装済/未実測 | OpenAI互換なら環境変数3つで載る。**実APIでは未検証** |
 | Provider Benchmark | 動作 | Impact分類16ケース。harness実行確認済み |
+| Benchmark → Routing接続 | **配線済/データ待ち** | 実測(REAL)が2 Provider揃えば品質順になる。今は記録が無く宣言順 |
+| Local AI 学習基盤 | **境界のみ** | 記録項目の制限・Shadow Mode設計・Provenance既定UNKNOWN。学習は未実施 |
 | Scripted Conversation Set | 動作 | 50セッション。平均質問1.20/繰り返し0/未決着0 |
 | Capability検出 / 仮説提示 | 動作 | `capability.py`。作れないものを名指しし、作れる形を出す |
 | Stateful User Correction | 動作 | 前回の仮説を保持し、訂正された層だけ差し替える |
 | Semantic Capability分解 | **PoC / 部分統合** | 分解・代替提示に使う。TRANSFORM/ENCODINGは訂正対象に**未統合** |
 | `transform.aggregate` | 動作 | グループごとの集計。**Compiler未接続**(会話からは到達しない) |
 | Declarative Capability定義 | 検証まで | 信頼度(`TrustLevel`)と実行可否(`ExecutionReadiness`)を別軸で持つ。**本番利用は不可** |
-| Self-Extension(能力獲得) | **目標として継続** | 定義は`FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md` §2。到達は「表現→検証」まで |
+| Self-Extension(能力獲得) | **目標として継続** | 5段階(表現→検証→コンパイル→描画→利用)のうち**2段階目まで**。定義は`FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md` §2 |
 | └ 実行中のDartコード注入 | **不採用** | Flutterが動的コード実行不可。これは技術的事実 |
 | └ 宣言的Capability定義 | 検証まで | 既存Primitiveの合成をデータとして追加。Runtime利用は不可 |
 | 模擬出力の明示 | 動作 | `simulated`フィールド + Flutter側のバナー/バッジ |
@@ -57,7 +62,7 @@
 | 対象 | 件数 | 状態 |
 |---|---|---|
 | `forge_ai/tests` | 521 | 全green |
-| `backend/tests` | 897 | 全green(skip 13) |
+| `backend/tests` | 989 | 全green(skip 16。うち3件はLive API Test、既定SKIP) |
 | `frontend`(Flutter) | 476 | 全green |
 | `flutter analyze` | 0件 | 2026-08-13にwarning/info含めて0へ(以前は77件) |
 
@@ -92,7 +97,13 @@
   あるのにSemantic側では`BLOCKED`になる例が残っている(既知の不一致)。
 * AI Routerは**Quota残量の実測をしていない**。枠切れは「429を受けたら
   学習する」という事後的な方法であり、事前の残量把握はしていない。
-* Routerの候補は`gemini`・`local`の2つのみ。Groq等は未実装
+* **実APIで動作を確認できているのはGeminiだけである。** `local`は環境制約で
+  実モデル未実行(TD51)、`cloud`枠はAdapterを実装したが実APIでは未検証
+  (TD62)。したがって「Multi-Cloud Routingが動く」とは書けない——
+  Test Doubleで A→B のfallbackが成立することは確認済みだが、それは
+  **Routerの契約**の確認であって、複数Cloudの実地確認ではない。
+* Benchmarkによる品質Routingは**配線済みだがデータが無い**。実測を
+  入れるまでは宣言順で動く。Test Doubleで測った数字は構造的に弾かれる。
   (動かないProviderを候補に並べない方針、§36)。
 * **内容によるPrivacy判定をしていない**(TD60)。健康情報等もCloudへ送られる。
 * 共有・通知などのEffect Capabilityは**確認は取るが、実装が無い**。

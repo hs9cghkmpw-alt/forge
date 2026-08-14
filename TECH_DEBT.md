@@ -2813,10 +2813,25 @@ $ grep -rn "ModelGateway" app/ | grep -v app/ai/gateway/
 呼ばれていない」と同じ形の問題である。** 基盤を作って配線を忘れると、
 テストは通るのに製品は何も変わらない。同じ失敗を2回している。
 
-**対応**: `AIRouter`を新設し、`/converse`を実際にRouter経由へ配線した。
-配線の確認方法も残した(`tests/test_ai_router.py`の
-`TestRouterIsActuallyWired`ではなく、実際にHTTP経由で枠切れを
-再現して確認済み)。
+**対応(2026-08-13、008)**: `AIRouter`を新設し、`/converse`を実際に
+Router経由へ配線した。
+
+**追加対応(2026-08-14、010 Phase B)**: 008の対応は**不十分だった**。
+再監査したところ、Router経由になっていたのは`/converse`の会話ステップ
+だけで、`/generate`・`/generate/confirm`・`/update`・`/converse`のBUILD
+経路は`ProviderRouter.resolve()`を直接呼んでいた。**同じ問題の3例目**
+である。
+
+* 残っていた迂回をすべて塞いだ
+* `ModelGateway`自体を**削除**した(`AIRouter`と責務が重複しており、
+  同じことをする層を2つ残すと、片方が本番から呼ばれないまま
+  テストだけ通り続ける)
+* `tests/test_router_anti_bypass.py`で、**Routerを通らない経路が
+  存在しないこと**を回帰化した。「Routerを呼んでいるか」ではなく
+  「迂回が無いか」を測る——前者は「Routerも呼び、かつ別経路でも
+  呼んでいる」を見逃す
+* この回帰テストが置物でないことも確認した(迂回を再導入すると
+  4件落ち、戻すと通る)
 
 ---
 
@@ -2850,3 +2865,74 @@ FORGE-QUOTA-AWARE-AI-ROUTER-008 §25・§26。
 
 `ConversationStore`・`ConfirmationStore`と同じ制限(TD41)。
 外部ストア(Redis等)へ移すなら3つまとめて行うべきである。
+
+---
+
+## TD62. 2つ目のCloud Providerが実APIで未検証
+
+FORGE-AI-FOUNDATION-010 Phase H。
+
+`cloud`枠(`CloudCompatibleProvider`)を実装し、環境変数3つで
+OpenAI互換のCloud ProviderがRoutingへ載るようにした。しかし
+**実APIに対して一度も動かしていない**。
+
+**なぜ実行できなかったか**: この開発環境は、Provider公式ドキュメントの
+ドメイン(`console.groq.com` / `openrouter.ai` / `docs.cerebras.ai`)への
+egressがproxyで禁止されている。エンドポイント・モデル名・レート制限を
+公式に確認できず、鍵も持っていない。
+
+記憶や検索結果から`https://api.groq.com/openai/v1`のような定数を
+書くことはできたが、そうすると**未検証のものが「実装済みProvider」
+として並ぶ**(§39が禁じている)。したがって定数は書かず、運用者が
+公式ドキュメントを見て設定する形にした。
+
+**この結果として言えないこと**: 「Multi-Cloud Routingが動く」。
+Test Doubleで A→B のfallbackが成立することは確認済みだが、それは
+Routerの契約の確認であって、複数Cloudの実地確認ではない(§62)。
+
+**次にやるべきこと**: 鍵を1つ取得し(`FORGE-AI-FOUNDATION-010-report.md`
+の推奨を参照)、`FORGE_LIVE_TEST=1`で`tests/test_live_api.py`を走らせる。
+Adapterは完成しているので、設定すれば通るはずである——「はず」で
+あって、確認していない。
+
+---
+
+## TD63. Benchmarkによる品質Routingは配線済みだがデータが無い
+
+FORGE-AI-FOUNDATION-010 Phase J。
+
+`AIRouter._order()`は`BenchmarkEvidenceStore.ranking_for()`を見るように
+なった。ただし順位が返るのは、**実API(`Verification.REAL`)で測った**
+記録が16件以上・30日以内で2 Provider以上そろったときだけである。
+
+現在その記録は**0件**であり、実際の順序は`catalog`の宣言順のままである。
+
+**これはTD59(基盤はあるが本番から呼ばれない)とは別種の未完了である。**
+呼び出し側は繋がっており、効いていないのはデータが無いからである。
+実測を入れれば自動的に効き始める(テストで両方向を固定している)。
+
+**次にやるべきこと**: 実Providerが2つ使える環境で
+`run_benchmark()`を走らせ、結果を`Verification.REAL`として記録する。
+そのためにはTD62(2つ目のCloud未検証)とTD51(Local実モデル未実行)の
+どちらかが先に解消している必要がある。
+
+---
+
+## TD64. Local AI学習は境界のみで、収集も学習も行っていない
+
+FORGE-AI-FOUNDATION-010 Phase K。
+
+`learning_foundation.py`は**型と境界だけ**である。
+`ExperienceStore`はどこからも呼ばれておらず、記録は1件も作られない。
+
+**これは意図的な未配線である**(TD59と混同しないこと)。学習用データの
+収集は後から安全にはできないので境界を先に置いたが、収集を始める判断は
+まだしていない。始めるには、少なくとも次が要る:
+
+* Privacy Policy(TD60)——何を記録してよいかの合意
+* 記録の永続化方針(現状プロセス内メモリ、TD41と同じ)
+* 利用者への説明(記録項目は絞ってあるが、説明しない理由にはならない)
+
+`ExperienceRecord`は発話・生成物・応答本文を持てない型にしてあるので、
+仮に配線しても利用者の入力は入らない。ただし**「入らない設計である」
+ことと「説明した」ことは別である**。
