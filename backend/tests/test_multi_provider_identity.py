@@ -183,7 +183,7 @@ class TestBenchmarkRecordsDoNotMix(_EnvSandbox):
     def _run(self, provider: str, accuracy: float) -> BenchmarkRun:
         return BenchmarkRun(
             task=ForgeTask.CONVERSATION_STEP, provider=provider,
-            model=f"{provider}-model", dataset_id="impact-v1", dataset_size=16,
+            model=f"{provider}-model", dataset_id="impact-v1", dataset_hash="abc123def456", dataset_size=16,
             verification=Verification.REAL, task_accuracy=accuracy,
             schema_valid_rate=1.0, recorded_at=self._NOW,
         )

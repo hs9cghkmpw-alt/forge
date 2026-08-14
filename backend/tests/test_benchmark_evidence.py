@@ -41,6 +41,9 @@ def _run(provider: str, *, accuracy: float = 0.9, **overrides) -> BenchmarkRun:
         "provider": provider,
         "model": f"{provider}-model-1",
         "dataset_id": "impact-v1",
+        # §3: 実使用では`run_benchmark()`が自動で入れる。同一Datasetで
+        # 測ったことの照合キーであり、無いとRoutingへ使えない。
+        "dataset_hash": "abc123def456",
         "dataset_size": 16,
         "verification": Verification.REAL,
         "task_accuracy": accuracy,
@@ -232,3 +235,122 @@ class TestTheRouterUsesTheRankingWhenItExists(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOnlySameDatasetComparisonsCount(unittest.TestCase):
+    """FORGE-AI-FOUNDATION-011 §3。
+
+    指示書が挙げた形をそのまま:
+
+        Provider A: easy-dataset / accuracy 0.98
+        Provider B: hard-dataset / accuracy 0.80
+
+    これを比べて順位を付けられてしまう状態だった(再現確認済み)。
+    分かるのは「easyはhardより易しい」だけで、Providerの差ではない。
+    """
+
+    def test_different_dataset_ids_do_not_produce_a_ranking(self) -> None:
+        store = _store()
+        store.record(_run("a", accuracy=0.98, dataset_id="easy-dataset"))
+        store.record(_run("b", accuracy=0.80, dataset_id="hard-dataset"))
+        self.assertIsNone(store.ranking_for(_TASK))
+
+    def test_the_same_name_with_different_contents_is_not_the_same_dataset(self) -> None:
+        """**`dataset_id`だけでは同一性を保証できない。**
+
+        同じ`impact-v1`のままケースを足したり文言を直したりできる。
+        指紋(`dataset_hash`)が違えば別Datasetとして扱う。
+        """
+        store = _store()
+        store.record(_run("a", accuracy=0.98, dataset_hash="hash-before-edit"))
+        store.record(_run("b", accuracy=0.80, dataset_hash="hash-after-edit"))
+        self.assertIsNone(store.ranking_for(_TASK))
+
+    def test_a_record_without_a_fingerprint_cannot_be_used(self) -> None:
+        """「たぶん同じDatasetだろう」で本番の経路を決めない。"""
+        store = _store()
+        store.record(_run("a", dataset_hash=""))
+        store.record(_run("b", dataset_hash=""))
+        self.assertIsNone(store.ranking_for(_TASK))
+        self.assertIn("指紋", " / ".join(store.exclusion_reasons(_TASK)))
+
+    def test_it_says_that_the_datasets_are_not_aligned(self) -> None:
+        store = _store()
+        store.record(_run("a", dataset_id="easy-dataset"))
+        store.record(_run("b", dataset_id="hard-dataset"))
+        reasons = " / ".join(store.exclusion_reasons(_TASK))
+        self.assertIn("Datasetが揃っていない", reasons)
+
+    def test_the_widest_coherent_group_is_used(self) -> None:
+        """群が複数あるときは、**最も多くのProviderを含む群**を使う。
+        比較の土台として最も広いものを選ぶ、という意味である。"""
+        store = _store()
+        store.record(_run("a", accuracy=0.9, dataset_id="shared"))
+        store.record(_run("b", accuracy=0.5, dataset_id="shared"))
+        store.record(_run("c", accuracy=1.0, dataset_id="lonely"))
+        self.assertEqual(store.ranking_for(_TASK), ("a", "b"))
+
+    def test_the_fingerprint_ignores_case_order_but_not_content(self) -> None:
+        """並べ替えただけで別物にしない。1件でも文言が変われば変わる。"""
+        from app.ai.gateway.benchmark_evidence import dataset_fingerprint  # noqa: PLC0415
+
+        self.assertEqual(
+            dataset_fingerprint(["one", "two", "three"]),
+            dataset_fingerprint(["three", "one", "two"]),
+        )
+        self.assertNotEqual(
+            dataset_fingerprint(["one", "two"]), dataset_fingerprint(["one", "two!"])
+        )
+        self.assertNotEqual(
+            dataset_fingerprint(["one", "two"]), dataset_fingerprint(["one", "two", "three"])
+        )
+
+
+class TestBrokenStructureIsNotJustALowerScore(unittest.TestCase):
+    """FORGE-AI-FOUNDATION-011 §3 の問いへの回答。
+
+        Provider A: task_accuracy 0.95 / schema_valid 0.40
+        Provider B: task_accuracy 0.90 / schema_valid 1.00
+
+    **Aを優先してはならない。** Forgeは応答をJSONとして解釈するので、
+    構造が壊れた応答は「少し悪い答え」ではなく「答えが無い」である。
+    """
+
+    def test_a_high_accuracy_but_broken_provider_never_wins(self) -> None:
+        store = _store()
+        store.record(_run("broken_structure", accuracy=0.95, schema_valid_rate=0.40))
+        store.record(_run("sound_structure", accuracy=0.90, schema_valid_rate=1.00))
+        # 足切りされるので、残るのは1つ→順位は成立しない。
+        self.assertIsNone(store.ranking_for(_TASK))
+        self.assertIn(
+            "構造化出力の成功率", " / ".join(store.exclusion_reasons(_TASK))
+        )
+
+    def test_it_is_a_gate_not_a_sort_key(self) -> None:
+        """健全性は**除外**で表し、品質は**順序**で表す。
+
+        両方が閾値を満たすなら、順序は正答率で決まる——schema適合率で
+        さらに並べ替えたりはしない(`AIRouter._order()`と同じ方針)。
+        """
+        store = _store()
+        store.record(_run("slightly_lower_schema", accuracy=0.95, schema_valid_rate=0.92))
+        store.record(_run("perfect_schema", accuracy=0.80, schema_valid_rate=1.00))
+        self.assertEqual(
+            store.ranking_for(_TASK), ("slightly_lower_schema", "perfect_schema")
+        )
+
+    def test_the_threshold_matches_the_benchmark_report(self) -> None:
+        """**同じ概念に2つの閾値を置かない。**
+
+        片方だけ直して食い違うのが、TD37で踏んだ形である。
+        """
+        import inspect  # noqa: PLC0415
+
+        from app.ai.gateway.benchmark import BenchmarkReport  # noqa: PLC0415
+        from app.ai.gateway.benchmark_evidence import _MIN_SCHEMA_VALID_RATE  # noqa: PLC0415
+
+        signature = inspect.signature(BenchmarkReport.winner)
+        self.assertEqual(
+            signature.parameters["min_schema_valid_rate"].default,
+            _MIN_SCHEMA_VALID_RATE,
+        )

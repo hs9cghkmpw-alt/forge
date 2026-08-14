@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.ai.gateway.ai_router import AIRouter
+from app.ai.gateway.benchmark_evidence import dataset_fingerprint
 from app.ai.gateway.tasks import ForgeTask
 
 __all__ = [
@@ -105,6 +106,10 @@ class BenchmarkReport:
     task: ForgeTask
     scores: list[ProviderScore] = field(default_factory=list)
 
+    dataset_hash: str = ""
+    """測ったDatasetの指紋(011 §3)。`BenchmarkRun`へ引き継ぐことで、
+    「同じDatasetで測ったか」を後から照合できるようにする。"""
+
     def winner(
         self, *, min_schema_valid_rate: float = 0.9, min_task_accuracy: float = 0.5
     ) -> str | None:
@@ -137,6 +142,7 @@ class BenchmarkReport:
     def to_dict(self) -> dict[str, Any]:
         return {
             "task": self.task.value,
+            "dataset_hash": self.dataset_hash,
             "scores": [s.to_dict() for s in self.scores],
             "winner": self.winner(),
         }
@@ -163,7 +169,10 @@ def run_benchmark(
     `AIRouter`へ移した(`ModelGateway`は削除。同じ責務の層を2つ
     残さない)。
     """
-    report = BenchmarkReport(task=task)
+    # §3: Datasetの指紋をここで1度だけ計算する。`BenchmarkRun`へ
+    # 載せることで、後から「同じDatasetで測ったか」を照合できる。
+    fingerprint = dataset_fingerprint(case.prompt for case in cases)
+    report = BenchmarkReport(task=task, dataset_hash=fingerprint)
     for provider in providers:
         score = ProviderScore(provider=provider, task=task)
         for case in cases:
