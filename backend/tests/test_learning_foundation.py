@@ -21,7 +21,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from app.ai.gateway.learning_foundation import (  # noqa: E402
     ACTIVE_SHADOW_PLANS,
     KNOWN_MODEL_PROVENANCE,
-    CorrectionSignal,
+    AcceptanceSignal,
+    acceptance_from_hypothesis_state,
     ExperienceRecord,
     ExperienceStore,
     ModelProvenance,
@@ -70,22 +71,50 @@ class TestUserInputCannotEnterTheLearningRecord(unittest.TestCase):
                     _record(**{forbidden: "何か"})
 
     def test_the_diagnostic_view_contains_no_content(self) -> None:
-        described = repr(_record(correction=CorrectionSignal.CORRECTED).to_dict())
+        described = repr(_record(acceptance=AcceptanceSignal.CORRECTED).to_dict())
         self.assertIn("gemini", described)
         for forbidden in ("prompt", "utterance", "build_brief", "forge_document"):
             self.assertNotIn(forbidden, described)
 
     def test_a_correction_records_only_that_it_happened(self) -> None:
         """訂正の**内容**は利用者の発話そのものなので持たない。"""
-        record = _record(correction=CorrectionSignal.CORRECTED)
-        self.assertIs(record.correction, CorrectionSignal.CORRECTED)
-        self.assertNotIn("correction_text", record.to_dict())
+        record = _record(acceptance=AcceptanceSignal.CORRECTED)
+        self.assertIs(record.acceptance, AcceptanceSignal.CORRECTED)
+        self.assertNotIn("acceptance_text", record.to_dict())
 
-    def test_no_correction_does_not_mean_it_was_correct(self) -> None:
-        """`NONE`は「正しかった」ではない——諦めた場合も気付かなかった
-        場合もここに入る。Enumのdocstringで明示していることを、
-        値の設計としても保つ(`CORRECT`のような値を作らない)。"""
-        self.assertNotIn("correct", [v.value for v in CorrectionSignal])
+    def test_silence_is_not_acceptance(self) -> None:
+        """**011 §5で直した点。**
+
+        010では`NONE`が「明示的に承認された」と「ただ訂正されなかった」
+        を飲み込んでいた。Teacher Evaluationではこの2つは正反対の
+        信号であり、混ぜると沈黙が正例として学習されうる。
+        """
+        self.assertIs(_record().acceptance, AcceptanceSignal.UNKNOWN)
+        self.assertFalse(AcceptanceSignal.UNKNOWN.is_usable_as_supervision)
+        self.assertFalse(AcceptanceSignal.UNKNOWN.is_positive)
+
+    def test_only_an_explicit_acceptance_is_a_positive_example(self) -> None:
+        self.assertTrue(AcceptanceSignal.ACCEPTED.is_positive)
+        for other in (AcceptanceSignal.CORRECTED, AcceptanceSignal.ABANDONED,
+                      AcceptanceSignal.UNKNOWN):
+            with self.subTest(signal=other):
+                self.assertFalse(other.is_positive)
+
+    def test_the_conversation_signal_maps_across_the_boundary(self) -> None:
+        """Forgeは既に`HypothesisState.ACCEPTED`を持っていた。
+        記録側で捨てていた、というのが010の実態である。"""
+        from app.ai.runtime.conversation_types import HypothesisState  # noqa: PLC0415
+
+        self.assertIs(
+            acceptance_from_hypothesis_state(HypothesisState.ACCEPTED),
+            AcceptanceSignal.ACCEPTED,
+        )
+
+    def test_an_unknown_conversation_state_never_becomes_a_positive(self) -> None:
+        """新しい状態が増えたときに、黙って正例へ流れ込まない。"""
+        self.assertIs(
+            acceptance_from_hypothesis_state("some_future_state"), AcceptanceSignal.UNKNOWN
+        )
 
 
 class TestObservationsAreNotBenchmarks(unittest.TestCase):
@@ -110,13 +139,17 @@ class TestObservationsAreNotBenchmarks(unittest.TestCase):
         store = ExperienceStore()
         store.record(_record(structured_output_valid=True))
         store.record(_record(structured_output_valid=False))
-        store.record(_record(correction=CorrectionSignal.CORRECTED))
+        store.record(_record(acceptance=AcceptanceSignal.CORRECTED))
         store.record(_record(used_fallback=True))
+        store.record(_record(acceptance=AcceptanceSignal.ACCEPTED))
         summary = store.summary_for(_TASK)
-        self.assertEqual(summary["samples"], 4)
-        self.assertEqual(summary["structured_output_valid_rate"], 0.75)
-        self.assertEqual(summary["correction_rate"], 0.25)
-        self.assertEqual(summary["fallback_rate"], 0.25)
+        self.assertEqual(summary["samples"], 5)
+        self.assertEqual(summary["structured_output_valid_rate"], 0.8)
+        self.assertEqual(summary["correction_rate"], 0.2)
+        self.assertEqual(summary["fallback_rate"], 0.2)
+        # §5: 明示的な承認は、訂正されなかっただけのものと分けて数える。
+        self.assertEqual(summary["explicit_acceptance_rate"], 0.2)
+        self.assertEqual(summary["unknown_signal_rate"], 0.6)
 
     def test_old_records_are_dropped_instead_of_growing_without_bound(self) -> None:
         store = ExperienceStore()

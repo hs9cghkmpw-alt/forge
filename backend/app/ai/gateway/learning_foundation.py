@@ -27,7 +27,7 @@ Providerの応答をとりあえず全部保存しておいて、あとで
 
     記録する: どのTaskか / どのProviderが答えたか / 構造化出力が
               妥当だったか / 何msか / Validatorを通ったか /
-              利用者が訂正したか(訂正の**有無**)
+              利用者がどう扱ったか(承認 / 訂正 / 離脱 / 不明の**別**のみ)
 
     記録しない: 発話文 / build_brief / 生成されたForge Document /
                 Providerの応答本文 / セッションを跨いで個人を
@@ -82,7 +82,8 @@ from enum import Enum
 from app.ai.gateway.tasks import ForgeTask
 
 __all__ = [
-    "CorrectionSignal",
+    "AcceptanceSignal",
+    "acceptance_from_hypothesis_state",
     "ExperienceRecord",
     "ExperienceStore",
     "ShadowPlan",
@@ -115,22 +116,84 @@ class TrainingProvenance(str, Enum):
     (黙って混ざる経路を作らない)。"""
 
 
-class CorrectionSignal(str, Enum):
-    """利用者がその応答をどう扱ったか。
+class AcceptanceSignal(str, Enum):
+    """利用者がその応答をどう扱ったか
+    (FORGE-AI-FOUNDATION-011 §5で`CorrectionSignal`から改称・拡張)。
 
-    **訂正の「有無と向き」だけ**を持つ。訂正の**内容**(何と言って
-    直したか)は利用者の発話そのものなので記録しない。
+    **内容は持たない。** 何と言って直したかは利用者の発話そのもの
+    なので記録しない。持つのは「どう扱われたか」だけである。
+
+    ---
+
+    ## なぜ`NONE`を割ったか
+
+    010では`NONE / CORRECTED / ABANDONED`の3値で、`NONE`が
+
+    * 利用者が明示的に「それでいい」と**承認した**
+    * ただ訂正されなかった(気付かなかった / 諦めた)
+
+    の両方を飲み込んでいた。将来のTeacher Evaluationでは、この2つは
+    **正反対の教師信号**である——前者は「この応答は正しかった」の
+    根拠になるが、後者は何の根拠にもならない。
+
+    **Forgeは既にACCEPTEDを持っていた。**
+    `conversation_types.HypothesisState.ACCEPTED`・
+    `capability.CorrectionTarget.ACCEPTED`として、利用者の明示的な
+    承認を判定している。それを記録側で捨てていた、というのが実態
+    である(`from_hypothesis_state()`で繋がる形にした)。
     """
 
-    NONE = "none"
-    """訂正されなかった。**「正しかった」ではない**——利用者が
-    諦めた場合も、気付かなかった場合も、ここに入る。"""
+    ACCEPTED = "accepted"
+    """利用者が**明示的に**「それでいい」と言った。
+
+    Teacher Evaluationで使える**唯一の強い正例**である。
+    `HypothesisState.ACCEPTED`から写る。"""
 
     CORRECTED = "corrected"
-    """次のターンで訂正された。"""
+    """次のターンで訂正された。**強い負例**である。"""
 
     ABANDONED = "abandoned"
-    """会話がそこで終わった。"""
+    """会話がそこで終わった。負例ではあるが弱い——利用者が単に
+    忙しくなっただけかもしれない。"""
+
+    UNKNOWN = "unknown"
+    """**既定値。** 何も分からない。
+
+    「訂正されなかった」はここに入る。**それを承認と読まない**
+    ——気付かなかったのかもしれないし、諦めたのかもしれない。
+    分からないものを正例へ格上げしない(`TrainingProvenance.UNKNOWN`と
+    同じ姿勢)。"""
+
+    @property
+    def is_usable_as_supervision(self) -> bool:
+        """教師信号として使えるか。
+
+        `UNKNOWN`は使えない。**沈黙は情報ではない。**
+        """
+        return self is not AcceptanceSignal.UNKNOWN
+
+    @property
+    def is_positive(self) -> bool:
+        """正例か。`ACCEPTED`だけである。"""
+        return self is AcceptanceSignal.ACCEPTED
+
+
+def acceptance_from_hypothesis_state(state: object) -> AcceptanceSignal:
+    """会話側の`HypothesisState`を教師信号へ写す(011 §5)。
+
+    `conversation_types`を**importしない**——学習の境界がConversation
+    実装へ依存すると、片方を触るたびにもう片方が動く。値の名前だけで
+    対応させる(会話側は`str`ベースのEnum)。
+
+    未知の状態は`UNKNOWN`である。**新しい状態が増えたときに、
+    黙って正例へ流れ込まない**方向へ倒してある。
+    """
+    name = getattr(state, "value", None) or str(state)
+    return {
+        "accepted": AcceptanceSignal.ACCEPTED,
+        "corrected": AcceptanceSignal.CORRECTED,
+        "abandoned": AcceptanceSignal.ABANDONED,
+    }.get(str(name).lower(), AcceptanceSignal.UNKNOWN)
 
 
 @dataclass(frozen=True)
@@ -157,8 +220,11 @@ class ExperienceRecord:
     latency_ms: float = 0.0
     used_fallback: bool = False
 
-    correction: CorrectionSignal = CorrectionSignal.NONE
-    """利用者の訂正の**有無**。内容は持たない。"""
+    acceptance: AcceptanceSignal = AcceptanceSignal.UNKNOWN
+    """利用者がこの応答をどう扱ったか。**内容は持たない。**
+
+    既定が`UNKNOWN`なのは、記録し忘れが「承認された」に化けない
+    ようにするためである(011 §5)。"""
 
     recorded_at: float = 0.0
 
@@ -173,7 +239,7 @@ class ExperienceRecord:
             "repair_attempts": self.repair_attempts,
             "latency_ms": round(self.latency_ms, 1),
             "used_fallback": self.used_fallback,
-            "correction": self.correction.value,
+            "acceptance": self.acceptance.value,
             "recorded_at": self.recorded_at,
         }
 
@@ -279,7 +345,14 @@ class ExperienceStore:
                 sum(1 for r in entries if r.structured_output_valid) / total, 3
             ),
             "correction_rate": round(
-                sum(1 for r in entries if r.correction is CorrectionSignal.CORRECTED) / total, 3
+                sum(1 for r in entries if r.acceptance is AcceptanceSignal.CORRECTED) / total, 3
+            ),
+            # §5: 明示的な承認は、訂正されなかっただけのものと分けて数える。
+            "explicit_acceptance_rate": round(
+                sum(1 for r in entries if r.acceptance is AcceptanceSignal.ACCEPTED) / total, 3
+            ),
+            "unknown_signal_rate": round(
+                sum(1 for r in entries if not r.acceptance.is_usable_as_supervision) / total, 3
             ),
             "fallback_rate": round(sum(1 for r in entries if r.used_fallback) / total, 3),
             "note": "本番実利用の観測。同一Datasetではないので Benchmark と混同しないこと。",

@@ -83,14 +83,28 @@
 * Declarative Capability定義は**検証までで、Runtime利用は不可**。
   `transform.aggregate`がRuntime未実装のため、今描くと「作れたふり」に
   なる(`FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md` §17・§19)。
-* 「地図で濃淡」に必要な4つのPrimitive(`data.geo` / `transform.aggregate` /
-  `encoding.color_intensity` / `view.spatial`)は**いずれも未実装**である。
+* 「地図で濃淡」に必要な4つのPrimitiveのうち、**`transform.aggregate`だけが
+  実装済み**である(2026-08-13、Phase 4)。残る3つ(`data.geo` /
+  `encoding.color_intensity` / `view.spatial`)は未実装。
   ただし性質が違う: **新しい描画の実装が要るのは`view.spatial`だけ**で、
-  残る3つはデータ変換・表示パラメータ・データ型であり、既存の描画
-  (`bar_chart`等)の上で成立する。「何が足りないかを種類ごとに言える」
-  とは、この違いを言えるという意味である。
+  残る2つは表示パラメータ・データ型であり、既存の描画(`bar_chart`等)の
+  上で成立する。「何が足りないかを種類ごとに言える」とは、この違いを
+  言えるという意味である。
+
+  > 2026-08-14訂正(FORGE-AI-FOUNDATION-011 §6): この行は以前
+  > 「4つ**いずれも**未実装」と書いていたが、同じファイルの上の表では
+  > `transform.aggregate`を「動作」としており、**矛盾していた**。
+  > Phase 4で実装した際に、こちらの行を直し忘れていた。実コードを
+  > 確認して訂正した(`semantic_capability.py`で`implemented=True`、
+  > Runtimeは`frontend/lib/json_ui/runtime/forge_aggregate.dart`、
+  > Validatorはv1.9対応済み)。
+* `transform.aggregate`の「実装済み」は**Runtimeとしての意味**である。
+  Cognitive Pipeline側のCompilerは`group_by`/`aggregate`を1度も出力しない
+  (`grep -rn "group_by" forge_ai/` が0件)。したがって**会話からは
+  到達しない**。手書きのForge Documentを`/update`等で渡せば描画される。
 * 同じ困りごと(「よく釣れる場所を知りたい」)に対して、地図表現は
-  4個先、集計表現は**1個先**(`transform.aggregate`のみ)。
+  Primitiveが3個先。集計表現はPrimitiveとしては**0個先**だが、
+  会話から到達させるにはCompiler接続が要る。
 * 「作れない」は3種類に分けて扱う: `EXACT`(作れる)/ `FALLBACK`(代替なら
   作れる)/ `BLOCKED`(有用な代替も無い)。ただし判定は分解表の粒度に
   依存しており、`view.calendar`のようにCapability側には代替(一覧)が
@@ -116,7 +130,23 @@
   (HTTP APIの許可リスト。Local公開はBenchmark後の判断)。
 * `todo`・`reading_log`はDomainCategory enumに無く、分類から到達不可能
   (TD39。ただし合成経路が同等のアプリを作るため影響は限定的)。
-* Gemini無料枠のレート制限(429)に当たると生成が失敗する。
+* Gemini無料枠のレート制限(429)に当たったとき何が起きるかは、
+  **他に使えるProviderがあるかどうかで変わる**(2026-08-14、011 §6で
+  Router Architectureに合わせて書き直した)。
+
+  * **他に設定済みのProviderがある場合** — AIRouterが429を
+    `RATE_LIMITED`(または枠切れなら`QUOTA_EXHAUSTED`)として分類し、
+    次の候補へfallbackする。Geminiは`Retry-After`が示す時間まで、
+    分からなければ既定時間まで候補から外れる。利用者から見ると
+    生成は成功する。
+  * **他に設定済みのProviderが無い場合** — 生成は失敗する。
+    レスポンスは`provider_error`(sub_reason=`rate_limited`)で、
+    「しばらく待ってからもう一度」という日本語の案内を返す。
+    **Mockへ黙って倒れることはしない**(§9)。
+
+  なお、この分類とfallbackはTest Doubleで検証済みだが、**実際の429を
+  受けた実機確認はしていない**(§38「429を出すために無料枠を大量消費
+  しない」)。
 * Conversation Metricsは測れる形にしただけで、まだ運用していない。
 * 解の形が`CHECKLIST`・`RECORD_CRUD`の2つしかない。カウンタ形は
   Forge Languageに動的な加算Actionが無いため作れない(TD48)。
