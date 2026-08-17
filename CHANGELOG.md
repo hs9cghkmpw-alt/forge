@@ -2,6 +2,24 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task075b — 文書の抜けを埋める(2026-08-17)
+
+CEOから「やったことはmdファイルにあるのか」と確認を受けて監査した
+結果、**会話でしか報告していないもの**が3つあった。会話は残らないので、
+文書へ落とした。
+
+* `docs/reports/FORGE-ROADMAP-R0-report.md`(新規) — R0 / 011 §7 / R0.1
+* `docs/reports/FORGE-AI-FOUNDATION-011-report.md`(新規) — 011の7点＋
+  報告項目。**会話で口頭報告しただけで文書化していなかった**
+* **TD65** — Curated DomainはAIを1回も呼ばずに生成される(実測)。
+  Product Direction §4に触れる形であり、Local AIへの影響が大きい
+  (この経路からEvidenceが1件も出ない)。判断待ちとして記録
+* **TD66** — Gemini無料枠は1日20回/Model(429本文の実測値)
+* `docs/ROADMAP-TO-TARGET.md` — R2.5(Curated判断)を追加、R0の実施結果と
+  発見を反映
+* `FORGE-AI-FOUNDATION-010-report.md` をリポジトリ直下から
+  `docs/reports/` へ移動(前回の置き場所ミス)
+
 ## Task075 — AI連携の失敗を直す(2026-08-17、FORGE-ROADMAP R0.1)
 
 CEOが実際に使ったところAI連携が失敗した。再現したら**6回中6回失敗**

@@ -2945,3 +2945,89 @@ FORGE-AI-FOUNDATION-010 Phase Kで境界を作り、
   `CORRECTED`しか集まらない。
 * **学習そのもの** ——Curated Dataset・LoRA/Adapterは未着手
   (ロードマップR6)。
+
+---
+
+## TD65. Curated Domainの依頼は、AIを1回も呼ばずに生成される(2026-08-17発見、未解消)
+
+**実機で確認した事実である。** 「家計の支出をカテゴリ別に管理したい」を
+`/api/v1/ai/generate`へ投げると、**0.01秒・AI呼び出し0件**で、
+Validatorに合格する完全なアプリが返る。
+
+```
+provider_used = "none"      ← 一度も呼んでいない
+AI呼び出し記録 = 0件
+所要 = 0.01秒
+validation.valid = true
+```
+
+`ForgeAIProviderBridge.complete()`にトレースを仕込んで確認した
+(`run_cognitive_pipeline`は呼ばれるが、Providerは呼ばれない)。
+
+### なぜそうなるか
+
+`pipeline_orchestrator.py`の`resolve_domain_source()`が、
+Curated Domain Library(`SUPPORTED_DOMAIN_CATEGORIES`)に載っていて
+概念語が一致したDomainを`SolutionSource.CURATED`と判定する。その場合
+`IRGenerator().generate()`——**完全にルールベース**——が使われ、
+AIを呼ぶ`EntitySynthesizer`も`Compiler`も通らない。
+
+つまり **AIが動くのは、Curatedに無いDomainのときだけ**である。
+
+### なぜ技術的負債として扱うか
+
+Product Direction §4 が禁じている形に見える。
+
+> Golden Appへの過学習は禁止 / 有限Template選択システムへの退化は禁止
+
+一方で、この経路は**速く・安定し・品質も一定**であり、単純に消すのは
+明らかな後退である。「AIを呼んでいないから悪い」とも言い切れない。
+
+### 判断が必要な点(まだ決めていない)
+
+1. Curatedを**叩き台**にして、AIが利用者の言葉に合わせて調整する形に
+   するか(ルールベースの安定とAIの適応を両立させる)
+2. そのままにして、Curatedを「品質の下限を保証する仕組み」と位置付け
+   直すか(その場合、Product Direction §4との整合を文書で取る必要がある)
+3. R1(Design Language)で語彙が入ったときに一緒に見直すか
+
+**Local AIへの影響が大きい。** この経路はExperienceを1件も残さない
+——AIを呼んでいないので当然である。つまり**Curatedで解けるDomainからは
+学習素材が一切集まらない**。よく使われるDomainほど記録が残らない、
+という向きになっている(R0で記録を始めた意味が、その範囲では出ない)。
+
+---
+
+## TD66. Gemini無料枠は1日20回/Modelで、実用には全く足りない(2026-08-17実測)
+
+429の本文を読んで確認した実測値である(推測ではない)。
+
+```
+"quotaId"    : "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+"quotaValue" : 20
+```
+
+**Modelごとに1日20回。** R0.1でModel候補を3つにしたので、gemini全体では
+**1日60回**が上限になる。
+
+アプリ1個の生成で会話ステップ+Cognitive Stageを数回使うため、
+**1日20個程度作ると止まる**。開発中の検証だけでも使い切る
+(実際に2026-08-17のR0.1検証で使い切った)。
+
+### Model fallbackでは解決しない
+
+R0.1で「枠はModel単位」を利用して別Modelへ進むようにしたが、これは
+20→60に増やしただけで、桁が変わらない。**枠は鍵ごとに独立している**
+ため、これ以上はProviderを増やす以外に方法が無い。
+
+### 必要な対応
+
+2つ目のCloud Providerを設定する。Adapterは実装済み(Phase Eの汎用
+OpenAI互換)なので、**コード変更は不要**で環境変数3つで載る。
+
+```
+FORGE_GROQ_API_KEY / FORGE_GROQ_BASE_URL / FORGE_GROQ_MODEL
+```
+
+候補(いずれもOpenAI互換、無料枠あり): Groq / Cerebras / OpenRouter。
+`backend/.env.example`に変数名を記載済み。**鍵の取得はCEOの判断待ち。**
