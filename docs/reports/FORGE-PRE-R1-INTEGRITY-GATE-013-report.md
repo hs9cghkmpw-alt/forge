@@ -402,8 +402,11 @@ AIを呼ぶ経路自体を叩かない。MockをProduction fallbackにもして�
 
 ## 14. flutter build web結果
 
-**この環境にFlutterが無いため、ローカルでは実行できていない。**
-CIのfrontend jobで確認する（結果は §20）。
+**CIで成功**（run `32022913409`、job `frontend (Flutter)` step 7）。
+所要 40秒（11:02:32 → 11:03:12）。
+
+この環境にFlutterが無いためローカルでは実行できていない。したがって
+**この項目の検証区分はCI実測**である。
 
 ## 15. CORS smoke結果
 
@@ -458,11 +461,29 @@ localhost preflight    HTTP/1.1 200 OK
 
 ## 19. Flutter test件数
 
-**476**（前回計測値。この環境にFlutterが無いため今回は未実行、CIで確認）
+**476**（前回計測値。この環境にFlutterが無いため今回は未実行。CIの
+`flutter test` stepは成功しているが、**件数はjob APIからは読めない**ので
+数字は前回値のまま据え置く——確かめていない数字を更新しない）
 
 ## 20. CI全job結果
 
-§24 に記載（push後に確認）。
+**全4 job green**（commit `cb37f8f`、run `32022913409`）。
+
+| job | 結果 | 備考 |
+|---|---|---|
+| `backend + forge_ai (Python 3.11)` | success | |
+| `backend + forge_ai (Python 3.12)` | success | |
+| **`backend smoke (起動 + CORS)`** | **success** | 新規。空envで起動 → /health 200 → preflight 200 + header一致 → 外部Origin拒否 |
+| `frontend (Flutter)` | success | analyze / test / **build web** すべて |
+
+backend smokeの各stepが個別に成功していることも確認した。
+
+```
+Start uvicorn                     success
+GET /health は 200                success
+localhost Origin の preflight     success
+外部 Origin は許可されない        success
+```
 
 ## 21. intentionally broken regressionで何件落ちたか
 
@@ -534,13 +555,13 @@ Definition of Doneの全項目を満たしている。
 | TD66が実測と推論を分離 | ✅ |
 | 第二Cloudが未検証であることを正確に記載 | ✅ TD67 |
 | Flutter Web buildがCI/検証対象 | ✅ CIに追加 |
-| GitHub Actions全green | §20 |
+| GitHub Actions全green | ✅ 全4 job（run `32022913409`） |
 | Backend全green | ✅ 1118 passed |
 | forge_ai全green | ✅ 521 passed |
-| Flutter analyze/test/build green | CIで確認 |
+| Flutter analyze/test/build green | ✅ CI success |
 | docs/HANDOFF.md更新 | ✅ |
 | report作成 | ✅ これ |
-| push完了 / 最新commit SHA報告 | §20と併記 |
+| push完了 / 最新commit SHA報告 | ✅ `cb37f8f72b9e8949dc461976580748fa5189a07e` |
 
 ---
 

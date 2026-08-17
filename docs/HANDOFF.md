@@ -142,7 +142,8 @@ ChatGPTによる独立監査の指摘を、**そのまま肯定せず現HEADで�
 backend/tests    1118 passed / 16 skipped
 forge_ai/tests    521 passed
 frontend          476 passed / flutter analyze 0件（CIで確認）
-CI               backend 3.11 / 3.12 / backend-smoke / frontend
+CI               全4 job green（commit cb37f8f）
+                 backend 3.11 / 3.12 / backend-smoke(起動+CORS) / frontend(build web含む)
 ```
 
 | 機能 | 状態 |
