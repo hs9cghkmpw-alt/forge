@@ -341,7 +341,56 @@ class ForgeScreen {
   final Map<String, ForgeStateValue> state;
   final ForgeWidgetNode body;
 
-  ForgeScreen({required this.id, required this.title, required this.state, required this.body});
+  /// widget id → Design Language の semantic role
+  /// (FORGE-R1-ENTRY-AND-DESIGN-LANGUAGE-014、v1.10)。
+  ///
+  /// **なぜ `ForgeWidgetNode` へ持たせないのか。**
+  ///
+  /// `ForgeWidgetNode` は sealed class で、21個の `const` コンストラクタを
+  /// 持つ。基底へ可変フィールドを足すと 21 箇所すべてが `const` で
+  /// なくなり、Widget を1つ足すたびに `style_role` の受け渡しを
+  /// 書き忘れる余地ができる。
+  ///
+  /// role は「その Widget が何であるか」ではなく「どういう意味で
+  /// 見せるか」なので、木の外に id で対応づける方が構造とも合う。
+  /// **1箇所で解決でき、Widget を増やしても書き忘れようがない。**
+  final Map<String, String> styleRoles;
+
+  ForgeScreen({
+    required this.id,
+    required this.title,
+    required this.state,
+    required this.body,
+    this.styleRoles = const {},
+  });
+
+  /// body の生 JSON を1度だけ辿って `style_role` を集める。
+  ///
+  /// キー名 `style_role` だけを見る。値の形では判定しない——本文に
+  /// たまたま `metric.primary` という文字列が入っていたものを拾わない
+  /// ため（backend 側 `design_roles_in()` と同じ理由）。
+  static Map<String, String> _collectStyleRoles(Object? node) {
+    final roles = <String, String>{};
+    void walk(Object? current) {
+      if (current is Map) {
+        final id = current['id'];
+        final role = current['style_role'];
+        if (id is String && id.isNotEmpty && role is String && role.isNotEmpty) {
+          roles[id] = role;
+        }
+        for (final value in current.values) {
+          walk(value);
+        }
+      } else if (current is List) {
+        for (final value in current) {
+          walk(value);
+        }
+      }
+    }
+
+    walk(node);
+    return roles;
+  }
 
   factory ForgeScreen.fromJson(Map<String, dynamic> json, String path) {
     final id = json['id'];
@@ -366,6 +415,7 @@ class ForgeScreen {
       title: json['title'] as String? ?? '',
       state: state,
       body: ForgeWidgetNode.fromJson(bodyJson, '$path/body'),
+      styleRoles: _collectStyleRoles(bodyJson),
     );
   }
 }

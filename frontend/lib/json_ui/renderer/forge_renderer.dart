@@ -5,6 +5,7 @@ import '../../core/utils/forge_logger.dart';
 import '../schema/forge_document.dart';
 import '../widget_registry/widget_registry.dart';
 import 'forge_runtime_state.dart';
+import 'design_language.dart';
 
 /// Rendererの入口。Backendから受け取った生JSON(`Map<String, dynamic>`)を渡すと、
 /// パース→初期画面の描画までを行う。パースに失敗しても画面全体をクラッシュさせず、
@@ -275,7 +276,13 @@ class _ForgeScreenViewState extends State<ForgeScreenView> {
     if (depth > _maxClientSideDepth) {
       return const ForgeFallbackWidget(reason: '再帰深度の上限を超えました(クライアント側ガード)');
     }
-    return buildForgeWidget(context, node, _state, _registry, (child) => _build(child, depth + 1));
+    final built =
+        buildForgeWidget(context, node, _state, _registry, (child) => _build(child, depth + 1));
+    // Design Language（v1.10）。**ここ1箇所だけ**で role を被せる。
+    // 19種の builder それぞれへ配ると、Widget を1つ足すたびに
+    // 付け忘れる（`CLAUDE.md` §3「忘れずに呼ばれる保証が無いものは
+    // 忘れられる」）。
+    return applyForgeRole(context, widget.screen.styleRoles[node.id], built);
   }
 
   @override

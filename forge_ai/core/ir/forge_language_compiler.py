@@ -174,6 +174,32 @@ class ForgeLanguageCompilationError(Exception):
     動作していれば通常発生しない、防御的な例外。"""
 
 
+
+# ---------------------------------------------------------------------------
+# Design Language V1（FORGE-R1-ENTRY-AND-DESIGN-LANGUAGE-014、2026-08-17）
+# ---------------------------------------------------------------------------
+#
+# Compilerが`style_role`を出すのは、**構造から意味が決まる箇所だけ**である。
+#
+# 「このカードは目立たせたい」のような判断はここではしない——それは
+# 利用者のNeedから来る意味であり、Cognitive Pipeline/AIが決めるべきもの
+# である。Compilerが知っているのは「これはセクションの見出しである」
+# 「これは繰り返し項目の一覧である」といった**構造上の事実**だけなので、
+# そこから決まるroleに限って付ける。
+#
+# 値を書かないのが要点である。`text.headline`が何pxで何色になるかは
+# Runtime（`design_language.dart`）が保証する。Compilerは意味だけを言う。
+#
+# roleの綴りはbackend側の語彙（`app/ai/runtime/design_language.py`）と
+# 一致していなければならない。ずれると**Validatorが落とす**ので、
+# 黙って壊れることはない（`unknown_style_role`）。
+_ROLE_SECTION_HEADER = "text.headline"
+_ROLE_RECORD_LIST = "card.list"
+_ROLE_SUMMARY_CHART = "card.summary"
+_ROLE_PRIMARY_BUTTON = "button.primary"
+_ROLE_SECONDARY_BUTTON = "button.secondary"
+_ROLE_FIELD_LABEL = "text.label"
+
 class ForgeLanguageCompiler:
     """`ForgeIR` → `ForgeIRDocument`(Forge Language v1.3)。
 
@@ -259,6 +285,7 @@ class ForgeLanguageCompiler:
                 ForgeIRWidget(
                     type="section_header", id="list_section_header",
                     properties={
+                        "style_role": _ROLE_SECTION_HEADER,
                         "title": entity.label,
                         "subtitle": "思いついたら追加して、済んだらチェックしてください",
                     },
@@ -280,6 +307,8 @@ class ForgeLanguageCompiler:
                         ForgeIRWidget(
                             type="button", id="add_button",
                             properties={
+                                # その画面の主要操作。画面に1つだけ。
+                                "style_role": _ROLE_PRIMARY_BUTTON,
                                 "label": "追加",
                                 "action": {
                                     "type": "add_item",
@@ -304,7 +333,7 @@ class ForgeLanguageCompiler:
         return ForgeIRDocument(
             # section_header(v1.5)・design_tokens(v1.5)を使うため。
             # RECORD_CRUD経路と揃えて"1.8"(上位互換)を宣言する。
-            version="1.8",
+            version="1.10",
             initial_screen_id=screen.id,
             screens=(screen,),
             app_title=title,
@@ -357,7 +386,8 @@ class ForgeLanguageCompiler:
             children=(
                 ForgeIRWidget(
                     type="section_header", id="create_section_header",
-                    properties={"title": f"{entity.label}を追加", "subtitle": "必要な情報を入力してください"},
+                    properties={
+                        "style_role": _ROLE_SECTION_HEADER,"title": f"{entity.label}を追加", "subtitle": "必要な情報を入力してください"},
                 ),
                 ForgeIRWidget(
                     type="form",
@@ -403,7 +433,11 @@ class ForgeLanguageCompiler:
             state[selected_state_id] = ForgeIRStateValue(type="selected_record", value=None)
 
         list_tab_children: list[ForgeIRWidget] = [
-            ForgeIRWidget(type="record_list_view", id="records_list_view", properties=record_list_view_properties),
+            ForgeIRWidget(
+                type="record_list_view", id="records_list_view",
+                # 「繰り返し項目の一覧」という構造上の事実からroleが決まる。
+                properties={**record_list_view_properties, "style_role": _ROLE_RECORD_LIST},
+            ),
         ]
 
         # v1.6新規: 数値Fieldを持つEntityは、一覧の直後にbar_chartを
@@ -452,7 +486,8 @@ class ForgeLanguageCompiler:
                 children=(
                     ForgeIRWidget(
                         type="section_header", id="edit_section_header",
-                        properties={"title": f"{entity.label}を編集", "subtitle": "一覧からカードを選ぶと入力欄が埋まります"},
+                        properties={
+                            "style_role": _ROLE_SECTION_HEADER,"title": f"{entity.label}を編集", "subtitle": "一覧からカードを選ぶと入力欄が埋まります"},
                     ),
                     ForgeIRWidget(
                         type="form",
@@ -463,7 +498,14 @@ class ForgeLanguageCompiler:
                     ForgeIRWidget(
                         type="button",
                         id="record_delete_button",
-                        properties={"label": "削除", "action": delete_action},
+                        # 削除は主要操作ではない。**state.dangerではなく
+                        # button.secondary**——「危険」はActionの
+                        # `destructive`が既に持っている事実であり、
+                        # 意味を色で二重に持つと食い違ったときに直せない。
+                        properties={
+                            "style_role": _ROLE_SECONDARY_BUTTON,
+                            "label": "削除", "action": delete_action,
+                        },
                     ),
                 ),
             ))
@@ -479,7 +521,7 @@ class ForgeLanguageCompiler:
             # v1.8(2026-08-11、Widget Vocabulary Expansion第3弾):
             # sliderはv1.8専用のため(それ以前のWidgetは既に追加済み。
             # v1.8はいずれの上位互換、無変更)。
-            version="1.8",
+            version="1.10",
             initial_screen_id=screen.id,
             screens=(screen,),
             app_title=title,
@@ -654,6 +696,9 @@ class ForgeLanguageCompiler:
         return ForgeIRWidget(
             type="bar_chart", id="records_bar_chart",
             properties={
+                # 集計して見せる面。**単一KPI(card.metric)ではない**
+                # ——複数の値の内訳を示すので card.summary である。
+                "style_role": _ROLE_SUMMARY_CHART,
                 "state_ref": records_state_id,
                 "value_field": value_field.name,
                 "label_field": label_field.name,

@@ -2,6 +2,71 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task077 — R1入口 + Design Language V1(2026-08-17、FORGE-R1-ENTRY-AND-DESIGN-LANGUAGE-014)
+
+### §2 GenerationSourceを実Providerの事実から決める(P0・実バグ)
+
+013は`domain_resolution == "generated"`を無条件に`CLOUD_AI`へ写して
+いた。しかし`generated`が言っているのは「決定的なCurated生成では
+なかった」だけで、**誰が作ったかは言っていない**。
+
+実害は2つ。Local AIが構造を作るようになると実績が丸ごとCloud AIの
+成績になる。そして**現に、Mock生成がCLOUD_AIとして記録されていた**
+——013のテスト自身が`assertIn(CLOUD_AI, ...)`と書いてその誤りを
+固定していた。
+
+Registryの`deployment`/`test_only`をSingle Source of Truthにした。
+`test_only`を**先に**見る(mockは`deployment=local`なので、順序を
+逆にするとLocal AIの実績を水増しする)。`TEST_DOUBLE`を追加し、
+Cloudにも Localにも混ぜない。
+
+### §3 generation_refをProduction Pathへ流す(P0)
+
+013は`record()`の戻り値を捨てていた。記録はされるが、後から
+Runtime結果や利用者の承認を書こうとしても「どの生成物へ書くか」を
+本番が知らない——R0以前にExperienceで踏んだのと同じ形である。
+`PipelineRunResult.generation_ref`まで流した。
+
+なお`ConversationSession`へ持たせる案は**撤回した**——BUILD後に
+セッションを破棄するので、置いても必ず捨てられる。「あるが誰も
+使えない」を作らない。
+
+### §4 Runtime/User Acceptanceを嘘で埋めない
+
+`UNKNOWN`のままにした。書ける**構造**だけ先に作り、テストで固定。
+
+### §5 UPDATE/Revision Evidenceの設計判断(TD68)
+
+3案を比較して案A(別Record + 関係)を採用。実装はR2。
+「混ぜない」と「取らない」は別である、を明記した。
+
+### §6 Semantic Identifier境界
+
+自由文を弾く。`metric.primary`は通し、「残高を目立たせてほしい」は
+弾く。大文字も弾く(`Metric.Primary`と両方記録されると集計が割れる)。
+
+### §7〜§11 Design Language V1
+
+33 role。Schema v1.10 / Validator / Compiler / Runtime / Evidence抽出
+まで接続。**Widgetは1つも増えていない**——増えたのは意味付けである。
+
+`style_role`の検査は**1箇所**(`_check_widget_schema`冒頭)。type別の
+`allowed_keys`へ配ると、Widgetを足すたびに書き忘れる。Runtime側も
+`_build()`の1箇所で被せる。
+
+Evidence抽出は**最終Documentの事実から**行う(AIの自己申告からでは
+なく、Repair後の確定版から、決定的に、重複を潰し、語彙外は捨てる)。
+
+### 未達(TD69、正直な申告)
+
+* **Hero KPI Widgetが無い**ので`metric.primary`をCompilerが出せない。
+  Golden Finance E2Eは完全には成立していない
+* **Conversationへ語彙を渡していない**——AIはまだroleを選んでいない。
+  今出ているroleは全てCompilerが構造から決めたもの。**R1の核心の
+  残件**であり、R2の最初にやる
+
+配線破壊試験: 4パターンすべてで対応するテストが落ちることを確認。
+
 ## Task076 — Pre-R1 Integrity Gate(2026-08-17、FORGE-PRE-R1-INTEGRITY-GATE-013)
 
 R1(Design Language)へ入る前に、実機バグ・Evidence設計・文書の事実関係・

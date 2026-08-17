@@ -103,7 +103,7 @@ class TestForgeLanguageCompiler(unittest.TestCase):
                 self.assertIn("form", widget_types)
                 self.assertIn("record_list_view", widget_types)
                 self.assertNotIn("checklist", widget_types)
-                self.assertEqual(document.version, "1.8")
+                self.assertEqual(document.version, "1.10")
 
     def test_non_target_domains_are_not_handled_by_this_compiler(self) -> None:
         """対象外Domainのcompile()は、`IRGenerator.generate()`が`None`
@@ -422,13 +422,13 @@ class TestForgeLanguageCompilerRecordSchema(unittest.TestCase):
         assert ir is not None
         return self.compiler.compile(ir, domain_category=domain_category, title="テスト")
 
-    def test_version_is_1_8(self) -> None:
+    def test_version_is_1_10(self) -> None:
         """FORGE v1.0(Product Quality Sprint1)でv1.4から1.5へ、v1.6
         (Widget Vocabulary Expansion第1弾)で1.6へ、v1.7(第2弾、
         date_field/tab_view)で1.7へ、v1.8(第3弾、slider)でさらに
         1.8へ更新した。"""
         document = self._compile("fishing_log")
-        self.assertEqual(document.version, "1.8")
+        self.assertEqual(document.version, "1.10")
 
     def test_record_schemas_is_generated_for_all_three_domains(self) -> None:
         for domain_category in SUPPORTED_DOMAIN_CATEGORIES:
@@ -957,7 +957,9 @@ class TestForgeLanguageCompilerV1_7WidgetVocabularyExpansion(unittest.TestCase):
         `TestForgeLanguageCompilerV1_8WidgetVocabularyExpansion.
         test_document_version_is_1_8`が検証する。"""
         document = self._compile("fishing_log")
-        self.assertIn(document.version, {"1.7", "1.8"})
+        # v1.10(Design Language)で版が上がった。**文字列の大小比較で
+        # 判定しない**——"1.10" < "1.9" になるため、集合で持つ。
+        self.assertIn(document.version, {"1.7", "1.8", "1.9", "1.10"})
 
     def test_date_fields_use_the_dedicated_widget_across_all_domains(self) -> None:
         """DATE型Fieldを持つ全Domain(diary以外の6つ、diaryの
@@ -1051,9 +1053,13 @@ class TestForgeLanguageCompilerV1_8WidgetVocabularyExpansion(unittest.TestCase):
         assert ir is not None
         return self.compiler.compile(ir, domain_category=domain_category, title="テスト")
 
-    def test_document_version_is_1_8(self) -> None:
+    def test_document_version_is_1_10(self) -> None:
+        """v1.10(FORGE-R1、Design Language)。`style_role`を出すため。
+
+        **Widgetは1つも増えていない。** 増えたのは意味付けである。
+        """
         document = self._compile("fishing_log")
-        self.assertEqual(document.version, "1.8")
+        self.assertEqual(document.version, "1.10")
 
     def test_reading_log_rating_field_uses_slider(self) -> None:
         document = self._compile("reading_log")

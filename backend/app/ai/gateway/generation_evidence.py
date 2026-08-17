@@ -114,6 +114,7 @@ __all__ = [
     "GenerationEvidenceStore",
     "GenerationRecord",
     "GenerationSource",
+    "source_for_generated",
     "RuntimeOutcome",
     "default_generation_store",
 ]
@@ -139,6 +140,17 @@ class GenerationSource(str, Enum):
     COMPOSITION = "composition"
     """Curatedを土台にAIが調整した等の複合。TD65の解決案1がこれ。"""
 
+    TEST_DOUBLE = "test_double"
+    """Mock等のテスト専用Providerが作った(014 §2で追加)。
+
+    **`CLOUD_AI`にも`LOCAL_AI`にも入れてはならない。** `mock`は
+    Registry上`deployment=local`だが、これを`LOCAL_AI`として数えると
+    「Local AIはもう十分な実績がある」という嘘の統計ができあがり、
+    Local Routingへの昇格判断が壊れる。Cloudへ入れれば同じことが
+    Cloud側で起きる。
+
+    **どちらでもない**ので、専用の値を持つ。"""
+
     UNKNOWN = "unknown"
     """**既定値。** 由来が記録されていない。
 
@@ -147,8 +159,73 @@ class GenerationSource(str, Enum):
 
     @property
     def is_usable_for_training(self) -> bool:
-        """由来が分かっているか。**分からないものは使わない。**"""
-        return self is not GenerationSource.UNKNOWN
+        """由来が分かっていて、かつ**本物**か。
+
+        `TEST_DOUBLE`は由来が分かっているが、学習には使えない
+        ——Mockの出力を教師にすると、Mockの癖を学ぶことになる。
+        """
+        return self not in {GenerationSource.UNKNOWN, GenerationSource.TEST_DOUBLE}
+
+    @property
+    def is_ai_generated(self) -> bool:
+        """AIが構造を決めたか。Curated/Test Doubleは`False`。"""
+        return self in {
+            GenerationSource.CLOUD_AI,
+            GenerationSource.LOCAL_AI,
+            GenerationSource.COMPOSITION,
+        }
+
+
+def source_for_generated(provider_used: str | None) -> GenerationSource:
+    """**実際に構造生成へ成功したProviderの事実**から由来を決める
+    (014 §2)。
+
+    ---
+
+    ## 直した問題
+
+    013では`domain_resolution == "generated"`を無条件に`CLOUD_AI`へ
+    写していた。しかし`generated`が表しているのは
+
+        「決定的なCurated生成ではなかった」
+
+    ということだけである。**誰が作ったかは言っていない。** この対応の
+    ままLocal AIが構造を作るようになると、その実績が丸ごとCloud AIの
+    成績として記録される——Local Routingへの昇格判断の根拠が、
+    最初から汚染される。
+
+    ## 判定の順序（順序に意味がある）
+
+    1. **`test_only`** — Mockは`deployment=local`だが、`LOCAL_AI`に
+       するとLocal AIの実績を水増しする。**先に弾く**
+    2. **`deployment`** — Registryが持つ事実。LOCAL / CLOUD
+    3. それ以外（未登録・Provider不明） — `UNKNOWN`
+
+    ## やらないこと
+
+    * `ai_calls > 0`だからCloud、という推測
+    * Model名の文字列からlocal/cloudを判定（`llama`が入っていれば
+      Local、のような判定はProviderをまたぐと必ず外れる）
+    * 分からないものを楽観側へ倒す
+    """
+    from app.ai.gateway.provider_registry import (  # noqa: PLC0415 — 循環import回避
+        Deployment,
+        definition_for,
+    )
+
+    if not provider_used:
+        return GenerationSource.UNKNOWN
+    definition = definition_for(provider_used)
+    if definition is None:
+        # Registryに宣言が無い名前。テストのFake等。**推測しない。**
+        return GenerationSource.UNKNOWN
+    if definition.test_only:
+        return GenerationSource.TEST_DOUBLE
+    if definition.deployment is Deployment.LOCAL:
+        return GenerationSource.LOCAL_AI
+    if definition.deployment is Deployment.CLOUD:
+        return GenerationSource.CLOUD_AI
+    return GenerationSource.UNKNOWN
 
 
 class RuntimeOutcome(str, Enum):

@@ -109,26 +109,35 @@ class TestCuratedGenerationsLeaveEvidence(unittest.TestCase):
         self.assertTrue(curated[0].validator_passed)
         self.assertEqual(curated[0].domain, "household_budget")
 
-    def test_a_generated_domain_is_recorded_with_a_different_source(self) -> None:
-        """由来が混ざらないこと。混ぜると、Curatedの成績でLocal AIの
-        昇格判断が押し上げられる。"""
-        self._generate("盆栽の水やりの記録をつけたい")
-        sources = {r.source for r in self.store.all_records()}
-        self.assertIn(GenerationSource.CLOUD_AI, sources)
+    def test_a_mock_generation_is_never_recorded_as_cloud_ai(self) -> None:
+        """**014 §2で直した実バグの回帰テスト。**
 
-    def test_the_source_is_never_guessed_from_the_call_count(self) -> None:
-        """**AI呼び出し0回だからCuratedとは推測しない。**
+        013では`domain_resolution == "generated"`を無条件に`CLOUD_AI`へ
+        写していた。そのため、Mock Providerで作ったものまで
+        「Cloud AIの実績」として記録されていた——このテスト自身が、
+        013では`assertIn(CLOUD_AI, sources)`と書いて**その誤りを固定
+        していた**。
 
-        決定の記録(`domain_resolution`)から読む。読めなければ
-        `UNKNOWN`であり、`UNKNOWN`は学習に使えない。
+        Mockの成功をCloudの実績に混ぜると、Cloudの品質を過大評価する。
+        Localへ混ぜれば、Local AIの昇格判断が壊れる。**どちらでもない**
+        ので`TEST_DOUBLE`である。
         """
-        from app.ai.runtime.prompt_pipeline import _generation_source  # noqa: PLC0415
+        self._generate("盆栽の水やりの記録をつけたい")
+        generated = [r for r in self.store.all_records() if r.source is not GenerationSource.CURATED]
+        self.assertTrue(generated, "生成されたDomainの記録が無い。")
+        for record in generated:
+            with self.subTest(ref=record.ref):
+                self.assertIs(
+                    record.source, GenerationSource.TEST_DOUBLE,
+                    "Mock Providerの生成がTEST_DOUBLE以外で記録されている。",
+                )
+                self.assertNotIn(
+                    record.source, {GenerationSource.CLOUD_AI, GenerationSource.LOCAL_AI},
+                )
 
-        self.assertIs(_generation_source([], ai_calls=0), GenerationSource.UNKNOWN)
-        self.assertIs(
-            _generation_source([{"stage": "domain_resolution", "decision": "curated"}], 0),
-            GenerationSource.CURATED,
-        )
+    def test_a_test_double_is_not_a_training_candidate(self) -> None:
+        """Mockの出力を教師にすると、Mockの癖を学ぶことになる。"""
+        self.assertFalse(GenerationSource.TEST_DOUBLE.is_usable_for_training)
 
     def test_the_decision_trace_still_carries_the_stage_we_read(self) -> None:
         """**唯一の接点が消えていないこと。**
@@ -150,6 +159,82 @@ class TestCuratedGenerationsLeaveEvidence(unittest.TestCase):
         self.assertNotIn("XYZZY", dumped)
         self.assertNotIn("むにゃむにゃ", dumped)
 
+
+
+class TestTheSourceComesFromTheProviderFacts(unittest.TestCase):
+    """**由来は実際に答えたProviderの事実から決める**(014 §2)。
+
+    Registryの`deployment`/`test_only`がSingle Source of Truthである。
+    """
+
+    def test_curated_resolution_wins(self) -> None:
+        """Curated経路は生成stageでAIを呼ばないので、会話ステップの
+        Providerが`last_provider_used`に残っていても**Curatedである**。"""
+        from app.ai.runtime.prompt_pipeline import _generation_source  # noqa: PLC0415
+
+        trace = [{"stage": "domain_resolution", "decision": "curated"}]
+        self.assertIs(_generation_source(trace, "gemini"), GenerationSource.CURATED)
+
+    def test_a_cloud_provider_is_recorded_as_cloud_ai(self) -> None:
+        from app.ai.runtime.prompt_pipeline import _generation_source  # noqa: PLC0415
+
+        trace = [{"stage": "domain_resolution", "decision": "generated"}]
+        self.assertIs(_generation_source(trace, "gemini"), GenerationSource.CLOUD_AI)
+
+    def test_a_local_provider_is_recorded_as_local_ai(self) -> None:
+        """**Local AIが将来動いたときの契約を、今のうちに固定する。**
+
+        実モデルを呼ぶ必要はない——Registryが`deployment=local`と
+        宣言していることが根拠であり、そこが判定の唯一の入口である。
+        """
+        from app.ai.runtime.prompt_pipeline import _generation_source  # noqa: PLC0415
+
+        trace = [{"stage": "domain_resolution", "decision": "generated"}]
+        self.assertIs(_generation_source(trace, "local"), GenerationSource.LOCAL_AI)
+
+    def test_a_test_only_provider_is_neither_cloud_nor_local(self) -> None:
+        """`mock`はRegistry上`deployment=local`だが、**`test_only`を先に
+        見る**。順序を逆にするとMockがLocal AIの実績を水増しする。"""
+        from app.ai.runtime.prompt_pipeline import _generation_source  # noqa: PLC0415
+
+        trace = [{"stage": "domain_resolution", "decision": "generated"}]
+        self.assertIs(_generation_source(trace, "mock"), GenerationSource.TEST_DOUBLE)
+
+    def test_an_unknown_provider_is_unknown(self) -> None:
+        """**推測しない。** 未登録の名前から由来を当てにいかない。"""
+        from app.ai.runtime.prompt_pipeline import _generation_source  # noqa: PLC0415
+
+        trace = [{"stage": "domain_resolution", "decision": "generated"}]
+        for provider in (None, "", "登録されていないProvider"):
+            with self.subTest(provider=provider):
+                self.assertIs(_generation_source(trace, provider), GenerationSource.UNKNOWN)
+
+    def test_no_decision_trace_still_reads_the_provider(self) -> None:
+        """決定の記録が無くても、**誰が答えたか**は分かる。"""
+        from app.ai.runtime.prompt_pipeline import _generation_source  # noqa: PLC0415
+
+        self.assertIs(_generation_source([], "gemini"), GenerationSource.CLOUD_AI)
+        self.assertIs(_generation_source([], None), GenerationSource.UNKNOWN)
+
+    def test_the_registry_is_the_single_source_of_truth(self) -> None:
+        """Providerを1つ増やすたびに判定表へ書き足す形にしない。
+
+        Registryの宣言だけで決まるので、**Provider追加時に由来判定を
+        書き忘れることができない**。
+        """
+        from app.ai.gateway.generation_evidence import source_for_generated  # noqa: PLC0415
+        from app.ai.gateway.provider_registry import Deployment, provider_registry  # noqa: PLC0415
+
+        for definition in provider_registry():
+            with self.subTest(provider=definition.provider_id):
+                actual = source_for_generated(definition.provider_id)
+                if definition.test_only:
+                    expected = GenerationSource.TEST_DOUBLE
+                elif definition.deployment is Deployment.LOCAL:
+                    expected = GenerationSource.LOCAL_AI
+                else:
+                    expected = GenerationSource.CLOUD_AI
+                self.assertIs(actual, expected)
 
 class TestTheRecordCannotHoldContent(unittest.TestCase):
     """`ExperienceRecord`と同じPrivacy境界(006 §22)を型で塞ぐ。"""

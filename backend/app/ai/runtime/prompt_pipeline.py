@@ -54,7 +54,9 @@ from app.ai.gateway.generation_evidence import (
     GenerationRecord,
     GenerationSource,
     default_generation_store,
+    source_for_generated,
 )
+from app.ai.runtime.design_language import design_roles_in
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.runtime.forge_ai_adapter import (
     intent_ir_from_forge_ai_intent,
@@ -134,31 +136,46 @@ class Diagnostics:
 # 「Curatedの成功が1件も記録されない」に静かに戻る。
 _DOMAIN_RESOLUTION_STAGE = "domain_resolution"
 
-_SOURCE_BY_RESOLUTION = {
-    "curated": GenerationSource.CURATED,
-    "generated": GenerationSource.CLOUD_AI,
-}
+def _generation_source(decision_trace, provider_used: str | None) -> GenerationSource:  # noqa: ANN001
+    """その生成物を**誰が作ったか**を、2つの事実から決める(014 §2)。
 
+    ```
+    domain_resolution == "curated"   → CURATED（決定的生成。AIは関与しない）
+    それ以外                          → 実際に答えたProviderの事実から決める
+    ```
 
-def _generation_source(decision_trace, ai_calls: int) -> GenerationSource:  # noqa: ANN001
-    """その生成物を誰が作ったかを、決定の記録から読む(013 §4)。
+    ---
 
-    `generated`を`CLOUD_AI`へ写すのは、現時点で構造を合成しうるのが
-    Cloud Providerだけだからである。Local AIが合成するようになったら、
-    ここは**Provider側の事実**(実際にどのProviderが答えたか)から
-    決めるべきで、`generated`という語だけでは足りなくなる。
+    ## 013から変えた点
 
-    決定が読めない場合は`UNKNOWN`。**AI呼び出し0回だからCurated、と
-    推測しない**——推測で由来を埋めると、学習側が由来を信用できなくなる
-    (`GenerationSource.UNKNOWN.is_usable_for_training`が`False`なのは
-    そのためである)。
+    013は`"generated"`を無条件に`CLOUD_AI`へ写していた。しかし
+    `generated`が言っているのは「**決定的なCurated生成ではなかった**」
+    だけであり、誰が作ったかは言っていない。
+
+    このままLocal AIが構造を作るようになると、その実績が丸ごとCloud AIの
+    成績として記録される。**Local Routingへ昇格してよいかの判断根拠が、
+    最初から汚染される。**
+
+    Mockも同じ問題を持っていた。013のテストではMock生成が`CLOUD_AI`に
+    なっていた——Cloud AIの実績にMockの成功が混ざっていた。
+
+    ## 誰が答えたかは`_BoundAdapter`が知っている
+
+    `last_provider_used`は「**実際に**応答を返したProvider名」であり、
+    Routerがfallbackした場合も正しい(010 Phase Bで入れた)。
+    そこからRegistryの`deployment`/`test_only`を引く
+    (`source_for_generated()`)。
+
+    Curatedを先に見るのは、Curated経路では会話ステップのProviderが
+    `last_provider_used`に残りうるためである。**生成stageがAIを
+    呼んでいないのに、会話のProviderで由来を決めてはならない。**
     """
     for entry in decision_trace or ():
         if entry.get("stage") == _DOMAIN_RESOLUTION_STAGE:
-            return _SOURCE_BY_RESOLUTION.get(
-                str(entry.get("decision", "")).strip().lower(), GenerationSource.UNKNOWN
-            )
-    return GenerationSource.UNKNOWN
+            if str(entry.get("decision", "")).strip().lower() == "curated":
+                return GenerationSource.CURATED
+            break
+    return source_for_generated(provider_used)
 
 
 def _record_generation(
@@ -169,7 +186,7 @@ def _record_generation(
     forge_document: dict,
     validator_passed: bool,
     repair_attempts: int,
-) -> None:
+) -> int:
     """**生成物そのもの**のEvidenceを残す(013 §4、TD65)。
 
     `_note_generation_outcome()`との違いが要点である。あちらは
@@ -181,20 +198,22 @@ def _record_generation(
     """
     store = default_generation_store()
     ai_calls = len(getattr(bound, "experience_refs", ()) or ())
-    store.record(
+    stored = store.record(
         GenerationRecord(
-            source=_generation_source(decision_trace, ai_calls),
+            source=_generation_source(decision_trace, getattr(bound, "last_provider_used", None)),
             domain=_domain_identifier(context),
             validator_passed=validator_passed,
             forge_language_version=str(forge_document.get("version", "") or ""),
             repair_attempts=repair_attempts,
             ai_calls=ai_calls,
-            # `capabilities`/`design_language_roles`は**空のままにする**。
-            # R1でDesign Languageが実在するようになるまで、埋められる
-            # 中身が無い。空であることが「まだ語彙が無い」という事実で
-            # あり、それらしい値で埋めると測定が嘘になる。
+            design_language_roles=design_roles_in(forge_document),
         )
     )
+    # **番号を返す。** 013はここで捨てていた。捨てると、後から
+    # Runtime結果や利用者の承認を書き足そうとしても「どの生成物へ
+    # 書くか」を本番が知らない——R0以前にExperienceで踏んだのと
+    # 同じ形である(Storeもmethodもあるが、refが流れていない)。
+    return stored.ref
 
 
 def _domain_identifier(context) -> str:  # noqa: ANN001
@@ -237,6 +256,24 @@ class PipelineRunResult:
     validation: ValidationResult
     quality: CriticResult | None
     diagnostics: Diagnostics
+
+    generation_ref: int | None = None
+    """この生成物の`GenerationRecord`番号(014 §3)。
+
+    **013はこれを捨てていた。** `record()`が番号を返していたのに
+    受け取らず、`PipelineRunResult`にも載せていなかった。その結果、
+    後からRuntimeの結果や利用者の承認を書こうとしても
+    「**どの生成物へ書くか**」を本番が知らない状態だった。
+
+    R0以前にExperienceで踏んだのと同じ形である——Storeもmethodも
+    あるが、refが流れていない。「Storeに記録された」で完成扱いしない
+    (`CLAUDE.md` §3)。
+
+    **HTTPレスポンスへは出さない。** 利用者に見せる情報ではなく、
+    Forge内部で後続のEvidenceを紐づけるためのものである。
+
+    `None`は「記録していない」——Confirmation要求で生成へ到達しな
+    かった場合など。0と区別できるようにしてある。"""
 
     experience_refs: tuple[int, ...] = ()
     """この生成に寄与したAI呼び出しの`ExperienceRecord`番号(R0)。
@@ -587,7 +624,7 @@ class PromptPipeline:
             # 返り続けることを確認した上で、この行を修正した)。
             critic_result = to_critic_result(quality_score, critic_report=context.critic_report)
             _note_generation_outcome(bound, validator_passed=True, repair_attempts=repair_attempts)
-            _record_generation(
+            generation_ref = _record_generation(
                 bound, context=context,
                 decision_trace=_decision_trace_to_dicts(context.decision_trace),
                 forge_document=forge_document, validator_passed=True,
@@ -648,6 +685,7 @@ class PromptPipeline:
 
         # 11. 結果返却
         return PipelineRunResult(
+            generation_ref=generation_ref,
             experience_refs=bound.experience_refs,
             forge_document=forge_document,
             validation=validation,

@@ -59,6 +59,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from app.ai.runtime.design_language import is_known_role
+
 
 # ---------------------------------------------------------------------------
 # 定数(shared/schemas/ui_schema.v1*.json と同期させること)
@@ -75,7 +77,7 @@ MAX_RECORD_LIST_ITEMS = 500  # checklist/string_listと同じ上限に揃える
 MAX_RECORD_FIELDS = 20  # 1Recordが持てるFieldの上限(既存state.maxProperties: 30より保守的)
 MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)
 
-SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9"}
+SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10"}
 
 # バージョン文字列同士を数値として比較するための順序付きタプル。
 # **設計上の注記(このセッションで実際に発見・修正した再発バグへの
@@ -87,7 +89,10 @@ SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1
 # 自身で発見・修正した)。今回、`_version_at_least()`という「以上」
 # 比較のヘルパーへ置き換え、将来のVersion追加(v1.5等)で
 # 同種の見落としが起きないようにした。
-_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9")
+# **文字列の大小比較ではなく、この並びの位置で比較する**(`_at_least()`)。
+# "1.10" < "1.9" になる文字列比較を避けるためであり、ここへ追記する
+# 順序がそのままバージョンの前後関係になる。
+_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10")
 
 
 def _version_at_least(version: str, minimum: str) -> bool:
@@ -208,6 +213,18 @@ WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
         | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
         | WIDGET_TYPES_V1_8_ADDITIONS
     ),
+    # v1.10(FORGE-R1-ENTRY-AND-DESIGN-LANGUAGE-014、2026-08-17)。
+    # **Widgetを1つも増やさない。** 足したのは全Widget共通の
+    # `style_role`(Design Languageの意味的役割)であり、表示できるものの
+    # 種類ではなく「どういう意味で見せるか」が増えた。
+    #
+    # v1.9で「Widgetを増やさずに表現の幅を増やせた」のと同じ形である
+    # ——あちらはデータ変換、こちらは意味付け。
+    "1.10": (
+        WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
+        | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
+        | WIDGET_TYPES_V1_8_ADDITIONS
+    ),
 }
 WIDGET_TYPES_ALL = (
     WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
@@ -251,6 +268,8 @@ ACTION_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.8": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
     # v1.9はActionを追加しない(足したのはデータ変換であり操作ではない)。
     "1.9": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
+    # v1.10もActionを追加しない(足したのは意味付けであり操作ではない)。
+    "1.10": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
 }
 ACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS  # 全バージョン合計(未知typeの判定用)
 
@@ -284,6 +303,9 @@ STATE_TYPES_BY_VERSION: dict[str, set[str]] = {
     # v1.9はState型を追加しない。集計結果は**保存しない**——表示のたびに
     # 導出する純粋関数であり、保存されるデータは1バイトも増えない。
     "1.9": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
+    # v1.10もState型を追加しない。意味的役割は**表示の解釈**であって、
+    # 保存されるデータではない。
+    "1.10": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
 }
 STATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS
 
@@ -789,6 +811,28 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
     errors: list[ValidationIssue] = []
     if not _is_identifier(widget.get("id")):
         errors.append(_err(f"{path}/id", Category.SCHEMA, "identifier_format", "widget.idが不正です。"))
+
+    # --- style_role(v1.10、Design Language)-------------------------------
+    #
+    # **全Widget共通の任意キー**である。ここ1箇所で検査し、以降の
+    # type別チェックへは`style_role`を除いたdictを渡す。
+    #
+    # なぜ1箇所か: type別の`allowed_keys`へ個別に足すと、**Widgetを
+    # 1つ追加するたびに足し忘れる**。19種すべてに同じキーを配るのは、
+    # Forgeが4回繰り返した「呼び出し側が忘れずにやる」設計そのもの
+    # である(`CLAUDE.md` §3)。
+    if "style_role" in widget:
+        if not _version_at_least(version, "1.10"):
+            errors.append(_err(f"{path}/style_role", Category.SCHEMA, "field_not_allowed_in_version",
+                                "style_roleはv1.10以降の文書でのみ使用できます。"))
+        elif not is_known_role(widget["style_role"]):
+            # **未知のroleは通さない。** 自由に増やせると、Runtimeが
+            # 保証できない値が入り、「AIは意味を選ぶ / Forgeが品質を
+            # 保証する」という分担が崩れる。
+            errors.append(_err(f"{path}/style_role", Category.SCHEMA, "unknown_style_role",
+                                "style_roleはDesign Languageの語彙である必要があります"
+                                f"(実際: {str(widget['style_role'])[:40]!r})。"))
+        widget = {k: v for k, v in widget.items() if k != "style_role"}
 
     if t == "text":
         errors.extend(_check_additional_properties(widget, {"type", "id", "value", "state_ref", "style"}, path))

@@ -3110,3 +3110,125 @@ Google Cloud Consoleの表示を見る等、APIを叩かない方法を先に試
 > まだ証明されていない。**
 
 鍵が手に入り次第、実際に接続して確かめ、この項目を更新する。
+
+---
+
+## TD68. UPDATE / Revision Evidence は設計のみ（2026-08-17、014 §5）
+
+### なぜ必要か
+
+Forgeにとって最も価値のある学習信号は、初回生成の成否ではない。
+
+```
+初回生成 → 利用者「違う、こうして」 → UPDATE → 良くなった → ACCEPTED
+```
+
+Local AIが学ぶべきなのは「何を作ると良いか」だけでなく、
+**「何を間違えたか」「どう直したら受け入れられたか」**である。
+
+現状、`/update`は`GenerationRecord`の対象外にしてある（013 §4）。
+これは**測定を歪めないための正しい判断**だが、
+「混ぜない」と「取らない」は別である。**今は取っていない。**
+
+### 採用する設計（案A: 別Record + 関係）
+
+3案を比較した。
+
+| 案 | 内容 | 判断 |
+|---|---|---|
+| A | `GenerationRecord` + `RevisionRecord`（別型・関係で繋ぐ） | **採用** |
+| B | `ArtifactEvidence` に `operation = generate \| update` を持たせる | 不採用 |
+| C | Correction / Revision 専用の別モデル | 不採用 |
+
+**Bを採らない理由**: 1つの型に混ぜると、`validator_passed`の意味が
+operationごとに変わる（生成の成功率と変更の成功率）。集計のたびに
+`operation`で割る必要があり、割り忘れると静かに混ざる。
+013で`/update`を除外した理由そのものが、型の中へ戻ってくる。
+
+**Cを採らない理由**: `AcceptanceSignal`・`RuntimeOutcome`など、
+生成と共有すべき語彙が多い。別系統にすると同じ概念が2つの名前を
+持ち、突き合わせられなくなる（011 §5で一度やった失敗）。
+
+### `RevisionRecord`の最小契約（実装前の設計）
+
+```
+revision_ref            この変更自体の番号
+base_generation_ref     どの生成物への変更か（**関係**）
+sequence                同一生成物への何回目の変更か
+source                  GenerationSource（誰が直したか）
+correction_target       どの層への訂正か（既存のCorrectionRecordと同じ語彙）
+validator_passed        変更後にValidatorを通ったか
+runtime_outcome         RuntimeOutcome（生成と同じ語彙）
+user_acceptance         AcceptanceSignal（生成と同じ語彙）
+design_language_roles   変更後の最終Documentから抽出（生成と同じ方法）
+```
+
+**生のユーザー発話は持たない**（006 §22。`correction_target`は
+「どの層か」の識別子であって、何と言われたかではない）。
+
+### 追跡できるようになること
+
+```
+GenerationRecord(ref=7, acceptance=CORRECTED)
+   ↑ base_generation_ref
+RevisionRecord(ref=1, sequence=1, acceptance=ACCEPTED)
+```
+
+「初回は外したが、この訂正で受け入れられた」という**対**が、
+Local AIのDatasetとして最も価値がある。
+
+### 未実装であること
+
+型もStoreもまだ無い。`/update`は今も`GenerationRecord`を残さない。
+**R2で実装する。** 実装時は、`generate`の成功率と`update`の成功率を
+**混ぜない**ことをテストで固定すること。
+
+---
+
+## TD69. R1 Design Language は Semantic層まで。Hero KPIとConversation接続が未了（2026-08-17）
+
+014 §17の完了条件のうち、**未達のもの**を正直に残す。
+
+### できていること
+
+* Semantic Vocabulary V1（33 role、意味/使う条件/避ける条件つき）
+* 識別子境界（自由文を弾く）
+* Schema v1.10（`style_role`、**全Widget共通**の1箇所検査）
+* Validator（語彙外を拒否、version gate）
+* Compiler（構造から決まるroleを出力）
+* Runtime（`design_language.dart`、`_build()`の1箇所で適用）
+* Generation Evidence（最終Documentの事実から抽出）
+
+### できていないこと
+
+**1. Hero KPI Widget が無い**
+
+`metric.primary` / `finance.income` / `finance.expense` は語彙にあり、
+ValidatorもRuntimeも対応しているが、**Compilerが出せない**。
+単一の重要な数値を表示するWidgetが存在しないためである。
+
+現在の集計手段は`bar_chart`の`group_by`/`aggregate`だけで、これは
+複数値の内訳であり単一KPIではない。
+
+**Widgetを増やすのはR3/R5の範囲**であり、R1（意味の層）でWidgetを
+足すと「Design Languageの成否」と「Widget追加の成否」が混ざる。
+したがって今回は足さない。
+
+結果として、**014 §9のGolden Finance E2E は完全には成立していない**
+——`metric.primary`を含むDocumentを、Production Pathが生成できない。
+
+**2. Conversation へ語彙を渡していない**
+
+`knowledge_entries()`は用意したが、Cognitive Pipeline / Conversation
+のpromptへは渡していない。したがって**AIはまだroleを選んでいない**
+——今出ているroleは、すべてCompilerが構造から決めたものである。
+
+「AIは意味を決める」の**AI側がまだ動いていない**。これがR1の核心の
+残件であり、R2の最初にやる。
+
+**3. Runtime / User Acceptance が書かれない**
+
+`generation_ref`はPipelineの戻り値まで届くようになったが、
+Flutterから結果が戻る経路と、生成物への承認を聞くUIが無い。
+書ける**構造**は用意した（`note_runtime_outcome` /
+`note_user_acceptance`、テストで確認済み）。
