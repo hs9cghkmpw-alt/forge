@@ -32,7 +32,7 @@ Vertical Sliceの実装:
     EffectCapability : 外へ何をするか   (share/notify/camera/location…)
 
 `supported`は`app/ai/validators/schema_validator.py`のWidget Registry
-(v1.8で19種)と1:1で対応させて手で維持する。**Registryを増やす際は
+(v1.11で20種)と1:1で対応させて手で維持する。**Registryを増やす際は
 Validator・Runtime・ここの3箇所を同時に更新すること**(TD37: 登録漏れで
 4種のWidgetが描画不能だった実バグ)。
 """
@@ -107,7 +107,7 @@ def _cap(*args, **kwargs) -> Capability:
 # ---------------------------------------------------------------------------
 # Capability Registry(静的・人手管理)
 #
-# `supported=True`のものは、Widget Registry v1.8(19種)に実装がある。
+# `supported=True`のものは、Widget Registry v1.11(20種)に実装がある。
 # `supported=False`のものは「よく要求されるが、まだ作れない」もので、
 # **検出のためだけに**列挙している——実装済みだと偽らないための一覧である。
 # ---------------------------------------------------------------------------
@@ -138,6 +138,11 @@ _REGISTRY: tuple[Capability, ...] = (
          detection_keywords=("棒グラフ", "グラフで", "グラフにして")),
     _cap("view.tabs", CapabilityLayer.VIEW, "タブで切り替える", True, ("tab_view",),
          detection_keywords=("タブ", "切り替え")),
+    # v1.11(FORGE-R1、TD69)。合計・平均を**画面で一番大きい1つの数値**
+    # として見せる。v1.10で語彙へ`metric.primary`を入れたのに、出力先の
+    # Widgetが無いまま置かれていた穴を塞いだもの。
+    _cap("view.metric", CapabilityLayer.VIEW, "合計を大きく見る", True, ("metric_view",),
+         detection_keywords=("合計", "総額", "残高", "いくら使った", "トータル")),
     # 未実装のView。§33の例(釣果を地図で)はここに当たる。
     _cap("view.map", CapabilityLayer.VIEW, "地図で見る", False,
          detection_keywords=("地図", "マップ", "地図上"), nearest_supported_id="view.list"),

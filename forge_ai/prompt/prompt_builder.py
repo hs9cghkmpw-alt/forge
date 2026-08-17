@@ -169,6 +169,59 @@ class PromptBuilder:
             context={"plan": plan_summary},
         )
 
+    def build_design_intent_prompt(
+        self, *, need_summary: str, entity_label: str, field_labels: tuple[str, ...],
+        axes: tuple[dict[str, Any], ...],
+    ) -> Prompt:
+        """Design Languageの**意味的役割をAIに選ばせる**Prompt
+        (FORGE-R1、2026-08-17)。
+
+        ---
+
+        ## 値を聞かない
+
+        `font_size`や色コードは一切聞かない。聞くのは
+
+            この画面はどの密度で見せるべきか
+            一覧の面は持ち上げるべきか
+
+        という**意味**だけである。それが何pxで何色になるかはForge
+        Runtimeが保証する(Product Direction §3)。
+
+        ## 選択肢を渡す（自由記述にしない）
+
+        `axes`には軸ごとの選択肢と、それぞれの`meaning`/`use_when`/
+        `avoid_when`が入る。自由に書かせず**閉じた選択肢から選ばせる**
+        のは、
+
+        * Runtimeが保証できない値が入らない
+        * **選ばれなかった候補が分かる**ので、後から
+          「このNeedではrelaxedではなくcompactが受け入れられた」と
+          いう対比が学習素材になる
+
+        ためである。Local AIにとっても、生成より選択の方がはるかに
+        易しい。
+        """
+        return Prompt(
+            stage="design_intent",
+            system=(
+                "あなたはアプリの見た目の**意味**を決める。"
+                "px・色コード・余白の数値は決めない——それはForgeが保証する。"
+                "各axisについて、options の id から**1つだけ**選ぶこと。"
+                "options に無い値を答えてはならない。"
+                "迷った場合は、use_when が依頼内容に最も近いものを選ぶ。"
+            ),
+            instruction=(
+                "利用者の依頼と、このアプリが記録するデータを見て、"
+                "各axisの選択肢から最も適切なものを1つずつ選べ。"
+            ),
+            context={
+                "need": need_summary,
+                "records": {"label": entity_label, "fields": list(field_labels)},
+                "axes": list(axes),
+            },
+        )
+
     def build_repair_prompt(self, *, ir_summary: dict[str, Any], issues: tuple[dict[str, Any], ...]) -> Prompt:
         """Repair段階のPromptを構築する。"""
         return Prompt(

@@ -140,3 +140,52 @@ List<ForgeAggregatedGroup> aggregateRecords(
       ),
   ];
 }
+
+/// 1つの数値へ畳む集計(グループ化しない)。v1.11新規(FORGE-R1、TD69)。
+///
+/// ---
+///
+/// ## なぜ`aggregateRecords`と別関数なのか
+///
+/// `groupBy: ''`のような「グループ化しない」呼び出しを許すこともできた
+/// が、そうすると**返り値の要素数が呼び出し方によって変わる**関数に
+/// なる。呼び出し側は毎回「1件のはずだ」と仮定して`.first`を書くことに
+/// なり、その仮定は型に現れない。
+///
+/// ここは**常に1つの値を返す**別の問いである。だから別の関数にして、
+/// 返り値も`List`ではなく単一の`double?`にした。
+///
+/// ## Recordが0件のときは`null`を返す(0ではない)
+///
+/// 「合計0円」と「まだ記録が無い」は違う。0を返すと、呼び出し側が
+/// その区別を復元できない——`metric_view`は前者を「0円使った」と
+/// 表示してしまう。**分からないものを楽観側へ倒さない**
+/// (`CLAUDE.md` §3)。
+///
+/// `count`だけは0件でも0を返す。「0件である」は正しく数えた結果で
+/// あって、欠落ではないからである。
+double? aggregateAll(
+  List<ForgeRecordItem> records, {
+  required ForgeAggregateOp op,
+  String? valueField,
+}) {
+  if (op == ForgeAggregateOp.count) {
+    return records.length.toDouble();
+  }
+  if (valueField == null || valueField.isEmpty) {
+    // sum/average に値Fieldが無いのは呼び出し側の誤り。例外で画面を
+    // 落とすほどのことではないが、**0を返して「合計0」に化けさせない**。
+    return null;
+  }
+
+  double total = 0;
+  int counted = 0;
+  for (final record in records) {
+    final raw = record.fields[valueField];
+    if (raw is! num) continue; // 未入力・型不一致は静かに無視(他Widgetと同方針)
+    total += raw.toDouble();
+    counted += 1;
+  }
+  if (counted == 0) return null;
+  return op == ForgeAggregateOp.average ? total / counted : total;
+}

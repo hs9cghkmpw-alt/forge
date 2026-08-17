@@ -231,7 +231,7 @@ ForgeRoleStyle? resolveForgeRole(BuildContext context, String? role) {
 
 /// role の見た目を、その Widget へ被せる。
 ///
-/// `_build()` から**1箇所だけ**呼ばれる。19種の builder それぞれへ
+/// `_build()` から**1箇所だけ**呼ばれる。20種の builder それぞれへ
 /// 配ると、Widget を1つ足すたびに付け忘れる。
 Widget applyForgeRole(BuildContext context, String? role, Widget child) {
   final style = resolveForgeRole(context, role);

@@ -3185,9 +3185,38 @@ Local AIのDatasetとして最も価値がある。
 
 ---
 
-## TD69. R1 Design Language は Semantic層まで。Hero KPIとConversation接続が未了（2026-08-17）
+## TD69. R1 Design Language（2026-08-17）
 
-014 §17の完了条件のうち、**未達のもの**を正直に残す。
+### ✅ 解消（2026-08-17、同日中に着手・完了）
+
+下の「できていないこと」の **1（Hero KPI Widget）と 2（Conversation
+へ語彙を渡す）は解消した**。3（Runtime / User Acceptance）は残る
+——これはR2の範囲である（TD65と重複）。
+
+**1の解消**: `metric_view`（Forge Language v1.11）を追加した。
+Validator / Compiler / Flutter Runtime / Capability Registry の4箇所を
+同時に更新している（TD37の再発防止）。家計簿の生成物に
+`style_role: metric.primary` を持つWidgetが実際に出る。
+配線破壊試験6件で確認（`docs/reports/FORGE-R1-HERO-METRIC-AND-DESIGN-INTENT-report.md`）。
+
+> 下に「WidgetはR3/R5の範囲だから今回は足さない」と書いたが、
+> **その判断は誤りだった**。語彙に「言えるのに作れない言葉」を残す
+> ことの方が害が大きい。R1の成否とWidget追加の成否が混ざるのを
+> 嫌ったのだが、実際には**混ざりようがない**——`metric.primary`の
+> 出力先が無いこと自体がR1の未達だったからである。
+
+**2の解消**: Cognitive Pipeline に `design_intent` 段を足し、軸ごとの
+閉じた選択肢をAIへ提示して選ばせるようにした。Forge側は軸ごとに
+検証し、外れたら既定値へ落として`fallback_axes`に残す。
+配線破壊試験6件で確認。
+
+**残る負債**: Design Intentが**Curated生成にもAI呼び出しを1回
+足している**（TD70）。
+
+---
+
+014 §17の完了条件のうち、**未達のもの**を正直に残す（以下は
+2026-08-17時点の記録。上の解消記録が最新）。
 
 ### できていること
 
@@ -3232,3 +3261,48 @@ ValidatorもRuntimeも対応しているが、**Compilerが出せない**。
 Flutterから結果が戻る経路と、生成物への承認を聞くUIが無い。
 書ける**構造**は用意した（`note_runtime_outcome` /
 `note_user_acceptance`、テストで確認済み）。
+
+---
+
+## TD70. Design Intentが Curated生成にもAI呼び出しを1回足している（2026-08-17）
+
+### 事実
+
+TD69の「AIへroleを選ばせる」を入れた結果、**Curated Domain の生成でも
+AIを1回呼ぶようになった**。以前は0回だった。
+
+Curatedの価値は「速い・安定・無料」である。Geminiの実測枠は
+**1日20回/Model**（TD66）なので、1生成あたり1回の追加は無視できない
+——生成できる回数がそのまま減る。
+
+### なぜそれでも入れたか
+
+「AIは意味を決める。Forgeは品質を保証する」の**AI側**が動いていない
+のがR1の核心の未達だった（TD69）。Curatedだけ意味の選択から外すと、
+**最もよく使われる経路でDesign Languageが効かない**。
+
+### 選ばなかった案
+
+* **Curatedでは既定値で固定する** — 家計簿と日記が同じ密度になる。
+  Curatedこそ利用者が最初に触る経路なので、そこで効かないのは本末転倒
+* **AIを呼ぶかどうかをDomainごとに切り替える** — 「どのDomainで
+  呼ぶか」という設定が増える。設定で分岐させると、忘れられる
+
+### 直す案（未着手）
+
+1. **軸の答えをキャッシュする** — 同じNeed・同じEntityなら同じ選択に
+   なるはずである。`(domain, entity_label)`単位で覚えれば、2回目以降は
+   0回に戻る。**ただし「同じNeed」の同一判定を雑にすると、違う依頼に
+   同じ意味を当てることになる**
+2. **Local AIに寄せる** — 択一はLocal AIに最も向いた仕事である
+   （生成より選択の方が易しい）。TD51が解ければ枠を消費しない
+3. **entity_synthesisと1回にまとめる** — 既にAIを呼んでいる段があり、
+   Curatedではその段を通らない。まとめると経路によって呼び出し回数が
+   変わるので、単純ではない
+
+### 今わかっている実測
+
+`metric_view`追加後の家計簿生成（mock provider）で、
+`ai_calls <= 2` をテストで固定している
+（`backend/tests/test_generation_evidence.py`）。実Providerでの
+回数は**測っていない**。

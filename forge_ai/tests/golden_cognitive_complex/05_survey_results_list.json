@@ -15,7 +15,8 @@
     "final_template_selection",
     "design_critic",
     "domain_resolution",
-    "entity_source"
+    "entity_source",
+    "design_intent"
   ],
   "domain": "survey",
   "input": "回答後に結果を一覧で確認できるアンケート",

@@ -129,6 +129,11 @@ Navigation・集計/グラフ・LLM-assisted Design Reasoningは、いずれも
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover — 型注釈のみ
+    from forge_ai.core.ir.design_intent import DesignIntent
+
 from typing import Any
 
 from forge_ai.core.compiler import (
@@ -199,6 +204,21 @@ _ROLE_SUMMARY_CHART = "card.summary"
 _ROLE_PRIMARY_BUTTON = "button.primary"
 _ROLE_SECONDARY_BUTTON = "button.secondary"
 _ROLE_FIELD_LABEL = "text.label"
+# v1.11。**画面で最も重要な単一のKPI**。この綴りは v1.10 で語彙へ入れた
+# のに、出力先のWidgetが無いまま置かれていた（TD69）。`metric_view` を
+# 足したことで、初めて実際の画面へ出るようになった。
+_ROLE_HERO_METRIC = "metric.primary"
+
+
+def _intent_role(design_intent: "DesignIntent | None", axis: str, fallback: str) -> str:
+    """AIが選んだroleを取り出す。**選んでいなければ既定値**。
+
+    `design_intent`が`None`なのは「AIへ聞かなかった」場合であり、
+    それ自体は異常ではない（Providerが無い経路・テスト）。
+    """
+    if design_intent is None:
+        return fallback
+    return design_intent.role_for(axis) or fallback
 
 class ForgeLanguageCompiler:
     """`ForgeIR` → `ForgeIRDocument`(Forge Language v1.3)。
@@ -211,7 +231,10 @@ class ForgeLanguageCompiler:
     `ForgeLanguageCompilationError`を送出する。
     """
 
-    def compile(self, ir: ForgeIR, *, domain_category: str, title: str) -> ForgeIRDocument:
+    def compile(
+        self, ir: ForgeIR, *, domain_category: str, title: str,
+        design_intent: "DesignIntent | None" = None,
+    ) -> ForgeIRDocument:
         errors = ir.referential_integrity_errors()
         if errors:
             raise ForgeLanguageCompilationError(f"ForgeIR has referential integrity errors: {errors}")
@@ -255,6 +278,7 @@ class ForgeLanguageCompiler:
         return self._compile_single_screen(
             entity, safe_title,
             include_crud=edit_form_view is not None, domain_category=domain_category,
+            design_intent=design_intent,
         )
 
     def _compile_checklist_screen(
@@ -333,7 +357,7 @@ class ForgeLanguageCompiler:
         return ForgeIRDocument(
             # section_header(v1.5)・design_tokens(v1.5)を使うため。
             # RECORD_CRUD経路と揃えて"1.8"(上位互換)を宣言する。
-            version="1.10",
+            version="1.11",
             initial_screen_id=screen.id,
             screens=(screen,),
             app_title=title,
@@ -343,7 +367,8 @@ class ForgeLanguageCompiler:
         )
 
     def _compile_single_screen(
-        self, entity: Entity, title: str, *, include_crud: bool, domain_category: str
+        self, entity: Entity, title: str, *, include_crud: bool, domain_category: str,
+        design_intent: "DesignIntent | None" = None,
     ) -> ForgeIRDocument:
         """FORGE v0.6でList View + Form Viewを単一画面へ変換する設計を
         導入し(モジュールdocstring参照)、FORGE v0.7で出力の中身を
@@ -435,8 +460,13 @@ class ForgeLanguageCompiler:
         list_tab_children: list[ForgeIRWidget] = [
             ForgeIRWidget(
                 type="record_list_view", id="records_list_view",
-                # 「繰り返し項目の一覧」という構造上の事実からroleが決まる。
-                properties={**record_list_view_properties, "style_role": _ROLE_RECORD_LIST},
+                # 面の扱いは**AIが選ぶ**（surface.card か surface.elevated か）。
+                # 「全部を持ち上げると階層が消える」ので、持ち上げるかどうかは
+                # 利用者のNeedから来る意味の判断であり、構造からは決まらない。
+                properties={
+                    **record_list_view_properties,
+                    "style_role": _intent_role(design_intent, "list_surface", _ROLE_RECORD_LIST),
+                },
             ),
         ]
 
@@ -444,6 +474,17 @@ class ForgeLanguageCompiler:
         # 追加する(household_budgetの「収支をグラフで見たい」という
         # 既存の例文——`example_picker_sheet.dart`——を実現するための
         # 追加。数値Fieldを持たないEntityには何も追加しない)。
+        # v1.11新規: 数値Fieldを持つEntityは、**一覧より前に**Hero KPIを
+        # 置く（`metric_view`、FORGE-R1 / TD69）。
+        #
+        # 順序に意味がある。「今月の残高」を知りたい人は、一覧を読みたい
+        # わけではない——**開いた瞬間に答えが目に入る**のが、家計簿を
+        # 家計簿たらしめている部分である。一覧の下に置くと、それは
+        # 「一覧のおまけの合計」になってしまう。
+        hero_metric_widget = self._build_hero_metric_widget(entity, records_state_id)
+        if hero_metric_widget is not None:
+            list_tab_children.insert(0, hero_metric_widget)
+
         bar_chart_widget = self._build_bar_chart_widget(entity, records_state_id)
         if bar_chart_widget is not None:
             list_tab_children.append(bar_chart_widget)
@@ -512,7 +553,13 @@ class ForgeLanguageCompiler:
 
         body = ForgeIRWidget(
             type="tab_view", id="root_tabs",
-            properties={"tab_titles": tab_titles},
+            properties={
+                "tab_titles": tab_titles,
+                # 情報密度は**AIが選ぶ**。一覧中心か、じっくり読ませたいかは
+                # 構造からは決まらない（同じCRUDでも、家計簿とジャーナルでは
+                # 適切な密度が違う）。
+                "style_role": _intent_role(design_intent, "screen_density", "density.normal"),
+            },
             children=tuple(tabs),
         )
         screen = ForgeIRScreen(id="generated_screen", title=title, state=state, body=body)
@@ -521,7 +568,7 @@ class ForgeLanguageCompiler:
             # v1.8(2026-08-11、Widget Vocabulary Expansion第3弾):
             # sliderはv1.8専用のため(それ以前のWidgetは既に追加済み。
             # v1.8はいずれの上位互換、無変更)。
-            version="1.10",
+            version="1.11",
             initial_screen_id=screen.id,
             screens=(screen,),
             app_title=title,
@@ -669,6 +716,47 @@ class ForgeLanguageCompiler:
 
             children.append(ForgeIRWidget(type="text_field", id=f"{state_id}{id_suffix}", properties=field_properties))
         return children, field_states
+
+    def _build_hero_metric_widget(self, entity: Entity, records_state_id: str) -> ForgeIRWidget | None:
+        """v1.11新規（FORGE-R1、TD69）。Entityが数値Fieldを持つ場合のみ、
+        その合計を**画面で一番大きい単一の数値**として置く。
+
+        ---
+
+        ## なぜ合計なのか（平均でも件数でもなく）
+
+        「今月いくら使ったか」「今月の残高」——数値Fieldを持つ記録型
+        アプリで最初に知りたいのは、ほぼ常に**積み上がった量**である。
+        平均は「1回あたり」を知りたいときの問いで、それは後から
+        利用者が言えばよい（Revisionの仕事）。
+
+        数値Fieldを持たないEntity（habit/todo/diary）には**何も置かない**。
+        `bar_chart`と同じ判断で、「根拠のない集計を発明しない」。
+        件数を出すことはできるが、「習慣が3件ある」は画面で一番大きく
+        出すべき数値ではない。**出せるからといって出さない。**
+
+        ## 値を決めない
+
+        `metric.primary`が何pxで何色になるかはRuntimeが保証する。
+        Compilerは「これは主KPIである」という意味だけを言う。
+        """
+        value_field = next((f for f in entity.fields if f.type == FieldType.NUMBER), None)
+        if value_field is None:
+            return None
+
+        return ForgeIRWidget(
+            type="metric_view", id="records_hero_metric",
+            properties={
+                "style_role": _ROLE_HERO_METRIC,
+                "state_ref": records_state_id,
+                "value_field": value_field.name,
+                "aggregate": "sum",
+                "label": f"{value_field.label}の合計",
+                # まだ1件も無いときに 0 とだけ出ると「0円だ」という
+                # **事実でない読み取り**を招く。記録が無いことを言う。
+                "empty_text": "まだ記録がありません",
+            },
+        )
 
     def _build_bar_chart_widget(self, entity: Entity, records_state_id: str) -> ForgeIRWidget | None:
         """v1.6新規。Entityが数値Fieldを持つ場合のみ、一覧の直後に

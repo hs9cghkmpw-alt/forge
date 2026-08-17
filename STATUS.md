@@ -3,7 +3,7 @@
 現在のForgeが「どこまで動くか」を一枚で示す。詳細な履歴は`CHANGELOG.md`、
 未解消の課題は`TECH_DEBT.md`・`KNOWN_ISSUES.md`を参照。
 
-**最終更新**: 2026-08-14(FORGE-AI-FOUNDATION-010)
+**最終更新**: 2026-08-17(TD69クローズ: Design Intent + Hero KPI)
 
 > このファイルはFORGE-CONVERSATION-READY-001指示書15章の要請で新設した。
 > それ以前は同等の役割を`KNOWN_ISSUES.md`と各`*-report.md`が分担しており、
@@ -33,16 +33,16 @@
 | Forge Language生成 | 動作 | Curated 5 Domain + 合成経路 |
 | Solution Shape選択 | 動作 | CHECKLIST / RECORD_CRUD の2形 |
 | Validator / Repair / Critic | 動作 | Validator最大3回・Repair最大2回 |
-| Flutter Runtime | 動作 | Widget 19種、v1.9(集計付きbar_chart) |
+| Flutter Runtime | 動作 | Widget **20種**、v1.11(`metric_view`= Hero KPI)。**Flutter側は当環境で未実行、CIで確認** |
 | 「はい、どうぞ」UX | 動作 | `conversation_flow_screen.dart` |
 | Conversation Metrics | 記録のみ | プロセス内メモリ。外部送出は未実装 |
 | AI Router | 動作 | Quota/健全性/Circuit Breaker。**全AI呼び出しが経由**(迂回を回帰で固定) |
 | Model Gateway | **削除** | `AIRouter`と責務が重複し本番未使用だった(TD59)。同じ層を2つ残さない |
 | Provider Registry | 動作 | Providerの唯一の宣言。名前・鍵の変数名・実装状況・protocol |
 | Provider Auto Discovery | 動作 | 環境変数が揃ったProviderだけが候補になる |
-| Design Language V1 | **Semantic層は動作** | 33 role。Schema v1.10/Validator/Compiler/Runtime/Evidenceまで接続。**AIはまだroleを選んでいない**(TD69) |
-| └ Hero KPI Widget | 未実装 | `metric.primary`を出す先が無い(TD69)。R3/R5 |
-| └ Conversationへの語彙提供 | 未接続 | R2の最初(TD69) |
+| Design Language V1 | 動作 | 33 role。Schema v1.11/Validator/Compiler/Runtime/Evidenceまで接続 |
+| └ Hero KPI Widget | **動作** | `metric_view`(v1.11)。数値Fieldを持つEntityの一覧の**前**に出る。数値が無ければ出さない |
+| └ AIによるrole選択 | **動作** | `design_intent`段。軸ごとの択一をAIへ提示し、**軸ごとに検証**して外れたら既定値+`fallback_axes`記録。Curatedでも1回AIを呼ぶようになった(**TD70**) |
 | Model fallback(Provider内) | 動作 | 一時的失敗・Model廃止・PER_MODEL枠切れのとき、同じProviderの別Modelへ進む。Provider Identityは増やさない(011 §1) |
 | **Gemini無料枠** | **観測1 Modelで20** | 実測は429本文の`quotaValue=20`・`quotaId=PerProjectPerModel`のみ。合計値と枠の単位(Project/鍵)は**未検証**(TD66)。検証作業だけで上限到達したので実運用には足りない |
 | Local Provider | 実装済/未実測 | OpenAI互換。実モデル未実行(環境制約、TD51) |

@@ -14,7 +14,8 @@
     "final_template_selection",
     "design_critic",
     "domain_resolution",
-    "entity_source"
+    "entity_source",
+    "design_intent"
   ],
   "domain": "inventory",
   "input": "在庫が少なくなったら分かるようにしたい",

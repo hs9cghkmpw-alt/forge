@@ -28,6 +28,7 @@ from forge_ai.contracts.cognitive_interfaces import (
     TemplateSelectorProtocol,
 )
 from forge_ai.contracts.interfaces import CompilerProtocol, QualityEngineProtocol
+from forge_ai.core.ir.design_intent import DesignIntentSelector
 from forge_ai.core.ir.entity_synthesizer import EntitySynthesizer
 
 
@@ -59,3 +60,12 @@ class CognitiveDependencies:
     # 純粋な追加になっている。実運用の組み立て
     # (`_default_cognitive_dependencies()`)では必ず注入される。
     entity_synthesizer: EntitySynthesizer | None = None
+
+    # FORGE-R1(2026-08-17)新規。Design Languageの意味的役割をAIに選ばせる
+    # (`design_intent.py`参照)。
+    #
+    # `entity_synthesizer`と同じく既定は`None`である。注入しなければ
+    # Compilerが構造から決めた既定のroleだけになり、**以前と完全に同じ
+    # 出力**になる。Design Languageが入ったせいで生成が落ちるのは
+    # 本末転倒なので、純粋な追加にしてある。
+    design_intent_selector: "DesignIntentSelector | None" = None

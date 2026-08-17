@@ -66,7 +66,12 @@ __all__ = [
     "RoleCategory",
     "SEMANTIC_ROLES",
     "SemanticRole",
+    "DESIGN_CHOICE_AXES",
+    "choices_for_axis",
+    "design_choice_guidance",
     "design_roles_in",
+    "is_valid_choice",
+    "knowledge_entries",
     "is_known_role",
     "role_definition",
     "validate_identifier",
@@ -291,6 +296,66 @@ def role_definition(role: str) -> SemanticRole | None:
 def knowledge_entries() -> tuple[dict[str, str], ...]:
     """将来RAGでLocal AIへ渡すための全語彙(§12)。"""
     return tuple(r.to_knowledge_entry() for r in SEMANTIC_ROLES)
+
+
+#: **AIに選ばせる軸**（014 §7 / R1）。
+#:
+#: 語彙33個すべてを一度に選ばせない。1回の問いで選べるのは
+#: 「この画面の情報密度」「一覧の面の扱い」のような**少数の択一**に
+#: 限る。33個から自由に選ばせると、
+#:
+#:   * 選択肢が多すぎて外しやすい（Local AIでは特に）
+#:   * 何が選ばれなかったのかが分からず、Evidenceとして弱い
+#:   * Runtimeが保証すべき組み合わせが爆発する
+#:
+#: 「軸ごとに1つ選ぶ」形なら、**選ばれなかった候補も分かる**ので、
+#: 後から「この Need では relaxed ではなく compact が受け入れられた」
+#: という対比が学習素材になる。
+DESIGN_CHOICE_AXES: dict[str, tuple[str, ...]] = {
+    # 画面の情報密度。一覧中心か、じっくり読ませたいか。
+    "screen_density": ("density.compact", "density.normal", "density.relaxed"),
+    # 一覧の面の扱い。**全部を持ち上げると階層が消える**ので、
+    # 持ち上げるかどうかは意味の判断である。
+    "list_surface": ("surface.card", "surface.elevated"),
+}
+
+
+def choices_for_axis(axis: str) -> tuple[str, ...]:
+    return DESIGN_CHOICE_AXES.get(axis, ())
+
+
+def is_valid_choice(axis: str, role: object) -> bool:
+    """その軸で選んでよい値か。
+
+    **語彙全体に含まれるだけでは不十分**である。`metric.primary`は
+    正しいroleだが、`screen_density`の答えとしては誤りである。
+    軸ごとに閉じた選択肢を持つのはそのため。
+    """
+    return isinstance(role, str) and role in DESIGN_CHOICE_AXES.get(axis, ())
+
+
+def design_choice_guidance() -> tuple[dict[str, object], ...]:
+    """AIへ渡す「軸・選択肢・各選択肢の意味」。
+
+    `knowledge_entries()`が語彙全部を返すのに対し、こちらは
+    **今この場で選ばせるもの**だけを返す。promptへ入れる情報は、
+    選ばせない語彙まで含めると長くなるだけで精度が落ちる。
+    """
+    guidance: list[dict[str, object]] = []
+    for axis, options in DESIGN_CHOICE_AXES.items():
+        guidance.append({
+            "axis": axis,
+            "options": [
+                {
+                    "id": role_id,
+                    "meaning": (d.meaning if (d := role_definition(role_id)) else ""),
+                    "use_when": (d.use_when if d else ""),
+                    "avoid_when": (d.avoid_when if d else ""),
+                }
+                for role_id in options
+            ],
+        })
+    return tuple(guidance)
 
 
 def design_roles_in(forge_document: Any) -> tuple[str, ...]:

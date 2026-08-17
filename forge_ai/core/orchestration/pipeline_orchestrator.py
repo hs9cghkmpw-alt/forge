@@ -360,8 +360,34 @@ class CognitiveOrchestrator:
                     if entity_source == "curated"
                     else "AIが合成したデータ構造を使用(決定的な検証・サニタイズ済み)",
                 ))
+                # --- Design Intent（FORGE-R1、2026-08-17）------------------
+                #
+                # **ここがAI側である。** Compilerが出すroleは構造から決まる
+                # ものだけで、「この画面はどの密度で見せるか」は利用者の
+                # Needから来る意味なので、AIに選ばせる。
+                #
+                # `deps.design_intent_selector`が無い場合（Providerを注入
+                # していないテスト等）は既定値で成立する——Design Language
+                # が入ったせいで生成が落ちるのは本末転倒である。
+                design_intent = None
+                if deps.design_intent_selector is not None:
+                    entity = ir.entities[0] if ir.entities else None
+                    design_intent = deps.design_intent_selector.select(
+                        need_summary=context.raw_input,
+                        entity_label=(entity.label if entity else ""),
+                        field_labels=tuple(f.label for f in entity.fields) if entity else (),
+                    )
+                    context = context.with_decision(_trace(
+                        "design_intent",
+                        "ai" if design_intent.ai_selected else "fallback",
+                        # **選ばれたroleを決定の記録に残す。** 後から
+                        # 「AIが選んだのか既定で埋まったのか」が分かる。
+                        f"choices={design_intent.choices} fallback={list(design_intent.fallback_axes)}",
+                    ))
+
                 forge_document = ForgeLanguageCompiler().compile(
-                    ir, domain_category=domain_category_value, title=context.plan.title
+                    ir, domain_category=domain_category_value, title=context.plan.title,
+                    design_intent=design_intent,
                 )
             else:
                 # FORGE-AI-QUALITY-001(2026-08-11): 以前はここで

@@ -15,7 +15,8 @@
     "final_template_selection",
     "design_critic",
     "domain_resolution",
-    "entity_source"
+    "entity_source",
+    "design_intent"
   ],
   "domain": "schedule",
   "input": "毎週月曜日の予定を管理したい",

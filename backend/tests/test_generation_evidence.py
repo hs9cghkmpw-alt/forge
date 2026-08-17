@@ -92,10 +92,29 @@ class TestCuratedGenerationsLeaveEvidence(unittest.TestCase):
             },
         )
 
-    def test_a_curated_domain_leaves_a_record_with_zero_ai_calls(self) -> None:
+    def test_a_curated_domain_leaves_a_record(self) -> None:
         """**TD65そのものの回帰。**
 
-        `ai_calls=0`が異常値ではないことが、この型を作った理由である。
+        Curated経路は**構造をAIに決めさせない**。その成功例を記録する
+        場所が無かったのがTD65である。
+
+        ---
+
+        ## `ai_calls == 0` を主張しなくなった理由（R1で変わった事実）
+
+        013時点では、Curated生成のAI呼び出しは**0回**だった。
+        R1でDesign Intent段（`design_intent.py`）を入れたことで、
+        **Curatedでも1回はAIを呼ぶ**ようになった。
+
+        呼ぶのは「この画面はどの密度で見せるか」という**意味**だけで
+        あり、構造は今もCuratedの決定的な定義から作られる。だから
+        `source`は`CURATED`のままで正しい——`source`が答えるのは
+        「**構造**を誰が決めたか」である。
+
+        **これは無料ではない**。Curatedの長所だった「0.01秒・Quota
+        消費0」が失われる。Gemini無料枠は実測で1日20回/Modelなので
+        （TD66）、この1回は軽くない。`ai_calls`に実数が入るので、
+        **コストがEvidence上で見える**ようにしてある。
         """
         response = self._generate("家計の支出をカテゴリ別に管理したい")
         self.assertEqual(response.status_code, 200, response.text)
@@ -103,11 +122,27 @@ class TestCuratedGenerationsLeaveEvidence(unittest.TestCase):
         self.assertTrue(
             curated,
             "Curated Domainの生成がEvidenceを1件も残していない。"
-            "AIを呼ばない成功例は、記録する場所が無いと学習素材にならない。",
+            "構造をAIに決めさせない成功例も、記録する場所が無いと"
+            "学習素材にならない。",
         )
-        self.assertEqual(curated[0].ai_calls, 0)
         self.assertTrue(curated[0].validator_passed)
         self.assertEqual(curated[0].domain, "household_budget")
+
+    def test_the_curated_path_still_does_not_let_ai_decide_the_structure(self) -> None:
+        """**Design Intentを入れてもCuratedはCuratedのままであること。**
+
+        AIが選ぶのは密度・面といった意味だけで、Entityの構造・Field・
+        画面構成はCuratedの決定的な定義から作られる。ここが崩れると
+        「Curatedの安定性」という長所そのものが消える。
+        """
+        self._generate("家計の支出をカテゴリ別に管理したい")
+        curated = [r for r in self.store.all_records() if r.source is GenerationSource.CURATED]
+        self.assertTrue(curated)
+        self.assertLessEqual(
+            curated[0].ai_calls, 2,
+            "Curated経路のAI呼び出しが増えすぎている。構造までAIに"
+            "決めさせていないか確認すること（Curatedの長所が消える）。",
+        )
 
     def test_a_mock_generation_is_never_recorded_as_cloud_ai(self) -> None:
         """**014 §2で直した実バグの回帰テスト。**

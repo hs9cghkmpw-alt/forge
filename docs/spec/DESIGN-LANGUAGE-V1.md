@@ -57,7 +57,7 @@ Product Direction §3 の分担を、実際の語彙として書き下したも�
 | `text.body` | 本文。既定の可読サイズ。 | 説明文・メモ・自由記述の表示。 | 数値の強調(それはmetric.*)。 |
 | `text.label` | 入力欄やボタンに付く短い語。 | フィールド名・タブ名・凡例。 | 文章。 |
 | `text.secondary` | 補助情報。本文より弱い。 | 日付・単位・注記・前月比の説明。 | 主要な内容。読めなくてよい情報ではないので、極端に小さくしない。 |
-| `metric.primary` | 画面で**最も重要な単一のKPI**。 | 残高・合計・今日の達成率など、利用者が最初に見る1つの数値。 | リスト内の全数値。**同一画面で2つ以上使わない。** |
+| `metric.primary` | 画面で**最も重要な単一のKPI**。出力先は`metric_view`(v1.11)。 | 残高・合計・今日の達成率など、利用者が最初に見る1つの数値。 | リスト内の全数値。**同一画面で2つ以上使わない。** |
 | `metric.secondary` | 主KPIを補足する数値。 | 前月比・内訳の小計・サブ指標。 | 主KPIと同じ大きさにしたい数値(それはmetric.primary)。 |
 
 ### color
@@ -115,9 +115,26 @@ Product Direction §3 の分担を、実際の語彙として書き下したも�
 この語彙は「見た目の設定」ではなく、**Local AIが将来選ぶ出力言語の
 一部**である。`knowledge_entries()`がRAGへ渡せる形を返す。
 
-**まだAIはroleを選んでいない**（TD69）。現在出ているroleはすべて
-Compilerが構造から決めたものである。Conversation/Cognitive Pipelineへ
-語彙を渡すのがR2の最初の作業。
+**AIがroleを選ぶようになった**（2026-08-17、TD69解消）。Cognitive
+Pipelineに `design_intent` 段があり、軸ごとに閉じた選択肢を提示して
+AIに1つ選ばせている。
+
+```
+screen_density → density.compact | density.normal | density.relaxed
+list_surface   → surface.card    | surface.elevated
+```
+
+Forge側は答えを**軸ごとに検証する**。`metric.primary` は語彙として
+正しいが `screen_density` の答えとしては誤りなので通さない。外れた
+場合・AIを呼べなかった場合は決定的な既定値へ落ち、落ちた軸を
+`fallback_axes` に残す——「AIが選んだ」と「Forgeが既定で埋めた」が
+Evidence上で混ざらないようにするためである。
+
+Compilerが出すroleは引き続き**構造から決まるもの**（見出し・一覧・
+ボタン）に限られる。構造から決まらないもの（密度・面の持ち上げ）だけ
+がAIの担当である。
+
+軸は今2つしかない。増やすときは §6 の条件を通す。
 
 ## 6. 増やすときの条件
 

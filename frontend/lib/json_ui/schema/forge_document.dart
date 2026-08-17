@@ -851,6 +851,38 @@ sealed class ForgeWidgetNode {
           groupBy: grouping,
           aggregate: aggregate,
         );
+      case 'metric_view':
+        // v1.11新規(FORGE-R1、TD69)。`group_by`を敢えて受け付けない
+        // ——受け付ければ「グループが複数あるのに数値は1つ」という、
+        // 表示できない文書が作れてしまう。複数の値を並べたいなら
+        // `bar_chart`が既にある。
+        final metricStateRef = json['state_ref'];
+        if (metricStateRef is! String || metricStateRef.isEmpty) {
+          throw ForgeParseException('$path/state_ref', 'metric_view.state_ref is required');
+        }
+        final metricAggregateRaw = json['aggregate'];
+        if (metricAggregateRaw != null &&
+            ForgeAggregateOp.fromJson(metricAggregateRaw as String?) == null) {
+          throw ForgeParseException(
+              '$path/aggregate', 'metric_view.aggregate must be count/sum/average');
+        }
+        final metricAggregate = ForgeAggregateOp.fromJson(metricAggregateRaw as String?);
+        final metricValueField = json['value_field'];
+        // countは数えるだけなので値Fieldが要らない。sum/averageは要る。
+        if ((metricAggregate ?? ForgeAggregateOp.count) != ForgeAggregateOp.count &&
+            (metricValueField is! String || metricValueField.isEmpty)) {
+          throw ForgeParseException(
+              '$path/value_field', 'metric_view.value_field is required for sum/average');
+        }
+        return ForgeMetricViewWidgetNode(
+          id,
+          stateRef: metricStateRef,
+          valueField: metricValueField as String? ?? '',
+          aggregate: metricAggregate,
+          label: json['label'] as String?,
+          unit: json['unit'] as String?,
+          emptyText: json['empty_text'] as String?,
+        );
       case 'date_field':
         // v1.7新規(Widget Vocabulary Expansion第2弾、2026-08-11)。
         // TD33の「text_fieldのplaceholderへYYYY-MM-DD形式のヒントを
@@ -1104,6 +1136,48 @@ class ForgeBarChartWidgetNode extends ForgeWidgetNode {
 
   /// 集計するかどうか。`groupBy`の有無だけで決まる。
   bool get isAggregating => groupBy != null && groupBy!.isNotEmpty;
+
+  ForgeAggregateOp get effectiveAggregate => aggregate ?? ForgeAggregateOp.count;
+}
+
+/// v1.11新規(FORGE-R1、TD69、2026-08-17)。record_listを**1つの数値へ
+/// 畳んで**大きく見せる、画面の主KPI(Hero KPI)。
+///
+/// `bar_chart`との違いは**グループ化しないこと**である——常に値が1つに
+/// なる。それが`metric.primary`(画面で最も重要な単一のKPI)という
+/// Design Languageの役割に対応する。
+///
+/// v1.10でその役割を語彙へ入れたとき、**出力先のWidgetが1つも無かった**。
+/// 「今月の残高を一番目立たせる」が語彙にはあるのに作れない状態で、
+/// これはその穴を塞ぐための追加である。
+class ForgeMetricViewWidgetNode extends ForgeWidgetNode {
+  final String stateRef;
+
+  /// `count`のときは空でよい(数えるだけなので値Fieldが要らない)。
+  final String valueField;
+
+  /// 既定は`count`。**Fieldが無くても必ず成立する側**を既定にしてある。
+  final ForgeAggregateOp? aggregate;
+
+  /// 数値の上に出す短い説明(例: 「支出の合計」)。
+  final String? label;
+
+  /// 数値の後ろに付ける単位(例: 「円」)。
+  final String? unit;
+
+  /// Recordが1件も無いときに、数値の代わりに出す文言。
+  /// **0とは違う**ものとして扱う(`aggregateAll`のコメント参照)。
+  final String? emptyText;
+
+  const ForgeMetricViewWidgetNode(
+    super.id, {
+    required this.stateRef,
+    this.valueField = '',
+    this.aggregate,
+    this.label,
+    this.unit,
+    this.emptyText,
+  });
 
   ForgeAggregateOp get effectiveAggregate => aggregate ?? ForgeAggregateOp.count;
 }

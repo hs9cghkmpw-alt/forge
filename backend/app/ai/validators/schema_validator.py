@@ -77,7 +77,7 @@ MAX_RECORD_LIST_ITEMS = 500  # checklist/string_listと同じ上限に揃える
 MAX_RECORD_FIELDS = 20  # 1Recordが持てるFieldの上限(既存state.maxProperties: 30より保守的)
 MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)
 
-SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10"}
+SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11"}
 
 # バージョン文字列同士を数値として比較するための順序付きタプル。
 # **設計上の注記(このセッションで実際に発見・修正した再発バグへの
@@ -92,7 +92,7 @@ SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1
 # **文字列の大小比較ではなく、この並びの位置で比較する**(`_at_least()`)。
 # "1.10" < "1.9" になる文字列比較を避けるためであり、ここへ追記する
 # 順序がそのままバージョンの前後関係になる。
-_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10")
+_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11")
 
 
 def _version_at_least(version: str, minimum: str) -> bool:
@@ -179,6 +179,29 @@ WIDGET_TYPES_V1_7_ADDITIONS = {"date_field", "tab_view"}
 #   新しいstate型は不要。範囲外の値を構造的に入力できない。
 WIDGET_TYPES_V1_8_ADDITIONS = {"slider"}
 
+# v1.11で追加された1種(FORGE-R1-ENTRY-AND-DESIGN-LANGUAGE-014、TD69、
+# 2026-08-17)。**v1.10でWidgetを1つも増やさなかったのに、ここで増やす
+# 理由**を残しておく。
+#
+# v1.10でDesign Language(意味的役割)を入れたとき、`metric.primary`
+# ——「画面で最も重要な単一のKPI」——という役割を語彙へ入れた。しかし
+# **その役割を持てるWidgetが1つも無かった**。既存19種で数値を出せるのは
+#
+#   * `text`      : Stateの文字列を出すだけ。集計できない
+#   * `bar_chart` : **複数**の値を並べる。単一の主数値には使えない
+#
+# の2つで、どちらも「今月の残高を、画面で一番大きく1つだけ見せる」を
+# 表現できない。つまり語彙に**出力先の無い言葉**が入っていた
+# (`docs/reports/FORGE-R1-DESIGN-LANGUAGE-014-report.md`の未達2)。
+#
+# * `metric_view`: record_listを**1つの数値へ畳んで**大きく見せる。
+#   `bar_chart`との違いは、グループ化しない(=常に1つの値になる)こと
+#   である。集計そのものは既存のTRANSFORM層
+#   (`frontend/lib/json_ui/runtime/forge_aggregate.dart`)を使い、
+#   このWidgetは所有しない——v1.9で`bar_chart`が最初の利用者になった
+#   のと同じ形で、2番目の利用者になる。
+WIDGET_TYPES_V1_11_ADDITIONS = {"metric_view"}
+
 WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.0": WIDGET_TYPES_V1_0,
     "1.1": WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS,
@@ -225,11 +248,18 @@ WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
         | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
         | WIDGET_TYPES_V1_8_ADDITIONS
     ),
+    # v1.11。`metric_view`(Hero KPI)を追加。上の
+    # WIDGET_TYPES_V1_11_ADDITIONS のコメントに理由を書いてある。
+    "1.11": (
+        WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
+        | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
+        | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS
+    ),
 }
 WIDGET_TYPES_ALL = (
     WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
     | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
-    | WIDGET_TYPES_V1_8_ADDITIONS
+    | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS
 )  # 未知Widget判定用
 
 # `tab_view`はchildren[i]が「1タブ分の中身」に対応する、column/row/card/
@@ -270,6 +300,8 @@ ACTION_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.9": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
     # v1.10もActionを追加しない(足したのは意味付けであり操作ではない)。
     "1.10": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
+    # v1.11。metric_viewは表示専用なので新しいAction型を追加しない。
+    "1.11": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
 }
 ACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS  # 全バージョン合計(未知typeの判定用)
 
@@ -306,6 +338,9 @@ STATE_TYPES_BY_VERSION: dict[str, set[str]] = {
     # v1.10もState型を追加しない。意味的役割は**表示の解釈**であって、
     # 保存されるデータではない。
     "1.10": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
+    # v1.11。metric_viewは既存の"record_list"を参照するだけで、
+    # 新しいState型を追加しない(bar_chartと同じ)。
+    "1.11": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
 }
 STATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS
 
@@ -818,7 +853,7 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
     # type別チェックへは`style_role`を除いたdictを渡す。
     #
     # なぜ1箇所か: type別の`allowed_keys`へ個別に足すと、**Widgetを
-    # 1つ追加するたびに足し忘れる**。19種すべてに同じキーを配るのは、
+    # 1つ追加するたびに足し忘れる**。20種すべてに同じキーを配るのは、
     # Forgeが4回繰り返した「呼び出し側が忘れずにやる」設計そのもの
     # である(`CLAUDE.md` §3)。
     if "style_role" in widget:
@@ -1088,6 +1123,42 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
             errors.append(_err(f"{path}/label_field", Category.SCHEMA, "required", "bar_chart.label_fieldは必須です。"))
         if "title" in widget and (not isinstance(widget["title"], str) or len(widget["title"]) > 80):
             errors.append(_err(f"{path}/title", Category.SCHEMA, "string_length", "titleが不正です。"))
+
+    elif t == "metric_view":
+        # v1.11新規(FORGE-R1、TD69)。record_listを**1つの数値へ畳んで**
+        # 大きく見せる。`bar_chart`との違いは**グループ化しない**こと
+        # ——常に値が1つになる。それが「画面で最も重要な単一のKPI」
+        # (`metric.primary`)という意味に対応する。
+        #
+        # `group_by`を敢えて受け付けない。受け付ければ「グループが複数
+        # あるのに数値は1つ」という表示できない文書が作れてしまう。
+        # 複数の値を並べたいなら`bar_chart`が既にある。
+        errors.extend(_check_additional_properties(
+            widget,
+            {"type", "id", "state_ref", "value_field", "aggregate", "label", "unit", "empty_text"},
+            path,
+        ))
+        if not _is_identifier(widget.get("state_ref")):
+            errors.append(_err(f"{path}/state_ref", Category.SCHEMA, "required", "metric_view.state_refは必須です。"))
+
+        aggregate = widget.get("aggregate")
+        if aggregate is not None and aggregate not in BAR_CHART_AGGREGATES:
+            errors.append(_err(
+                f"{path}/aggregate", Category.SCHEMA, "enum",
+                f"metric_view.aggregateは{sorted(BAR_CHART_AGGREGATES)}のいずれかです。",
+            ))
+        # `count`は数えるだけなので値Fieldが要らない。sum/averageは要る。
+        # 既定を`count`にしてあるのは、**Fieldが無くても必ず成立する側**
+        # だからである(`CLAUDE.md` §3「分からないものを楽観側へ倒さない」)。
+        if (aggregate or "count") != "count" and not _is_identifier(widget.get("value_field")):
+            errors.append(_err(
+                f"{path}/value_field", Category.SCHEMA, "required",
+                "metric_view.value_fieldは、aggregateがsum/averageのとき必須です。",
+            ))
+        for key, limit in (("label", 40), ("unit", 8), ("empty_text", 40)):
+            if key in widget and (not isinstance(widget[key], str) or len(widget[key]) > limit):
+                errors.append(_err(f"{path}/{key}", Category.SCHEMA, "string_length",
+                                    f"metric_view.{key}は{limit}文字以内の文字列です。"))
 
     elif t == "date_field":
         # v1.7新規(CEO「全て実装してくれ」対応、Widget Vocabulary
@@ -1370,7 +1441,7 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
 
             if wtype in {
                 "text", "text_field", "checklist", "list", "record_list_view",
-                "choice_field", "bar_chart", "date_field", "slider",
+                "choice_field", "bar_chart", "date_field", "slider", "metric_view",
             } and (
                 wtype != "text" or "state_ref" in widget
             ):
@@ -1445,6 +1516,35 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
                         errors.append(_err(
                             f"{w_path}/label_field", Category.SEMANTIC, "field_reference_exists",
                             f"label_field '{label_field}' に一致するFieldがrecord_schemas['{schema_ref}']にありません。",
+                        ))
+
+            if wtype == "metric_view":
+                # v1.11新規。`bar_chart`と同じ理由で、value_fieldが実在の
+                # 数値Fieldを指しているかまで検査する。**画面で一番大きく
+                # 出る数値**なので、「存在しないFieldで0が出る」は
+                # bar_chartより実害が大きい。
+                ref = widget.get("state_ref")
+                state_value = state.get(ref) if isinstance(ref, str) else None
+                schema_ref = state_value.get("schema_ref") if isinstance(state_value, dict) else None
+                schema_def = doc.get("record_schemas", {}).get(schema_ref) if schema_ref else None
+                if isinstance(schema_def, dict):
+                    fields_by_name = {
+                        f.get("name"): f for f in schema_def.get("fields", []) if isinstance(f, dict)
+                    }
+                    value_field = widget.get("value_field")
+                    if (widget.get("aggregate") or "count") == "count" and value_field is None:
+                        pass  # 件数を数えるだけなので値Fieldは要らない
+                    elif value_field not in fields_by_name:
+                        errors.append(_err(
+                            f"{w_path}/value_field", Category.SEMANTIC, "field_reference_exists",
+                            f"value_field '{value_field}' に一致するFieldが"
+                            f"record_schemas['{schema_ref}']にありません。",
+                        ))
+                    elif fields_by_name[value_field].get("type") != "number":
+                        errors.append(_err(
+                            f"{w_path}/value_field", Category.SEMANTIC, "field_type_mismatch",
+                            f"value_field '{value_field}' はtype=numberのFieldである必要があります"
+                            f"(実際: {fields_by_name[value_field].get('type')!r})。",
                         ))
 
             if wtype in {"text_field", "checkbox"} and "validation" in widget:
@@ -1616,6 +1716,8 @@ def _check_state_ref(ref: str, expected_kind: str, state: dict, path: str, ref_f
         "record_list_view": "record_list", "record_list": "record_list",
         "selected_record": "selected_record",
         "choice_field": "string", "bar_chart": "record_list", "date_field": "string", "slider": "number",
+        # v1.11。bar_chartと同じくrecord_listを畳んで見せる。
+        "metric_view": "record_list",
     }
     expected_type = expected_type_map.get(expected_kind)
     if expected_type and actual_type != expected_type:

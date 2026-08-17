@@ -2,6 +2,71 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task078 — R1残件クローズ: Design Intent と Hero KPI(2026-08-17、TD69)
+
+Task077で **R1 = NO-GO** とした理由は2件あり、その両方を閉じた。
+
+### 1. AIがDesign Roleを選ぶようになった
+
+Cognitive Pipelineへ `design_intent` 段を追加。軸ごとの**閉じた
+選択肢**をAIへ提示し、1つ選ばせる。値（px・色）は一切聞かない。
+
+```
+screen_density → density.compact | density.normal | density.relaxed
+list_surface   → surface.card    | surface.elevated
+```
+
+Forge側は**軸ごとに**検証する。`metric.primary` は語彙として正しいが
+`screen_density` の答えとしては誤りなので通さない。外れた場合・AIを
+呼べなかった場合は既定値へ落ち、落ちた軸を `fallback_axes` に残す
+——「AIが選んだ」と「Forgeが既定で埋めた」がEvidence上で混ざらない。
+
+Task077で `knowledge_entries()` を作りながら**誰も呼んでいなかった**
+——「作ったが本番から呼ばれない」の5回目になりかけていた。配線破壊
+試験6件で、外すと落ちることを確認した。
+
+### 2. Hero KPI Widget (`metric_view`、Forge Language v1.11)
+
+Task077は `metric.primary` を語彙へ入れながら、**その役割を持てる
+Widgetを1つも作っていなかった**。「今月の残高を一番目立たせて」と
+言われても出す先が無い状態だった。
+
+`bar_chart` との違いは**グループ化しない**こと（常に値が1つ）。
+`group_by` は敢えて受け付けない。集計は既存のTRANSFORM層
+（`aggregateAll()`）が行い、Widgetは所有しない。
+
+* 0件のとき **「0」と書かない** — 「合計0円」と「記録が無い」は違う
+* **一覧より前**に置く — 後ろだと「一覧のおまけの合計」になる
+* 数値Fieldが無いEntityには**何も置かない** — 出せるからといって出さない
+
+TD37（Validator・Runtime・Registryの不一致で4種が描画不能だった実バグ）
+の再発防止として、Validator / Compiler / Flutter Runtime / Capability
+Registry の4層を同じcommitで更新した。配線破壊試験6件で確認。
+
+### 訂正
+
+Task077のTD69に「WidgetはR3/R5の範囲だから今回は足さない」と書いたが、
+**誤りだった**。`metric.primary` の出力先が無いこと自体がR1の未達で
+あり、混ざりようがない。
+
+### 新たな負債（TD70）
+
+Design Intentにより **Curated生成のAI呼び出しが 0回 → 1回**になった。
+Gemini実測枠は1日20回/Model（TD66）なので無視できない。それでも
+入れたのは、Curatedだけ外すと最もよく使われる経路でDesign Language
+が効かないため。
+
+### 検証区分
+
+* **実測**: backend 1182 passed / forge_ai 521 passed、生成Documentの
+  v1.11 Validator通過
+* **Test Double**: Design IntentのAI選択（provider差し替え）
+* **未検証**: Flutter（この環境にSDKが無く未実行、CI待ち）、実Cloud API
+
+詳細: `docs/reports/FORGE-R1-HERO-METRIC-AND-DESIGN-INTENT-report.md`
+
+---
+
 ## Task077 — R1入口 + Design Language V1(2026-08-17、FORGE-R1-ENTRY-AND-DESIGN-LANGUAGE-014)
 
 ### §2 GenerationSourceを実Providerの事実から決める(P0・実バグ)

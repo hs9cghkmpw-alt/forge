@@ -304,9 +304,10 @@ class TestTheProductionPathCarriesRolesAndRefs(unittest.TestCase):
         )
         self.assertIn("text.headline", roles)
 
-    def test_the_document_declares_version_1_10(self) -> None:
+    def test_the_document_declares_version_1_11(self) -> None:
+        """v1.11(FORGE-R1、TD69)で`metric_view`を追加した。"""
         document = self._generate("家計の支出をカテゴリ別に管理したい").json()["result"]["forge_document"]
-        self.assertEqual(document["version"], "1.10")
+        self.assertEqual(document["version"], "1.11")
 
     def test_every_emitted_role_is_in_the_vocabulary(self) -> None:
         """Compiler側の綴りとbackend語彙がずれていないこと。

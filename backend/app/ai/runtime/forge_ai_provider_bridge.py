@@ -98,6 +98,20 @@ _RESPONSE_SCHEMAS: dict[str, dict[str, Any]] = {
         },
         "required": ["entity_name", "entity_label", "visual_style", "fields"],
     },
+    # FORGE-R1(2026-08-17)。Design Languageの意味的役割をAIに選ばせる段。
+    #
+    # **enumを持たせない**のは、選択肢がProviderへ渡るcontext側にあり、
+    # Forge側で必ず検証し直すためである(`design_intent.py`)。schemaで
+    # enumを固定すると、語彙を1つ増やすたびに2箇所を直すことになり、
+    # そのうちずれる——ずれたときに黙って通る方が危ない。
+    "design_intent": {
+        "type": "object",
+        "properties": {
+            "screen_density": {"type": "string"},
+            "list_surface": {"type": "string"},
+        },
+        "required": ["screen_density", "list_surface"],
+    },
     "compile": {
         "type": "object",
         "properties": {

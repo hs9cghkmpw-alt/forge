@@ -279,7 +279,7 @@ class _ForgeScreenViewState extends State<ForgeScreenView> {
     final built =
         buildForgeWidget(context, node, _state, _registry, (child) => _build(child, depth + 1));
     // Design Language（v1.10）。**ここ1箇所だけ**で role を被せる。
-    // 19種の builder それぞれへ配ると、Widget を1つ足すたびに
+    // 20種の builder それぞれへ配ると、Widget を1つ足すたびに
     // 付け忘れる（`CLAUDE.md` §3「忘れずに呼ばれる保証が無いものは
     // 忘れられる」）。
     return applyForgeRole(context, widget.screen.styleRoles[node.id], built);

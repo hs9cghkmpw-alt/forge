@@ -96,7 +96,32 @@ from forge_ai.core.understanding.world_builder import CognitiveWorldBuilder  # n
 from forge_ai.repair.repair_engine import RepairEngine  # noqa: E402,F401 (将来のRepair接続用、今回は未使用)
 
 
+from forge_ai.core.ir.design_intent import DesignIntentSelector  # noqa: E402
 from forge_ai.provider.mock_provider import MockProvider  # noqa: E402
+
+
+def _design_axes():
+    """Design Languageの軸と選択肢。**backend側の語彙が正**である。
+
+    forge_aiはbackendをimportしない層なので、ここで遅延importする。
+    backendが無い環境（forge_ai単体のテスト）では空を返し、
+    AIへは何も聞かない——既定値で成立する。
+    """
+    try:
+        from app.ai.runtime.design_language import design_choice_guidance  # noqa: PLC0415
+    except ImportError:
+        return ()
+    return design_choice_guidance()
+
+
+def _design_choice_validator():
+    """AIの答えを軸ごとに検証する関数。`None`なら検証できないので
+    **AIへ聞かない**（検証できない答えを採用しない）。"""
+    try:
+        from app.ai.runtime.design_language import is_valid_choice  # noqa: PLC0415
+    except ImportError:
+        return None
+    return is_valid_choice
 
 
 def _default_cognitive_dependencies(provider: AIProvider) -> CognitiveDependencies:
@@ -129,6 +154,14 @@ def _default_cognitive_dependencies(provider: AIProvider) -> CognitiveDependenci
         # (`entity_synthesizer.py`参照)。`compiler`と同じく、実際に
         # `provider.complete()`を呼び出すコンポーネントである。
         entity_synthesizer=EntitySynthesizer(provider=provider),
+        # FORGE-R1(2026-08-17): Design Languageの選択をAIへ委ねる。
+        # 語彙はbackend側にあるので（forge_aiはbackendをimportしない）、
+        # 軸と検証関数を**外から渡す**。渡さなければ既定値のまま。
+        design_intent_selector=DesignIntentSelector(
+            provider=provider,
+            axes=_design_axes(),
+            validator=_design_choice_validator(),
+        ),
     )
 
 

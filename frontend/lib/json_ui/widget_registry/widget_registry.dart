@@ -17,11 +17,12 @@ import 'widget_registry_v1_5.dart';
 import 'widget_registry_v1_6.dart';
 import 'widget_registry_v1_7.dart';
 import 'widget_registry_v1_8.dart';
+import 'widget_registry_v1_11.dart';
 
 export 'widget_registry_core.dart' show ForgeWidgetRegistry, ForgeWidgetBuilder, ForgeFallbackWidget, buildForgeWidget;
 
-/// v1.0の6種 + v1.1の6種 + v1.3の1種 + v1.5の1種 + v1.6の2種 + v1.7の2種 + v1.8の1種、
-/// 計19種類すべてを登録した既定のRegistryを組み立てる。
+/// v1.0の6種 + v1.1の6種 + v1.3の1種 + v1.5の1種 + v1.6の2種 + v1.7の2種 + v1.8の1種
+/// + v1.11の1種、計20種類すべてを登録した既定のRegistryを組み立てる。
 ///
 /// 修正の記録: 当初`ForgeWidgetRegistry`への`extension`として`static withBuiltins()`を
 /// 追加しようとしたが、Dartの`extension`は既存クラスへの**インスタンス**メンバー追加の
@@ -49,6 +50,9 @@ ForgeWidgetRegistry buildDefaultForgeRegistry() {
   registerV1_7Widgets(registry);
   // v1.8で追加された1種(Widget Vocabulary Expansion第3弾、2026-08-11)。
   registerV1_8Widgets(registry);
+  // v1.11で追加された1種(Hero KPI、FORGE-R1 / TD69、2026-08-17)。
+  // v1.9/v1.10はWidgetを増やしていないので、ファイルも無い。
+  registerV1_11Widgets(registry);
   return registry;
 }
 
