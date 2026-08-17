@@ -76,6 +76,7 @@ MVPではShadow Modeを**設計として置くだけ**で、実行はしない�
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 
@@ -88,6 +89,7 @@ __all__ = [
     "ExperienceStore",
     "ShadowPlan",
     "TrainingProvenance",
+    "acceptance_from_turn_event",
     "default_experience_store",
 ]
 
@@ -196,6 +198,38 @@ def acceptance_from_hypothesis_state(state: object) -> AcceptanceSignal:
     }.get(str(name).lower(), AcceptanceSignal.UNKNOWN)
 
 
+#: 会話1ターンの出来事 → 教師信号(R0)。
+#:
+#: `conversation_store.record_hypothesis_event()`が受け取る`event`は
+#: `CapabilityTurnKind`の値である(`capability.py`)。ここで名前だけで
+#: 対応させているのは`acceptance_from_hypothesis_state()`と同じ理由——
+#: 学習の境界がConversation実装へ依存しないようにするためである。
+#:
+#: **`present`が入っていない**のは、それが「初回の提示」でも
+#: 「訂正を受けての作り直し」でも同じ値だからである。前者は評価では
+#: ないので、呼び出し側が**前の仮説があった場合だけ**`CORRECTED`を
+#: 渡す(`conversation_store`側で判定している)。
+_TURN_EVENT_TO_ACCEPTANCE: dict[str, AcceptanceSignal] = {
+    # 「それでいい」。**唯一の強い正例**である。
+    "accept": AcceptanceSignal.ACCEPTED,
+    # 「そこは違う」。仮説は保つが、外していた層があった。
+    "clarify": AcceptanceSignal.CORRECTED,
+    # 「そもそも違う」。Problem理解まで巻き戻った、最も強い負例。
+    "rewind": AcceptanceSignal.CORRECTED,
+}
+
+
+def acceptance_from_turn_event(event: object) -> "AcceptanceSignal":
+    """会話1ターンの出来事を教師信号へ写す(R0)。
+
+    未知の出来事は`UNKNOWN`である——新しいイベント種別が増えたときに、
+    黙って正例へ流れ込まない(`acceptance_from_hypothesis_state()`と
+    同じ方向へ倒す)。
+    """
+    name = str(getattr(event, "value", None) or event).lower()
+    return _TURN_EVENT_TO_ACCEPTANCE.get(name, AcceptanceSignal.UNKNOWN)
+
+
 @dataclass(frozen=True)
 class ExperienceRecord:
     """1回のAI呼び出しについての**Forgeの振る舞いの事実**。
@@ -228,9 +262,24 @@ class ExperienceRecord:
 
     recorded_at: float = 0.0
 
+    ref: int = 0
+    """`ExperienceStore`が付ける不透明な通し番号。**0は「未保存」。**
+
+    FORGE-ROADMAP R0(2026-08-17)で追加。1回のAI呼び出しについての
+    事実は、**同時には揃わない**——Providerとlatencyは呼び出し直後に
+    分かるが、Validatorの合否は生成が終わってから、利用者の承認/訂正
+    は**次のターン**でしか分からない。後から書き足すには、どの記録に
+    書き足すのかを指す手段が要る。
+
+    セッションIDでも利用者IDでもない、**Store内の位置**である
+    (§22「セッションを跨いで個人を辿れる識別子を持たない」)。
+    プロセスを跨いで意味を持たず、記録が捨てられれば無効になる。
+    """
+
     def to_dict(self) -> dict[str, object]:
         """診断・集計用。**ここに本文が現れないことが不変条件である。**"""
         return {
+            "ref": self.ref,
             "task": self.task.value,
             "provider": self.provider,
             "model": self.model,
@@ -309,21 +358,95 @@ class ExperienceStore:
     _MAX_RECORDS = 1000
 
     def __init__(self, *, now: object = time.time) -> None:
-        self._records: list[ExperienceRecord] = []
+        # dictにしているのは、**後から書き足す**ためである(R0)。
+        # 挿入順は保たれるので、古い順に捨てる従来の性質は変わらない。
+        self._records: dict[int, ExperienceRecord] = {}
+        self._next_ref = 1
         self._now = now
 
     def record(self, entry: ExperienceRecord) -> ExperienceRecord:
-        if entry.recorded_at <= 0:
-            from dataclasses import replace  # noqa: PLC0415
+        from dataclasses import replace  # noqa: PLC0415
 
+        if entry.recorded_at <= 0:
             entry = replace(entry, recorded_at=self._now())
-        self._records.append(entry)
-        if len(self._records) > self._MAX_RECORDS:
-            del self._records[: len(self._records) - self._MAX_RECORDS]
+        entry = replace(entry, ref=self._next_ref)
+        self._next_ref += 1
+        self._records[entry.ref] = entry
+        while len(self._records) > self._MAX_RECORDS:
+            del self._records[next(iter(self._records))]
         return entry
 
+    # --- 後から分かる事実を書き足す(R0)---------------------------------
+    #
+    # **なぜ「後から」が要るのか。**
+    #
+    # 1回のAI呼び出しについて、事実が揃う時刻は3つに分かれている。
+    #
+    #   呼び出し直後   Provider / model / latency / fallback / 構造化出力
+    #   生成の終わり   Validatorを通ったか
+    #   **次のターン** 利用者が承認したか、訂正したか
+    #
+    # 最後のものが本命である(Product Direction §5: 正しさの根拠は
+    # User ACCEPTED / CORRECTED / Validator / Runtime であって、
+    # Cloudの出力ではない)。呼び出し時点で全部揃うことを前提にすると、
+    # **一番価値のある信号だけが永久に記録されない**。
+
+    def note_generation_outcome(
+        self, refs: Sequence[int], *, validator_passed: bool, repair_attempts: int = 0
+    ) -> int:
+        """それらの呼び出しが寄与した生成物が、Validatorを通ったか。
+
+        `refs`が複数なのは、1つのForge Documentが**Cognitive Pipelineの
+        複数段の呼び出し**から出来ているためである。どの段が悪かったかは
+        ここでは分からない。分けられないものを分けて記録すると嘘になる
+        ので、寄与した全部へ同じ結果を付ける。
+
+        `repair_attempts`も同じ理由で run 単位の属性として付ける
+        (「何回直せば通ったか」は生成物についての事実であり、
+        個々の呼び出しについての事実ではない)。
+
+        戻り値は実際に書き足せた件数(捨てられた記録は数えない)。
+        """
+        written = 0
+        from dataclasses import replace  # noqa: PLC0415
+
+        for ref in refs:
+            existing = self._records.get(ref)
+            if existing is None:
+                continue
+            self._records[ref] = replace(
+                existing, validator_passed=validator_passed, repair_attempts=repair_attempts
+            )
+            written += 1
+        return written
+
+    def note_acceptance(self, refs: Sequence[int], signal: AcceptanceSignal) -> int:
+        """利用者がその応答をどう扱ったか。
+
+        **先に書かれた信号が勝つ。** 直後の反応がその応答への評価で
+        あり、後から来る弱い信号(セッション終了=`ABANDONED`など)で
+        上書きしてはならない。「訂正されたが、その後セッションが
+        切れた」を`ABANDONED`に書き換えると、**訂正されたという事実が
+        消える**。
+
+        `UNKNOWN`を書きに来た場合は何もしない——沈黙は上書きの理由に
+        ならない(011 §5)。
+        """
+        if signal is AcceptanceSignal.UNKNOWN:
+            return 0
+        written = 0
+        from dataclasses import replace  # noqa: PLC0415
+
+        for ref in refs:
+            existing = self._records.get(ref)
+            if existing is None or existing.acceptance is not AcceptanceSignal.UNKNOWN:
+                continue
+            self._records[ref] = replace(existing, acceptance=signal)
+            written += 1
+        return written
+
     def all_records(self) -> tuple[ExperienceRecord, ...]:
-        return tuple(self._records)
+        return tuple(self._records.values())
 
     def summary_for(self, task: ForgeTask) -> dict[str, object]:
         """Task別の集計。**Benchmarkの代わりにはならない。**
@@ -334,7 +457,7 @@ class ExperienceStore:
         違うものを比べると、Providerの差なのか入力の差なのかが
         分からなくなる。**傾向を見るためだけの数字である。**
         """
-        entries = [r for r in self._records if r.task is task]
+        entries = [r for r in self._records.values() if r.task is task]
         if not entries:
             return {"task": task.value, "samples": 0}
         total = len(entries)

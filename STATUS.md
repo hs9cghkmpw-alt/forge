@@ -44,7 +44,9 @@
 | 2つ目のCloud枠(`cloud`) | 実装済/未実測 | OpenAI互換なら環境変数3つで載る。**実APIでは未検証** |
 | Provider Benchmark | 動作 | Impact分類16ケース。harness実行確認済み |
 | Benchmark → Routing接続 | **配線済/データ待ち** | 実測(REAL)が2 Provider揃えば品質順になる。今は記録が無く宣言順 |
-| Local AI 学習基盤 | **境界のみ** | 記録項目の制限・Shadow Mode設計・Provenance既定UNKNOWN。学習は未実施 |
+| Local AI 学習基盤 | **記録開始** | R0で`/converse`・`/generate`・`/update`から実際に記録するようになった。実Geminiで確認済み。学習・永続化は未着手 |
+| └ Experience記録 | 動作 | 記録地点は`AIRouter.generate()`の1箇所。Validatorの合否・利用者の承認/訂正を後から書き足す |
+| └ 学習(Dataset/LoRA) | 未着手 | 記録はプロセス内メモリのみ(TD41)。`ABANDONED`は未検出(TD64) |
 | Scripted Conversation Set | 動作 | 50セッション。平均質問1.20/繰り返し0/未決着0 |
 | Capability検出 / 仮説提示 | 動作 | `capability.py`。作れないものを名指しし、作れる形を出す |
 | Stateful User Correction | 動作 | 前回の仮説を保持し、訂正された層だけ差し替える |
@@ -62,7 +64,7 @@
 | 対象 | 件数 | 状態 |
 |---|---|---|
 | `forge_ai/tests` | 521 | 全green |
-| `backend/tests` | 989 | 全green(skip 16。うち3件はLive API Test、既定SKIP) |
+| `backend/tests` | 1058 | 全green(skip 16。うち3件はLive API Test、既定SKIP) |
 | `frontend`(Flutter) | 476 | 全green |
 | `flutter analyze` | 0件 | 2026-08-13にwarning/info含めて0へ(以前は77件) |
 

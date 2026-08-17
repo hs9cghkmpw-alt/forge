@@ -97,6 +97,29 @@ _GENERATE_ERROR_RESPONSES = {
 }
 
 
+def _note_update_outcome(bound, result) -> None:  # noqa: ANN001 — _BoundAdapter / UpdateResult
+    """`/update`の結果をExperienceへ書き足す(FORGE-ROADMAP R0、2026-08-17)。
+
+    UPDATEはCognitive Pipelineを通らない独立経路なので、
+    `prompt_pipeline._note_generation_outcome()`は通らない。**通らない
+    経路は記録されない**——それが「ExperienceStoreはあるがProductionから
+    記録されない」(Product Direction §7)の作られ方である。
+
+    `attempts`はRepairの往復回数(`forge_operation.py`)であり、
+    生成側の`repair_attempts`と同じ意味なので同じ欄へ入れる。
+    """
+    store = getattr(bound.router, "experience", None)
+    if store is None or not bound.experience_refs:
+        return
+    store.note_generation_outcome(
+        bound.experience_refs,
+        # Validatorに通らなかった更新は`success=False`で返る
+        # (`forge_operation.py`の契約)。成功=Validator合格である。
+        validator_passed=bool(result.success),
+        repair_attempts=max(0, int(getattr(result, "attempts", 0) or 0) - 1),
+    )
+
+
 def _diagnostics_dto(diagnostics) -> DiagnosticsDTO:  # noqa: ANN001 — app.ai.runtime.prompt_pipeline.Diagnostics
     return DiagnosticsDTO(
         engine_used=diagnostics.engine_used,
@@ -428,6 +451,16 @@ def converse(request: ConverseRequest):
         event=step_result.hypothesis_event,
         hypothesis=step_result.hypothesis,
         correction_target=step_result.correction_target,
+        # FORGE-ROADMAP R0(2026-08-17): 今ターンのAI呼び出しの記録番号を
+        # 渡す。Storeはこれを次ターンまで持ち、利用者の「それでいい」/
+        # 「違う」を**前ターンの応答へ**書き足す。
+        #
+        # ここでStoreを`default_experience_store()`から取らず
+        # **Routerから取る**のは、記録した先と書き足す先を必ず一致
+        # させるためである(`prompt_pipeline._note_generation_outcome()`
+        # と同じ理由)。
+        experience_refs=provider.experience_refs,
+        experience_store=default_router().experience,
     )
 
     if step_result.action == ConversationAction.ASK:
@@ -491,6 +524,7 @@ def converse(request: ConverseRequest):
             ) from exc
         provider_name = update_provider.last_provider_used or provider_name
         simulated = router.is_simulated(provider_name)
+        _note_update_outcome(update_provider, update_result)
         default_conversation_store.discard(session.session_id)
         if not update_result.success:
             raise UpdateOperationError(
@@ -612,6 +646,8 @@ def update(request: UpdateRequest):
             f"(内訳: {exc})",
             sub_reason="unavailable", stage="forming_operation",
         ) from exc
+
+    _note_update_outcome(provider, result)
 
     if not result.success:
         raise UpdateOperationError(

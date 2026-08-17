@@ -2,6 +2,62 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task074 — Experienceを本番から記録する(2026-08-17、FORGE-ROADMAP R0)
+
+Product Direction §7が「完成扱いしてはならない」と名指しした状態
+——**ExperienceStoreはあるがProductionから記録されない**——を解消した。
+Widget追加は0件。
+
+**同じ形の失敗が4回続いていた。** `ModelGateway`(TD59)、
+`classify_correction`(007 §10)、`/generate`・`/update`のRouter迂回
+(010 Phase B)、`ExperienceStore`(TD64)。いずれも基盤は作ったが
+本番から呼ばれておらず、共通しているのは「呼び出し側が忘れずに呼ぶ」
+設計だったことである。**忘れずに呼ばれる保証が無いものは忘れられる。**
+
+そこで記録地点を`AIRouter.generate()`——本番のAI呼び出しが必ず通る
+唯一の入口(Phase Bの Anti-Bypass Regression が証明済み)——に置いた。
+Endpointが増えても、記録を書き忘れることができない。成功だけでなく
+**全Provider失敗も記録する**(成功だけ貯めると「Providerは常に上手く
+いっている」という記録になる)。
+
+呼び出し時点では分からない事実は、後から書き足す形にした。1回の
+AI呼び出しについて事実が揃う時刻は3つに分かれている——Provider・
+latencyは直後、Validatorの合否は生成の終わり、**利用者が承認したか
+訂正したかは次のターン**。最後のものがProduct Direction §5の言う
+「正しさの根拠」の本命であり、呼び出し時点で全部揃う前提にすると、
+一番価値のある信号だけが永久に記録されない。
+
+* `ExperienceRecord.ref`(不透明な通し番号)で書き足し先を指す
+* `note_generation_outcome()` — Validatorの合否・repair回数
+* `note_acceptance()` — 利用者の承認/訂正。**先に書かれた信号が勝つ**
+  (後から来る弱い信号で「訂正された」を消さない)
+* 会話の`accept`/`clarify`/`rewind`を、`ConversationStore`が
+  **前ターンの記録へ**書き足す(011 §5の分離が、ここで初めて
+  本番の値として現れる)
+
+**実機で実バグを1つ見つけた。** 実Providerで確認したところ、Geminiの
+記録が`{"provider": "gemini", "model": ""}`になっていた。
+`GeminiProvider`だけがModel名をprivate属性にしていてRouterから読めて
+いなかった。Providerだけ分かってModelが分からない記録は、Model入れ替えの
+前後を区別できず学習素材にならない。`model`プロパティを公開し、回帰
+テストを追加した(未設定の汎用Cloud枠は対象外——呼べないものが名乗ら
+ないのは矛盾ではない)。
+
+**配線が置物でないことを確認した**(010と同じ手順)。5箇所の配線を
+1つずつ外して、それぞれ対応するテストが落ちること・戻すと通ることを
+確認している。最初に書いた`/update`のテストは配線を外しても通って
+しまったので、テストの方を直した。
+
+実機確認: 実Gemini(`gemini-flash-latest`)で`/converse`を実行し、
+`{"provider":"gemini","model":"gemini-flash-latest",
+"structured_output_valid":true}`が記録されること、利用者の発話が
+記録に含まれないことを確認した。Gemini側の503(高負荷)で失敗した
+往復も記録されており、失敗の記録も動いている。
+
+**残っている制限**(TD64): 永続化していない(プロセス内メモリ、TD41と
+同じ)・`ABANDONED`は一度も書かれない(セッション放棄を検出していない)・
+Privacy Policy(TD60)は未完成。
+
 ## Task073 — AI Foundation 統合(2026-08-14、FORGE-AI-FOUNDATION-010)
 
 **Phase Bの監査で実バグを発見した。** `FORGE_DEFAULT_PROVIDER=mock`を

@@ -422,6 +422,17 @@ class ConversationSession:
     rewind_count: int = 0
     """PROBLEM訂正でNeed理解まで巻き戻した回数。無限に巻き戻さないため。"""
 
+    pending_experience_refs: tuple[int, ...] = ()
+    """**まだ評価が付いていない**、直前ターンのAI呼び出しの記録番号
+    (FORGE-ROADMAP R0、2026-08-17)。
+
+    利用者がその応答をどう扱ったかは、**次のターンでしか分からない**。
+    「それでいい」も「違う、そうじゃない」も、次の発話として来る。
+    したがって、評価を書き足す先を1ターンだけ覚えておく必要がある。
+
+    番号であって内容ではない(`ExperienceRecord`側に本文の置き場が
+    無い、006 §22)。セッションが消えれば一緒に消える。"""
+
     def with_turn(self, turn: ConversationTurn) -> ConversationSession:
         # `dataclasses.replace()`を使う(FORGE-USER-GUIDED-SELF-EXTENSION-006、
         # 2026-08-13)。以前は全フィールドを手で書き並べて再構築していたため、
@@ -473,6 +484,14 @@ class ConversationSession:
 
     def with_acceptance(self) -> ConversationSession:
         return replace(self, hypothesis_state=HypothesisState.ACCEPTED)
+
+    def with_pending_experience_refs(self, refs: tuple[int, ...]) -> ConversationSession:
+        """次ターンの反応を書き足す先を差し替える(R0)。
+
+        **上書きである。** 前ターン分は評価済み(または評価が付かない
+        まま)としてここで手放す。溜め続けると、3ターン前の応答へ
+        今の「それでいい」が付いてしまう。"""
+        return replace(self, pending_experience_refs=refs)
 
     def rewound(self) -> ConversationSession:
         """Problem理解が違った(§15)。仮説を捨て、Need側から作り直す。

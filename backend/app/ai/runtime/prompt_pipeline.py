@@ -123,6 +123,29 @@ class Diagnostics:
     生成そのものはブロックしない(TD21と同じ設計方針)。"""
 
 
+def _note_generation_outcome(bound, *, validator_passed: bool, repair_attempts: int) -> None:
+    """今回の生成に寄与したAI呼び出しへ、**後から分かった事実**を書き足す
+    (FORGE-ROADMAP R0、2026-08-17)。
+
+    記録そのものは`AIRouter.generate()`が既に済ませている。ここで
+    足すのは、呼び出し時点では分からなかったもの——Validatorを
+    通ったか、何回直したか——だけである。
+
+    Storeを`default_experience_store()`から取らず**Routerから取る**
+    のは、Routerが記録した先とここで書き足す先を必ず一致させる
+    ためである。別々に解決すると、テストが差し替えたStoreと本番の
+    Storeがずれ、「書いたはずが入っていない」が静かに起きる。
+    """
+    store = getattr(bound.router, "experience", None)
+    if store is None or not bound.experience_refs:
+        return
+    store.note_generation_outcome(
+        bound.experience_refs,
+        validator_passed=validator_passed,
+        repair_attempts=repair_attempts,
+    )
+
+
 @dataclass(frozen=True)
 class PipelineRunResult:
     """`PromptPipeline.run()`の戻り値(成功時)。HTTP層がこれをそのまま
@@ -132,6 +155,14 @@ class PipelineRunResult:
     validation: ValidationResult
     quality: CriticResult | None
     diagnostics: Diagnostics
+
+    experience_refs: tuple[int, ...] = ()
+    """この生成に寄与したAI呼び出しの`ExperienceRecord`番号(R0)。
+
+    **HTTPレスポンスへは出さない**(`Diagnostics`ではなくこちらに
+    置いてあるのはそのためである)。利用者に見せる情報ではなく、
+    呼び出し側が**利用者の承認/訂正を後から書き足す**ための手掛かり
+    である。"""
 
 
 @dataclass(frozen=True)
@@ -473,7 +504,14 @@ class PromptPipeline:
             # (実行して確認: 引数無しの場合、単純な入力でscore=100が
             # 返り続けることを確認した上で、この行を修正した)。
             critic_result = to_critic_result(quality_score, critic_report=context.critic_report)
+            _note_generation_outcome(bound, validator_passed=True, repair_attempts=repair_attempts)
         else:
+            # **失敗も残す。** 合格したものだけ記録すると、
+            # 「Forgeは常にValidatorを通っている」という記録になる。
+            # Validatorの合否はProduct Direction §5が挙げた
+            # 「正しさの根拠」の1つであり、Cloudの出力そのものより
+            # 信頼できる信号である——落とすわけにいかない。
+            _note_generation_outcome(bound, validator_passed=False, repair_attempts=repair_attempts)
             raise ForgeValidationError(
                 f"Repair({repair_attempts}回)後もValidatorに合格しませんでした。",
                 validation_errors=tuple(e.to_dict() for e in validation.errors),
@@ -516,6 +554,7 @@ class PromptPipeline:
 
         # 11. 結果返却
         return PipelineRunResult(
+            experience_refs=bound.experience_refs,
             forge_document=forge_document,
             validation=validation,
             quality=critic_result,

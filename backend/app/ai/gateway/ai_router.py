@@ -54,6 +54,11 @@ from typing import Any
 from app.ai.foundation.deadline import apply_deadline, supports_deadline
 from app.ai.gateway.ai_errors import ErrorKind, classify_exception
 from app.ai.gateway.benchmark_evidence import BenchmarkEvidenceStore, default_evidence_store
+from app.ai.gateway.learning_foundation import (
+    ExperienceRecord,
+    ExperienceStore,
+    default_experience_store,
+)
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.gateway.provider_registry import (
     Deployment,
@@ -162,6 +167,17 @@ class RouteAttempt:
     error_kind: ErrorKind | None = None
     detail: str = ""
 
+    model: str = ""
+    """実際に呼んだModel名。**Adapterが名乗った場合のみ**入る。
+
+    R0(2026-08-17)で追加。Experienceは「geminiが答えた」ではなく
+    「gemini-2.0-flashが答えた」の粒度で残さないと、Model入れ替えの
+    前後を区別できず、後から学習素材として使えない。
+
+    名乗らないAdapter(テストのFake等)は空文字のままにする——
+    Provider名で代用すると、**Model名が分かっているように見える**
+    記録が出来上がる。分からないものは分からないままにする。"""
+
 
 @dataclass(frozen=True)
 class RoutedResult:
@@ -169,6 +185,15 @@ class RoutedResult:
     task: ForgeTask
     provider_used: str
     attempts: tuple[RouteAttempt, ...] = field(default_factory=tuple)
+
+    experience_ref: int = 0
+    """この呼び出しについて`ExperienceStore`が付けた通し番号
+    (0は「記録していない」、R0)。
+
+    呼び出し側は、**後から分かった事実**——Validatorの合否、
+    利用者が承認したか訂正したか——をこの番号へ書き足す。
+    ここで返さないと、記録は残るが**一番価値のある信号だけが
+    永久に付かない**。"""
 
     @property
     def used_fallback(self) -> bool:
@@ -232,6 +257,7 @@ class AIRouter:
         *,
         state_store: ProviderStateStore | None = None,
         evidence: BenchmarkEvidenceStore | None = None,
+        experience: ExperienceStore | None = None,
         now: Callable[[], float] = time.time,
         monotonic: Callable[[], float] = time.perf_counter,
     ) -> None:
@@ -241,12 +267,24 @@ class AIRouter:
         # Phase J: 実測されたTask別品質。`None`なら宣言順のまま
         # (テストが並べ替えを意図的に切るために使う)。
         self._evidence = evidence
+        # R0: 本番のAI呼び出しをExperienceへ残す先。`None`なら記録しない
+        # ——ただし**既定はNoneではない**(`default_router()`が既定Storeを
+        # 渡す)。記録しないのはテストが明示的にそうした場合だけである。
+        self._experience = experience
         self._now = now
         self._monotonic = monotonic
 
     @property
     def states(self) -> ProviderStateStore:
         return self._states
+
+    @property
+    def experience(self) -> ExperienceStore | None:
+        """記録先。**後から分かった事実を書き足す側**が使う(R0)。
+
+        `None`は「このRouterは記録しない」であり、テストが明示的に
+        そうした場合だけ起きる。"""
+        return self._experience
 
     # -- 候補選び ---------------------------------------------------------
 
@@ -340,12 +378,89 @@ class AIRouter:
         *,
         provider: str | None = None,
     ) -> RoutedResult:
-        """Taskを実行する。失敗したら次の候補を試す。
+        """Taskを実行し、**起きたことをExperienceへ残す**。
+
+        ---
+
+        ## なぜ記録をここに置くのか(R0、2026-08-17)
+
+        Forgeは同じ失敗を4回繰り返している——`ModelGateway`(TD59)、
+        `classify_correction`(007 §10)、`/generate`・`/update`の
+        Router迂回(010 Phase B)、`ExperienceStore`(TD64)。いずれも
+        **基盤は作ったが、本番から呼ぶ人がいなかった**。
+
+        共通の形は「呼び出し側が忘れずに呼ぶ」設計になっていたこと
+        である。忘れずに呼ばれる保証が無いものは、忘れられる。
+
+        だからここに置く。Phase Bの Anti-Bypass Regression が
+        「本番のAI呼び出しは**必ず**Routerを通る」ことを証明済みで
+        あり、そのRouterの唯一の入口がこのメソッドである。
+        新しいEndpointが増えても、記録を書き忘れることが**できない**。
 
         `provider`を明示した場合、**Routingを迂回する**。HTTP APIの
         利用者が選んだProviderをRouterが勝手に上書きしないため
         (既存契約の維持)。Mockが使えるのもこの経路だけである。
         """
+        try:
+            result = self._route(task, prompt, response_schema, provider=provider)
+        except NoProviderAvailableError as exc:
+            # **失敗も記録する。** 成功だけ貯めると、
+            # 「Providerは常に上手くいっている」という記録が出来上がる。
+            self._note_experience(
+                task, provider_used=exc.attempts[-1].provider if exc.attempts else "none",
+                model=exc.attempts[-1].model if exc.attempts else "",
+                attempts=exc.attempts, structured_output_valid=False,
+            )
+            raise
+        ref = self._note_experience(
+            task, provider_used=result.provider_used,
+            model=next(
+                (a.model for a in reversed(result.attempts) if a.provider == result.provider_used),
+                "",
+            ),
+            attempts=result.attempts, structured_output_valid=True,
+        )
+        return replace(result, experience_ref=ref)
+
+    def _note_experience(
+        self,
+        task: ForgeTask,
+        *,
+        provider_used: str,
+        model: str,
+        attempts: tuple[RouteAttempt, ...],
+        structured_output_valid: bool,
+    ) -> int:
+        """1回の呼び出しをExperienceへ残す。**本文は渡らない**
+        ——`ExperienceRecord`にはpromptも応答も入れる場所が無い
+        (006 §22の担保、`learning_foundation.py`参照)。
+
+        `latency_ms`は**失敗した試行も含む合計**である。利用者が
+        待った時間はfallbackを含めた合計であり、成功した1回だけを
+        記録すると体感より速い記録が残る。
+        """
+        if self._experience is None:
+            return 0
+        stored = self._experience.record(
+            ExperienceRecord(
+                task=task, provider=provider_used, model=model,
+                structured_output_valid=structured_output_valid,
+                latency_ms=sum(a.latency_ms for a in attempts),
+                used_fallback=len(attempts) > 1,
+            )
+        )
+        return stored.ref
+
+    def _route(
+        self,
+        task: ForgeTask,
+        prompt: str,
+        response_schema: dict[str, Any],
+        *,
+        provider: str | None = None,
+    ) -> RoutedResult:
+        """候補を巡回して1つ成功させる。**記録はしない**
+        (`generate()`が唯一の記録地点である)。"""
         if provider is not None:
             return self._generate_direct(task, prompt, response_schema, provider)
 
@@ -453,6 +568,10 @@ class AIRouter:
                 error_kind=error.kind, detail=error.message,
             ), None
 
+        # 解決できたAdapterだけがModel名を名乗れる。解決に失敗した
+        # 場合(上のexcept)に空なのは、**本当に分からない**ためである。
+        model = str(getattr(adapter, "model", "") or "")
+
         try:
             value = adapter.complete_structured(prompt, response_schema)
         except Exception as exc:  # noqa: BLE001 — 分類して次の候補へ進むため
@@ -463,7 +582,7 @@ class AIRouter:
             )
             return RouteAttempt(
                 provider=provider, ok=False, latency_ms=latency,
-                error_kind=error.kind, detail=error.message,
+                error_kind=error.kind, detail=error.message, model=model,
             ), None
 
         latency = (self._monotonic() - started) * 1000.0
@@ -473,11 +592,11 @@ class AIRouter:
             return RouteAttempt(
                 provider=provider, ok=False, latency_ms=latency,
                 error_kind=ErrorKind.STRUCTURED_OUTPUT_FAILURE,
-                detail=f"dictではなく{type(value).__name__}が返った",
+                detail=f"dictではなく{type(value).__name__}が返った", model=model,
             ), None
 
         self._states.record_success(provider, latency_ms=latency)
-        return RouteAttempt(provider=provider, ok=True, latency_ms=latency), value
+        return RouteAttempt(provider=provider, ok=True, latency_ms=latency, model=model), value
 
     def _fit_to_budget(
         self, adapter: Any, provider: str, remaining_ms: float | None
@@ -559,11 +678,23 @@ class _BoundAdapter:
     """直近の`complete_structured()`で**実際に**応答を返したProvider名。
     まだ呼ばれていなければ`None`。"""
 
+    experience_refs: tuple[int, ...] = field(default=(), init=False)
+    """このAdapterを通した呼び出しの`ExperienceRecord`番号(R0)。
+
+    **複数になる。** 1つのForge Documentは Cognitive Pipeline の
+    十数段の呼び出しから出来ており、どの段が良かった/悪かったかは
+    最終的なValidator結果からは分けられない。分けられないものを
+    分けて記録すると嘘になるので、寄与した全部を持ち、同じ結果を
+    後から付ける(`ExperienceStore.note_validator_outcome()`)。
+    """
+
     def complete_structured(self, prompt: str, response_schema: dict[str, Any]) -> dict[str, Any]:
         result = self.router.generate(
             self.task, prompt, response_schema, provider=self.provider
         )
         self.last_provider_used = result.provider_used
+        if result.experience_ref:
+            self.experience_refs = (*self.experience_refs, result.experience_ref)
         return result.value
 
 
@@ -696,6 +827,11 @@ def default_router() -> AIRouter:
             # Phase J: 実測がそろえば品質順になる。今は記録が無いので
             # 宣言順のまま動く(`_order()`参照)。
             evidence=default_evidence_store(),
+            # R0: **本番のAI呼び出しをここでExperienceへ残す。**
+            # これを渡さなければ、`ExperienceStore`は今までどおり
+            # 「実装はあるが本番から一度も呼ばれない」ままである
+            # (Product Direction §7が名指しした状態)。
+            experience=default_experience_store(),
         )
     return _default_router
 

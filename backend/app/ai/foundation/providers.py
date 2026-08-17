@@ -114,6 +114,21 @@ class GeminiProvider:
         self._client = client  # テスト用にhttpx.MockTransportを注入できるようにする
         self._timeout = timeout
 
+    @property
+    def model(self) -> str:
+        """実際に呼ぶModel名。
+
+        FORGE-ROADMAP R0(2026-08-17)で公開した。`AIRouter`がExperienceへ
+        Model名を残そうとしたところ、`GeminiProvider`だけが`_model`
+        (private)しか持たず**空文字で記録されていた**——実機で確認した
+        (`{"provider": "gemini", "model": ""}`)。
+
+        Providerが分かってModelが分からない記録は、Model入れ替えの前後を
+        区別できないので、後から学習素材として使えない
+        (`OpenAICompatibleAdapter.model`と同じ形に揃えた)。
+        """
+        return self._model
+
     def with_deadline(self, seconds: float) -> "GeminiProvider":
         """Task全体の残り時間に締めたProviderを返す
         (`app/ai/foundation/deadline.py`の`SupportsDeadline`、011 §4)。
@@ -367,6 +382,10 @@ class MockLLMAdapter:
     """
 
     provider_name = "mock"
+
+    model = "mock-deterministic"
+    """R0: Mockも名乗る。空にしておくと「Model名が取れないAdapter」と
+    「Mockだった」が記録上で区別できない。"""
 
     def complete_structured(self, prompt: str, response_schema: dict[str, Any]) -> dict[str, Any]:
         # [CONTEXT]セクション以降だけから単語を抽出する。[SYSTEM]/[INSTRUCTION]

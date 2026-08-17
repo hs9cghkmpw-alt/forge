@@ -107,6 +107,8 @@ class ConversationStore:
     def record_hypothesis_event(
         self, session_id: str, *, event: str | None, hypothesis: object | None,
         correction_target: str | None,
+        experience_refs: tuple[int, ...] = (),
+        experience_store: object | None = None,
     ) -> ConversationSession:
         """Stateful User Correctionの状態遷移を永続化する
         (FORGE-USER-GUIDED-SELF-EXTENSION-006 §13、2026-08-13)。
@@ -119,8 +121,34 @@ class ConversationStore:
         `event`が`None`(Capability層が何もしなかったターン)なら、
         既存の仮説状態には**一切触れない**。従来どおりの会話が仮説を
         壊さないようにするため。
+
+        ---
+
+        ## Experienceの評価もここで書く(FORGE-ROADMAP R0、2026-08-17)
+
+        利用者が前の応答をどう扱ったかは、**このターンの出来事として
+        しか現れない**。「それでいい」(accept)・「そこは違う」
+        (clarify)・「そもそも違う」(rewind)は、いずれも直前のAI応答
+        への評価である。
+
+        書く場所をこのメソッドにしたのは、上と同じ理由である——
+        「このターンで何が起きたかを状態へ書き下す」のはここ1箇所で
+        あり、別の場所へ足すと、書き忘れる経路が増える。Forgeは
+        `ExperienceStore`を作って本番から一度も呼ばないまま放置した
+        (Product Direction §7)。同じ形にしないための配置である。
+
+        `experience_store`を引数で受け取るのは、**Routerが記録した
+        Storeとここで書き足すStoreを必ず一致させる**ためである。
+        それぞれが既定Storeを自分で解決すると、テストが差し替えた
+        ときに静かにずれる。
         """
         session = self.get(session_id)
+
+        # 評価の書き足しは、仮説状態の遷移とは**独立に**行う。
+        # `event`が`None`のターン(=仮説を触らない普通の会話)でも、
+        # 前ターンの応答を評価する術が無いだけであって、今ターンの
+        # 呼び出しを次ターンへ引き継ぐ必要はある。
+        session = self._carry_experience(session, event, experience_refs, experience_store)
         if event is None:
             return session
 
@@ -149,6 +177,44 @@ class ConversationStore:
         else:
             return session
 
+        self.save(updated)
+        return updated
+
+    def _carry_experience(
+        self,
+        session: ConversationSession,
+        event: str | None,
+        experience_refs: tuple[int, ...],
+        experience_store: object | None,
+    ) -> ConversationSession:
+        """前ターンの応答へ評価を付け、今ターンの呼び出しを次へ渡す(R0)。"""
+        from app.ai.gateway.learning_foundation import (  # noqa: PLC0415 — Conversation層→Gateway層の一方向依存に留める
+            AcceptanceSignal,
+            acceptance_from_turn_event,
+        )
+
+        signal = acceptance_from_turn_event(event) if event is not None else AcceptanceSignal.UNKNOWN
+        if (
+            signal is AcceptanceSignal.UNKNOWN
+            and event == "present"
+            and session.current_hypothesis is not None
+        ):
+            # 「提示」が2回目以降なら、それは**前の仮説が外れていた**
+            # ということである(`record_hypothesis_event`が下で
+            # `with_correction`を呼ぶのと同じ判定)。初回の提示は
+            # 評価ではないので、ここで初めて`CORRECTED`になる。
+            signal = AcceptanceSignal.CORRECTED
+
+        if (
+            experience_store is not None
+            and session.pending_experience_refs
+            and signal is not AcceptanceSignal.UNKNOWN
+        ):
+            experience_store.note_acceptance(session.pending_experience_refs, signal)
+
+        if experience_refs == session.pending_experience_refs:
+            return session
+        updated = session.with_pending_experience_refs(experience_refs)
         self.save(updated)
         return updated
 
