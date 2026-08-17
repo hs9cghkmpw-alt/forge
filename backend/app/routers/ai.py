@@ -97,6 +97,28 @@ _GENERATE_ERROR_RESPONSES = {
 }
 
 
+def _no_provider_message(exc: NoProviderAvailableError) -> str:
+    """利用者へ見せる文言(FORGE-ROADMAP R0.1、2026-08-17)。
+
+    **枠切れと障害を同じ文言にしない。** 以前はどちらも
+    「しばらく待ってからもう一度お試しください」だったが、実測した
+    Gemini無料枠は**1日20回/Model**であり(429本文の`quotaValue`)、
+    枠を使い切った利用者が5分後に再試行しても同じ結果になる。
+    直し方も違う——待つのではなく、翌日にするか、別のProviderを
+    足す必要がある。**打つ手が違うものを同じ文言で案内しない。**
+    """
+    if exc.is_quota_exhaustion:
+        return (
+            "今日のAI利用枠を使い切りました。日付が変わるまで待つか、"
+            "別のAI Providerを設定してください。"
+            f"(内訳: {exc})"
+        )
+    return (
+        "今どのAIも利用できませんでした。しばらく待ってからもう一度お試しください。"
+        f"(内訳: {exc})"
+    )
+
+
 def _note_update_outcome(bound, result) -> None:  # noqa: ANN001 — _BoundAdapter / UpdateResult
     """`/update`の結果をExperienceへ書き足す(FORGE-ROADMAP R0、2026-08-17)。
 
@@ -429,8 +451,7 @@ def converse(request: ConverseRequest):
         # 伝える(§33 graceful degradation)。ここで偽のToolを作らない。
         if isinstance(exc, NoProviderAvailableError):
             raise ProviderError(
-                "今どのAIも利用できませんでした。しばらく待ってからもう一度お試しください。"
-                f"(内訳: {message})",
+                _no_provider_message(exc),
                 sub_reason="unavailable", stage="conversation",
             ) from exc
         sub_reason = "rate_limited" if ("429" in message or "利用上限" in message) else "unavailable"
@@ -518,8 +539,7 @@ def converse(request: ConverseRequest):
             )
         except NoProviderAvailableError as exc:
             raise ProviderError(
-                "今どのAIも利用できませんでした。しばらく待ってからもう一度お試しください。"
-                f"(内訳: {exc})",
+                _no_provider_message(exc),
                 sub_reason="unavailable", stage="forming_operation",
             ) from exc
         provider_name = update_provider.last_provider_used or provider_name
@@ -642,8 +662,7 @@ def update(request: UpdateRequest):
         )
     except NoProviderAvailableError as exc:
         raise ProviderError(
-            "今どのAIも利用できませんでした。しばらく待ってからもう一度お試しください。"
-            f"(内訳: {exc})",
+            _no_provider_message(exc),
             sub_reason="unavailable", stage="forming_operation",
         ) from exc
 

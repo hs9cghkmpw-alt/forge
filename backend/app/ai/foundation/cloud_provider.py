@@ -47,6 +47,7 @@ proxyで禁止されており、エンドポイント・モデル名を公式に
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 
@@ -91,7 +92,23 @@ class OpenAICompatibleCloudProvider(OpenAICompatibleAdapter):
 
     @property
     def model(self) -> str:
+        # **`with_model()`が指定したものを優先する。**
+        # このクラスは`model`をpropertyで上書きしているので、親の
+        # `with_model()`が`_model`へ書いても効かない(propertyが勝つ)。
+        # 黙って無視されると「Modelを切り替えたつもりで切り替わって
+        # いない」という一番調べにくい壊れ方になるので、明示的に見る。
+        override = getattr(self, "_model_override", "")
+        if override:
+            return override
         return os.environ.get(f"{self._prefix}_MODEL", "").strip()
+
+    def with_model(self, model: str) -> "OpenAICompatibleCloudProvider":
+        """`SupportsModelChoice`。環境変数より優先する複製を返す。"""
+        if not model or model == self.model:
+            return self
+        clone = copy.copy(self)
+        clone._model_override = model  # noqa: SLF001 — 自分自身のコピー
+        return clone
 
     def _headers(self) -> dict[str, str]:
         return {**super()._headers(), **self._extra()}

@@ -505,7 +505,20 @@ ACTIVE_SHADOW_PLANS: tuple[ShadowPlan, ...] = ()
 # 唯一の役目である。
 KNOWN_MODEL_PROVENANCE: tuple[ModelProvenance, ...] = (
     ModelProvenance(
-        model="gemini-2.0-flash",
+        model="gemini-flash-latest",
         note="Google公称の学習データ構成は未検証。したがってUNKNOWNのまま。",
     ),
+    ModelProvenance(
+        model="gemini-flash-lite-latest",
+        note="同上。混雑時の代替候補として実際に使う(R0.1)。",
+    ),
+    ModelProvenance(
+        model="gemini-3.5-flash",
+        note="同上。混雑時の代替候補として実際に使う(R0.1)。",
+    ),
 )
+
+# 2026-08-17: `gemini-2.0-flash`をこの表から外した。実際に呼んだところ
+# 404「no longer available」だったので、**存在しないModelの由来を
+# 記録していた**ことになる。表に載っているだけで使われていない名前は、
+# 「これは検討済みだ」という誤った印象を作る。

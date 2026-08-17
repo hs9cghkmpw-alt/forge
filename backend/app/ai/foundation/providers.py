@@ -144,6 +144,18 @@ class GeminiProvider:
         clone._timeout = max(0.1, min(self._timeout, seconds))
         return clone
 
+    def with_model(self, model: str) -> "GeminiProvider":
+        """そのModelを使うProviderを返す
+        (`app/ai/foundation/model_choice.py`の`SupportsModelChoice`)。
+
+        `with_deadline`と同じく**自分自身を書き換えない**。
+        """
+        if not model or model == self._model:
+            return self
+        clone = copy.copy(self)
+        clone._model = model
+        return clone
+
     def complete_structured(self, prompt: str, response_schema: dict[str, Any]) -> dict[str, Any]:
         """`response_schema`が空dict(`{}`)の場合、`responseSchema`自体を
         省略し、`responseMimeType: application/json`のみでフリーフォームの

@@ -134,6 +134,55 @@ class ErrorKind(str, Enum):
         """そのProviderを恒久的に候補から外すか(設定を直すまで)。"""
         return self in {ErrorKind.AUTH, ErrorKind.NOT_IMPLEMENTED}
 
+    @property
+    def is_transient(self) -> bool:
+        """**時間が経てば、同じ相手で成功しうるか。**
+
+        FORGE-ROADMAP R0.1(2026-08-17)で追加。実機で見つけた実バグの
+        中心にある区別である。
+
+        §20は「同じProviderを二度試さない」と決めていた。これは
+        **恒久的な失敗**(鍵が無い・未実装・Modelが廃止された)に
+        ついては正しい——同じ相手にもう一度聞いても同じ答えが返る。
+
+        しかし一時的な失敗はそうではない。実測(2026-08-17、実Gemini):
+
+            gemini-flash-latest → 503 UNAVAILABLE
+            "This model is currently experiencing high demand.
+             Spikes in demand are usually temporary."
+
+        Provider自身が「一時的だ」と言っているのに、Forgeは1回で
+        諦めていた。候補が実質1つしかない環境では、**一時的な混雑が
+        そのまま「AIが使えません」になる**。実測で6回中6回失敗した。
+
+        `QUOTA_EXHAUSTED`と`RATE_LIMITED`は**ここに入れない**。
+        どちらも時間で回復するが、回復まで数分〜1日であり、
+        1リクエストの中で待てる長さではない。既存の`reset_at`/
+        cooldownの仕組みが担当する(そちらへ二重に手を出さない)。
+        """
+        return self in {
+            ErrorKind.PROVIDER_SERVER_ERROR,
+            ErrorKind.TIMEOUT,
+            ErrorKind.NETWORK,
+            ErrorKind.STRUCTURED_OUTPUT_FAILURE,
+            ErrorKind.UNKNOWN,
+        }
+
+    @property
+    def another_model_may_work(self) -> bool:
+        """**同じProviderの別Modelなら通るかもしれないか。**
+
+        `MODEL_UNAVAILABLE`が典型である——そのModelが廃止された
+        だけで、Provider自体は正常に動いている。実際に踏んだ:
+        `gemini-2.0-flash`が404(提供終了)になっても、
+        `gemini-flash-latest`は動いていた。
+
+        一時的失敗も含む。Google側の混雑はModelごとに出るので、
+        実測でも`gemini-flash-latest`が503を返す時間帯に
+        `gemini-flash-lite-latest`は3/3で応答していた。
+        """
+        return self is ErrorKind.MODEL_UNAVAILABLE or self.is_transient
+
 
 @dataclass(frozen=True)
 class ProviderError(Exception):

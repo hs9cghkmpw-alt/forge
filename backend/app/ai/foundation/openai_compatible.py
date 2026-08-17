@@ -380,6 +380,17 @@ class OpenAICompatibleAdapter:
         clone._timeout = max(0.1, min(self._timeout, seconds))  # noqa: SLF001 — 自分自身のコピー
         return clone
 
+    def with_model(self, model: str) -> "OpenAICompatibleAdapter":
+        """そのModelを使うAdapterを返す(`SupportsModelChoice`)。
+
+        `with_deadline`と同じく**自分自身を書き換えない**。
+        """
+        if not model or model == self.model:
+            return self
+        clone = copy.copy(self)
+        clone._model = model  # noqa: SLF001 — 自分自身のコピー
+        return clone
+
     # -- LLMAdapter契約 ----------------------------------------------------
 
     def complete_structured(self, prompt: str, response_schema: dict[str, Any]) -> dict[str, Any]:

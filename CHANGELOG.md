@@ -2,6 +2,80 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task075 — AI連携の失敗を直す(2026-08-17、FORGE-ROADMAP R0.1)
+
+CEOが実際に使ったところAI連携が失敗した。再現したら**6回中6回失敗**
+していた。原因は3つ重なっていた。
+
+### 1. 環境 — 既定Modelが混んでいた
+
+同時刻に実測(同じ鍵・同じPayload・各3回):
+
+    gemini-flash-latest        [200, 503, 503]   ← Forgeの既定
+    gemini-flash-lite-latest   [200, 200, 200]
+    gemini-3.5-flash           [200, 200, 200]
+
+Google自身が「一時的だ」と言う503("Spikes in demand are usually
+temporary")。
+
+### 2. 設計 — 一時的な失敗でも1回しか試さなかった
+
+§20「同じProviderを二度試さない」を、一時的な失敗にも当てていた。
+恒久的な失敗(鍵が無い・未実装)には正しいが、一時的な失敗に当てると
+**混雑がそのまま「AIが使えません」になる**。`ErrorKind.is_transient`と
+`another_model_may_work`で分けた。
+
+### 3. 設計 — ProviderにModelが1つしか無かった
+
+`ProviderDefinition.models`は「診断とBenchmarkのため」でRoutingには
+使っていなかった。「別Modelなら通る」という事実が実行へ反映される
+経路が無かった。
+
+**Provider Identityは増やしていない。** `gemini-flash-latest`と
+`gemini-flash-lite-latest`を別Providerにすれば既存の巡回だけで済むが、
+それは011 §1が禁じた形である——同じ鍵・同じ枠を共有する2つを別
+Providerにすると、枠切れを片方で学習してももう片方が同じ枠へ突っ込み、
+Circuit BreakerもBenchmarkも単位がずれる。Modelは**Provider内部の
+実行選択肢**として扱い、Providerの外から見た振る舞いは変えていない。
+
+### 実測の結果、もう1つ分かったこと(枠はModel単位)
+
+429の本文を読んだ:
+
+    "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+    "quotaValue": 20
+
+**Modelごとに1日20回**である。`QuotaScope`を宣言として追加し、
+`PER_MODEL`と実測で分かっているProviderに限り、枠切れでも別Modelへ
+進むようにした。既定は`UNKNOWN`で**進まない**——分からないものを
+楽観側へ倒さない。
+
+### 文言も直した
+
+枠切れと障害を同じ「しばらく待ってからもう一度お試しください」で
+案内していた。1日単位の枠切れに対しては嘘になる(5分後も同じ結果)。
+打つ手が違うものを同じ文言で案内しない。
+
+### 実機確認
+
+    修正前  /converse 0/6 成功
+    修正後  /converse 6/6 成功、/generate 3/3 成功
+
+配線を1つずつ外して、対応するテストが落ちること・戻すと通ることを
+確認した。**最初に書いた「枠が不明なら賭けない」テストは、配線を
+壊しても落ちなかった**(候補が1つしか無いProviderで測っていたため
+偶然通っていた)。テストの方を書き直した。
+
+### 未解決として残すもの
+
+`gemini-2.0-flash`は404(提供終了)を実測したのでRegistryと
+`KNOWN_MODEL_PROVENANCE`から外した。
+
+無料枠1日20回/Modelという上限そのものは、Model fallbackでは
+解決できない(3 Modelで60回/日)。実運用には**2つ目のCloud Provider**
+が要る——枠は鍵ごとに独立しているため、これはProviderを増やす以外に
+方法が無い。
+
 ## Task074b — CI(GitHub Actions)を導入(2026-08-17、FORGE-AI-FOUNDATION-011 §7)
 
 `.github/workflows/ci.yml`。backend(Python 3.11/3.12)・forge_ai・

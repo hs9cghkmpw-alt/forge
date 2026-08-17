@@ -52,6 +52,7 @@ __all__ = [
     "PROVIDER_REGISTRY",
     "Protocol",
     "ProviderDefinition",
+    "QuotaScope",
     "QuotaStrategy",
     "StructuredOutputMode",
     "configured_providers",
@@ -199,6 +200,36 @@ class QuotaStrategy(str, Enum):
     """Local / Mock。枠という概念が無い。"""
 
 
+class QuotaScope(str, Enum):
+    """枠が**何単位で**切れるか(FORGE-ROADMAP R0.1、2026-08-17)。
+
+    実機でGeminiの429本文を読んで分かったことである。
+
+        "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+        "quotaValue": 20
+
+    **Modelごとに1日20回**であって、Providerごとではない。したがって
+    片方のModelが枠切れでも、同じProviderの別Modelはまだ呼べる。
+
+    既定は`UNKNOWN`である。**「別Modelなら残っている」と勝手に
+    期待しない**——Provider単位で切れる相手に対してModelを巡ると、
+    確実に失敗する呼び出しを積み増すだけになる(`QuotaStrategy.NONE`が
+    「不明を無制限と扱わない」のと同じ姿勢)。
+    """
+
+    PER_MODEL = "per_model"
+    """Modelごとに独立した枠。別Modelなら残っているかもしれない。"""
+
+    PER_PROVIDER = "per_provider"
+    """Provider(鍵/プロジェクト)単位。Modelを変えても同じ枠を食う。"""
+
+    UNKNOWN = "unknown"
+    """**既定値。** 分からない。別Modelを試す根拠にはしない。"""
+
+    NOT_APPLICABLE = "not_applicable"
+    """Local / Mock。"""
+
+
 class ErrorStrategy(str, Enum):
     """失敗の**種類をどこから読めるか**(Phase Gの正規化順序で使う)。
 
@@ -277,10 +308,25 @@ class ProviderDefinition:
     `None`なら`api_key_env`があればそれだけを必須とする。
     """
 
+    quota_scope: QuotaScope = QuotaScope.UNKNOWN
+    """枠が何単位で切れるか。**実機で確認したものだけを書く**——
+    公称や推測で`PER_MODEL`と書くと、枠切れのたびに無駄な呼び出しが
+    増える(R0.1)。"""
+
     models: tuple[str, ...] = ()
-    """既知のモデル名。**Routingの判断には使わない**——公称値を
-    大量に固定すると、API変更のたびに嘘になる(§12)。診断と
-    Benchmarkの対象指定のために持つ。"""
+    """そのProviderで試すModel名。**先頭がAdapterの既定と一致する
+    必要はない**——Routerは既定を先に試し、残りをここから採る
+    (`AIRouter._model_candidates()`)。
+
+    **R0.1(2026-08-17)で役割が変わった。** それまでは「診断と
+    Benchmarkの対象指定のため」であり、Routingには使っていなかった。
+    実機で、既定Modelだけが混雑で503を返し**同じProviderの別Modelは
+    応答している**状態に当たったので、実行にも使うようにした。
+
+    §12「公称値を大量に固定しない」は今も守る。ここに書いてよいのは
+    **実際に呼んで200が返ったことを確認したModelだけ**である。
+    ドキュメントに載っていたから書く、をやると、候補を巡る時間が
+    増えるだけで一度も成功しない列ができる。"""
 
     test_only: bool = False
     """Mock等。自動Routingの候補にしない(§22)。"""
@@ -440,15 +486,31 @@ PROVIDER_REGISTRY: tuple[ProviderDefinition, ...] = (
         implementation_status=ImplementationStatus.IMPLEMENTED,
         supports_structured_output=True,
         quota_strategy=QuotaStrategy.NONE,
+        # 2026-08-17に実際の429本文で確認した:
+        #   quotaId  = GenerateRequestsPerDayPerProjectPerModel-FreeTier
+        #   quotaValue = 20
+        # **Modelごとに1日20回**。推測ではなく実測である。
+        quota_scope=QuotaScope.PER_MODEL,
         error_strategy=ErrorStrategy.MESSAGE_ONLY,
         api_key_env="GEMINI_API_KEY",
         nominal_timeout_seconds=30.0,
-        models=("gemini-2.0-flash",),
+        # 2026-08-17に実際に呼んで確認した順である(§12: 公称値では
+        # なく実測を書く)。既定の`gemini-flash-latest`はAdapter側に
+        # あるので、ここには**代わりに試すもの**を並べる。
+        #
+        #   gemini-flash-latest       [200, 503, 503]  ← 既定。当日混雑
+        #   gemini-flash-lite-latest  [200, 200, 200]
+        #   gemini-3.5-flash          [200, 200, 200]
+        #
+        # `gemini-2.0-flash`は**404(提供終了)**になっていたので消した。
+        # `gemini-pro-latest`は429(無料枠外)だったので入れない。
+        models=("gemini-flash-lite-latest", "gemini-3.5-flash"),
         notes=(
             "`GeminiProvider`が実装済み。`responseSchema`は`$ref`非対応で、"
             "`properties`の無い`object`を渡すと黙って`{}`を返す(TD40)。"
             "現行Adapterは`RuntimeError`しか投げないため`error_strategy`は"
             "MESSAGE_ONLY——Phase Gで構造化する対象である。"
+            "`models`は混雑時に代わりに試す候補(2026-08-17実測)。"
         ),
     ),
     ProviderDefinition(

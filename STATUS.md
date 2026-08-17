@@ -40,6 +40,8 @@
 | Model Gateway | **削除** | `AIRouter`と責務が重複し本番未使用だった(TD59)。同じ層を2つ残さない |
 | Provider Registry | 動作 | Providerの唯一の宣言。名前・鍵の変数名・実装状況・protocol |
 | Provider Auto Discovery | 動作 | 環境変数が揃ったProviderだけが候補になる |
+| Model fallback(Provider内) | 動作 | 一時的失敗・Model廃止・PER_MODEL枠切れのとき、同じProviderの別Modelへ進む。Provider Identityは増やさない(011 §1) |
+| **Gemini無料枠** | **1日20回/Model** | 実測(429の`quotaValue`)。3 Modelで60回/日。実運用には2つ目のCloud Providerが要る |
 | Local Provider | 実装済/未実測 | OpenAI互換。実モデル未実行(環境制約、TD51) |
 | 2つ目のCloud枠(`cloud`) | 実装済/未実測 | OpenAI互換なら環境変数3つで載る。**実APIでは未検証** |
 | Provider Benchmark | 動作 | Impact分類16ケース。harness実行確認済み |

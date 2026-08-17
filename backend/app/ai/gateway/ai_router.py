@@ -52,6 +52,7 @@ from enum import Enum
 from typing import Any
 
 from app.ai.foundation.deadline import apply_deadline, supports_deadline
+from app.ai.foundation.model_choice import apply_model, supports_model_choice
 from app.ai.gateway.ai_errors import ErrorKind, classify_exception
 from app.ai.gateway.benchmark_evidence import BenchmarkEvidenceStore, default_evidence_store
 from app.ai.gateway.learning_foundation import (
@@ -64,6 +65,7 @@ from app.ai.gateway.provider_registry import (
     Deployment,
     ImplementationStatus,
     ProviderDefinition,
+    QuotaScope,
     configured_providers,
     definition_for,
     provider_registry,
@@ -167,6 +169,15 @@ class RouteAttempt:
     error_kind: ErrorKind | None = None
     detail: str = ""
 
+    retry_after_seconds: float | None = None
+    """Providerが明示した待ち時間。不明なら`None`
+    ——**`None`を「すぐ再試行してよい」と読まないこと**。
+
+    R0.1で`RouteAttempt`へ載せた。以前は`_try_one`が失敗した直後に
+    Provider状態を更新していたので、その場の変数で足りていた。
+    Model候補を巡るようになると、状態更新は**全Model試し終えてから**
+    になるため、値を持ち運ぶ場所が要る。"""
+
     model: str = ""
     """実際に呼んだModel名。**Adapterが名乗った場合のみ**入る。
 
@@ -241,6 +252,29 @@ class NoProviderAvailableError(RuntimeError):
             f"task={task.value} で利用可能なProviderがありません。"
             f"試行: [{tried or 'なし'}] 除外: [{reasons or 'なし'}]"
         )
+
+    @property
+    def is_quota_exhaustion(self) -> bool:
+        """**全部が枠切れだったか**(R0.1、2026-08-17)。
+
+        呼び出し側が利用者へ何と言うかを変えるための情報である。
+        枠切れとサーバ障害では、待つべき時間も、打つべき手も違う:
+
+            サーバ障害 → 数分待てば直る
+            枠切れ     → 実測したGemini無料枠は**1日20回/Model**。
+                         「しばらく待って」は嘘になりうる。
+
+        `attempts`が空(候補が1つも無かった)の場合は`False`——
+        呼んでもいないものを枠切れとは言わない。
+        """
+        return bool(attempts_all_quota(self.attempts))
+
+
+def attempts_all_quota(attempts: tuple[RouteAttempt, ...]) -> bool:
+    """試行がすべて枠切れだったか。1件も無ければ`False`。"""
+    return bool(attempts) and all(
+        a.error_kind is ErrorKind.QUOTA_EXHAUSTED for a in attempts
+    )
 
 
 class AIRouter:
@@ -539,7 +573,7 @@ class AIRouter:
         *,
         remaining_ms: float | None = None,
     ) -> tuple[RouteAttempt | None, dict[str, Any] | None]:
-        """1 Providerを1回試す。
+        """1 Providerを試す。**そのProviderのModel候補を順に使う。**
 
         `remaining_ms`があれば、**Task全体の残り時間で締める**
         (011 §4)。締められないAdapterの場合、入りきらないと分かって
@@ -550,6 +584,21 @@ class AIRouter:
         第2要素に理由(文字列)が入る。試行として数えないのは、
         Providerが失敗したわけではないためである(Circuit Breakerや
         Benchmarkの記録を汚さない)。
+
+        ---
+
+        ## Model候補を巡るのはここである(R0.1、2026-08-17)
+
+        **Providerの外から見た振る舞いは変わらない。** 呼び出し側にも
+        Circuit Breakerにも「geminiを1回試した」としか見えず、
+        成否だけが伝わる。Model単位でCircuit Breakerを開いたり
+        Quotaを数えたりはしない——それらの識別键は`provider_id`で
+        あって、Modelではない(011 §1)。
+
+        巡るのは**同じProviderの別Modelなら通りうる失敗**のときだけ
+        である(`ErrorKind.another_model_may_work`)。認証エラーや
+        Forge側のschema誤りでModelを変えても、鍵もschemaも同じなので
+        意味が無い。
         """
         started = self._monotonic()
         try:
@@ -568,35 +617,121 @@ class AIRouter:
                 error_kind=error.kind, detail=error.message,
             ), None
 
-        # 解決できたAdapterだけがModel名を名乗れる。解決に失敗した
-        # 場合(上のexcept)に空なのは、**本当に分からない**ためである。
-        model = str(getattr(adapter, "model", "") or "")
+        last: RouteAttempt | None = None
+        for candidate in self._model_candidates(provider, adapter):
+            attempt, value = self._call_once(
+                provider, adapter, candidate, prompt, response_schema, started
+            )
+            if value is not None:
+                self._states.record_success(provider, latency_ms=attempt.latency_ms)
+                return attempt, value
+            last = attempt
+            assert attempt.error_kind is not None  # noqa: S101 — 失敗なら必ず分類済み
+            if not self._another_model_may_work(provider, attempt.error_kind):
+                break
+            # 予算を食い破らない(011 §4)。残りが無ければ、次のModelは
+            # 始めずにここまでの失敗を返す——始めても意味のある応答は
+            # 返らず、待ち時間だけが伸びる。
+            if remaining_ms is not None:
+                spent = (self._monotonic() - started) * 1000.0
+                if remaining_ms - spent <= _MIN_USEFUL_ATTEMPT_MS:
+                    break
 
+        assert last is not None  # noqa: S101 — 候補は必ず1つ以上ある(下記参照)
+        # **Providerの失敗として記録するのは、全Modelで駄目だったときだけ。**
+        # Model単位でCircuit Breakerを開くと、識別键がProviderから
+        # ずれる(011 §1)。
+        self._states.record_failure(
+            provider, last.error_kind or ErrorKind.UNKNOWN,
+            retry_after_seconds=last.retry_after_seconds,
+        )
+        return last, None
+
+    def _call_once(
+        self,
+        provider: str,
+        adapter: Any,
+        model_name: str,
+        prompt: str,
+        response_schema: dict,
+        started: float,
+    ) -> tuple[RouteAttempt, dict[str, Any] | None]:
+        """1 Modelで1回呼ぶ。**状態は更新しない**——Provider状態の
+        更新は`_try_one`が全Model試し終えてから1回だけ行う。"""
+        bound = apply_model(adapter, model_name)
+        # 解決できたAdapterだけがModel名を名乗れる。名乗らないものを
+        # Provider名で代用しない(分からないものは分からないまま)。
+        model = str(getattr(bound, "model", "") or "")
         try:
-            value = adapter.complete_structured(prompt, response_schema)
+            value = bound.complete_structured(prompt, response_schema)
         except Exception as exc:  # noqa: BLE001 — 分類して次の候補へ進むため
             error = classify_exception(exc, provider)
-            latency = (self._monotonic() - started) * 1000.0
-            self._states.record_failure(
-                provider, error.kind, retry_after_seconds=error.retry_after_seconds
-            )
             return RouteAttempt(
-                provider=provider, ok=False, latency_ms=latency,
+                provider=provider, ok=False,
+                latency_ms=(self._monotonic() - started) * 1000.0,
                 error_kind=error.kind, detail=error.message, model=model,
+                retry_after_seconds=error.retry_after_seconds,
             ), None
 
         latency = (self._monotonic() - started) * 1000.0
         if not isinstance(value, dict):
             # 構造化出力が壊れている。Provider障害として扱う。
-            self._states.record_failure(provider, ErrorKind.STRUCTURED_OUTPUT_FAILURE)
             return RouteAttempt(
                 provider=provider, ok=False, latency_ms=latency,
                 error_kind=ErrorKind.STRUCTURED_OUTPUT_FAILURE,
                 detail=f"dictではなく{type(value).__name__}が返った", model=model,
             ), None
 
-        self._states.record_success(provider, latency_ms=latency)
         return RouteAttempt(provider=provider, ok=True, latency_ms=latency, model=model), value
+
+    def _another_model_may_work(self, provider: str, kind: ErrorKind) -> bool:
+        """この失敗のあと、同じProviderの別Modelを試す意味があるか。
+
+        大半は`ErrorKind`だけで決まる。**枠切れだけがProviderの宣言に
+        依存する**——枠がModel単位で切れるのか、鍵/プロジェクト単位で
+        切れるのかは、相手の課金設計であってエラーの種類ではない。
+
+        実機で読んだGeminiの429本文:
+
+            "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+            "quotaValue": 20
+
+        **Modelごとに1日20回**である。ここで諦めると、まだ20回残って
+        いる別Modelを持っているのに「AIが使えません」と言うことになる。
+
+        逆に、枠が鍵単位で切れる相手にModelを巡ると、確実に失敗する
+        呼び出しを積むだけである。だから既定(`UNKNOWN`)では巡らない
+        ——分からないものを楽観側へ倒さない。
+        """
+        if kind is ErrorKind.QUOTA_EXHAUSTED:
+            definition = definition_for(provider)
+            return definition is not None and definition.quota_scope is QuotaScope.PER_MODEL
+        return kind.another_model_may_work
+
+    def _model_candidates(self, provider: str, adapter: Any) -> tuple[str, ...]:
+        """そのProviderで試すModel名を、順番に返す。
+
+        **必ず1つ以上返す。** 先頭は空文字(=Adapterの既定Model)で
+        あり、Model候補が宣言されていないProviderや、Modelを差し替え
+        られないAdapterでは、これ1つだけになる——つまり**従来と
+        まったく同じ動き**である。
+
+        2つ目以降はRegistryの`models`宣言から採る。宣言は元々
+        「診断とBenchmarkの対象指定のため」に持っていたもので、
+        Routingには使っていなかった。実機で「既定Modelだけが混雑で
+        503を返し、同じProviderの別Modelは応答していた」という状態に
+        当たったので、実行にも使うようにした。
+
+        既定Modelと同名のものは落とす(同じ相手へ二度聞かない)。
+        """
+        default = str(getattr(adapter, "model", "") or "")
+        if not supports_model_choice(adapter):
+            return ("",)
+        definition = definition_for(provider)
+        if definition is None:
+            return ("",)
+        rest = tuple(m for m in definition.models if m and m != default)
+        return ("", *rest)
 
     def _fit_to_budget(
         self, adapter: Any, provider: str, remaining_ms: float | None
