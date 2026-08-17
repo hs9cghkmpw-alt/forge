@@ -11,6 +11,22 @@ Flutterはその JSON を解釈して動的にウィジェットツリーを組�
 
 ---
 
+## 📌 最新状況はここ
+
+| 見たいもの | パス |
+|---|---|
+| **最新の申し送り・CEOへの依頼** | **[`docs/HANDOFF.md`](docs/HANDOFF.md)** |
+| 最上位方針（変更不可） | [`docs/PRODUCT-DIRECTION.md`](docs/PRODUCT-DIRECTION.md) |
+| 完成図までの段取り | [`docs/ROADMAP-TO-TARGET.md`](docs/ROADMAP-TO-TARGET.md) |
+| 現状の機能一覧 | [`STATUS.md`](STATUS.md) |
+| AIエージェントの作業ルール | [`CLAUDE.md`](CLAUDE.md) |
+
+> このリポジトリは Claude / ChatGPT の**複数のAIが同じGitHubを見て**
+> 作業する。報告はチャットではなく**必ずmdへ書いて同じpushに含める**
+> （`CLAUDE.md` §1）。
+
+---
+
 ## 1. プロジェクト概要
 
 | 項目 | 内容 |
