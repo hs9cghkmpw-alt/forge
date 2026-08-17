@@ -2,6 +2,24 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task074b — CI(GitHub Actions)を導入(2026-08-17、FORGE-AI-FOUNDATION-011 §7)
+
+`.github/workflows/ci.yml`。backend(Python 3.11/3.12)・forge_ai・
+Flutter(`analyze --fatal-infos --fatal-warnings` + `test`)。
+
+**実APIは呼ばない。** `FORGE_LIVE_TEST`を設定しないので
+`test_live_api.py`は自分でSKIPする(010 Phase Iの既定)。CIにAPIキーを
+置かないので、無料枠を消費せず(§38)、Secretが漏れる経路が最初から
+存在しない(§14〜18の境界をCIでも保つ)。
+
+Python 3.13を入れていないのは好みではなく、`requirements.txt`が
+書いているとおり pydantic 2.7.4 / supabase 2.5.1 が3.13のwheelを
+出していないためである。
+
+**未検証**: この環境にFlutterが無いため、Flutterジョブは実行して
+いない。backend/forge_aiの2ステップは同じコマンドをローカルで実行し、
+通ることを確認済み。
+
 ## Task074 — Experienceを本番から記録する(2026-08-17、FORGE-ROADMAP R0)
 
 Product Direction §7が「完成扱いしてはならない」と名指しした状態

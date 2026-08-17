@@ -1,0 +1,101 @@
+# Forge CI（FORGE-AI-FOUNDATION-011 §7、2026-08-17）
+#
+# ---
+#
+# ## 何を守るためのCIか
+#
+# Forgeのテストは「基盤が動くこと」より **「基盤が本番から使われて
+# いること」** を測る方向へ寄せてきた（Phase Bの Anti-Bypass
+# Regression、R0の Experience Wiring）。この種のテストは、
+# 「気を付ける」では守れないものを機械に守らせるためにある。
+#
+# CIも同じ役割である。ローカルで通ったかどうかは記憶に頼る話であり、
+# 記憶は忘れる。
+#
+# ## 実APIを絶対に呼ばない
+#
+# `FORGE_LIVE_TEST` を設定しない。設定しない限り
+# `tests/test_live_api.py` は自分でSKIPする（既定SKIP、010 Phase I）。
+# CIへAPIキーを置かないので、
+#
+#   * 無料枠を消費しない（§38）
+#   * Secretを持たないので漏れない（§14〜18の境界をCIでも保つ）
+#   * PRからの実行でSecretが露出する経路が最初から存在しない
+#
+# Providerが未設定な環境では Auto Discovery が候補を空にするため、
+# 実Providerを要求するテストは存在しない構成になっている。
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# 同じブランチへ続けてpushしたとき、古い実行を止める。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: backend + forge_ai (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # requirements.txt が明示している上限・下限の両端で回す。
+        # pydantic 2.7.4 / supabase 2.5.1 は 3.13 のwheelを出して
+        # いないので 3.13 は入れない（上限を上げるのは、その2つを
+        # 上げてからの話である。requirements.txt 冒頭のコメント参照）。
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
+
+      - name: forge_ai tests
+        working-directory: forge_ai
+        run: python -m pytest tests -q
+
+      - name: backend tests
+        working-directory: backend
+        # 実APIは呼ばない（FORGE_LIVE_TEST を設定しない = test_live_api.py は自分でSKIPする）。
+        run: python -m pytest tests -q
+
+  frontend:
+    name: frontend (Flutter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # pubspec.yaml の sdk: '>=3.3.0 <4.0.0' に対して stable を使う。
+          channel: stable
+          cache: true
+
+      - name: flutter pub get
+        working-directory: frontend
+        run: flutter pub get
+
+      # `flutter analyze` は 2026-08-13 に warning/info 含めて0件へ
+      # 落としてある（STATUS.md）。0件を保つのが目的なので、
+      # info も失敗として扱う。
+      - name: flutter analyze
+        working-directory: frontend
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: flutter test
+        working-directory: frontend
+        run: flutter test

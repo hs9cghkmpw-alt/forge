@@ -58,6 +58,7 @@
 | └ 宣言的Capability定義 | 検証まで | 既存Primitiveの合成をデータとして追加。Runtime利用は不可 |
 | 模擬出力の明示 | 動作 | `simulated`フィールド + Flutter側のバナー/バッジ |
 | Voice(STT/TTS) | 未接続 | Adapterとして後から足せる構造は維持 |
+| CI(GitHub Actions) | **導入・未実行** | `.github/workflows/ci.yml`。backend/forge_ai は実行確認済み、Flutterジョブはこの環境にFlutterが無いため**未検証**(初回push時に確認する) |
 
 ## テスト
 
