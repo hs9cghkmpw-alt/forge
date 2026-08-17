@@ -16,9 +16,10 @@ Python 3.13を入れていないのは好みではなく、`requirements.txt`が
 書いているとおり pydantic 2.7.4 / supabase 2.5.1 が3.13のwheelを
 出していないためである。
 
-**未検証**: この環境にFlutterが無いため、Flutterジョブは実行して
-いない。backend/forge_aiの2ステップは同じコマンドをローカルで実行し、
-通ることを確認済み。
+初回実行(run #1、commit 32087d5)で3ジョブとも green。
+backend 3.11 / backend 3.12 / frontend(Flutter analyze + test)。
+`flutter analyze --fatal-infos --fatal-warnings`も通っており、
+STATUS.mdが書いていた「analyze 0件」がCIで固定された。
 
 ## Task074 — Experienceを本番から記録する(2026-08-17、FORGE-ROADMAP R0)
 
