@@ -52,6 +52,7 @@ import json
 import os
 
 from app.ai.foundation.openai_compatible import OpenAICompatibleAdapter
+from app.core.env_settings import env_float
 from app.ai.gateway.provider_registry import env_prefix_for
 
 __all__ = ["OpenAICompatibleCloudProvider"]
@@ -77,8 +78,12 @@ class OpenAICompatibleCloudProvider(OpenAICompatibleAdapter):
             base_url="",  # 下のpropertyが環境から遅延解決する
             model="",
             api_key_env=f"{self._prefix}_API_KEY",
-            timeout_seconds=float(
-                os.environ.get(f"{self._prefix}_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
+            # 013 §2: 空文字で落ちない共通境界を通す。**ここが一番効く**
+            # ——`ProviderRouter`は起動時に全Providerを構築するので、
+            # `FORGE_<ID>_TIMEOUT_SECONDS=`が1つ空なだけでForge全体が
+            # 起動しなかった(`.env.example`にその行がある)。
+            timeout_seconds=env_float(
+                f"{self._prefix}_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS, minimum=0.1
             ),
         )
 

@@ -223,24 +223,33 @@ Providerの外から見た振る舞いは変えていない——Circuit Breaker
 
 ## 4. 副次的に見つけたこと(未解消・判断待ち)
 
-### 4-1. Curated DomainはAIを1回も呼ばない(→ TD65)
+> **2026-08-17 追記(013で訂正)**: 以下2項は、初出時に**測った範囲より
+> 広い主張**をしていた。013の独立監査で指摘を受けて測り直し、訂正した。
+> 正確な記述は `docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md`
+> §3・§5、および TECH_DEBT.md TD65 / TD66 / TD67 を参照。
 
-「家計の支出をカテゴリ別に管理したい」は、**0.01秒・AI呼び出し0件**で
-Validator合格のアプリを返す。Curated Domain Libraryに載っているDomainは
-完全にルールベースで生成され、AIが動くのは**Curatedに無いDomainのときだけ**
-である。
+### 4-1. Curated Domainの生成stageはAI呼び出し0回(→ TD65、013で解決)
 
-Product Direction §4「有限Template選択システムへの退化は禁止」に触れる
-形に見える一方、この経路は速く・安定し・品質も一定であり、単純に消すのは
-後退である。**判断が要るのでTD65として残し、今回は変更していない。**
+~~Curated DomainはAIを1回も呼ばない~~ → **正しくは「生成stageが
+AI Providerを呼ばない」**。会話(`/converse`)は`ConversationEngine`自身が
+AIを呼ぶので、会話ステップのExperienceは残る(実測で確認)。
 
-Local AIへの影響が大きい: この経路はExperienceを1件も残さないため、
-**よく使われるDomainほど学習素材が集まらない**向きになっている。
+~~この経路はExperienceを1件も残さない~~ → **正しくは「生成物についての
+Evidenceが残らない」**。
 
-### 4-2. Gemini無料枠は実用に足りない(→ TD66)
+013で`GenerationRecord`(生成物単位のEvidence)を導入し、`source=curated`
+として残すようにした。**Curatedを消さず、AIを無理に通さずに**閉ループへ
+載せている。
 
-Model 3つで1日60回が上限。2つ目のCloud Providerが要る。Adapterは実装済み
-なので**コード変更は不要**(環境変数3つ)。鍵の取得はCEOの判断待ち。
+### 4-2. Gemini無料枠(→ TD66 / TD67、013で証拠の範囲へ訂正)
+
+~~Model 3つで1日60回が上限~~ → **推論であって実測ではない**。実測したのは
+「観測した1 Modelの`quotaValue`が20」「`quotaId`が`PerProjectPerModel`」
+の2点だけである。
+
+~~コード変更は不要~~ → **設計上そうなっている、が正しい**。Groq等の実APIは
+一度も呼んでいないので、接続時にコード変更が不要であることは未証明
+(TD67)。
 
 ---
 
@@ -253,7 +262,7 @@ Model 3つで1日60回が上限。2つ目のCloud Providerが要る。Adapterは
 | 3 | 片方のためにもう片方を後退させたか | **していない。** 既存の応答経路は変えていない |
 | 4 | Template依存を増やしたか | **増やしていない**(Widget/Template追加0件)。ただし**既存のTemplate依存を1つ発見した**(TD65) |
 | 5 | Production Pathへ本当に接続されたか | **された。** ExperienceStoreに触れずHTTP APIを叩くテストで確認。実Geminiでも確認 |
-| 6 | Evidenceが残るか | **残る。ただし揮発する**(プロセス内メモリのみ)。**Curated経路では1件も残らない**(TD65) |
+| 6 | Evidenceが残るか | **残る。ただし揮発する**(プロセス内メモリのみ)。Curated経路は013で解決(TD65) |
 | 7 | 実装都合で最終目標を縮小したか | **していない。** 残件は下記のとおり明示する |
 
 ### 問題として報告するもの(§8「黙って目標を変更しない」)
@@ -264,8 +273,8 @@ Model 3つで1日60回が上限。2つ目のCloud Providerが要る。Adapterは
    負例が`CORRECTED`しか集まらない。
 3. **Privacy Policy(TD60)が未完成** — 記録項目は絞ってあるが、
    「入らない設計である」ことと「利用者に説明した」ことは別である。
-4. **Curated経路からEvidenceが取れない**(TD65) — 閉ループの入口が、
-   よく使われるDomainで塞がっている。
+4. ~~**Curated経路からEvidenceが取れない**(TD65)~~ → **013で解決**
+   (`GenerationRecord`)。
 5. **無料枠が足りない**(TD66) — 2つ目のProviderが要る。
 
 ---

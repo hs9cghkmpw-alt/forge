@@ -2,6 +2,103 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task076 — Pre-R1 Integrity Gate(2026-08-17、FORGE-PRE-R1-INTEGRITY-GATE-013)
+
+R1(Design Language)へ入る前に、実機バグ・Evidence設計・文書の事実関係・
+CIの穴を閉じる。ChatGPTによる独立監査の指摘を、**そのまま肯定せず
+現HEADで再現してから**扱った。
+
+### §1 CORS — 指摘は再現せず。ただし回帰テストは追加した
+
+指摘は「`allow_origin_regex`が二重escapeされており、実機で既にCORS障害を
+踏んでいる」だった。**現HEAD(`02c559c`)では再現しない。** 実コードは
+raw stringで正しく書かれており、`git log -p`を全履歴で追っても二重escape
+された版は一度も存在しない。HTTPレベルで叩いても期待どおり動いた。
+
+ただし**HTTPレベルで確かめるテストが1つも無かった**のは事実なので、
+`test_cors_contract.py`を追加した。regexを指摘された二重escape形へ戻すと
+実際に3件落ちる——つまり**指摘の懸念自体は正当**だった(状態が違っただけ)。
+
+### §2 空optional env — 再現。報告より影響が広かった
+
+`.env.example`をコピーすると入る`FORGE_GROQ_TIMEOUT_SECONDS=`(値なし)で
+`float("")`が`ValueError`になる。**`ProviderRouter`は起動時に全Providerを
+構築するので、1つ空なだけでForge全体が起動しない。**
+
+`app/core/env_settings.py`を作り、未設定/空/whitespaceは既定値、
+壊れた値と範囲外は`ConfigurationError`という契約にした。**生の
+`float(os.environ...)`が再び現れたら落ちるsource scan**も置いた
+——共通関数があるだけでは、次にProviderを足す人が同じ書き方をする。
+
+なお全角数字`３０`は「弾かれるはず」と想定してテストを書いたが落ちな
+かった。Pythonの`float()`は全角も`1_000`も**意図どおりの値**に解釈する。
+私の想定が間違っていたので、その事実をテストに残した。
+
+### §3 TD65の事実関係を訂正
+
+「Curated DomainはAIを1回も呼ばない」「Experienceが1件も出ない」は
+**測った範囲より広い主張**だった。測り直した:
+
+| 経路 | 生成stageのAI呼び出し | Experience |
+|---|---|---|
+| `/generate`(Curated) | 0回 | 0件 |
+| `/converse`(製品の通常経路) | 0回 | **1件**(会話ステップ) |
+
+会話は`ConversationEngine`自身がAIを呼ぶ。欠けていたのは**生成物に
+ついてのEvidence**だった。TECH_DEBT / STATUS / ROADMAP / R0 report /
+HANDOFF の該当箇所を訂正した。
+
+### §4 Curatedを消さずに学習ループへ載せる(第4案を実装)
+
+3択でCEO判断待ちにしていたが、**第4の案を設計して実装した**。
+
+「1回のAI呼び出しの記録」(`ExperienceRecord`)とは別に、
+「1つの生成物の記録」(`GenerationRecord`)を持つ。`source = curated |
+cloud_ai | local_ai | composition`で由来を区別するので、**AIを呼ばずに
+作った成功例も同じ形のEvidence**として並ぶ。
+
+学習データを作るためだけにCuratedへAIを通すのは本末転倒である
+——速く・安定・無料な経路を、記録の都合で遅く不安定に有料にすることに
+なる。**記録の形が実行の形を歪める**のは設計として逆立ちしている。
+
+Production配線済み(`PromptPipeline`の生成完了地点)。実測:
+
+```
+{"source":"curated",  "domain":"household_budget", "ai_calls":0}
+{"source":"cloud_ai", "domain":"diary",            "ai_calls":1}
+```
+
+由来は`domain_resolution`の決定から読む。**AI呼び出し0回だからCurated、
+とは推測しない**——推測で由来を埋めると学習側が由来を信用できなくなる。
+
+### §5 TD66を実測/推論/未検証に分離
+
+実測は「観測した1 Modelの`quotaValue`が20」「`quotaId`が
+`PerProjectPerModel`」の2点だけ。「3 Modelで60回」「1日20アプリで止まる」
+は推論である。とくに**「枠は鍵ごとに独立」は`PerProject`という実測と
+整合していなかった**ので訂正した。枠を消費する追加検証はしていない。
+
+### §6 「Groqはコード変更不要」の断定を訂正(TD67)
+
+設計上そうなっているのは事実だが、実APIは一度も呼んでいない。
+「接続時にコード変更が不要」は**未証明**である。
+
+### §7 CIを拡張
+
+* `flutter build web --debug` を追加(analyze/testが通ってもWeb buildは
+  落ちうる)
+* **backend smoke job**を追加——uvicornを実際に起動し、`/health` 200、
+  localhost Originのpreflight 200 + header一致、外部Originの拒否を見る。
+  **空のoptional envを設定した状態で起動**するので、§2の実バグもCIを
+  すり抜けない
+
+### §8 Documentation drift
+
+「Claudeのサンドボックスにfastapiが無いため一度もimport・実行できて
+いない」という古い注記が5ファイルに残っていた。全てCIで実行されている
+ので訂正した。歴史は消さず、現在状態を誤読させない形にした。
+`security.py`のJWT未実装のように**今も有効な制限**は、そのまま残した。
+
 ## Task075c — 報告をmdで残す運用を確立(2026-08-17、CEO指示)
 
 CEO指示: 「今後は報告事項をmdファイルにして同時にプッシュするように。

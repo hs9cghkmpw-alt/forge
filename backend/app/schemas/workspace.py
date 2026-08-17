@@ -4,13 +4,15 @@
 /v1/workspace`)・5章(DTO Mapping)、`FORGE-V2-TYPE-DESIGN-REVIEW.md`
 8章の`WorkspaceDetailDTO`をそのまま実装したもの。
 
-**注記(重要)**: このファイルはpydanticに依存する。Claudeのサンド
-ボックスにはpydantic・fastapiがインストールされておらず、ネット
-ワークも無いため導入できなかった(`app/schemas/ai.py`と同じ制限)。
-したがってこのファイル自体は一度もimport・実行できていない
-(構文は目視で確認したが、Pydantic v2の実際の挙動での検証はできて
-いない)。CEO環境で`pip install -r requirements.txt`実行後、初めて
-動作確認できる。
+**注記(2026-08-17更新)**: このファイルは**import・実行済み**である。
+`backend/tests/test_workspace_router.py`が`TestClient`経由で実際に
+使っており、GitHub Actionsがpushごとに実行している。
+
+**かつては**「Claudeのサンドボックスにpydantic/fastapiが無いため一度も
+import・実行できていない」と書いてあった。当時は事実だったが、その後
+インストール可能な環境になり、記述だけが古いまま残っていた
+(`app/schemas/ai.py`は2026-08-11に同じ訂正済み。こちらは013 §8の
+ドキュメント監査で発見)。
 
 Architecture Principles AP-015(Domain Objects Do Not Cross API
 Boundaries)に従い、`app.domain.entities.workspace.Workspace`を

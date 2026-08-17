@@ -2,14 +2,23 @@
 (FORGE_v0.2_COMPLETE_IMPLEMENTATION_DIRECTIVE.md / FORGE_v0.2_修正指示.md
 P0〜P1章に基づき全面改訂)。
 
-**注記(重要)**: このファイルはfastapiに依存する。Claudeのサンドボックスには
-fastapiがインストールされておらず、ネットワークも無いため導入できなかった
-(`pip install`を実際に試行し、失敗を確認済み)。したがってこのファイル自体は
-一度もimport・実行できていない。`app/ai/runtime/prompt_pipeline.py`・
-`app/ai/runtime/confirmation_store.py`という「呼び出される側」の純粋な
-Pythonロジックは、Claudeの環境で実際にunittest実行して検証済みだが、
-この薄いルーター層(HTTPの皮)はCEO環境で`uvicorn app.main:app --reload`
-を実行した上での動作確認が必要。
+**注記(2026-08-17更新)**: このファイルは**実行・検証済み**である。
+
+* `backend/tests/test_converse_and_update_http.py`等が`TestClient`で
+  実際にこのrouterを叩いている
+* GitHub Actions(`.github/workflows/ci.yml`)がpushごとに実行している
+* 実Gemini(`gemini-flash-latest`)での`/converse`・`/generate`往復を
+  実測している(`docs/reports/FORGE-ROADMAP-R0-report.md`)
+
+**かつては**「Claudeのサンドボックスにfastapiが無いため、このファイル
+自体を一度もimport・実行できていない」と書いてあった。当時はそれが
+事実だったが、その後fastapiが入る環境になり、記述だけが古いまま
+残っていた(`app/main.py`冒頭は2026-08-11に同じ訂正済み。こちらは
+013 §8のドキュメント監査で発見)。
+
+歴史を消さずに残しているのは、**「未検証だから慎重に」という当時の
+判断が正しかった**ことと、**その前提がもう成り立たない**ことの両方を
+次に読む人へ伝えるためである。
 
 **P1 6章対応(response_model=None禁止)**: 以前はエラー時に`JSONResponse`を
 route関数が直接returnしていたため、`response_model`を`None`にせざるを

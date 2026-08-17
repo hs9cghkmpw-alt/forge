@@ -140,11 +140,17 @@ Product Direction §7 が名指しした違反を先に消す。
 **閉じる辺**: `Rendered Application → User Acceptance / Correction →
 Experience`
 
-> **2026-08-17 実施済み。** ただし実施中に、この辺が**一部塞がっている**
-> ことが分かった。Curated Domain Library に載っているDomain
-> (家計簿・釣り記録・習慣管理等)は**AIを1回も呼ばずに**生成されるため、
-> Experienceが1件も残らない(TD65)。**よく使われるDomainほど学習素材が
-> 集まらない**向きになっている。R1〜R3のどこかで判断が要る。
+> **2026-08-17 実施済み。** 実施中に、この辺が**一部塞がっている**ことが
+> 分かった——Curated Domainの**生成stage**はAI Providerを呼ばないので、
+> R0の記録(AI呼び出し単位)には生成物の事実が残らなかった(TD65)。
+>
+> **013で解決済み。** AI呼び出しの記録とは別に`GenerationRecord`
+> (生成物単位)を持ち、`source=curated`として残すようにした。
+> Curatedを消さず、AIを無理に通さずに、閉ループへ載せている。
+>
+> なお初出時に「Curated経路からExperienceが1件も出ない」と書いたのは
+> **測った範囲より広い主張**だった。会話(`/converse`)は`ConversationEngine`
+> 自身がAIを呼ぶので、会話ステップのExperienceは残る。
 
 **なぜ最初か**: これが無いと、以降のどのPhaseも「良くなったか」を
 測れない。Design Token を入れても、それが受け入れられたのか
@@ -181,26 +187,29 @@ Product Direction §6 の優先1位。R1で語彙が固まった部分から着�
 配ることになる（§6の後段の警告）。R1で語彙が安定した範囲だけを
 Knowledge へ入れる。
 
-### R2.5. Curated Domain と AI の関係を決める(**判断が要る**)
+### R2.5. Curated Domain を学習ループへ載せる(**013で実施済み**)
 
 TD65として記録した、R0で見つかった構造上の問題。
 
-* Curated Domainは**AIを1回も呼ばずに**アプリを生成する(実測0.01秒)
-* 速く・安定し・品質も一定なので、単純に消すのは後退である
+* Curated Domainの**生成stage**はAI Providerを呼ばない(実測0.01秒)
+* 速く・安定し・Quota消費0・品質も一定なので、単純に消すのは後退である
 * 一方で Product Direction §4「有限Template選択システムへの退化は禁止」に
   触れる形に見える
-* **Local AIへの影響が大きい** ——この経路からはEvidenceが1件も出ない
+* **Local AIへの影響が大きい** ——生成物についてのEvidenceが残らなかった
 
-選択肢(未決定):
+当初は3択(叩き台化 / 位置付け直し / R1で見直し)を挙げてCEO判断待ちに
+していたが、**013で第4の案を採って実装した**。
 
-1. Curatedを**叩き台**にし、AIが利用者の言葉へ合わせて調整する
-   (安定と適応の両立。Evidenceも残る)
-2. そのままにし、Curatedを「品質の下限保証」と位置付け直す
-   (その場合 §4 との整合を文書で取る必要がある)
-3. R1のDesign Languageが入った時点で一緒に見直す
+> **AI呼び出しの記録**と、**生成物の記録**を分ける。
+> `GenerationRecord.source`が由来(`curated` / `cloud_ai` / `local_ai` /
+> `composition`)を持つので、AIを呼ばずに作った成功例も同じ形の
+> Evidenceとして並ぶ。
 
-**CEOの判断待ち。** ロードマップの他のPhaseはこの判断に依存しないので、
-先に進めてよい。
+Curatedを消さず、AIを無理に通さず、閉ループへ載せられる。
+**残っているのは「Curatedを叩き台にAIが調整する」(旧案1)を実際に
+やるかどうか**で、これはR1でDesign Languageの語彙が入ってからの方が
+判断しやすい(調整すべき軸が語彙として存在しないと、何を調整するのか
+決められない)。
 
 ### R3. 小さい Widget 4つ + Compiler接続
 
@@ -259,8 +268,9 @@ Definition of Done §7 の禁止事項そのものになる。
 * **実測**: Widget 19種 / `design_tokens` 3キー / Compilerが
   `group_by` を出さないこと / `ExperienceStore` の Production 呼び出し
   0件 — いずれも実コードで確認済み(呼び出し0件は**2026-08-17のR0で解消**)
-* **実測(2026-08-17追加)**: Curated DomainはAI呼び出し0件で生成される
-  (TD65) / Gemini無料枠は1日20回/Model(TD66)
+* **実測(2026-08-17追加)**: Curated Domainの**生成stage**はAI呼び出し
+  0件(TD65) / 観測した1 Modelについて`quotaValue=20`、`quotaId`は
+  `PerProjectPerModel`(TD66。合計値と鍵単位かProject単位かは**未検証**)
 * **設計判断**: Phase の順序と粒度 — 着手すると変わりうる
 * **未検証**: 完成図の3画面が R1〜R5 で実際に描けるかは、**描いてみる
   まで分からない**。R1完了時点で1画面を手で組んで確かめ、差分をここへ

@@ -2,12 +2,12 @@
 
 `FORGE-V2-API-DESIGN-SPECIFICATION.md` 4.1節をそのまま実装する。
 
-**注記(重要、未検証)**: このファイルはfastapiに依存する。Claudeの
-サンドボックスにはfastapiがインストールされておらず、ネットワークも
-無いため導入できなかった(`app/routers/ai.py`と同じ制限)。した
-がってこのファイル自体は一度もimport・実行できていない。CEO環境で
-`pip install -r requirements.txt`実行後、`uvicorn`起動または
-`fastapi.testclient.TestClient`経由で初めて動作確認できる。
+**注記(2026-08-17更新)**: このファイルは**import・実行済み**である。
+`backend/tests/test_workspace_router.py`が`TestClient`経由で叩いており、
+GitHub Actionsがpushごとに実行している(013 §8で訂正)。
+
+**ただし下記の認証の制限は今も有効である。** 「実行できている」ことと
+「本番で使える」ことは別なので、混同しないこと。
 
 **認証について**: `app/core/security.py`の`get_current_user_id()`が
 未実装(`_verify_and_decode()`がNotImplementedError、同ファイルの

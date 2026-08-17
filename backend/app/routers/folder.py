@@ -3,8 +3,14 @@
 
 `FORGE-V2-API-DESIGN-SPECIFICATION.md` 4.3節をそのまま実装する。
 
-**注記(重要、未検証)**: `app/routers/workspace.py`と同じ制限
-(fastapi不在、JWT検証未実装)。一度もimport・実行できていない。
+**注記(2026-08-17更新)**: import・実行は**済んでいる**
+(`backend/tests/test_folder_router.py`がTestClient経由で叩き、
+GitHub Actionsがpushごとに実行する)。「fastapi不在で一度も実行できて
+いない」という記述は古かったので訂正した(013 §8)。
+
+**JWT検証が未実装である点は今も有効**(`app/core/security.py`の
+`_verify_and_decode()`が`NotImplementedError`)。したがって本番利用は
+できない。実行できることと使えることを混同しないこと。
 """
 
 from __future__ import annotations

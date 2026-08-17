@@ -50,6 +50,11 @@ from forge_ai.repair.repair_engine import RepairEngine
 
 from app.ai.foundation.interfaces import CriticResult
 from app.ai.gateway.ai_router import AIRouter, NoProviderAvailableError, default_router
+from app.ai.gateway.generation_evidence import (
+    GenerationRecord,
+    GenerationSource,
+    default_generation_store,
+)
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.runtime.forge_ai_adapter import (
     intent_ir_from_forge_ai_intent,
@@ -121,6 +126,83 @@ class Diagnostics:
     対する`OutputSafetyChecker`(`app/ai/runtime/output_safety.py`、
     backend内で完結しforge_ai/には依存しない)の検査結果。検出のみで、
     生成そのものはブロックしない(TD21と同じ設計方針)。"""
+
+
+# `pipeline_orchestrator`が残すdecision traceのstage名。**ここが唯一の
+# 接点**なので、名前が変わったらテストが落ちるようにしてある
+# (`tests/test_generation_evidence.py`)。黙って`UNKNOWN`へ落ちると、
+# 「Curatedの成功が1件も記録されない」に静かに戻る。
+_DOMAIN_RESOLUTION_STAGE = "domain_resolution"
+
+_SOURCE_BY_RESOLUTION = {
+    "curated": GenerationSource.CURATED,
+    "generated": GenerationSource.CLOUD_AI,
+}
+
+
+def _generation_source(decision_trace, ai_calls: int) -> GenerationSource:  # noqa: ANN001
+    """その生成物を誰が作ったかを、決定の記録から読む(013 §4)。
+
+    `generated`を`CLOUD_AI`へ写すのは、現時点で構造を合成しうるのが
+    Cloud Providerだけだからである。Local AIが合成するようになったら、
+    ここは**Provider側の事実**(実際にどのProviderが答えたか)から
+    決めるべきで、`generated`という語だけでは足りなくなる。
+
+    決定が読めない場合は`UNKNOWN`。**AI呼び出し0回だからCurated、と
+    推測しない**——推測で由来を埋めると、学習側が由来を信用できなくなる
+    (`GenerationSource.UNKNOWN.is_usable_for_training`が`False`なのは
+    そのためである)。
+    """
+    for entry in decision_trace or ():
+        if entry.get("stage") == _DOMAIN_RESOLUTION_STAGE:
+            return _SOURCE_BY_RESOLUTION.get(
+                str(entry.get("decision", "")).strip().lower(), GenerationSource.UNKNOWN
+            )
+    return GenerationSource.UNKNOWN
+
+
+def _record_generation(
+    bound,  # noqa: ANN001 — _BoundAdapter
+    *,
+    context,  # noqa: ANN001 — CognitivePipelineContext
+    decision_trace,  # noqa: ANN001
+    forge_document: dict,
+    validator_passed: bool,
+    repair_attempts: int,
+) -> None:
+    """**生成物そのもの**のEvidenceを残す(013 §4、TD65)。
+
+    `_note_generation_outcome()`との違いが要点である。あちらは
+    「AI呼び出しの記録へ後から書き足す」ので、**AIを呼んでいなければ
+    書き足す先が無い**。Curated Domainは生成stageでAIを1回も呼ばない
+    ので、あちらだけでは成功例が永久に残らなかった(TD65の実測)。
+
+    こちらはAI呼び出しの有無と**独立に**、1つの生成物につき1件残す。
+    """
+    store = default_generation_store()
+    ai_calls = len(getattr(bound, "experience_refs", ()) or ())
+    store.record(
+        GenerationRecord(
+            source=_generation_source(decision_trace, ai_calls),
+            domain=_domain_identifier(context),
+            validator_passed=validator_passed,
+            forge_language_version=str(forge_document.get("version", "") or ""),
+            repair_attempts=repair_attempts,
+            ai_calls=ai_calls,
+            # `capabilities`/`design_language_roles`は**空のままにする**。
+            # R1でDesign Languageが実在するようになるまで、埋められる
+            # 中身が無い。空であることが「まだ語彙が無い」という事実で
+            # あり、それらしい値で埋めると測定が嘘になる。
+        )
+    )
+
+
+def _domain_identifier(context) -> str:  # noqa: ANN001
+    """Forgeが分類したDomain識別子。**利用者の言葉ではない**(006 §22)。"""
+    classification = getattr(context, "domain_classification", None)
+    primary = getattr(classification, "primary_domain", None)
+    category = getattr(primary, "category", None)
+    return str(getattr(category, "value", "") or "")
 
 
 def _note_generation_outcome(bound, *, validator_passed: bool, repair_attempts: int) -> None:
@@ -505,6 +587,12 @@ class PromptPipeline:
             # 返り続けることを確認した上で、この行を修正した)。
             critic_result = to_critic_result(quality_score, critic_report=context.critic_report)
             _note_generation_outcome(bound, validator_passed=True, repair_attempts=repair_attempts)
+            _record_generation(
+                bound, context=context,
+                decision_trace=_decision_trace_to_dicts(context.decision_trace),
+                forge_document=forge_document, validator_passed=True,
+                repair_attempts=repair_attempts,
+            )
         else:
             # **失敗も残す。** 合格したものだけ記録すると、
             # 「Forgeは常にValidatorを通っている」という記録になる。
@@ -512,6 +600,12 @@ class PromptPipeline:
             # 「正しさの根拠」の1つであり、Cloudの出力そのものより
             # 信頼できる信号である——落とすわけにいかない。
             _note_generation_outcome(bound, validator_passed=False, repair_attempts=repair_attempts)
+            _record_generation(
+                bound, context=context,
+                decision_trace=_decision_trace_to_dicts(context.decision_trace),
+                forge_document=forge_document, validator_passed=False,
+                repair_attempts=repair_attempts,
+            )
             raise ForgeValidationError(
                 f"Repair({repair_attempts}回)後もValidatorに合格しませんでした。",
                 validation_errors=tuple(e.to_dict() for e in validation.errors),

@@ -73,6 +73,86 @@ jobs:
         # 実APIは呼ばない（FORGE_LIVE_TEST を設定しない = test_live_api.py は自分でSKIPする）。
         run: python -m pytest tests -q
 
+  # ---------------------------------------------------------------------
+  # Backend smoke（013 §7）
+  #
+  # 「テストが通る」と「サーバーが起動して応答する」は別である。
+  # 実際に uvicorn を立てて HTTP を叩く。とくに **CORS** を見る:
+  # regex を書き間違えても unit test は通りうるが、開発中の Flutter Web
+  # からは繋がらなくなる。CI をすり抜ける形にしない。
+  #
+  # 実 Cloud API は呼ばない。API Key も置かない。Mock を本番の
+  # fallback にもしない（Provider を指定しないので、AI を呼ぶ経路自体を
+  # 叩かない ── /health と OPTIONS だけで足りる）。
+  # ---------------------------------------------------------------------
+  backend-smoke:
+    name: backend smoke (起動 + CORS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
+
+      - name: Start uvicorn
+        env:
+          FORGE_ENV: development
+          # 空文字の optional env でも起動できること（013 §2 の実バグ）。
+          # `.env.example` をコピーした利用者と同じ状態を CI で再現する。
+          FORGE_LOCAL_TIMEOUT_SECONDS: ""
+          FORGE_GROQ_TIMEOUT_SECONDS: ""
+        run: |
+          # 出力をファイルへ逃がす。stdout を継承したまま background に
+          # すると、runner が step の終了を待ち続けることがある。
+          nohup python -m uvicorn backend.app.main:app \
+            --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
+          echo $! > /tmp/uvicorn.pid
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/health > /dev/null; then
+              echo "起動を確認"; exit 0
+            fi
+            sleep 1
+          done
+          echo "30秒待っても /health が応答しない"
+          cat /tmp/uvicorn.log
+          exit 1
+
+      - name: GET /health は 200
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health)
+          test "$code" = "200" || { echo "health=$code"; exit 1; }
+
+      - name: localhost Origin の preflight が通る
+        run: |
+          headers=$(curl -s -i -X OPTIONS http://127.0.0.1:8000/api/v1/ai/converse \
+            -H 'Origin: http://localhost:56000' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type')
+          echo "$headers" | head -20
+          echo "$headers" | grep -qi '^HTTP/1.1 200' \
+            || { echo 'preflight が 200 を返さない'; exit 1; }
+          echo "$headers" | grep -qi '^access-control-allow-origin: http://localhost:56000' \
+            || { echo 'Access-Control-Allow-Origin が Origin と一致しない'; exit 1; }
+
+      - name: 外部 Origin は許可されない
+        run: |
+          headers=$(curl -s -i -X OPTIONS http://127.0.0.1:8000/api/v1/ai/converse \
+            -H 'Origin: https://evil.example' \
+            -H 'Access-Control-Request-Method: POST')
+          if echo "$headers" | grep -qi '^access-control-allow-origin'; then
+            echo '外部 Origin を許可している'; exit 1
+          fi
+
+      - name: Stop uvicorn
+        if: always()
+        run: kill "$(cat /tmp/uvicorn.pid)" || true
+
   frontend:
     name: frontend (Flutter)
     runs-on: ubuntu-latest
@@ -99,3 +179,11 @@ jobs:
       - name: flutter test
         working-directory: frontend
         run: flutter test
+
+      # 013 §7: analyze と test が通っても **Web build は落ちうる**
+      # （Web 非対応の依存、条件付き import、dart2js だけが出す型エラー等）。
+      # Forge の完成図は Web IDE なので、Web が build できることは
+      # 品質ではなく前提である。
+      - name: flutter build web
+        working-directory: frontend
+        run: flutter build web --debug

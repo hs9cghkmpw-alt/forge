@@ -8,35 +8,44 @@
 
 ---
 
-## 1. CEOへの依頼（対応が要るもの）
+## 1. CEOへの依頼
 
 ### 🔴 依頼1: 2つ目のAI APIキーが必要です
 
-**現状**: Gemini無料枠を実測したところ **1モデルあたり1日20回**でした。
+**実測（これは確かなこと）**: Geminiの429の本文そのものです。
 
 ```
 "quotaId"    : "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
 "quotaValue" : 20
+"retryDelay" : "39s"
 ```
 
-Forgeは現在3モデルを使い分けるので **合計1日60回**が上限。
-アプリ1個の生成で数回使うため、**1日20個ほど作ると止まります。**
-2026-08-17の動作検証だけで使い切りました。
+* 観測した**1つのモデル**について、無料枠の上限が **20** だった
+* `quotaId` は **Project × Model** の組で数えると示している
+* **2026-08-17の動作検証だけで、実際にこの上限へ到達しました**
 
-**なぜモデルを増やしても解決しないか**: 枠は**鍵ごとに独立**しています。
-同じ鍵の中でモデルを増やしても20→60になるだけで、桁が変わりません。
-**Providerを増やす以外に方法がありません。**
+**推測（まだ確かめていないこと）**: 「3モデルだから合計60回」
+「1日20アプリで止まる」は、上の1件から広げた推測です。他のモデルの
+上限は測っていません。
+
+> **訂正**: 前版で「枠は**鍵ごとに**独立」と書きましたが、`quotaId`は
+> `PerProject`と言っているので、**単位はProjectである可能性が高い**です。
+> 同じProjectで鍵を増やしても増えないかもしれません。実測と食い違う
+> 書き方をしていました（ChatGPTの監査で指摘を受けて訂正）。
+
+**確かなこと**: 検証作業だけで上限に達したので、実運用に足りていません。
+そして**別のProviderなら別の枠**になります——これは単位がProjectでも
+鍵でも成り立ちます。
 
 **お願いしたいこと**: 以下のいずれかで無料APIキーを取得してください。
 
-| 優先 | サービス | URL | 備考 |
-|---|---|---|---|
-| 1 | **Groq** | https://console.groq.com | 無料枠が広い。OpenAI互換 |
-| 2 | **Cerebras** | https://cloud.cerebras.ai | 同上 |
-| 3 | **OpenRouter** | https://openrouter.ai | 無料モデルあり。同上 |
+| 優先 | サービス | URL |
+|---|---|---|
+| 1 | **Groq** | https://console.groq.com |
+| 2 | **Cerebras** | https://cloud.cerebras.ai |
+| 3 | **OpenRouter** | https://openrouter.ai |
 
-**コード変更は不要です。** Adapterは実装済みなので、`backend/.env` に
-3行足すだけで動きます。
+取得後は `backend/.env` に3行足すだけの想定です。
 
 ```
 FORGE_GROQ_API_KEY=（取得した鍵）
@@ -44,42 +53,51 @@ FORGE_GROQ_BASE_URL=https://api.groq.com/openai/v1
 FORGE_GROQ_MODEL=（コンソールに表示されるモデル名）
 ```
 
+> **ただし「コード変更不要」とは言い切れません。** Groq等の実APIは
+> 一度も呼んでいないので（鍵が無いため）、これは**設計上の想定であって
+> 証明された事実ではありません**。実接続で構造化出力の形式差やエラー
+> 本文の違いが出れば調整が要る可能性があります（TD67）。
+> 前版で「コード変更は不要です」と断定していたのを訂正しました。
+
 鍵を渡していただければ、設定して実機で通るところまで確認します。
 
-参照: `TECH_DEBT.md` TD66
+参照: `TECH_DEBT.md` TD66 / TD67
 
 ---
 
-### 🟡 依頼2: 判断が要る — Curated DomainとAIの関係
+### 🟡 依頼2: 確認したいこと — CORS障害は実際に起きていますか
 
-**実測した事実**: 「家計の支出をカテゴリ別に管理したい」を投げると、
-**0.01秒・AI呼び出し0件**で、Validator合格の完全なアプリが返ります。
+ChatGPTの監査で「localhost Originで既にCORS障害を踏んでいる」という
+指摘を受けましたが、**私の環境では再現しませんでした。**
 
-Curated Domain Library（家計簿・釣り記録・習慣管理など）に載っている
-ドメインは**完全にルールベースで生成**され、AIが動くのは
-**Curatedに無いドメインのときだけ**です。
+* 実コードのregexは正しい形（履歴を全部追っても壊れた版は存在しない）
+* HTTPレベルで10 Origin叩いて、期待と1件も違わなかった
 
-**なぜ報告するか**:
+ただし**HTTPで確かめるテストが1つも無かった**のは事実なので、契約テスト
+とCI smokeを追加しました（regexを壊すと実際に落ちます）。
 
-* Product Direction §4「有限Template選択システムへの退化は禁止」に
-  触れる形に見える
-* 一方、この経路は速く・安定し・品質も一定なので、**単純に消すのは
-  明らかな後退**
-* **Local AIへの影響が大きい** — この経路はExperienceを1件も残さない
-  ため、**よく使われるドメインほど学習素材が集まらない**
+**もしCEOの環境で実際にCORSエラーが出ているなら、原因は別にあります**
+（proxy、ブラウザキャッシュ、`FORGE_ENV`がdevelopment以外、等）。
+**その場合はブラウザのコンソールに出るエラー文をそのまま頂けますか。**
 
-**選択肢（未決定・CEOの判断待ち）**:
+---
 
-1. Curatedを**叩き台**にし、AIが利用者の言葉に合わせて調整する
-   （安定と適応の両立。Evidenceも残る）
-2. そのままにし、Curatedを「品質の下限保証」と位置付け直す
-   （その場合 §4 との整合を文書で取る必要がある）
-3. R1（Design Language）が入った時点で一緒に見直す
+### ✅ 解決済み: Curated DomainとAIの関係（前版の依頼2）
 
-ロードマップの他のPhaseはこの判断に依存しないので、**返事を待たずに
-先へ進めます。**
+前版は3択でCEO判断待ちにしていましたが、**第4の案を設計して実装しました。**
 
-参照: `TECH_DEBT.md` TD65 / `docs/ROADMAP-TO-TARGET.md` R2.5
+**AI呼び出しの記録**とは別に、**生成物の記録**(`GenerationRecord`)を
+持つようにしました。`source = curated | cloud_ai | local_ai | ...` で
+由来を区別するので、**AIを呼ばずに作った成功例も、同じ形の学習素材と
+して並びます。**
+
+Curatedを消さず、AIを無理に通さず、閉ループへ載せられました。
+（学習データを作るためだけにCuratedへAIを通すのは本末転倒です——速くて
+安定していて無料な経路を、記録の都合で遅く不安定に有料にすることに
+なります。）
+
+なお前版の「Curated DomainはAIを1回も呼ばない」は**測った範囲より広い
+書き方**でした。会話そのものはAIを呼んでいます。訂正済みです。
 
 ---
 
@@ -91,44 +109,40 @@ Curated Domain Library（家計簿・釣り記録・習慣管理など）に載�
 | 011 §7 | CI（GitHub Actions） | `32087d5` `d206ac9` |
 | R0.1 | **AI連携の失敗を修正**（実機 0/6 → 6/6） | `736a5cd` |
 | — | 文書の抜けを埋める | `508009c` |
+| — | 報告をmdで残す運用を確立 | `02c559c` |
+| **013** | **Pre-R1 Integrity Gate**（下記） | 最新 |
 
-### R0 — Experienceを本番から記録する
+### 013 で直したこと
 
-Product Direction §7 が「完成扱いしてはならない」と名指しした状態
-（ExperienceStoreはあるがProductionから記録されない）を解消。
-Widget追加は0件。
+ChatGPTによる独立監査の指摘を、**そのまま肯定せず現HEADで再現してから**
+扱いました。
 
-記録地点を `AIRouter.generate()` — 本番のAI呼び出しが必ず通る唯一の
-入口 — に置いたので、Endpointが増えても書き忘れられない。
-Validatorの合否と利用者の承認/訂正は、後から書き足す形。
+* **§1 CORS** — 再現せず。ただしHTTP契約テストとCI smokeを追加
+  （regexを壊すと3件落ちる = 懸念自体は正当だった）
+* **§2 空env** — 再現。**報告より影響が広く**、`.env.example`をコピー
+  すると**Forge全体が起動しない**状態だった。共通境界
+  (`app/core/env_settings.py`)を作り、生の`float(os.environ...)`が
+  再び現れたら落ちるsource scanも置いた
+* **§3 TD65の事実関係** — 私の書き方が広すぎた。測り直して訂正
+* **§4 Curated → 学習ループ** — `GenerationRecord`を設計・実装・配線
+* **§5 TD66** — 実測 / 推論 / 未検証 を分離
+* **§6 「コード変更不要」** — 断定を撤回（TD67）
+* **§7 CI** — `flutter build web` と **backend smoke（起動+CORS）**を追加
+* **§8 古い注記** — 「fastapiが無く一度も実行できていない」が5ファイルに
+  残っていた。全て訂正
 
-### R0.1 — AI連携の失敗を修正
-
-**CEOが実機で踏んだ失敗。再現したら6回中6回失敗していた。**
-原因は3つ重なっていた。
-
-1. 既定モデル `gemini-flash-latest` が混雑して503（同時刻の実測で
-   `gemini-flash-lite-latest` は3/3成功）
-2. 「同じProviderを二度試さない」を**一時的な失敗にも**当てていた
-3. `models` 宣言がRoutingに使われていなかった
-
-Provider内でモデルを切り替える形にした（**Provider Identityは
-増やしていない** — 011 §1の原則を守るため）。
-
-### CI
-
-`.github/workflows/ci.yml`。3ジョブとも green。**実APIは呼ばない**
-（CIにAPIキーを置かない）。
+**Pre-R1 Gate: GO**（詳細は
+`docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md`）
 
 ---
 
 ## 3. 今の状態
 
 ```
-backend/tests    1079 passed / 16 skipped
+backend/tests    1118 passed / 16 skipped
 forge_ai/tests    521 passed
-frontend          476 passed / flutter analyze 0件
-CI               3ジョブとも green
+frontend          476 passed / flutter analyze 0件（CIで確認）
+CI               backend 3.11 / 3.12 / backend-smoke / frontend
 ```
 
 | 機能 | 状態 |
@@ -136,8 +150,9 @@ CI               3ジョブとも green
 | 自然言語 → アプリ生成 | 動作（実Geminiで確認済み） |
 | 会話（/converse） | 動作 |
 | AI Router / fallback | 動作。Provider内のモデル切替も動作 |
-| Experience記録 | **動作**（R0で本番接続） |
-| Local AIの学習 | **未着手**（記録は始まったが、Dataset化もLoRAもまだ） |
+| Experience記録（AI呼び出し単位） | 動作 |
+| **Generation記録（生成物単位）** | **動作**（AIを呼ばないCurated生成も残る） |
+| Local AIの学習 | **未着手**（記録は貯まるが、Dataset化もLoRAもまだ） |
 | Knowledge / RAG | 未着手 |
 | Widget | 19種（v1.9） |
 
@@ -145,13 +160,21 @@ CI               3ジョブとも green
 
 ## 4. 次にやること
 
-`docs/ROADMAP-TO-TARGET.md` の順に進めます。
+**R1 — Design Language を「AIが選ぶ語彙」として導入。**
 
-* **R1** — Design Language を「AIが選ぶ語彙」として導入
-  （Schema + Compiler + Validator + Runtime + Conversation まで通す）
-* R2 — Forge Knowledge / RAG（Local AI優先順位 #1）
-* R2.5 — Curated Domainの判断（上記 依頼2）
-* R3 — 小さいWidget 4つ + Compiler接続
+`docs/ROADMAP-TO-TARGET.md` R1。Schema + Compiler + Validator + Runtime
++ Conversation まで通します（Tokenを実装しただけを完成扱いしない）。
+
+設計の芯:
+
+```
+❌ AIが決める:  font-size 36px / #23D18B / padding 16
+✅ AIが決める:  metric.primary / finance.income / surface.elevated
+   Forgeが保証: それが実際に何pxで何色になるか
+```
+
+R1が入ると、013で作った`GenerationRecord.design_language_roles`が
+初めて埋まります（今は空 = 語彙がまだ無いという事実）。
 
 ---
 
@@ -159,12 +182,15 @@ CI               3ジョブとも green
 
 | # | 内容 | 参照 |
 |---|---|---|
-| 1 | Experienceが永続化されない（プロセス内メモリ、再起動で消える） | TD41 / TD64 |
-| 2 | `ABANDONED`（会話の放棄）を検出していないので負例が偏る | TD64 |
-| 3 | Privacy Policyが未完成 | TD60 |
-| 4 | Curated経路からEvidenceが出ない | TD65 |
-| 5 | 無料枠が足りない | TD66 |
-| 6 | Local AIの実モデル実行が0回（環境制約） | TD51 |
+| 1 | Experience/Generationが永続化されない（再起動で消える） | TD41 / TD64 |
+| 2 | `ABANDONED`（会話の放棄）を検出していない | TD64 |
+| 3 | **`runtime_outcome`が常にUNKNOWN** — Flutterから結果が戻る経路が無い | TD65 |
+| 4 | **生成物への「これで良い」をUIが聞いていない** — 閉ループの最重要の辺が細い | TD65 |
+| 5 | Privacy Policy未完成 | TD60 |
+| 6 | Gemini枠の合計値・単位が未検証 | TD66 |
+| 7 | 第二Cloudが実API未検証 | TD67 |
+| 8 | JWT検証が`NotImplementedError` | `core/security.py` |
+| 9 | Local AI実モデル実行0回 | TD51 |
 
 ---
 
@@ -172,10 +198,12 @@ CI               3ジョブとも green
 
 | 文書 | 内容 |
 |---|---|
-| `docs/reports/FORGE-ROADMAP-R0-report.md` | R0 / CI / R0.1 の詳細 |
+| `docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md` | **最新**。013の全項目 |
+| `docs/reports/FORGE-ROADMAP-R0-report.md` | R0 / CI / R0.1 |
 | `docs/reports/FORGE-AI-FOUNDATION-011-report.md` | 011の7点への回答 |
 | `docs/reports/FORGE-AI-FOUNDATION-010-report.md` | その前段 |
 | `docs/PRODUCT-DIRECTION.md` | **最上位方針（変更不可）** |
 | `docs/ROADMAP-TO-TARGET.md` | 完成図までの段取り |
+| `CLAUDE.md` | AIエージェントの作業ルール |
 | `CHANGELOG.md` | Taskごとの記録 |
-| `TECH_DEBT.md` | 技術的負債 TD1〜TD66 |
+| `TECH_DEBT.md` | 技術的負債 TD1〜TD67 |

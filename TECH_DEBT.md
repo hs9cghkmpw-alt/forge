@@ -2948,86 +2948,165 @@ FORGE-AI-FOUNDATION-010 Phase Kで境界を作り、
 
 ---
 
-## TD65. Curated Domainの依頼は、AIを1回も呼ばずに生成される(2026-08-17発見、未解消)
+## TD65. Curated Domainの**生成stage**はAI Provider呼び出し0回で、生成物のEvidenceが残らない(2026-08-17発見、未解消)
 
-**実機で確認した事実である。** 「家計の支出をカテゴリ別に管理したい」を
-`/api/v1/ai/generate`へ投げると、**0.01秒・AI呼び出し0件**で、
-Validatorに合格する完全なアプリが返る。
+**2026-08-17に範囲を訂正した。** 初出時は「Curated DomainはAIを1回も
+呼ばない」「この経路からExperienceが1件も出ない」と書いていたが、
+これは**測った範囲より広い主張**だった。ChatGPTの独立監査で指摘を受け、
+測り直した。
+
+### 実測（2026-08-17、mock Provider、`ForgeAIProviderBridge.complete`にトレース）
+
+| 経路 | 生成stageのAI呼び出し | Experience記録 |
+|---|---|---|
+| `POST /generate`（Curated Domain） | **0回** | 0件 |
+| `POST /converse`（同じ入力・製品の通常経路） | **0回** | **1件**（`conversation_step`） |
+
+正確に言えることは次の2つである。
+
+1. **Curated Domainの生成stageは、AI Providerを呼ばずに成立する。**
+   `pipeline_orchestrator.resolve_domain_source()`が`SolutionSource.
+   CURATED`と判定すると、`IRGenerator().generate()`（完全にルールベース）
+   が使われ、AIを呼ぶ`Compiler`も`EntitySynthesizer`も通らない。
+2. **利用者の会話全体がAI 0回とは限らない。** `ConversationEngine`自身が
+   `complete_structured()`を呼ぶので、通常の製品経路では
+   `conversation_step`のExperienceが残る。
+
+### 訂正前の書き方が招く誤解
+
+「Curatedなら Experience が完全に0」は**誤り**である。
+`/generate`を直接叩いた場合の観測を、製品経路全体の話へ広げていた。
+
+### では何が本当に欠けているのか
+
+実測した`/converse`のExperienceは、こうなっていた。
 
 ```
-provider_used = "none"      ← 一度も呼んでいない
-AI呼び出し記録 = 0件
-所要 = 0.01秒
-validation.valid = true
+task=conversation_step  provider=mock  validator_passed=None
+                                       ^^^^^^^^^^^^^^^^^^^^^
 ```
 
-`ForgeAIProviderBridge.complete()`にトレースを仕込んで確認した
-(`run_cognitive_pipeline`は呼ばれるが、Providerは呼ばれない)。
+**生成物についての事実が付いていない。** 理由は構造的である:
 
-### なぜそうなるか
+* R0の`_note_generation_outcome()`は、Pipelineが束ねたAdapterの
+  `experience_refs`へ書き足す
+* Curated経路ではPipelineがAIを1回も呼ばないので`experience_refs`が空
+* したがって書き足す先が無い
 
-`pipeline_orchestrator.py`の`resolve_domain_source()`が、
-Curated Domain Library(`SUPPORTED_DOMAIN_CATEGORIES`)に載っていて
-概念語が一致したDomainを`SolutionSource.CURATED`と判定する。その場合
-`IRGenerator().generate()`——**完全にルールベース**——が使われ、
-AIを呼ぶ`EntitySynthesizer`も`Compiler`も通らない。
+つまり欠けているのは「AI呼び出しの記録」ではなく、
+**「生成物そのもののEvidence」**である。
 
-つまり **AIが動くのは、Curatedに無いDomainのときだけ**である。
+    今ある: ExperienceRecord = 1回のAI呼び出しについての事実
+    無い  : このNeedに対して、この構造がValidatorを通り、
+            Runtimeで動き、利用者に受け入れられた という事実
 
-### なぜ技術的負債として扱うか
+後者は**AIを呼んだかどうかと独立**に存在しうる。Curatedで作った成功例も
+Local AIの学習素材になりうるのに、残す場所が無い。
 
-Product Direction §4 が禁じている形に見える。
+### 解決の方向（013 §4で第一候補として採用）
 
-> Golden Appへの過学習は禁止 / 有限Template選択システムへの退化は禁止
+**Curatedを消さない。AIを無理に通さない。**
+`GenerationRecord`（生成物についてのEvidence）を`ExperienceRecord`とは
+別に持ち、`source = curated | cloud_ai | local_ai | ...`で由来を区別する。
 
-一方で、この経路は**速く・安定し・品質も一定**であり、単純に消すのは
-明らかな後退である。「AIを呼んでいないから悪い」とも言い切れない。
+詳細と設計判断は
+`docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md` §4。
 
-### 判断が必要な点(まだ決めていない)
+### 未解決として残っていること
 
-1. Curatedを**叩き台**にして、AIが利用者の言葉に合わせて調整する形に
-   するか(ルールベースの安定とAIの適応を両立させる)
-2. そのままにして、Curatedを「品質の下限を保証する仕組み」と位置付け
-   直すか(その場合、Product Direction §4との整合を文書で取る必要がある)
-3. R1(Design Language)で語彙が入ったときに一緒に見直すか
+* `GenerationRecord`のProduction配線（今回は型と設計のみ）
+* Curatedの出力をそのままTruthとして固定しない仕組み
+  （Product Direction §5「Cloud出力はTeacher Candidate」と同じ扱いが要る）
 
-**Local AIへの影響が大きい。** この経路はExperienceを1件も残さない
-——AIを呼んでいないので当然である。つまり**Curatedで解けるDomainからは
-学習素材が一切集まらない**。よく使われるDomainほど記録が残らない、
-という向きになっている(R0で記録を始めた意味が、その範囲では出ない)。
+## TD66. Gemini無料枠の実測は「PerProjectPerModel = 20」。合計値は未検証(2026-08-17)
+
+**2026-08-17に証拠の範囲へ書き直した。** 初出時は「1日20回/Model」
+「Model 3つで60回」「枠は鍵ごとに独立」と書いていたが、**実測から
+直接言えることと推論が混ざっていた**。ChatGPTの独立監査で指摘を受けた。
+
+### 実測（Measured）
+
+`gemini-flash-latest`を呼んで受け取った429の本文そのもの:
+
+```json
+{"quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+ "quotaValue": 20,
+ "retryDelay": "39s"}
+```
+
+ここから**直接**言えるのは次だけである。
+
+* 観測したModelについて、Free Tierの`quotaValue`が **20** だった
+* `quotaId`が **PerProjectPerModel** と示している
+  （= Project × Model の組で数える、とGoogleが名付けている）
+* 2026-08-17の検証中に、実際にこの上限へ到達した
+
+### 推論（Inference、未確認）
+
+* **Model 3つなら合計60回** — `PerProjectPerModel`という名前からの
+  推測。全Modelが同じ`quotaValue=20`である保証は無く、観測したのは
+  1 Modelだけである
+* **1日20アプリで止まる** — アプリ1個あたりのAI呼び出し回数を
+  固定と仮定した推測。実際は会話の往復数で変わる
+* **枠は鍵ごとに独立** — `PerProject`とあるので、単位は**鍵ではなく
+  Project**である可能性が高い。**初出時の「鍵ごとに独立」という記述は、
+  提示した`quotaId`と整合していなかった。** 同一Projectで鍵を増やして
+  も増えない可能性がある
+
+### 未検証（Unverified）
+
+* 他のModelの`quotaValue`
+* Project と API Key の関係（同一Projectの別鍵で枠が分かれるか）
+* 日次リセットの時刻
+* 有料枠へ切り替えた場合の上限
+
+**これらを確かめるために枠を消費しない**（§38）。必要になった時点で、
+Google Cloud Consoleの表示を見る等、APIを叩かない方法を先に試す。
+
+### 分かっている影響
+
+検証作業だけで上限に到達した、というのは**実測**である。したがって
+実運用に足りていないことは確かである。ただし「何アプリ分か」は
+上記のとおり推論なので、断定しない。
+
+### 対応方針
+
+2つ目のCloud Providerを設定する。**枠の単位がProjectであれ鍵であれ、
+別Providerなら別の枠になる**——これはどちらの解釈でも成立する。
+
+`FORGE_GROQ_API_KEY` / `FORGE_GROQ_BASE_URL` / `FORGE_GROQ_MODEL`。
+候補: Groq / Cerebras / OpenRouter。
+
+**ただし「コード変更不要」とは断定しない**——下記TD67。
 
 ---
 
-## TD66. Gemini無料枠は1日20回/Modelで、実用には全く足りない(2026-08-17実測)
+## TD67. 第二Cloud Providerは「設計済み」であって「実API検証済み」ではない(2026-08-17)
 
-429の本文を読んで確認した実測値である(推測ではない)。
+**2026-08-17に表現を訂正した。** それまでHANDOFFやreportに
+「コード変更は不要です」と、Production事実であるかのように書いていた。
 
-```
-"quotaId"    : "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
-"quotaValue" : 20
-```
+### 正確な状態
 
-**Modelごとに1日20回。** R0.1でModel候補を3つにしたので、gemini全体では
-**1日60回**が上限になる。
+* **設計**: `Protocol.OPENAI_COMPATIBLE`のProviderは、
+  `ProviderDefinition`の宣言と環境変数3つ（`_API_KEY` / `_BASE_URL` /
+  `_MODEL`）で載る。HTTP実装は共通で、コピーは発生しない（011 §1）
+* **検証済み**: この経路が動くことは、Local Provider
+  （Ollama互換、同じ`OpenAICompatibleAdapter`）とTest Doubleで確認済み
+* **未検証**: Groq / Cerebras / OpenRouter / Together / DeepInfraの
+  **実API**は一度も呼んでいない。鍵が無い
 
-アプリ1個の生成で会話ステップ+Cognitive Stageを数回使うため、
-**1日20個程度作ると止まる**。開発中の検証だけでも使い切る
-(実際に2026-08-17のR0.1検証で使い切った)。
+### 実接続時に起こりうること（推測、だから断定しない）
 
-### Model fallbackでは解決しない
+* 構造化出力modeの対応差（011 §2の梯子が効くはずだが、実測していない）
+* エラー本文の形が違い、`classify_http_failure()`の分類が外れる
+* 追加ヘッダが必要（`FORGE_<ID>_EXTRA_HEADERS`で吸収する設計だが未検証）
+* `quota_scope`が不明なので、枠切れ時にModelを巡らない（既定`UNKNOWN`）
 
-R0.1で「枠はModel単位」を利用して別Modelへ進むようにしたが、これは
-20→60に増やしただけで、桁が変わらない。**枠は鍵ごとに独立している**
-ため、これ以上はProviderを増やす以外に方法が無い。
+### 正しい言い方
 
-### 必要な対応
+> 現在のArchitectureでは環境変数の設定のみで接続できる**設計**である。
+> ただし実APIでは未検証のため、**接続時にコード変更が不要であることは
+> まだ証明されていない。**
 
-2つ目のCloud Providerを設定する。Adapterは実装済み(Phase Eの汎用
-OpenAI互換)なので、**コード変更は不要**で環境変数3つで載る。
-
-```
-FORGE_GROQ_API_KEY / FORGE_GROQ_BASE_URL / FORGE_GROQ_MODEL
-```
-
-候補(いずれもOpenAI互換、無料枠あり): Groq / Cerebras / OpenRouter。
-`backend/.env.example`に変数名を記載済み。**鍵の取得はCEOの判断待ち。**
+鍵が手に入り次第、実際に接続して確かめ、この項目を更新する。

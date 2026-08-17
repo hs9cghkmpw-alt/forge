@@ -9,12 +9,13 @@
    実際に実行・検証できる。
 2. `get_current_user_id()` — 実際にHTTPリクエストの`Authorization`
    ヘッダからJWTを取り出し、Supabaseで検証する、FastAPI依存の
-   関数。**注記(重要、未検証)**: `fastapi`・`supabase`のいずれも
-   このサンドボックスにインストールされておらず、ネットワークも
-   無いため、この関数自体は一度もimport・実行できていない
-   (`app/routers/ai.py`・`app/schemas/ai.py`と同じ制限)。
-   **CEO環境で`pip install -r requirements.txt`実行後、実際の
-   Supabaseプロジェクト・実際のJWTを使って動作確認する必要がある。**
+   関数。**注記(2026-08-17更新)**: `fastapi`はインストール済みに
+   なったので、moduleのimportは通る(013 §8で訂正)。
+
+   **ただし`_verify_and_decode()`は今も`NotImplementedError`である。**
+   実際のSupabaseプロジェクト・実際のJWTでの検証は未実施であり、
+   この関数を通る経路は**本番で使えない**。「importできる」ことを
+   「動く」と読まないこと。
 
 この分離により、「JWTから`user_id`を正しく取り出せるか」という
 ロジックの核心部分は、外部ライブラリの有無に関わらずテストできる

@@ -51,6 +51,7 @@ from typing import Any
 
 import httpx
 
+from app.core.env_settings import env_float
 from app.ai.foundation.openai_compatible import (
     OpenAICompatibleAdapter,
     ResponseFormatError,
@@ -102,8 +103,13 @@ class LocalModelProvider(OpenAICompatibleAdapter):
             model=model or os.environ.get("FORGE_LOCAL_MODEL") or _DEFAULT_MODEL,
             # Local Runtimeは認証を要求しない(§: 鍵不要)。
             api_key_env=None,
+            # 013 §2: 空文字で落ちない共通境界を通す。
+            # `.env.example`の`FORGE_LOCAL_TIMEOUT_SECONDS=`(値なし)を
+            # そのままコピーすると`float("")`で起動できなかった。
             timeout_seconds=timeout_seconds
-            or float(os.environ.get("FORGE_LOCAL_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)),
+            or env_float(
+                "FORGE_LOCAL_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS, minimum=0.1
+            ),
         )
 
     def _response_format_error_type(self) -> type[Exception]:
