@@ -1,6 +1,7 @@
 # Forge 申し送り（最新）
 
 **最終更新: 2026-08-17 / branch `claude/forge-master-handoff-k46jns`**
+**最新commit: `f53963a` / CI 全4 job green**
 
 > このファイルは**毎回の作業のたびに上書き更新して push される**。
 > パスは固定なので、`docs/HANDOFF.md` だけ見れば最新状況が分かる。
@@ -105,44 +106,56 @@ Curatedを消さず、AIを無理に通さず、閉ループへ載せられま�
 
 | | 内容 | commit |
 |---|---|---|
-| R0 | Experienceを本番の3経路から記録する | `d065f58` |
-| 011 §7 | CI（GitHub Actions） | `32087d5` `d206ac9` |
-| R0.1 | **AI連携の失敗を修正**（実機 0/6 → 6/6） | `736a5cd` |
-| — | 文書の抜けを埋める | `508009c` |
-| — | 報告をmdで残す運用を確立 | `02c559c` |
-| **013** | **Pre-R1 Integrity Gate**（下記） | 最新 |
+| R0 | Experienceを本番から記録 | `d065f58` |
+| R0.1 | AI連携の失敗を修正（実機 0/6 → 6/6） | `736a5cd` |
+| 013 | Pre-R1 Integrity Gate | `cb37f8f` |
+| **014** | **R1入口 + Design Language V1** | **`f53963a`** |
 
-### 013 で直したこと
+### 014 の結論: **R1 = NO-GO（部分完了）**
 
-ChatGPTによる独立監査の指摘を、**そのまま肯定せず現HEADで再現してから**
-扱いました。
+完了条件のうち**2つが未達**なので、GOとは言えません。
 
-* **§1 CORS** — 再現せず。ただしHTTP契約テストとCI smokeを追加
-  （regexを壊すと3件落ちる = 懸念自体は正当だった）
-* **§2 空env** — 再現。**報告より影響が広く**、`.env.example`をコピー
-  すると**Forge全体が起動しない**状態だった。共通境界
-  (`app/core/env_settings.py`)を作り、生の`float(os.environ...)`が
-  再び現れたら落ちるsource scanも置いた
-* **§3 TD65の事実関係** — 私の書き方が広すぎた。測り直して訂正
-* **§4 Curated → 学習ループ** — `GenerationRecord`を設計・実装・配線
-* **§5 TD66** — 実測 / 推論 / 未検証 を分離
-* **§6 「コード変更不要」** — 断定を撤回（TD67）
-* **§7 CI** — `flutter build web` と **backend smoke（起動+CORS）**を追加
-* **§8 古い注記** — 「fastapiが無く一度も実行できていない」が5ファイルに
-  残っていた。全て訂正
+**直したこと（P0の実バグ2件）**
 
-**Pre-R1 Gate: GO**（詳細は
-`docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md`）
+* **Mock生成が「Cloud AIの実績」として記録されていた** — 由来を
+  `domain_resolution`の語だけで決めていたため。Registryの
+  `deployment`/`test_only`から決めるようにした。Local AIが将来動いた
+  ときに`LOCAL_AI`と記録される契約も、今のうちにテストで固定
+* **`generation_ref`が捨てられていた** — 記録はされるが、後から
+  「どの生成物への評価か」を本番が知らない状態だった
 
----
+**作ったもの: Design Language V1（33 role）**
+
+```
+❌ AIが決める:  font_size: 36 / color: "#23D18B"
+✅ AIが決める:  metric.primary / finance.income / surface.elevated
+   Forgeが保証: それが実際に何pxで何色になるか
+```
+
+Schema v1.10 / Validator / Compiler / Runtime / Evidence抽出まで接続。
+**Widgetは1つも増やしていません**（増えたのは意味付け）。
+
+**未達（正直に）**
+
+1. **Conversationへ語彙を渡していない** — つまり**AIはまだroleを
+   選んでいません**。今出ているroleは全てCompilerが構造から決めた
+   ものです。「AIは意味を決める」のAI側が動いていない
+2. **Hero KPI Widgetが無い** — `metric.primary`を出す先が無いので、
+   「今月の残高を一番目立たせる」がまだ作れない。Golden Finance E2Eは
+   完全には成立していない
+
+**見た目はまだほとんど変わっていません。** 変わったのは、良くする
+ための足場（語彙・階層・値のブレを消す仕組み）です。
+
+詳細: `docs/reports/FORGE-R1-DESIGN-LANGUAGE-014-report.md`
 
 ## 3. 今の状態
 
 ```
-backend/tests    1118 passed / 16 skipped
+backend/tests    1155 passed / 16 skipped
 forge_ai/tests    521 passed
 frontend          476 passed / flutter analyze 0件（CIで確認）
-CI               全4 job green（commit cb37f8f）
+CI               全4 job green（commit f53963a、run 32027537995）
                  backend 3.11 / 3.12 / backend-smoke(起動+CORS) / frontend(build web含む)
 ```
 
@@ -161,23 +174,15 @@ CI               全4 job green（commit cb37f8f）
 
 ## 4. 次にやること
 
-**R1 — Design Language を「AIが選ぶ語彙」として導入。**
+**R1をGOにするための2つ。** 順番も理由も決まっています。
 
-`docs/ROADMAP-TO-TARGET.md` R1。Schema + Compiler + Validator + Runtime
-+ Conversation まで通します（Tokenを実装しただけを完成扱いしない）。
+1. **Conversation / Cognitive Pipeline へ語彙を渡す** — R1の核心。
+   これをやらないと「AIが意味を選ぶ」が成立しない。`knowledge_entries()`
+   は用意済みで、**今は誰も呼んでいない**（放置すると5回目の同じ失敗）
+2. **Hero KPI Widget を追加** — `metric.primary`の出力先。R3の前倒しに
+   なるが、Golden Finance E2Eの完了条件がこれを要求している
 
-設計の芯:
-
-```
-❌ AIが決める:  font-size 36px / #23D18B / padding 16
-✅ AIが決める:  metric.primary / finance.income / surface.elevated
-   Forgeが保証: それが実際に何pxで何色になるか
-```
-
-R1が入ると、013で作った`GenerationRecord.design_language_roles`が
-初めて埋まります（今は空 = 語彙がまだ無いという事実）。
-
----
+その後 R2（Forge Knowledge / RAG）へ。
 
 ## 5. 未解決として抱えているもの
 
@@ -192,6 +197,9 @@ R1が入ると、013で作った`GenerationRecord.design_language_roles`が
 | 7 | 第二Cloudが実API未検証 | TD67 |
 | 8 | JWT検証が`NotImplementedError` | `core/security.py` |
 | 9 | Local AI実モデル実行0回 | TD51 |
+| 10 | **AIがまだDesign Roleを選んでいない**（Conversation未接続） | TD69 |
+| 11 | **Hero KPI Widgetが無い**（metric.primaryの出力先） | TD69 |
+| 12 | UPDATE/Revision Evidenceは設計のみ（実装はR2） | TD68 |
 
 ---
 
@@ -199,7 +207,9 @@ R1が入ると、013で作った`GenerationRecord.design_language_roles`が
 
 | 文書 | 内容 |
 |---|---|
-| `docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md` | **最新**。013の全項目 |
+| `docs/reports/FORGE-R1-DESIGN-LANGUAGE-014-report.md` | **最新**。014の全項目 |
+| `docs/spec/DESIGN-LANGUAGE-V1.md` | Semantic Vocabulary 33 role |
+| `docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md` | 013 |
 | `docs/reports/FORGE-ROADMAP-R0-report.md` | R0 / CI / R0.1 |
 | `docs/reports/FORGE-AI-FOUNDATION-011-report.md` | 011の7点への回答 |
 | `docs/reports/FORGE-AI-FOUNDATION-010-report.md` | その前段 |
