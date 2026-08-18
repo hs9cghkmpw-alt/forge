@@ -234,7 +234,7 @@ tab_view root_tabs                      density.normal   ← AIが選ぶ軸
 | forge_ai 521 passed | **実測** |
 | 生成Documentがv1.11で Validator を通ること | **実測** |
 | Design IntentのAI選択が生成物へ届くこと | **Test Double**（provider差し替え） |
-| Flutter（`metric_view` の描画・`aggregateAll`） | **未検証**。この環境にFlutter SDKが無く、`flutter analyze` / `flutter test` を実行できない。**CIのfrontend jobの結果を待つ** |
+| Flutter（`metric_view` の描画・`aggregateAll`） | **実測（CI）**。この環境にFlutter SDKが無く自分では実行できないため、CIのfrontend jobで確認した。`flutter analyze` 0件 / `flutter test` 通過 / `build web` 成功（run 32095320829） |
 | 実Cloud APIでのDesign Intent選択 | **未検証**。014の指示どおり実APIを呼んでいない（Gemini枠を消費しない） |
 
 **Flutterのテストは書いたが、この環境では実行していない。** 新規2
@@ -267,6 +267,22 @@ TD71として登録した——「忘れずに更新する設計だから忘れ�
 失敗である。
 
 修正して再push。
+
+### CI 2回目（`bc16fb9`）: 全4 job green
+
+```
+backend + forge_ai (Python 3.11)   success
+backend + forge_ai (Python 3.12)   success
+backend smoke (起動 + CORS)         success
+frontend (Flutter)                 success
+  flutter analyze     0件
+  flutter test        通過（新規21件を含む）
+  flutter build web   成功
+```
+
+これで `metric_view` は**実際に描画されるところまで確認済み**である
+——Validator・Compiler・Schema・Registry・Builderのどれか1つでも欠けて
+いれば、`v1_11_metric_view_test.dart` が落ちる。
 
 ---
 

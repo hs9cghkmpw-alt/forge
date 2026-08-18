@@ -1,7 +1,7 @@
 # Forge 申し送り（最新）
 
 **最終更新: 2026-08-17 / branch `claude/forge-master-handoff-k46jns`**
-**最新: TD69クローズ（Design Intent + Hero KPI）。CI結果待ち**
+**最新commit: `bc16fb9` / CI 全4 job green（run 32095320829）**
 
 > このファイルは**毎回の作業のたびに上書き更新して push される**。
 > パスは固定なので、`docs/HANDOFF.md` だけ見れば最新状況が分かる。
@@ -182,16 +182,16 @@ Geminiの枠は実測で**1日20回/Model**なので、1回増えると作れる
 ## 3. 今の状態
 
 ```
-backend/tests    1182 passed / 16 skipped   ← 実測
-forge_ai/tests    521 passed                ← 実測
-frontend          この環境にFlutter SDKが無く、今回は実行できていません
-                  （新規テスト21件はCIで初めて走ります）
-CI               このpushの結果待ち
+backend/tests    1182 passed / 16 skipped
+forge_ai/tests    521 passed
+frontend          flutter analyze 0件 / flutter test 通過 / build web 成功
+CI               全4 job green（commit bc16fb9、run 32095320829）
+                 backend 3.11 / 3.12 / backend-smoke(起動+CORS) / frontend
 ```
 
-> **正直に**: Flutter側（`metric_view`の描画）は**まだ一度も動かして
-> いません**。コードとテストは書きましたが、確認はCIのfrontend jobに
-> 委ねています。落ちたら直します。
+> Flutter側（`metric_view` の描画）は**この環境にSDKが無いため自分では
+> 実行できず**、CIで確認しました。1回目は落ちています（原因と対処は
+> 下の「CIで1回落ちた件」）。2回目で全green。
 
 | 機能 | 状態 |
 |---|---|
@@ -201,19 +201,34 @@ CI               このpushの結果待ち
 | Experience記録（AI呼び出し単位） | 動作 |
 | Generation記録（生成物単位） | 動作（AIを呼ばないCurated生成も残る） |
 | **AIがDesign Roleを選ぶ** | **動作**（2軸。軸ごとに検証し、外れたら既定値） |
-| **Hero KPI（合計を大きく出す）** | **動作**（Python側は実測。Flutter描画はCI待ち） |
+| **Hero KPI（合計を大きく出す）** | **動作**（Flutter描画までCIで確認済み） |
 | Local AIの学習 | 未着手（記録は貯まるが、Dataset化もLoRAもまだ） |
 | Knowledge / RAG | 未着手 |
 | Widget | **20種（v1.11）** |
 
+### CIで1回落ちた件（記録として残します）
+
+1回目（`27b3597`）は frontend job が落ちました。backend 3ジョブは
+通っています。
+
+原因は `metric_view` の追加漏れが**テスト側にもう1箇所**あったこと
+です。Widget種別を並べるswitchが本体とテストの2箇所にあり、本体だけ
+直していました。**同じ場所で落ちたのは3回目**なので TD71 として登録
+しました。
+
+救いはあります。Dartの網羅性検査が効くので**黙って壊れることはなく、
+必ずコンパイルエラーになります**。壊れたアプリが出る種類の失敗では
+なく、CIを1往復無駄にする種類の失敗です。
+
+2回目（`bc16fb9`）で全4 job green。
+
 ## 4. 次にやること
 
-**R1の完了条件は埋まりました。** CIがgreenなら R1 = GO です。
+**R1の完了条件は埋まり、CIも全green です。R1 = GO と考えています。**
 
-1. **CIの結果を確認する**（Flutter側が初回実行。落ちていれば直す）
-2. **TD70を直す** — Curatedが1回AIを呼ぶようになった件。軸の答えを
+1. **TD70を直す** — Curatedが1回AIを呼ぶようになった件。軸の答えを
    キャッシュするのが第一候補（同じ依頼なら同じ選択になるはず）
-3. **R2（Forge Knowledge / RAG）へ進む**
+2. **R2（Forge Knowledge / RAG）へ進む**
 
 ## 5. 未解決として抱えているもの
 
@@ -232,7 +247,7 @@ CI               このpushの結果待ち
 | 11 | ~~Hero KPI Widgetが無い~~ → **解消** | TD69 |
 | 12 | UPDATE/Revision Evidenceは設計のみ（実装はR2） | TD68 |
 | 13 | **CuratedがAIを1回呼ぶようになった**（前は0回） | TD70 |
-| 14 | **Flutter側の`metric_view`が未実行**（当環境にSDK無し、CI待ち） | 本報告 §4 |
+| 14 | Widget種別の網羅switchが2箇所にあり、追加のたびにCIが落ちる（3回目） | TD71 |
 
 ---
 
