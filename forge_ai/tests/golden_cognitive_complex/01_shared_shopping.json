@@ -16,7 +16,8 @@
     "design_critic",
     "domain_resolution",
     "entity_source",
-    "design_intent"
+    "design_intent",
+    "semantic_design"
   ],
   "domain": "shopping",
   "input": "家族で共有できる買い物リストを作りたい",

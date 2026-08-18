@@ -39,7 +39,7 @@ import re
 from typing import Any
 
 from forge_ai.core.ir.ir_generator import EntitySpec, FieldSpec
-from forge_ai.core.ir.ir_types import FieldType
+from forge_ai.core.ir.ir_types import FieldType, MeasureSemantics
 from forge_ai.core.planner import ApplicationPlan
 from forge_ai.prompt.prompt_builder import PromptBuilder
 from forge_ai.provider.provider_interface import AIProvider
@@ -64,6 +64,23 @@ _VALID_FIELD_TYPES: dict[str, FieldType] = {
     "date": FieldType.DATE,
     "choice": FieldType.CHOICE,
 }
+# FORGE-R1-CLOSURE-015(2026-08-17)。数値Fieldが**どういう量か**を
+# AIに選ばせる、閉じた選択肢。
+#
+# **自由記述にしない**のはDesign Roleと同じ理由である——Forgeが
+# 保証できない値が入らず、選ばれなかった候補が学習素材として残る。
+#
+# 未知・未指定は`UNKNOWN`へ倒す。**`ADDITIVE`へ倒さない**のが要点で、
+# 倒すと「評価の合計」「魚のサイズの合計」が復活する(§2の実バグ)。
+_VALID_MEASURES: dict[str, MeasureSemantics] = {
+    "additive": MeasureSemantics.ADDITIVE,
+    "averageable": MeasureSemantics.AVERAGEABLE,
+    "level": MeasureSemantics.LEVEL,
+    "extremum": MeasureSemantics.EXTREMUM,
+    "identifier": MeasureSemantics.IDENTIFIER,
+    "unknown": MeasureSemantics.UNKNOWN,
+}
+
 _VALID_VISUAL_STYLES = frozenset({"calm", "warm", "vibrant", "neutral"})
 _DEFAULT_VISUAL_STYLE = "calm"
 
@@ -211,12 +228,32 @@ def _sanitize_one_field(
     min_value, max_value = _sanitize_bounds(
         raw.get("min_value"), raw.get("max_value"), field_type=field_type
     )
+    measure = _sanitize_measure(raw.get("measure"), field_type=field_type)
 
     return FieldSpec(
         name, label,
         field_type=field_type, required=required,
         choices=choices, min_value=min_value, max_value=max_value,
+        measure=measure,
     )
+
+
+def _sanitize_measure(raw: Any, *, field_type: FieldType) -> MeasureSemantics:
+    """AIが言った「量の性質」を検証する。**分からなければUNKNOWN**。
+
+    数値でないFieldは常に`UNKNOWN`——文字列に「足せる量か」を
+    問う意味が無い。
+
+    ここで`ADDITIVE`を既定にしないのが要点である。既定を「足せる」に
+    すると、AIが黙っていただけのFieldが画面で一番大きな数値になる
+    (§2の実バグそのもの)。分からないものは楽観側へ倒さない
+    (`CLAUDE.md` §3)。
+    """
+    if field_type != FieldType.NUMBER:
+        return MeasureSemantics.UNKNOWN
+    if not isinstance(raw, str):
+        return MeasureSemantics.UNKNOWN
+    return _VALID_MEASURES.get(raw.strip().lower(), MeasureSemantics.UNKNOWN)
 
 
 def _sanitize_identifier(raw: Any) -> str | None:

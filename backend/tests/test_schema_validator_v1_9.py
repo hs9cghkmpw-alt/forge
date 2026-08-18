@@ -151,9 +151,24 @@ class TestRuntimeContractIsShared(unittest.TestCase):
         block = re.search(r"enum ForgeAggregateOp \{(.*?)\n\}", source, re.S)
         self.assertIsNotNone(block, "ForgeAggregateOpのenum定義が見つからない")
         names = set(re.findall(r"^\s{2}(\w+)[,;]", block.group(1), re.M))
+
+        # v1.11(FORGE-R1-CLOSURE-015)以降、**Widgetによって許す集計が違う**。
+        #
+        #   bar_chart   : count / sum / average      （複数の値を並べる）
+        #   metric_view : + max / min / latest       （単一の値だから意味を持つ）
+        #
+        # Dartのenumは両方の和集合を持つ。だから「enum == BAR_CHART」では
+        # なく、**Validatorが許すものがenumに全部あるか**を見る
+        # (Validatorが通すのにRuntimeが解釈できない、がTD37の事故)。
+        from app.ai.validators.schema_validator import METRIC_VIEW_AGGREGATES
+
         self.assertEqual(
-            names, BAR_CHART_AGGREGATES,
+            names, METRIC_VIEW_AGGREGATES,
             "Validatorが許す集計方法と、Runtimeが解釈できる集計方法が食い違っている",
+        )
+        self.assertTrue(
+            BAR_CHART_AGGREGATES < METRIC_VIEW_AGGREGATES,
+            "bar_chartが許す集計はmetric_viewの真部分集合であるべき",
         )
 
 

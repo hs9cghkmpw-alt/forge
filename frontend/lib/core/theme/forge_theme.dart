@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../json_ui/renderer/design_language.dart';
+
 /// Prototype v0.1.3 (lib/core/theme.dart) から移植。
 /// Forge の見た目の方針:
 /// - 静か / 軽い / 余白 / 未来感
@@ -61,6 +63,10 @@ class ForgeTheme {
   static ThemeData get theme {
     return ThemeData(
       useMaterial3: true,
+      // Design Languageの**意味の色**(FORGE-R1-CLOSURE-015 §7)。
+      // 「成功」「支出」が何色になるかはここで決まり、参照側
+      // (`design_language.dart`)は意味の名前だけを言う。
+      extensions: const [ForgeSemanticColors.light],
       scaffoldBackgroundColor: background,
       colorScheme: ColorScheme.fromSeed(
         seedColor: accent,

@@ -157,7 +157,24 @@ Experience`
 訂正されたのかが残らない。**測れないまま作ると、Local AIへ渡す
 素材が1つも増えない。**
 
-### R1. Design Language を「AIが選ぶ語彙」として導入
+### R1. Design Language を「AIが選ぶ語彙」として導入 ✅ 完了(2026-08-17)
+
+> **状態: GO**（`FORGE-R1-CLOSURE-015`、CIのFlutter jobが緑であることを条件）
+> 詳細: `docs/reports/FORGE-R1-CLOSURE-015-report.md`
+>
+> 3回に分けて閉じた。014で語彙とSchema、TD69でAI選択とHero KPI、
+> 015で「意味が本当に画面とEvidenceへ届いているか」。
+>
+> **015で直した主な穴**（すべて再現してから直した）:
+> * 数値だからという理由でKPIを発明していた（評価の合計・魚の長さの合計）
+> * `metric.primary`を付けても**実際には描画が変わっていなかった**
+> * `button.primary`/`secondary`が画面上で区別できなかった
+> * AIが選んだroleとForgeの既定値が**Evidence上で混ざっていた**
+> * forge_aiがbackendを遅延importし、環境で挙動が変わっていた
+> * 単純な金額合計を「残高」と呼びかねない状態だった
+>
+> **残った負債**: TD70（CuratedのAI呼び出し1回、推奨解を記録済み）、
+> TD73（roleの反映はWidgetごとの対応が要る）。
 
 * `design_tokens` を意味的役割へ拡張（§1の形）
 * **Schema + Compiler + Validator + Runtime + Conversation** まで通す
@@ -167,10 +184,16 @@ Experience`
 * R0で入れた Evidence に**どの役割が選ばれ、受け入れられたか**が残る
 
 **閉じる辺**: `Capability/Design Language → Forge Language → Validator
-→ Runtime → Visual Quality Evidence`
+→ Runtime → Visual Quality Evidence` ✅ 全辺が繋がった
+
+> ただし最後の辺の名前は **Visual *Structure* Evidence** にした。
+> 主KPI数・被覆率・階層深さのような**決定的に測れる構造の事実**であって、
+> 「美しさ」は測れていない。測れていないものを測ったことにしない。
 
 **生成品質**: 完成図の「洗練された感じ」の相当部分。
-**Local AI素材**: 語彙選択の正解/不正解データが貯まり始める。
+**Local AI素材**: 語彙選択の正解/不正解データが貯まり始める
+（**AIが選んだものとForgeの既定値を型で分けてある**ので、既定値を
+成功例として学習することが無い）。
 
 ### R2. Forge Knowledge / RAG（Local AI優先順位 #1）
 

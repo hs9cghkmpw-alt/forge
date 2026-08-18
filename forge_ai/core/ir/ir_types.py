@@ -40,6 +40,92 @@ class FieldType(str, Enum):
     CHOICE = "choice"
 
 
+class MeasureSemantics(str, Enum):
+    """数値Fieldが**どういう量なのか**(FORGE-R1-CLOSURE-015、2026-08-17)。
+
+    ---
+
+    ## なぜ型だけでは足りないのか
+
+    v1.11のHero KPIは「Entityの最初のNUMBER Fieldを合計する」という
+    実装だった。その結果、実際に次が生成されていた。
+
+    ```
+    読書記録  rating(評価5段階) → **評価の合計**
+    釣果記録  size(サイズcm)   → **魚のサイズの合計**
+    ```
+
+    どちらも意味を成さない。**「数値である」ことと「足すと意味がある
+    量である」ことは別**である。型(`FieldType.NUMBER`)は前者しか
+    言っていないのに、後者を推測していた。
+
+    これはForgeが繰り返している失敗の一種である——分からないものを
+    **楽観側(合計できる)へ倒していた**(`CLAUDE.md` §3)。
+
+    ## 集計方法ではなく「量の性質」を持つ
+
+    `preferred_aggregate`（sum/avg/…）だけを持たせる案もあったが、
+    **なぜそう集計するのかが失われる**。「合計する」は結論であって、
+    理由は「足し合わせに意味がある量だから」である。
+
+    理由を持っておくと、後から別の問いにも答えられる——
+    「この数値をグラフのY軸にしてよいか」「前月比を出してよいか」は、
+    集計方法ではなく量の性質から決まる。
+
+    ## Local AIが選ぶ語彙でもある
+
+    Design Roleと同じく、これは**AIに選ばせる閉じた選択肢**である。
+    自由記述にせず、選ばれなかった候補が分かる形にしてある
+    (`entity_synthesizer.py`)。
+    """
+
+    ADDITIVE = "additive"
+    """足し合わせに意味がある。金額・数量・歩数・距離。
+    合計が「全部でいくら/いくつ」という答えになる。"""
+
+    AVERAGEABLE = "averageable"
+    """平均に意味がある。評価・点数・満足度。
+    **合計は無意味**——「評価の合計が42」は何も言っていない。"""
+
+    LEVEL = "level"
+    """ある時点の水準。体温・体重・残高・在庫水準。
+    足しても平均しても弱く、**知りたいのは普通「今いくつか」**である。"""
+
+    EXTREMUM = "extremum"
+    """最大/最小に意味がある。魚のサイズ・自己ベスト・最高気温。
+    合計は無意味だが、**最大値は誇らしい事実**である。"""
+
+    IDENTIFIER = "identifier"
+    """集計しない数値。年号・部屋番号・ページ番号。
+    数値の形をしているだけで、量ではない。"""
+
+    UNKNOWN = "unknown"
+    """**既定値。** どういう量か分からない。
+
+    分からないときにHero KPIを作らない——「出せるから出す」を
+    しないための既定である。UNKNOWNを`ADDITIVE`へ倒すと、まさに
+    今回直した「rating の合計」が復活する。"""
+
+
+# 量の性質 → その量について**最初に知りたいこと**。
+#
+# `None`は「単一の主KPIとしては出さない」という意味である。集計方法が
+# 無いのではなく、**画面で一番大きく出すべき単一の数値が決まらない**。
+_PREFERRED_AGGREGATE: dict[MeasureSemantics, str | None] = {
+    MeasureSemantics.ADDITIVE: "sum",
+    MeasureSemantics.AVERAGEABLE: "average",
+    MeasureSemantics.LEVEL: "latest",
+    MeasureSemantics.EXTREMUM: "max",
+    MeasureSemantics.IDENTIFIER: None,
+    MeasureSemantics.UNKNOWN: None,
+}
+
+
+def preferred_aggregate(measure: MeasureSemantics) -> str | None:
+    """その量について最初に知りたい集計。`None`ならHero KPIを出さない。"""
+    return _PREFERRED_AGGREGATE.get(measure)
+
+
 @dataclass(frozen=True)
 class FieldValidationRule:
     """Field単位のValidationルール。Forge Language v1.2の
@@ -70,6 +156,48 @@ class Field:
     # 「有限の範囲」が必須であり、根拠なく上限/下限を発明しないため)。
     min_value: float | None = None
     max_value: float | None = None
+    # FORGE-R1-CLOSURE-015(2026-08-17)新規。`type=NUMBER`のFieldが
+    # **どういう量なのか**。既定は`UNKNOWN`であり、Hero KPIは作られない
+    # ——分からないものを「合計できる」側へ倒さないためである
+    # (`MeasureSemantics`のdocstring参照)。
+    measure: MeasureSemantics = MeasureSemantics.UNKNOWN
+
+
+@dataclass(frozen=True)
+class MonetaryFlow:
+    """お金の**出入り**の表し方(FORGE-R1-CLOSURE-015 §2.3、2026-08-17)。
+
+    ---
+
+    ## なぜ必要か
+
+    「金額を全部足したもの」は**残高ではない**。収入と支出を区別して
+    いないからである。それでも家計簿の利用者が一番知りたいのは
+    「今月いくら残っているか」であり、単純な合計をそう呼ぶのは嘘になる。
+
+    ## なぜEntity側に置くか
+
+    「どのFieldが金額で、どのFieldが収支の別で、そのうちどの値が支出を
+    意味するか」は、**3つのFieldにまたがる関係**である。1つのFieldの
+    属性にすると、残り2つとの繋がりが暗黙になる。
+
+    ## Compilerに日本語を持ち込まない
+
+    `outflow_value`をここへ持つのが要点である。「支出」という語を
+    Compilerが知っていると、英語のDomainや別の言い回し
+    (「出金」「マイナス」)に対応できない。**意味はIRが持ち、Compilerは
+    それを読むだけ**にする(ADR-012と同じ方針)。
+    """
+
+    amount_field: str
+    """金額を持つField名。`MeasureSemantics.ADDITIVE`であるべき。"""
+
+    direction_field: str
+    """収入か支出かを表すCHOICE Field名。"""
+
+    outflow_value: str
+    """`direction_field`の値のうち、**お金が出ていく**ことを意味するもの。
+    それ以外の値は入ってくる側として扱う。"""
 
 
 @dataclass(frozen=True)
@@ -97,6 +225,10 @@ class Entity:
     label: str
     fields: tuple[Field, ...]
     visual_style: str = "calm"
+    # FORGE-R1-CLOSURE-015(2026-08-17)新規。お金の出入りを持つEntityだけ
+    # が持つ。`None`なら「金額の合計」までしか言えない——**それを
+    # 「残高」と呼ばない**(`MonetaryFlow`のdocstring参照)。
+    monetary_flow: "MonetaryFlow | None" = None
 
     def field_names(self) -> tuple[str, ...]:
         return tuple(f.name for f in self.fields)

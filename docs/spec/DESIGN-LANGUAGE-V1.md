@@ -57,7 +57,7 @@ Product Direction §3 の分担を、実際の語彙として書き下したも�
 | `text.body` | 本文。既定の可読サイズ。 | 説明文・メモ・自由記述の表示。 | 数値の強調(それはmetric.*)。 |
 | `text.label` | 入力欄やボタンに付く短い語。 | フィールド名・タブ名・凡例。 | 文章。 |
 | `text.secondary` | 補助情報。本文より弱い。 | 日付・単位・注記・前月比の説明。 | 主要な内容。読めなくてよい情報ではないので、極端に小さくしない。 |
-| `metric.primary` | 画面で**最も重要な単一のKPI**。出力先は`metric_view`(v1.11)。 | 残高・合計・今日の達成率など、利用者が最初に見る1つの数値。 | リスト内の全数値。**同一画面で2つ以上使わない。** |
+| `metric.primary` | 画面で**最も重要な単一のKPI**。出力先は`metric_view`(v1.11)。実描画で実際に大きくなる(v1.12)。 | 残高・合計・今日の達成率など、利用者が最初に見る1つの数値。 | リスト内の全数値。**同一画面で2つ以上使わない。** |
 | `metric.secondary` | 主KPIを補足する数値。 | 前月比・内訳の小計・サブ指標。 | 主KPIと同じ大きさにしたい数値(それはmetric.primary)。 |
 
 ### color
@@ -145,3 +145,45 @@ Compilerが出すroleは引き続き**構造から決まるもの**（見出し�
 
 語彙が増えるほど、AIが選び間違える余地と、Runtimeが保証すべき
 組み合わせが増える。
+
+## 7. roleが実際に見た目を変えること（v1.12、2026-08-17）
+
+v1.11までは「roleは記録として意味を持つが描画は変えない」箇所があった。
+**それは欠陥である**——意味が見た目に出ないなら、その語彙は記録用の
+飾りでしかない。
+
+| role | 実際に変わるもの |
+|---|---|
+| `metric.primary` / `metric.secondary` | 文字の大きさ・太さ・字形(tabular) |
+| `button.primary` | 塗りつぶし(FilledButton) |
+| `button.secondary` | 輪郭のみ(OutlinedButton) |
+| `density.compact/normal/relaxed` | 上下の余白（3段） |
+| `surface.card` / `surface.elevated` | 面・角丸・余白・持ち上げ |
+| `state.*` / `finance.*` | 意味の色（**Light/Darkで別の値**） |
+
+### 意味の色はThemeから引く
+
+`ForgeSemanticColors`（ThemeExtension）。固定の色コードを
+`design_language.dart`へ書かない——Darkで背景に沈む。
+
+**`finance.expense` ≠ `state.danger`** は維持している。支出はエラー
+ではない。同じ赤で塗ると、家計簿を開くたびに何か失敗したように見える。
+
+### 被せる方式の限界（TD73）
+
+roleは`_build()`が1箇所で被せる設計だが、**builderが明示的なstyleを
+持つ場合は効かない**（`metric_view`が実際にそうなっていた）。
+`ForgeRoleScope`でbuilderへ先に渡す経路を足したが、
+「1箇所で被せれば全Widgetに効く」は成立しないことを負債として
+記録してある。
+
+## 8. Criticが階層を見る（v1.12）
+
+`semantic_design`軸を追加した。**「roleがある」だけを評価しない。**
+
+```
+❌ style_roleが存在する → PASS
+```
+
+では10個すべてが`metric.primary`でもPASSする。それは
+「一番大事なものが10個ある」という、階層が消えた状態である。

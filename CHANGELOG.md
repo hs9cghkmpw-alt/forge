@@ -2,6 +2,92 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task081 — R1 Design Language の閉じ込め(2026-08-17、FORGE-R1-CLOSURE-015)
+
+指摘された穴を**すべて再現してから**直した。推測でPatchしたものは無い。
+
+### §2 NUMBERだからSUM、を廃止（実バグ）
+
+本番経路で実際にこれが出ていた。
+
+```
+読書記録  rating(評価5段階) → 評価の合計
+釣果記録  size(サイズcm)   → 魚のサイズの合計
+```
+
+「数値である」ことと「足すと意味のある量である」ことは別なのに、型だけで
+後者を推測していた。`MeasureSemantics`（additive/averageable/level/
+extremum/identifier/unknown）をIRへ導入し、性質から集計を引く。
+**unknownはHero KPIを作らない**——倒した瞬間に上の2件が復活する。
+
+AI合成経路でもAIが閉じた6択から選ぶ（Promptに「迷ったらunknown」）。
+
+### §2.3/§9/§11 お金の出入りを意味として表す
+
+`MonetaryFlow`をIRへ。Curated `household_budget`に`entry_type`（収支）を
+足した。**それまで収入と支出を区別できず**、いくら記録しても
+「今いくら残っているか」に答えられなかった。Templateを増やしたのではなく
+既存Domainのデータモデルの欠落を埋めた。
+
+`metric_view`へ絞り込み(filter_*)と符号付け(sign_*)を追加（v1.12、
+**Widget型は増やさない**）。自然言語「毎日の収入と支出を記録したい。
+今月の残高を一番目立たせたい。」から、残高(metric.primary)/収入
+(finance.income)/支出(finance.expense)まで到達するE2Eを追加。
+
+### §3 Design Criticへ semantic_design 軸
+
+**「roleがある」だけを評価しない。** 10個すべてがmetric.primaryでも
+roleは存在する——それは階層が消えた状態である。乱立・被覆不足・
+持ち上げすぎ・finance と state の混同をblocking/mediumで言う。
+
+実装直後の破壊試験で**外してもテストが落ちなかった**（置物だった）。
+`test_semantic_design_critic.py`を追加して直した。
+
+### §4 AI選択とFallbackをEvidenceで分離
+
+`DesignRoleDecision(axis, role, source=ai|fallback|deterministic|…)`。
+それまで最終role一覧しか残らず、**Forgeの既定値をAIの成功例として
+学習する**経路が開いていた。型で分けた。
+
+### §5 forge_ai→backend 逆依存の解消
+
+`forge_ai/core/pipeline.py`が遅延importでbackendを呼び、失敗を握り
+潰していた。**同じコードがProductionとstandaloneで別の振る舞い**を
+していた。`DesignLanguageGuidance`契約を作り、backendが注入する形へ。
+構文木で`app.*` importが無いことを検査する。
+
+### §6/§7/§8 roleを実際の視覚差へ
+
+* `metric_view`の数値Textが明示styleを持ち、**DefaultTextStyleが効いて
+  いなかった**（`metric.primary`を付けても描画は変わっていない）
+* `button.primary`/`secondary`が同じElevatedButtonで**区別できなかった**
+* 意味の色が固定値で、**Darkで沈んでいた**
+
+`ForgeRoleScope`でbuilderへroleを先に渡し、FilledButton/OutlinedButton
+へ分岐。`ForgeSemanticColors`（ThemeExtension）でLight/Dark対応。
+TD73として「1箇所で被せれば全Widgetに効く、は成立しない」を記録。
+
+### §10 Visual Structure Evidence
+
+主KPI数・被覆率・階層深さ等の決定的な事実をEvidenceへ。
+**`VisualQuality`と名付けなかった**——測れていないものを測ったことに
+しない。Criticと同じ関数で測る（食い違いを作らない）。
+
+### §12/§13
+
+`knowledge_candidates()`（代替候補とfallbackを持つ）。TD70の4案比較と
+推奨（Local AIへ寄せる案が本命、cacheは繋ぎ）。
+
+### 検証区分
+
+* **実測**: backend 1258 passed / forge_ai 521 passed、配線破壊試験7件
+* **Test Double**: AIの答え（実Cloud APIは呼んでいない）
+* **未検証**: Flutter（当環境にSDK無し、CI待ち。新規17件）
+
+詳細: `docs/reports/FORGE-R1-CLOSURE-015-report.md`
+
+---
+
 ## Task080 — APIキーの扱いの説明と、Live Test選択の実バグ修正(2026-08-17、TD72)
 
 CEOの「さっきのAPIはどこかに使った？試験するならどうやる？」に答える

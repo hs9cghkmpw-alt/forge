@@ -10,6 +10,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../renderer/design_language.dart';
 import '../renderer/forge_runtime_state.dart';
 import '../schema/forge_document.dart';
 import 'widget_registry_core.dart';
@@ -107,7 +108,11 @@ Widget buildForm(BuildContext context, ForgeWidgetNode node, ForgeRuntimeState s
     children: [
       ...n.children.map(build),
       const SizedBox(height: 12),
-      ElevatedButton(
+      // v1.12(§6.1)。formに付いた role の強弱を、**送信ボタンへ**渡す。
+      // formの主役は送信ボタンなので、面を被せるのではなくボタンの
+      // 種類を変えるのが正しい反映のしかたである。
+      forgeEmphasisButton(
+        emphasis: buttonEmphasisFor(ForgeRoleScope.roleOf(context)),
         // FORGE-MILESTONE-003 Task 4/5: formの送信ボタン自身も、他の場所から
         // form_refで参照する場合と同じ経路(submit_form Action)を通す。
         // n.submitAction(JSON上のsubmit_action)を直接dispatchしていた以前の実装では、

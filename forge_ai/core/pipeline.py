@@ -96,35 +96,14 @@ from forge_ai.core.understanding.world_builder import CognitiveWorldBuilder  # n
 from forge_ai.repair.repair_engine import RepairEngine  # noqa: E402,F401 (将来のRepair接続用、今回は未使用)
 
 
+from forge_ai.contracts.design_language_contract import DesignLanguageGuidance  # noqa: E402
 from forge_ai.core.ir.design_intent import DesignIntentSelector  # noqa: E402
 from forge_ai.provider.mock_provider import MockProvider  # noqa: E402
 
 
-def _design_axes():
-    """Design Languageの軸と選択肢。**backend側の語彙が正**である。
-
-    forge_aiはbackendをimportしない層なので、ここで遅延importする。
-    backendが無い環境（forge_ai単体のテスト）では空を返し、
-    AIへは何も聞かない——既定値で成立する。
-    """
-    try:
-        from app.ai.runtime.design_language import design_choice_guidance  # noqa: PLC0415
-    except ImportError:
-        return ()
-    return design_choice_guidance()
-
-
-def _design_choice_validator():
-    """AIの答えを軸ごとに検証する関数。`None`なら検証できないので
-    **AIへ聞かない**（検証できない答えを採用しない）。"""
-    try:
-        from app.ai.runtime.design_language import is_valid_choice  # noqa: PLC0415
-    except ImportError:
-        return None
-    return is_valid_choice
-
-
-def _default_cognitive_dependencies(provider: AIProvider) -> CognitiveDependencies:
+def _default_cognitive_dependencies(
+    provider: AIProvider, *, design_language: DesignLanguageGuidance | None = None
+) -> CognitiveDependencies:
     """第一段階のルールベース実装一式を組み立てる。`compiler`のみ、
     実際に`provider.complete()`を呼び出す(`Compiler.compile()`は
     Provider依存のコンポーネントである。当初「Providerを呼ばない」と
@@ -155,12 +134,19 @@ def _default_cognitive_dependencies(provider: AIProvider) -> CognitiveDependenci
         # `provider.complete()`を呼び出すコンポーネントである。
         entity_synthesizer=EntitySynthesizer(provider=provider),
         # FORGE-R1(2026-08-17): Design Languageの選択をAIへ委ねる。
-        # 語彙はbackend側にあるので（forge_aiはbackendをimportしない）、
-        # 軸と検証関数を**外から渡す**。渡さなければ既定値のまま。
+        #
+        # FORGE-R1-CLOSURE-015 §5で**遅延importをやめた**。以前はここで
+        # `app.ai.runtime.design_language`をtry/exceptでimportしており、
+        # 「forge_aiはbackendをimportしない」というコメントと実装が
+        # 食い違っていた。しかもimport失敗を握り潰していたので、
+        # Production（backendあり）とstandalone（backend無し）で
+        # **同じコードが別の振る舞いをしていた**。
+        #
+        # いまは`DesignLanguageGuidance`という契約を外から受け取る。
+        # 渡されなければAIへは聞かない——これは環境の違いではなく、
+        # 明示的に「語彙を渡していない」という状態である。
         design_intent_selector=DesignIntentSelector(
-            provider=provider,
-            axes=_design_axes(),
-            validator=_design_choice_validator(),
+            provider=provider, guidance=design_language,
         ),
     )
 
@@ -172,6 +158,7 @@ def run_cognitive_pipeline(
     clarification_answers: tuple[str, ...] = (),
     domain_registry: DomainRegistry | None = None,
     dependencies: CognitiveDependencies | None = None,
+    design_language: "DesignLanguageGuidance | None" = None,
     title_seed: str | None = None,
 ) -> CognitivePipelineOutcome:
     """**M007 Phase 1 Minimal Cognitive Slice**のFacade。
@@ -239,7 +226,9 @@ def run_cognitive_pipeline(
     if provider is None:
         provider = MockProvider()
     domain_registry = domain_registry or DomainRegistry()
-    dependencies = dependencies or _default_cognitive_dependencies(provider)
+    dependencies = dependencies or _default_cognitive_dependencies(
+        provider, design_language=design_language
+    )
     orchestrator = CognitiveOrchestrator(domain_registry, dependencies)
     effective_input = _combine_with_answers(raw_input, clarification_answers)
     # 呼び出し側が明示した`title_seed`を最優先する

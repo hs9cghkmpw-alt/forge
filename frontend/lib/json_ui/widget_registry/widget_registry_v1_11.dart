@@ -32,6 +32,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../renderer/design_language.dart';
 import '../renderer/forge_runtime_state.dart';
 import '../runtime/forge_aggregate.dart';
 import '../schema/forge_document.dart';
@@ -52,16 +53,31 @@ Widget buildMetricView(
         records,
         op: n.effectiveAggregate,
         valueField: n.valueField.isEmpty ? null : n.valueField,
+        // v1.12。収入だけ/支出だけを数える、支出を負として足す
+        // (`forge_aggregate.dart`参照)。集計そのものはここでは行わない。
+        filterField: n.filterField,
+        filterValue: n.filterValue,
+        signField: n.signField,
+        negativeWhen: n.negativeWhen,
       );
 
       final theme = Theme.of(context);
-      // 数値そのもののTextStyleは**ここでは決めない**。`style_role`が
-      // 付いていればRendererが上書きする。ここに書くのは、roleが無い
-      // 文書でも読める最低限の土台である。
-      final valueStyle = theme.textTheme.headlineMedium?.copyWith(
+      // **v1.12(§8)で直した実バグ。**
+      //
+      // ここは以前 `style: valueStyle` を明示していた。`style_role`は
+      // Renderer側が`DefaultTextStyle.merge`で被せる設計なのだが、
+      // **Textが明示的なstyleを持つとDefaultTextStyleは効かない**。
+      // つまり`metric.primary`を付けても、実際の描画は何も変わって
+      // いなかった——「roleは付いている」のに「大きくなっていない」。
+      //
+      // roleをここで解決して**明示的に混ぜる**。roleが無ければ土台の
+      // まま(roleの無い文書の見た目は変わらない)。
+      final roleStyle = resolveForgeRole(context, ForgeRoleScope.roleOf(context))?.textStyle;
+      final baseStyle = theme.textTheme.headlineMedium?.copyWith(
         fontWeight: FontWeight.w700,
         color: theme.colorScheme.onSurface,
       );
+      final valueStyle = roleStyle == null ? baseStyle : baseStyle?.merge(roleStyle);
       final labelStyle = theme.textTheme.labelLarge?.copyWith(
         color: theme.colorScheme.onSurfaceVariant,
       );

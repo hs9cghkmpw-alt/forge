@@ -821,11 +821,25 @@ sealed class ForgeWidgetNode {
           throw ForgeParseException('$path/group_by', 'bar_chart.group_by must be a non-empty string');
         }
         final aggregateRaw = json['aggregate'];
-        if (aggregateRaw != null && ForgeAggregateOp.fromJson(aggregateRaw as String?) == null) {
+        final parsedChartAggregate = ForgeAggregateOp.fromJson(aggregateRaw as String?);
+        // **bar_chartが計算できる集計だけを受け付ける。**
+        //
+        // v1.11で`max`/`min`/`latest`を足したが、それらは`metric_view`
+        // (単一KPI)のための集計で、`aggregateRecords`(グループごと)は
+        // 計算できない。ここで弾かないと、指定した集計が黙って合計に
+        // すり替わる——Validatorは既に弾いているので、Runtime側も
+        // 同じ判断にしておく(Validator・Runtime・Registryの食い違いが
+        // TD37の事故だった)。
+        const chartOps = {
+          ForgeAggregateOp.count,
+          ForgeAggregateOp.sum,
+          ForgeAggregateOp.average,
+        };
+        if (aggregateRaw != null && !chartOps.contains(parsedChartAggregate)) {
           throw ForgeParseException(
-            '$path/aggregate', 'bar_chart.aggregate must be count/sum/average');
+              '$path/aggregate', 'bar_chart.aggregate must be count/sum/average');
         }
-        final aggregate = ForgeAggregateOp.fromJson(aggregateRaw as String?);
+        final aggregate = parsedChartAggregate;
         final grouping = groupBy as String?;
 
         // 集計する場合、`value_field`は sum/average のときだけ要る
@@ -864,7 +878,8 @@ sealed class ForgeWidgetNode {
         if (metricAggregateRaw != null &&
             ForgeAggregateOp.fromJson(metricAggregateRaw as String?) == null) {
           throw ForgeParseException(
-              '$path/aggregate', 'metric_view.aggregate must be count/sum/average');
+              '$path/aggregate',
+              'metric_view.aggregate must be count/sum/average/max/min/latest');
         }
         final metricAggregate = ForgeAggregateOp.fromJson(metricAggregateRaw as String?);
         final metricValueField = json['value_field'];
@@ -882,6 +897,10 @@ sealed class ForgeWidgetNode {
           label: json['label'] as String?,
           unit: json['unit'] as String?,
           emptyText: json['empty_text'] as String?,
+          filterField: json['filter_field'] as String?,
+          filterValue: json['filter_value'] as String?,
+          signField: json['sign_field'] as String?,
+          negativeWhen: json['negative_when'] as String?,
         );
       case 'date_field':
         // v1.7新規(Widget Vocabulary Expansion第2弾、2026-08-11)。
@@ -1169,6 +1188,16 @@ class ForgeMetricViewWidgetNode extends ForgeWidgetNode {
   /// **0とは違う**ものとして扱う(`aggregateAll`のコメント参照)。
   final String? emptyText;
 
+  /// v1.12(FORGE-R1-CLOSURE-015 §2.3)。[filterField]がこの値のRecordだけ
+  /// を数える(「収入だけの合計」)。
+  final String? filterField;
+  final String? filterValue;
+
+  /// v1.12。[signField]がこの値のRecordを**負として**足す
+  /// (「収入 − 支出 = 残高」)。合計のときだけ意味を持つ。
+  final String? signField;
+  final String? negativeWhen;
+
   const ForgeMetricViewWidgetNode(
     super.id, {
     required this.stateRef,
@@ -1177,6 +1206,10 @@ class ForgeMetricViewWidgetNode extends ForgeWidgetNode {
     this.label,
     this.unit,
     this.emptyText,
+    this.filterField,
+    this.filterValue,
+    this.signField,
+    this.negativeWhen,
   });
 
   ForgeAggregateOp get effectiveAggregate => aggregate ?? ForgeAggregateOp.count;

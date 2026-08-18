@@ -304,10 +304,10 @@ class TestTheProductionPathCarriesRolesAndRefs(unittest.TestCase):
         )
         self.assertIn("text.headline", roles)
 
-    def test_the_document_declares_version_1_11(self) -> None:
-        """v1.11(FORGE-R1、TD69)で`metric_view`を追加した。"""
+    def test_the_document_declares_version_1_12(self) -> None:
+        """v1.11で`metric_view`、v1.12でお金の出入り(filter/sign)を追加。"""
         document = self._generate("家計の支出をカテゴリ別に管理したい").json()["result"]["forge_document"]
-        self.assertEqual(document["version"], "1.11")
+        self.assertEqual(document["version"], "1.12")
 
     def test_every_emitted_role_is_in_the_vocabulary(self) -> None:
         """Compiler側の綴りとbackend語彙がずれていないこと。
@@ -384,3 +384,66 @@ class TestTheProductionPathCarriesRolesAndRefs(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheKnowledgeCandidatesAreLearnable(unittest.TestCase):
+    """**§12。** Local AIが「選べるようになる」ための知識が揃っていること。
+
+    `knowledge_entries()`は33 roleを1件ずつ並べたもので、
+    「`metric.primary`とは何か」には答えられるが**「何と何から選ぶのか」
+    には答えられない**。選択は比較なので、候補の集合が要る。
+    """
+
+    def test_every_axis_carries_its_alternatives(self) -> None:
+        from app.ai.runtime.design_language import knowledge_candidates
+
+        candidates = knowledge_candidates()
+        self.assertTrue(candidates)
+        for entry in candidates:
+            with self.subTest(axis=entry["axis"]):
+                options = entry["options"]
+                self.assertGreaterEqual(len(options), 2, "択一なのに候補が1つ以下")
+                for option in options:
+                    # **選ばれなかった候補**が残っていること。これが無いと
+                    # 「relaxedではなくcompactが受け入れられた」という対比が
+                    # 後から作れない。
+                    self.assertEqual(
+                        set(option["alternatives"]),
+                        {o["id"] for o in options} - {option["id"]},
+                    )
+                    self.assertTrue(option["meaning"], f"{option['id']}に意味が無い")
+
+    def test_every_option_is_a_known_role(self) -> None:
+        from app.ai.runtime.design_language import knowledge_candidates
+
+        for entry in knowledge_candidates():
+            for option in entry["options"]:
+                self.assertTrue(is_known_role(option["id"]))
+
+    def test_the_declared_fallback_matches_what_forge_actually_uses(self) -> None:
+        """**知識と実装がずれていないこと。**
+
+        「fallbackはnormalだ」とKnowledgeに書いてあるのに、実際は
+        compactが埋まる、という嘘を防ぐ。Local AIはこの知識を信じて
+        学ぶので、ずれたまま配ると学習そのものが汚れる。
+        """
+        import os
+        import sys
+
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+        from forge_ai.core.ir.design_intent import _DEFAULTS
+
+        from app.ai.runtime.design_language import DESIGN_AXIS_FALLBACKS, knowledge_candidates
+
+        self.assertEqual(DESIGN_AXIS_FALLBACKS, _DEFAULTS)
+        for entry in knowledge_candidates():
+            self.assertEqual(entry["fallback"], _DEFAULTS[entry["axis"]])
+
+    def test_the_knowledge_carries_no_free_text(self) -> None:
+        """語彙の定義だけ。利用者の発話もProvider出力も入らない。"""
+        from app.ai.runtime.design_language import knowledge_candidates
+
+        for entry in knowledge_candidates():
+            validate_identifier(entry["fallback"])
+            for option in entry["options"]:
+                validate_identifier(option["id"])

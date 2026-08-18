@@ -74,6 +74,8 @@ from forge_ai.core.ir.ir_types import (
     FieldType,
     FieldValidationRule,
     ForgeIR,
+    MeasureSemantics,
+    MonetaryFlow,
     NavigationGraph,
     View,
     ViewKind,
@@ -99,7 +101,7 @@ class FieldSpec:
     このモジュール内の後方互換エイリアスとして残している。
     """
 
-    __slots__ = ("name", "label", "field_type", "required", "choices", "min_value", "max_value")
+    __slots__ = ("name", "label", "field_type", "required", "choices", "min_value", "max_value", "measure")
 
     def __init__(
         self,
@@ -111,6 +113,7 @@ class FieldSpec:
         choices: tuple[str, ...] = (),
         min_value: float | None = None,
         max_value: float | None = None,
+        measure: MeasureSemantics = MeasureSemantics.UNKNOWN,
     ) -> None:
         self.name = name
         self.label = label
@@ -121,6 +124,9 @@ class FieldSpec:
         # `slider`Widgetを選ぶ(`ir_types.Field`のdocコメント参照)。
         self.min_value = min_value
         self.max_value = max_value
+        # FORGE-R1-CLOSURE-015: この数値が**どういう量か**。
+        # 既定はUNKNOWN——書き忘れたFieldがHero KPIになることは無い。
+        self.measure = measure
 
 
 class EntitySpec:
@@ -131,14 +137,17 @@ class EntitySpec:
     このモジュール内の後方互換エイリアスとして残している。
     """
 
-    __slots__ = ("name", "label", "field_specs", "visual_style")
+    __slots__ = ("name", "label", "field_specs", "visual_style", "monetary_flow")
 
     def __init__(
-        self, name: str, label: str, field_specs: tuple[FieldSpec, ...], *, visual_style: str = "calm"
+        self, name: str, label: str, field_specs: tuple[FieldSpec, ...], *,
+        visual_style: str = "calm", monetary_flow: MonetaryFlow | None = None,
     ) -> None:
         self.name = name
         self.label = label
         self.field_specs = field_specs
+        # FORGE-R1-CLOSURE-015。お金の出入りを持つEntityだけが持つ。
+        self.monetary_flow = monetary_flow
         # FORGE v1.0(Product Quality Sprint1)新規。このDomainの
         # 「雰囲気・トーン」を表す、プラットフォーム非依存な性質
         # (具体的な色コードやWidget名はIRに含めない、ADR-012の方針を
@@ -196,8 +205,16 @@ _ENTITY_DEFINITIONS: dict[str, _EntitySpec] = {
         visual_style="neutral",
         field_specs=(
             _FieldSpec("species", "魚種", field_type=FieldType.STRING),
-            _FieldSpec("size", "サイズ(cm)", field_type=FieldType.NUMBER, required=False),
-            _FieldSpec("weight", "重量(g)", field_type=FieldType.NUMBER, required=False),
+            _FieldSpec(
+                # 釣り人が知りたいのは**最大**であって合計ではない。
+                # 「今まで釣った魚の長さの合計」は誰も知りたくない。
+                "size", "サイズ(cm)", field_type=FieldType.NUMBER, required=False,
+                measure=MeasureSemantics.EXTREMUM,
+            ),
+            _FieldSpec(
+                "weight", "重量(g)", field_type=FieldType.NUMBER, required=False,
+                measure=MeasureSemantics.EXTREMUM,
+            ),
             _FieldSpec("location", "場所", field_type=FieldType.STRING, required=False),
             _FieldSpec("date", "日付", field_type=FieldType.DATE, required=False),
         ),
@@ -206,12 +223,34 @@ _ENTITY_DEFINITIONS: dict[str, _EntitySpec] = {
         name="transaction",
         label="家計簿記録",
         visual_style="calm",
+        # FORGE-R1-CLOSURE-015(2026-08-17)で`entry_type`を足した。
+        #
+        # **それまで収入と支出を区別できなかった。** `amount`だけしか
+        # 無いので、いくら記録しても「今月いくら残っているか」に答えられ
+        # ない——金額を全部足したものは残高ではない。家計簿の利用者が
+        # 一番知りたいことに、データモデルが答えられていなかった。
+        #
+        # これはTemplateを増やしたのではなく、**既存Curated Domainの
+        # データモデルの欠落を埋めた**ものである。
+        monetary_flow=MonetaryFlow(
+            amount_field="amount", direction_field="entry_type", outflow_value="支出",
+        ),
         field_specs=(
+            _FieldSpec(
+                "entry_type", "収支", field_type=FieldType.CHOICE,
+                choices=("支出", "収入"),
+            ),
             _FieldSpec(
                 "category", "カテゴリ", field_type=FieldType.CHOICE,
                 choices=("食費", "交通費", "娯楽", "その他"),
             ),
-            _FieldSpec("amount", "金額", field_type=FieldType.NUMBER, required=True),
+            _FieldSpec(
+                # 金額は足し合わせに意味がある。ただし**単純な合計を
+                # 「残高」と呼ばない**——`monetary_flow`が収支の別を
+                # 教えるので、Compilerは収入/支出/残高を別々に出せる。
+                "amount", "金額", field_type=FieldType.NUMBER, required=True,
+                measure=MeasureSemantics.ADDITIVE,
+            ),
             _FieldSpec("date", "日付", field_type=FieldType.DATE, required=False),
             _FieldSpec("payment_method", "支払方法", field_type=FieldType.STRING, required=False),
         ),
@@ -264,6 +303,9 @@ _ENTITY_DEFINITIONS: dict[str, _EntitySpec] = {
             ),
             _FieldSpec(
                 "rating", "評価(5段階)", field_type=FieldType.NUMBER, required=False,
+                # **合計しない。** 「評価の合計が42」は何も言っていない。
+                # 平均なら「この人が読む本は平均4.2」という意味になる。
+                measure=MeasureSemantics.AVERAGEABLE,
                 # v1.8新規: 「5段階」という既存のlabelそのものが根拠と
                 # なる、具体的な範囲(1〜5)。Compilerがこれを見て
                 # `slider`Widgetを選ぶ(構造的に範囲外の値を入力できない)。
@@ -278,7 +320,11 @@ _ENTITY_DEFINITIONS: dict[str, _EntitySpec] = {
         visual_style="neutral",
         field_specs=(
             _FieldSpec("item_name", "品名", field_type=FieldType.STRING),
-            _FieldSpec("quantity", "数量", field_type=FieldType.NUMBER, required=True),
+            _FieldSpec(
+                # 在庫の数量は足せる。「全部で何個あるか」は答えになる。
+                "quantity", "数量", field_type=FieldType.NUMBER, required=True,
+                measure=MeasureSemantics.ADDITIVE,
+            ),
             _FieldSpec(
                 "category", "カテゴリ", field_type=FieldType.CHOICE,
                 choices=("食品", "日用品", "衣類", "その他"), required=False,
@@ -346,7 +392,14 @@ class IRGenerator:
 
     def _build_ir(self, spec: EntitySpec) -> ForgeIR:
         fields = tuple(self._build_field(fs) for fs in spec.field_specs)
-        entity = Entity(name=spec.name, label=spec.label, fields=fields, visual_style=spec.visual_style)
+        entity = Entity(
+            name=spec.name, label=spec.label, fields=fields,
+            visual_style=spec.visual_style,
+            # 宣言されたお金の出入りが、実在するFieldを指しているときだけ
+            # 採る。存在しないFieldを指した宣言は**黙って捨てる**
+            # ——Compilerが存在しないFieldで集計しようとするより安全。
+            monetary_flow=_validated_monetary_flow(spec.monetary_flow, fields),
+        )
 
         list_view = View(
             id=f"{spec.name}_list",
@@ -455,7 +508,34 @@ class IRGenerator:
             validations=tuple(validations),
             min_value=spec.min_value,
             max_value=spec.max_value,
+            measure=spec.measure,
         )
+
+
+def _validated_monetary_flow(
+    flow: MonetaryFlow | None, fields: tuple[Field, ...]
+) -> MonetaryFlow | None:
+    """宣言されたお金の出入りが、実在するFieldと整合しているか。
+
+    通す条件を厳しくしてある。**通ってしまうと「残高」という強い言葉を
+    使うことになる**ので、少しでも怪しければ通さない。
+
+    * `amount_field`が実在し、`NUMBER`で、`ADDITIVE`であること
+    * `direction_field`が実在し、`CHOICE`であること
+    * `outflow_value`がその選択肢に実在すること
+    """
+    if flow is None:
+        return None
+    by_name = {f.name: f for f in fields}
+    amount = by_name.get(flow.amount_field)
+    direction = by_name.get(flow.direction_field)
+    if amount is None or direction is None:
+        return None
+    if amount.type != FieldType.NUMBER or amount.measure is not MeasureSemantics.ADDITIVE:
+        return None
+    if direction.type != FieldType.CHOICE or flow.outflow_value not in direction.choices:
+        return None
+    return flow
 
 
 # 対象Domainの一覧(呼び出し側が「この3 Domainが対象である」ことを

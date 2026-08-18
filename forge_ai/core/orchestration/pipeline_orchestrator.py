@@ -20,6 +20,7 @@ from __future__ import annotations
 import dataclasses
 from datetime import datetime, timezone
 
+from forge_ai.core.critic.semantic_design_critic import evaluate_semantic_design
 from forge_ai.core.domain_model import DomainRegistry
 from forge_ai.core.ir.domain_resolution import SolutionSource, resolve_domain_source
 from forge_ai.core.ir.forge_language_compiler import ForgeLanguageCompiler
@@ -377,6 +378,10 @@ class CognitiveOrchestrator:
                         entity_label=(entity.label if entity else ""),
                         field_labels=tuple(f.label for f in entity.fields) if entity else (),
                     )
+                    # **Contextへ持たせる。** Decision Traceの文字列だけに
+                    # すると、後から由来(AIが選んだのか既定で埋めたのか)を
+                    # 取り出すのに書式へ依存することになる。
+                    context = context.with_design_intent(design_intent)
                     context = context.with_decision(_trace(
                         "design_intent",
                         "ai" if design_intent.ai_selected else "fallback",
@@ -402,6 +407,25 @@ class CognitiveOrchestrator:
                     template=context.template_selection.template,
                 )
 
+            # --- Semantic Design Critic（FORGE-R1-CLOSURE-015 §3）--------
+            #
+            # **compile後でなければ評価できない。** `style_role`はここで
+            # 初めて存在する。Design Criticを前へ動かすとPlanの評価が
+            # Compilerに依存することになるので、動かさずに軸を足す。
+            #
+            # 見るのは「roleがあるか」ではない。10個すべてが
+            # `metric.primary`でもroleは「ある」——それは階層が消えた
+            # 状態であって、Designとしては失敗である。
+            semantic = evaluate_semantic_design(forge_document.to_json_dict())
+            context = context.with_critic_report(_merged_critic_report(
+                context.critic_report, semantic,
+            ))
+            context = context.with_decision(_trace(
+                "semantic_design",
+                "pass" if not semantic.issues else "issues",
+                f"score={semantic.score:.2f} {semantic.evidence.to_dict()}",
+            ))
+
             # 13. Initial Quality Evaluation(共有Legacy Protocol、無変更。M004の責務)
             initial_quality = deps.quality_engine.evaluate(forge_document, context.plan)
 
@@ -419,6 +443,40 @@ class CognitiveOrchestrator:
 
         assert_context_ready_for_success(context)
         return CognitivePipelineSuccess(context=context, ir=forge_document, initial_quality=initial_quality)
+
+
+def _merged_critic_report(report, semantic):  # noqa: ANN001, ANN201
+    """既存のCriticReportへ`semantic_design`軸を**足す**。
+
+    作り直さないのは、Planに対する既存10軸の評価をそのまま残すため
+    である。ここで置き換えると、後から「どの軸が何点だったか」を
+    突き合わせられなくなる。
+    """
+    import dataclasses
+
+    from forge_ai.core.critic.semantic_design_critic import SemanticDesignFinding
+
+    assert isinstance(semantic, SemanticDesignFinding)
+    if report is None:
+        return report
+
+    axes = tuple(report.evaluated_axes) + ("semantic_design",)
+    unevaluated = tuple(a for a in report.unevaluated_axes if a != "semantic_design")
+    issues = tuple(report.issues) + semantic.issues
+    # 実装済み軸の平均へ、新しい軸を1つ分として混ぜる。
+    previous = report.implemented_checks_score * max(len(report.evaluated_axes), 1)
+    merged_score = (previous + semantic.score) / (len(report.evaluated_axes) + 1)
+    return dataclasses.replace(
+        report,
+        issues=issues,
+        evaluated_axes=axes,
+        unevaluated_axes=unevaluated,
+        implemented_checks_score=merged_score,
+        score=merged_score,
+        coverage_ratio=len(axes) / 14,
+        # **意味の階層が壊れているものをrelease_readyと呼ばない。**
+        release_ready=report.release_ready and not semantic.has_blocking_issue,
+    )
 
 
 def _trace(

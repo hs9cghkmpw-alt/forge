@@ -16,7 +16,8 @@
     "design_critic",
     "domain_resolution",
     "entity_source",
-    "design_intent"
+    "design_intent",
+    "semantic_design"
   ],
   "domain": "diary",
   "input": "写真と気分を記録できる日記がほしい",

@@ -66,8 +66,11 @@ __all__ = [
     "RoleCategory",
     "SEMANTIC_ROLES",
     "SemanticRole",
+    "DESIGN_AXIS_FALLBACKS",
     "DESIGN_CHOICE_AXES",
     "choices_for_axis",
+    "design_language_guidance",
+    "knowledge_candidates",
     "design_choice_guidance",
     "design_roles_in",
     "is_valid_choice",
@@ -393,3 +396,96 @@ def _collect_roles(node: Any, found: set[str]) -> None:
     elif isinstance(node, (list, tuple)):
         for value in node:
             _collect_roles(value, found)
+
+
+def design_language_guidance():
+    """forge_aiへ渡す`DesignLanguageGuidance`を組み立てる
+    (FORGE-R1-CLOSURE-015 §5)。
+
+    **依存の向きがここで反転する。** backendがforge_aiの契約型を知り、
+    forge_aiはbackendを知らない。以前は逆に、forge_aiがこのモジュールを
+    遅延importしていた——「forge_aiはbackendをimportしない」という
+    コメントを裏切ったまま、import失敗を握り潰していたので、
+    Productionとstandaloneで同じコードが別の振る舞いをしていた。
+
+    語彙の**中身はここが正**である。増やすときはここだけを直す。
+    """
+    from forge_ai.contracts.design_language_contract import (  # noqa: PLC0415
+        DesignAxis,
+        DesignChoice,
+        DesignLanguageGuidance,
+    )
+
+    axes = tuple(
+        DesignAxis(
+            axis=str(entry["axis"]),
+            options=tuple(
+                DesignChoice(
+                    id=str(option["id"]),
+                    meaning=str(option.get("meaning", "")),
+                    use_when=str(option.get("use_when", "")),
+                    avoid_when=str(option.get("avoid_when", "")),
+                )
+                for option in entry["options"]
+            ),
+        )
+        for entry in design_choice_guidance()
+    )
+    return DesignLanguageGuidance(axes=axes, is_valid_choice=is_valid_choice)
+
+
+# 軸ごとの既定値。**AIが答えられなかったときに埋まるもの**である。
+#
+# `forge_ai/core/ir/design_intent.py`の`_DEFAULTS`と同じ値でなければ
+# ならない。ずれると「Knowledgeにはfallback=normalと書いてあるのに、
+# 実際はcompactが埋まる」という嘘になる——`test_design_language.py`が
+# 突き合わせる。
+DESIGN_AXIS_FALLBACKS: dict[str, str] = {
+    "screen_density": "density.normal",
+    "list_surface": "surface.card",
+}
+
+
+def knowledge_candidates() -> tuple[dict[str, object], ...]:
+    """Local AIが**選べるようになる**ための知識(§12)。
+
+    ---
+
+    ## `knowledge_entries()`との違い
+
+    あちらは33 role を1件ずつ並べたもので、「`metric.primary`とは何か」
+    には答えられるが、**「何と何から選ぶのか」には答えられない**。
+    選択は比較なので、候補の集合が要る。
+
+    ここでは軸ごとに
+
+        軸ID / 質問 / 候補の全体 / 各候補の意味・使う・避ける / 既定値
+
+    を持つ。**選ばれなかった候補が残る**のが要点である——
+    「このNeedではrelaxedではなくcompactが受け入れられた」という対比は、
+    候補が分かっていて初めて学習素材になる。
+
+    ## 何を持たないか
+
+    利用者の発話も、Providerの生出力も入らない。入るのは語彙の定義
+    だけである(006 §22のPrivacy境界)。
+    """
+    by_id = {role.id: role for role in SEMANTIC_ROLES}
+    entries: list[dict[str, object]] = []
+    for axis, options in DESIGN_CHOICE_AXES.items():
+        entries.append({
+            "axis": axis,
+            "fallback": DESIGN_AXIS_FALLBACKS.get(axis, ""),
+            "options": [
+                {
+                    "id": option,
+                    "meaning": by_id[option].meaning if option in by_id else "",
+                    "use_when": by_id[option].use_when if option in by_id else "",
+                    "avoid_when": by_id[option].avoid_when if option in by_id else "",
+                    # **選ばれなかった候補**。比較として学べるようにする。
+                    "alternatives": [o for o in options if o != option],
+                }
+                for option in options
+            ],
+        })
+    return tuple(entries)

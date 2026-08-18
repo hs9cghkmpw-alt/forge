@@ -276,13 +276,23 @@ class _ForgeScreenViewState extends State<ForgeScreenView> {
     if (depth > _maxClientSideDepth) {
       return const ForgeFallbackWidget(reason: '再帰深度の上限を超えました(クライアント側ガード)');
     }
-    final built =
-        buildForgeWidget(context, node, _state, _registry, (child) => _build(child, depth + 1));
+    final role = widget.screen.styleRoles[node.id];
+    // role を builder へ**先に**届ける。被せる方式（`applyForgeRole`）は
+    // 文字や面は変えられるが、「ボタンの種類そのものを変える」ことは
+    // できない——builder が作り終えた後だからである。
+    final built = ForgeRoleScope(
+      role: role,
+      child: Builder(
+        builder: (context) => buildForgeWidget(
+          context, node, _state, _registry, (child) => _build(child, depth + 1),
+        ),
+      ),
+    );
     // Design Language（v1.10）。**ここ1箇所だけ**で role を被せる。
     // 20種の builder それぞれへ配ると、Widget を1つ足すたびに
     // 付け忘れる（`CLAUDE.md` §3「忘れずに呼ばれる保証が無いものは
     // 忘れられる」）。
-    return applyForgeRole(context, widget.screen.styleRoles[node.id], built);
+    return applyForgeRole(context, role, built);
   }
 
   @override

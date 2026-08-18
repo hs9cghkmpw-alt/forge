@@ -45,12 +45,26 @@ enum ForgeAggregateOp {
   sum,
 
   /// 数値Fieldの平均。
-  average;
+  average,
+
+  /// 最大値。v1.11(FORGE-R1-CLOSURE-015)新規。**単一KPIのときだけ
+  /// 意味を持つ**——「今まで釣った一番大きい魚」は1つの答えになる。
+  max,
+
+  /// 最小値。自己ベスト(タイム)等。
+  min,
+
+  /// 最後に記録された値。体温・体重・残高のように、**足しても平均しても
+  /// 弱く「今いくつか」が知りたい量**のための集計。
+  latest;
 
   static ForgeAggregateOp? fromJson(String? raw) => switch (raw) {
         'count' => ForgeAggregateOp.count,
         'sum' => ForgeAggregateOp.sum,
         'average' => ForgeAggregateOp.average,
+        'max' => ForgeAggregateOp.max,
+        'min' => ForgeAggregateOp.min,
+        'latest' => ForgeAggregateOp.latest,
         _ => null,
       };
 
@@ -101,6 +115,14 @@ List<ForgeAggregatedGroup> aggregateRecords(
   String? valueField,
 }) {
   if (groupBy.isEmpty) return const [];
+  // **この関数が計算できるのは count/sum/average だけ。**
+  // v1.11で足した max/min/latest は単一KPI(`aggregateAll`)のための
+  // 集計であり、ここで受けると黙って合計にすり替わる。
+  if (op == ForgeAggregateOp.max ||
+      op == ForgeAggregateOp.min ||
+      op == ForgeAggregateOp.latest) {
+    return const [];
+  }
   if (op != ForgeAggregateOp.count && (valueField == null || valueField.isEmpty)) {
     // sum/average に値Fieldが無いのは呼び出し側の誤りだが、
     // 例外で画面を落とすほどのことではない。何も集計しない。
@@ -164,11 +186,32 @@ List<ForgeAggregatedGroup> aggregateRecords(
 ///
 /// `count`だけは0件でも0を返す。「0件である」は正しく数えた結果で
 /// あって、欠落ではないからである。
+/// [filterField]/[filterValue] を渡すと、そのFieldが その値 のRecordだけを
+/// 数える(「収入だけの合計」)。
+///
+/// [signField]/[negativeWhen] を渡すと、そのFieldが その値 のRecordを
+/// **負として**足す(「収入 − 支出 = 残高」)。合計にしか意味が無いので
+/// `sum`以外では無視される。
+///
+/// この2つを足したのは、**「金額の合計」までしか言えなかった**からで
+/// ある(FORGE-R1-CLOSURE-015 §2.3)。収入と支出を区別しない合計は、
+/// いくら記録しても家計簿の利用者が一番知りたい「今いくら残っているか」
+/// に答えていない。
 double? aggregateAll(
   List<ForgeRecordItem> records, {
   required ForgeAggregateOp op,
   String? valueField,
+  String? filterField,
+  String? filterValue,
+  String? signField,
+  String? negativeWhen,
 }) {
+  if (filterField != null && filterField.isNotEmpty) {
+    records = [
+      for (final record in records)
+        if (record.fields[filterField]?.toString() == filterValue) record,
+    ];
+  }
   if (op == ForgeAggregateOp.count) {
     return records.length.toDouble();
   }
@@ -180,12 +223,36 @@ double? aggregateAll(
 
   double total = 0;
   int counted = 0;
+  double? extremum;
+  double? last;
   for (final record in records) {
     final raw = record.fields[valueField];
     if (raw is! num) continue; // 未入力・型不一致は静かに無視(他Widgetと同方針)
-    total += raw.toDouble();
+    var value = raw.toDouble();
+    if (op == ForgeAggregateOp.sum &&
+        signField != null &&
+        signField.isNotEmpty &&
+        record.fields[signField]?.toString() == negativeWhen) {
+      // **出ていったお金**。負として足すことで、合計がそのまま残高になる。
+      value = -value;
+    }
+    total += value;
     counted += 1;
+    last = value;
+    if (op == ForgeAggregateOp.max) {
+      if (extremum == null || value > extremum) extremum = value;
+    } else if (op == ForgeAggregateOp.min) {
+      if (extremum == null || value < extremum) extremum = value;
+    }
   }
   if (counted == 0) return null;
-  return op == ForgeAggregateOp.average ? total / counted : total;
+  return switch (op) {
+    ForgeAggregateOp.average => total / counted,
+    // **最後に記録された値**。Record Listは追加順に並ぶので末尾が最新。
+    // 日付Fieldで並べ替えないのは、それが`transform.sort`という別の
+    // Primitiveの仕事だからである(1つの関数へ2つの関心を混ぜない)。
+    ForgeAggregateOp.latest => last,
+    ForgeAggregateOp.max || ForgeAggregateOp.min => extremum,
+    _ => total,
+  };
 }

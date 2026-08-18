@@ -20,6 +20,7 @@ from forge_ai.core.orchestration.cognitive_types import (
     RequirementSet,
     TemplateSelection,
 )
+from forge_ai.core.ir.design_intent import DesignIntent
 from forge_ai.core.planner import ApplicationPlan
 from forge_ai.core.world_model import World
 
@@ -47,6 +48,13 @@ class CognitiveContext:
     plan: ApplicationPlan | None = None
     template_selection: TemplateSelection | None = None
     critic_report: CriticReport | None = None
+    # FORGE-R1-CLOSURE-015(2026-08-17)新規。AIが選んだDesign Roleと、
+    # Forgeが既定で埋めた軸。**他のStage出力と同じ扱い**にしてある。
+    #
+    # Decision Traceの文字列から復元する案もあったが、書式が変わるたびに
+    # 静かに壊れる。「後から文字列を読んで意味を取り出す」設計は、
+    # 読む側が壊れたことに気付けない。
+    design_intent: "DesignIntent | None" = None
 
     # Pipeline全体を通して蓄積
     decision_trace: tuple[DecisionTrace, ...] = ()
@@ -87,6 +95,9 @@ class CognitiveContext:
 
     def with_critic_report(self, value: CriticReport) -> "CognitiveContext":
         return dataclasses.replace(self, critic_report=value)
+
+    def with_design_intent(self, value: "DesignIntent") -> "CognitiveContext":
+        return dataclasses.replace(self, design_intent=value)
 
     def with_decision(self, trace: DecisionTrace) -> "CognitiveContext":
         return dataclasses.replace(self, decision_trace=self.decision_trace + (trace,))

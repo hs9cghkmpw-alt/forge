@@ -41,7 +41,15 @@ class TestIRGenerator(unittest.TestCase):
         assert ir is not None
         entity = ir.entities[0]
         self.assertEqual(entity.name, "transaction")
-        self.assertEqual(entity.field_names(), ("category", "amount", "date", "payment_method"))
+        # v1.12(FORGE-R1-CLOSURE-015 §2.3)で`entry_type`(収支の別)を足した。
+        # それまで収入と支出を区別できず、いくら記録しても
+        # 「今いくら残っているか」に答えられなかった。
+        self.assertEqual(
+            entity.field_names(), ("entry_type", "category", "amount", "date", "payment_method")
+        )
+        self.assertIsNotNone(entity.monetary_flow, "お金の出入りが宣言されていない")
+        self.assertEqual(entity.monetary_flow.amount_field, "amount")
+        self.assertEqual(entity.monetary_flow.outflow_value, "支出")
 
     def test_habit_tracking_produces_habit_entity(self) -> None:
         ir = self.generator.generate(self.plan, domain_category="habit_tracking")

@@ -77,7 +77,7 @@ MAX_RECORD_LIST_ITEMS = 500  # checklist/string_listと同じ上限に揃える
 MAX_RECORD_FIELDS = 20  # 1Recordが持てるFieldの上限(既存state.maxProperties: 30より保守的)
 MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)
 
-SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11"}
+SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12"}
 
 # バージョン文字列同士を数値として比較するための順序付きタプル。
 # **設計上の注記(このセッションで実際に発見・修正した再発バグへの
@@ -92,7 +92,7 @@ SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1
 # **文字列の大小比較ではなく、この並びの位置で比較する**(`_at_least()`)。
 # "1.10" < "1.9" になる文字列比較を避けるためであり、ここへ追記する
 # 順序がそのままバージョンの前後関係になる。
-_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11")
+_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12")
 
 
 def _version_at_least(version: str, minimum: str) -> bool:
@@ -255,6 +255,19 @@ WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
         | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
         | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS
     ),
+    # v1.12(FORGE-R1-CLOSURE-015、2026-08-17)は**Widget型を増やさない**。
+    # `metric_view`へ絞り込み(filter_*)と符号付け(sign_*)を足しただけの
+    # property-onlyな追加である(v1.2/v1.5/v1.9と同じ形)。
+    #
+    # 足したのは表示できるものの種類ではなく、**お金の出入りという意味**
+    # を表せるかどうかである。それまで「金額の合計」までしか言えず、
+    # 家計簿の利用者が一番知りたい「今いくら残っているか」に答えられて
+    # いなかった。
+    "1.12": (
+        WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
+        | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
+        | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS
+    ),
 }
 WIDGET_TYPES_ALL = (
     WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
@@ -302,6 +315,7 @@ ACTION_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.10": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
     # v1.11。metric_viewは表示専用なので新しいAction型を追加しない。
     "1.11": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
+    "1.12": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
 }
 ACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS  # 全バージョン合計(未知typeの判定用)
 
@@ -341,6 +355,7 @@ STATE_TYPES_BY_VERSION: dict[str, set[str]] = {
     # v1.11。metric_viewは既存の"record_list"を参照するだけで、
     # 新しいState型を追加しない(bar_chartと同じ)。
     "1.11": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
+    "1.12": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
 }
 STATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS
 
@@ -362,6 +377,19 @@ VALIDATION_RULE_TYPES = {"required", "min_length", "max_length", "min", "max", "
 # `ForgeAggregateOp`)と**1:1で一致させること**——ここが食い違うと、
 # Validatorは通るのにRuntimeが解釈できない文書が生まれる(TD37と同じ形の事故)。
 BAR_CHART_AGGREGATES = {"count", "sum", "average"}
+
+# `metric_view`(v1.11、Hero KPI)が受け付ける集計。**bar_chartより広い。**
+#
+# 単一の数値だからこそ意味を持つ集計がある——「一番大きかったのは」
+# (max)、「今いくつか」(latest)は、1つの値だから答えになる。棒グラフの
+# ように複数並べる文脈では、これらは別の問いになるので広げない。
+#
+# 広げた理由(FORGE-R1-CLOSURE-015 §2): `MeasureSemantics`が
+# `extremum`(サイズ・自己ベスト)と`level`(体温・残高)を区別できるように
+# なったのに、出す先がsum/average/countしか無ければ、**語彙にあるのに
+# 表現できない**状態を作ることになる(014で`metric.primary`に出力先が
+# 無かったのと同じ失敗)。
+METRIC_VIEW_AGGREGATES = BAR_CHART_AGGREGATES | {"max", "min", "latest"}
 
 IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
@@ -1135,17 +1163,27 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
         # 複数の値を並べたいなら`bar_chart`が既にある。
         errors.extend(_check_additional_properties(
             widget,
-            {"type", "id", "state_ref", "value_field", "aggregate", "label", "unit", "empty_text"},
+            {"type", "id", "state_ref", "value_field", "aggregate", "label", "unit", "empty_text",
+             # v1.12(FORGE-R1-CLOSURE-015 §2.3)。お金の出入りを表すため
+             # の2つの仕組み。**どちらもRecordの絞り込み/符号付けであって、
+             # 新しい集計方法ではない**。
+             #
+             #   filter_field/filter_value : 収入だけ・支出だけを合計する
+             #   sign_field/negative_when  : 支出を負として合計する(=残高)
+             #
+             # これが無いと「金額の合計」までしか言えず、家計簿の利用者が
+             # 一番知りたい「今いくら残っているか」に答えられない。
+             "filter_field", "filter_value", "sign_field", "negative_when"},
             path,
         ))
         if not _is_identifier(widget.get("state_ref")):
             errors.append(_err(f"{path}/state_ref", Category.SCHEMA, "required", "metric_view.state_refは必須です。"))
 
         aggregate = widget.get("aggregate")
-        if aggregate is not None and aggregate not in BAR_CHART_AGGREGATES:
+        if aggregate is not None and aggregate not in METRIC_VIEW_AGGREGATES:
             errors.append(_err(
                 f"{path}/aggregate", Category.SCHEMA, "enum",
-                f"metric_view.aggregateは{sorted(BAR_CHART_AGGREGATES)}のいずれかです。",
+                f"metric_view.aggregateは{sorted(METRIC_VIEW_AGGREGATES)}のいずれかです。",
             ))
         # `count`は数えるだけなので値Fieldが要らない。sum/averageは要る。
         # 既定を`count`にしてあるのは、**Fieldが無くても必ず成立する側**
@@ -1155,10 +1193,33 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
                 f"{path}/value_field", Category.SCHEMA, "required",
                 "metric_view.value_fieldは、aggregateがsum/averageのとき必須です。",
             ))
-        for key, limit in (("label", 40), ("unit", 8), ("empty_text", 40)):
+        for key, limit in (("label", 40), ("unit", 8), ("empty_text", 40),
+                           ("filter_value", 40), ("negative_when", 40)):
             if key in widget and (not isinstance(widget[key], str) or len(widget[key]) > limit):
                 errors.append(_err(f"{path}/{key}", Category.SCHEMA, "string_length",
                                     f"metric_view.{key}は{limit}文字以内の文字列です。"))
+        for field_key, value_key in (("filter_field", "filter_value"),
+                                     ("sign_field", "negative_when")):
+            if (field_key in widget or value_key in widget) and not _version_at_least(version, "1.12"):
+                errors.append(_err(
+                    f"{path}/{field_key}", Category.SCHEMA, "field_not_allowed_in_version",
+                    f"metric_view.{field_key}はv1.12以降の文書でのみ使用できます。",
+                ))
+            if field_key in widget and not _is_identifier(widget.get(field_key)):
+                errors.append(_err(f"{path}/{field_key}", Category.SCHEMA, "identifier",
+                                    f"metric_view.{field_key}はField名でなければなりません。"))
+            # **片方だけの指定を通さない。** 「どのFieldで」だけ書いて
+            # 「どの値のとき」が無いと、絞り込みも符号付けも成立しない。
+            # 黙って無視すると、指定したつもりの絞り込みが効かないまま
+            # 「収入の合計」という見出しの下に全額が出る。
+            if (field_key in widget) != (value_key in widget):
+                errors.append(_err(f"{path}/{field_key}", Category.SCHEMA, "required",
+                                    f"metric_view.{field_key}と{value_key}は両方必要です。"))
+        if "sign_field" in widget and (widget.get("aggregate") or "count") != "sum":
+            # 符号付けは合計にしか意味が無い。平均や最大に負の記録を
+            # 混ぜても、答えになる数値にならない。
+            errors.append(_err(f"{path}/sign_field", Category.SCHEMA, "field_not_allowed",
+                                "metric_view.sign_fieldはaggregate=sumのときだけ使えます。"))
 
     elif t == "date_field":
         # v1.7新規(CEO「全て実装してくれ」対応、Widget Vocabulary

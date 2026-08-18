@@ -16,7 +16,8 @@
     "design_critic",
     "domain_resolution",
     "entity_source",
-    "design_intent"
+    "design_intent",
+    "semantic_design"
   ],
   "domain": "task_management",
   "input": "期限と優先度を設定できるタスク管理アプリ",

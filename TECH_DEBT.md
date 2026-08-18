@@ -3311,6 +3311,43 @@ Curatedの価値は「速い・安定・無料」である。Geminiの実測枠�
 * **AIを呼ぶかどうかをDomainごとに切り替える** — 「どのDomainで
   呼ぶか」という設定が増える。設定で分岐させると、忘れられる
 
+### 推奨案（2026-08-17、FORGE-R1-CLOSURE-015 §13で比較した結果）
+
+**推奨: B（Local AIへDesign Intentを寄せる）を本命に、Aを繋ぎとする。**
+
+4案を6つの軸で比較した。
+
+| | A. 軸の答えをcache | **B. Local AIへ寄せる** | C. 既存AI callへ統合 | D. 既定値+任意refine |
+|---|---|---|---|---|
+| 品質 | 同等（同じ答えを再利用） | 当初は劣る可能性 | 同等 | **劣る**（refineが省かれる） |
+| 遅延 | 2回目以降ゼロ | ローカル実行分のみ | ゼロ（同居） | ゼロ |
+| Cloud枠 | 2回目以降ゼロ | **完全にゼロ** | Curatedでは減らない | ゼロ |
+| Local AI育成 | 寄与しない | **これ自体が育成** | 寄与しない | 寄与しない |
+| cache汚染 | **あり**（下記） | 無し | 無し | 無し |
+| Needへの追随 | **鈍る** | 保たれる | 保たれる | 失われる |
+
+**Bが本命である理由**は、このTaskの目的と一致するからである。
+択一はLocal AIに最も向いた仕事で（生成より選択の方が易しい）、
+しかも**Design Intentを解かせること自体がLocal AIの訓練になる**。
+Cloud枠を1回も使わない。Product Direction §3「Local AIを小さく・
+安く・高品質に」そのものである。
+
+前提はTD51（Local AI実モデル実行が0回）の解消。
+
+**AはBまでの繋ぎ**として妥当だが、危険が1つある。キャッシュキーの
+粒度を粗くすると（例: Domainだけ）、**違う依頼に同じ意味を当てる**。
+「家計簿」でも「毎日の支出を落ち着いて振り返りたい」と
+「レシートを素早く放り込みたい」では適切な密度が違う。
+Needの要約まで含めた鍵にしないと、Design Languageを入れた意味が
+薄れる。
+
+**Cを採らない理由**: `entity_synthesis`はCuratedでは通らない。統合
+すると経路によって呼び出し回数が変わり、「Curatedは1回・合成は0回」
+という逆転が起きる。
+
+**Dを採らない理由**: 「任意」は忘れられる（`CLAUDE.md` §3）。
+結局ほぼ常に既定値になり、家計簿と日記が同じ密度になる。
+
 ### 直す案（未着手）
 
 1. **軸の答えをキャッシュする** — 同じNeed・同じEntityなら同じ選択に
@@ -3410,3 +3447,47 @@ TD67（第二Cloudが実API未検証）が進まなかった一因でもある�
 
 選択ロジックの検査を**`_LIVE_ENABLED`の外**へ出した（常時実行、実API
 呼び出し0回）。旧実装へ戻すと3件落ちることを確認済み。
+
+---
+
+## TD73. Design Language の Runtime 反映は Widget ごとの対応が要る（2026-08-17）
+
+### 事実
+
+FORGE-R1-CLOSURE-015 §8で、`metric.primary`が**実際には描画へ効いて
+いなかった**ことが判明した。
+
+`style_role`は`_build()`が1箇所で`DefaultTextStyle.merge`として被せる
+設計だった。ところが`metric_view`のbuilderは数値Textへ
+`style: valueStyle`を明示しており、**明示的なstyleはDefaultTextStyle
+より強い**。つまりroleを付けても描画は1ピクセルも変わっていなかった。
+
+同じ理由で`button.primary`/`button.secondary`も同じ`ElevatedButton`
+で描かれ、画面上は区別できなかった。
+
+### 直したこと
+
+* `ForgeRoleScope`（InheritedWidget）でbuilderへroleを**先に**渡す
+* `metric_view`はroleのTextStyleを明示的にmergeする
+* button系は強弱（`ForgeButtonEmphasis`）でWidgetの種類を変える
+
+### 残る負債
+
+**「1箇所で被せれば全Widgetに効く」は成立しない。** 被せる方式で
+効くのは、builderが明示的なstyleを持たない場合だけである。
+
+つまりWidgetを1つ足すたびに「このWidgetはroleを読むべきか」を
+判断する必要がある。今は`metric_view`・`button`・`form`の3つだけが
+読んでいる。読んでいないWidgetでroleが効かないことは、**テストが
+無ければ気付けない**（実際、今回まで気付けなかった）。
+
+### 直す案（未着手）
+
+1. **builderが明示styleを持つ箇所を機械的に検出する** — Dartの静的
+   解析で`Text(style:`を列挙し、role対象Widgetと突き合わせる
+2. **role適用を必須にする** — 全builderが`ForgeRoleScope.roleOf`を
+   読む形にし、読んでいないbuilderをテストで落とす。ただし
+   「読む必要が無いWidget」（divider等）まで巻き込む
+3. **視覚回帰テストを増やす** — Widgetを足すたびに
+   `semantic_visual_hierarchy_test.dart`へ1件足すことを規約にする。
+   規約は忘れられるので、1か2の方が確実である

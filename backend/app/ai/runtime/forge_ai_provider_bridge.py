@@ -91,6 +91,17 @@ _RESPONSE_SCHEMAS: dict[str, dict[str, Any]] = {
                         "choices": {"type": "array", "items": {"type": "string"}},
                         "min_value": {"type": "number"},
                         "max_value": {"type": "number"},
+                        # FORGE-R1-CLOSURE-015。数値が**どういう量か**。
+                        # ここはenumで閉じてよい——選択肢が6つで固定で
+                        # あり、Design Roleのように増減しないため。
+                        # forge_ai側でも必ず検証し直す(`_sanitize_measure`)。
+                        "measure": {
+                            "type": "string",
+                            "enum": [
+                                "additive", "averageable", "level",
+                                "extremum", "identifier", "unknown",
+                            ],
+                        },
                     },
                     "required": ["name", "label", "type"],
                 },

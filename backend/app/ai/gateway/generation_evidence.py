@@ -111,6 +111,8 @@ from enum import Enum
 from app.ai.gateway.learning_foundation import AcceptanceSignal
 
 __all__ = [
+    "DesignDecisionSource",
+    "DesignRoleDecision",
     "GenerationEvidenceStore",
     "GenerationRecord",
     "GenerationSource",
@@ -250,6 +252,72 @@ class RuntimeOutcome(str, Enum):
         return self is not RuntimeOutcome.UNKNOWN
 
 
+class DesignDecisionSource(str, Enum):
+    """その意味的役割を**誰が決めたか**(FORGE-R1-CLOSURE-015 §4、2026-08-17)。
+
+    ---
+
+    ## なぜ分けるのか
+
+    `design_language_roles`は最終的に使われたrole一覧しか持たない。
+    だから記録を後から見ても
+
+        screen_density = density.compact
+
+    が**AIが選んだ結果**なのか、**AIが答えられずForgeが既定で埋めた
+    結果**なのかが分からない。
+
+    そのままLocal AIの教師データにすると、**Forgeの既定値をAIの成功例
+    として学習する**ことになる。「このNeedではcompactが良い」とAIが
+    判断した事実は1つも無いのに、そう記録されてしまう。
+
+    `DesignIntent`の内部には`fallback_axes`として区別が存在していた。
+    **Evidenceへ渡すところで消えていた**ので、そこを繋ぐ。
+    """
+
+    AI = "ai"
+    """AIが選び、Forgeの検証を通った。**唯一「AIの成功例」と呼べるもの。**"""
+
+    DETERMINISTIC = "deterministic"
+    """Compilerが構造から決めた(見出し・一覧・ボタン)。
+    AIの手柄ではないが、間違いでもない——構造から一意に決まる。"""
+
+    FALLBACK = "fallback"
+    """AIへ聞いたが採れなかったので既定値で埋めた。
+    **AIの選択が受け入れられた証拠にはならない。**"""
+
+    CURATED = "curated"
+    """人手で書いたCurated定義に由来する。"""
+
+    UNKNOWN = "unknown"
+    """由来を記録し損ねた。**既定値。** 楽観側(AI)へ倒さない。"""
+
+    @property
+    def is_ai_evidence(self) -> bool:
+        """AIの選択の成否を語ってよいか。"""
+        return self is DesignDecisionSource.AI
+
+
+@dataclass(frozen=True)
+class DesignRoleDecision:
+    """1つの軸について「どのroleが、誰の判断で選ばれたか」。
+
+    **識別子しか持たない。** Promptも、Providerの生出力も、利用者の
+    発話も入らない(`ExperienceRecord`と同じPrivacy境界、006 §22)。
+    """
+
+    axis: str
+    """`screen_density`等。何についての判断か。"""
+
+    role: str
+    """`density.compact`等。選ばれた意味。"""
+
+    source: DesignDecisionSource = DesignDecisionSource.UNKNOWN
+
+    def to_dict(self) -> dict[str, str]:
+        return {"axis": self.axis, "role": self.role, "source": self.source.value}
+
+
 @dataclass(frozen=True)
 class GenerationRecord:
     """1つの生成物についての**Forgeの振る舞いの事実**。
@@ -275,6 +343,24 @@ class GenerationRecord:
 
     R1で実在するようになる。それまでは空——**空であることが
     「まだ語彙が無い」という事実**であり、埋めるべき欠損ではない。"""
+
+    visual_structure: dict[str, object] = field(default_factory=dict)
+    """生成物の**構造についての決定的な事実**(§10)。
+
+    主KPIが何個あるか、意味が付いている割合、階層の深さ——「美しい」を
+    測ったものではない。名前を`visual_quality`にしなかったのはそのため
+    である(測れていないものを測ったことにしない)。
+
+    それでも`UNKNOWN`のまま置くよりはよい。**後から「どういう構造の
+    生成物が受け入れられたか」を突き合わせられる**、機械的に再現できる
+    事実である。"""
+
+    design_decisions: tuple[DesignRoleDecision, ...] = ()
+    """軸ごとの「誰が決めたか」(FORGE-R1-CLOSURE-015 §4)。
+
+    `design_language_roles`が**結果**の一覧であるのに対し、こちらは
+    **由来**を持つ。片方だけでは、Forgeの既定値をAIの成功例として
+    学習してしまう。"""
 
     forge_language_version: str = ""
     """生成時のForge Languageのバージョン。仕様が動くので、
@@ -308,6 +394,23 @@ class GenerationRecord:
             and self.runtime_outcome is not RuntimeOutcome.FAILED
         )
 
+    @property
+    def ai_selected_roles(self) -> tuple[DesignRoleDecision, ...]:
+        """**AIが選んだものだけ。** Local AIの教師データはここから採る。
+
+        `design_language_roles`をそのまま使うと、Forgeが既定で埋めた
+        roleまで「AIの成功例」に混ざる(§4.3)。
+        """
+        return tuple(d for d in self.design_decisions if d.source.is_ai_evidence)
+
+    @property
+    def fallback_roles(self) -> tuple[DesignRoleDecision, ...]:
+        """AIが答えられなかった軸。**どこが弱いか**が分かる。"""
+        return tuple(
+            d for d in self.design_decisions
+            if d.source is DesignDecisionSource.FALLBACK
+        )
+
     def to_dict(self) -> dict[str, object]:
         """診断・集計用。**本文が現れないことが不変条件である。**"""
         return {
@@ -317,6 +420,8 @@ class GenerationRecord:
             "validator_passed": self.validator_passed,
             "capabilities": list(self.capabilities),
             "design_language_roles": list(self.design_language_roles),
+            "design_decisions": [d.to_dict() for d in self.design_decisions],
+            "visual_structure": dict(self.visual_structure),
             "forge_language_version": self.forge_language_version,
             "runtime_outcome": self.runtime_outcome.value,
             "user_acceptance": self.user_acceptance.value,

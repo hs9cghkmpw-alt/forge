@@ -51,12 +51,14 @@ from forge_ai.repair.repair_engine import RepairEngine
 from app.ai.foundation.interfaces import CriticResult
 from app.ai.gateway.ai_router import AIRouter, NoProviderAvailableError, default_router
 from app.ai.gateway.generation_evidence import (
+    DesignDecisionSource,
+    DesignRoleDecision,
     GenerationRecord,
     GenerationSource,
     default_generation_store,
     source_for_generated,
 )
-from app.ai.runtime.design_language import design_roles_in
+from app.ai.runtime.design_language import design_language_guidance, design_roles_in
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.runtime.forge_ai_adapter import (
     intent_ir_from_forge_ai_intent,
@@ -178,6 +180,68 @@ def _generation_source(decision_trace, provider_used: str | None) -> GenerationS
     return source_for_generated(provider_used)
 
 
+def _design_decisions(context, forge_document: dict):  # noqa: ANN001, ANN201
+    """軸ごとの「どのroleが、誰の判断で選ばれたか」(§4)。
+
+    ---
+
+    ## 何を分けているのか
+
+    ```
+    ai            AIが選び、Forgeの検証を通った  ← 唯一「AIの成功例」
+    fallback      AIへ聞いたが採れず既定で埋めた  ← AIの手柄ではない
+    deterministic Compilerが構造から決めた        ← 見出し・一覧・ボタン
+    ```
+
+    `design_language_roles`(結果の一覧)だけを教師データにすると、
+    **Forgeの既定値をAIの成功例として学習する**。「このNeedでは
+    compactが良い」とAIが判断した事実は1つも無いのに、そう記録される。
+
+    ## 持たないもの
+
+    Prompt本文もProviderの生出力も入らない。入るのは軸ID・role ID・
+    由来の3つだけである(§4.2、006 §22のPrivacy境界)。
+    """
+    decisions: list[DesignRoleDecision] = []
+
+    intent = getattr(context, "design_intent", None)
+    ai_axes: set[str] = set()
+    if intent is not None:
+        fallback_axes = set(getattr(intent, "fallback_axes", ()) or ())
+        for axis, role in (getattr(intent, "choices", {}) or {}).items():
+            if not role:
+                continue
+            ai_axes.add(str(role))
+            decisions.append(DesignRoleDecision(
+                axis=str(axis), role=str(role),
+                source=(DesignDecisionSource.FALLBACK if axis in fallback_axes
+                        else DesignDecisionSource.AI),
+            ))
+
+    # Compilerが構造から決めたrole。**AIへは一度も聞いていない**ので、
+    # AIの成功例として数えてはならない。かといって由来不明でもない
+    # ——構造から一意に決まる、という確かな由来がある。
+    for role in design_roles_in(forge_document):
+        if role in ai_axes:
+            continue
+        decisions.append(DesignRoleDecision(
+            axis="", role=role, source=DesignDecisionSource.DETERMINISTIC,
+        ))
+    return tuple(decisions)
+
+
+def _visual_structure(forge_document: dict) -> dict:
+    """生成物の構造についての決定的な事実(§10)。
+
+    Semantic Design Criticと**同じ関数**で測る。別々に数えると、
+    Criticが「主KPIは1つ」と言っているのにEvidenceには2と残る、と
+    いう食い違いが起きうる。1回のscanを2人が読む形にしてある。
+    """
+    from forge_ai.core.critic.semantic_design_critic import evaluate_semantic_design  # noqa: PLC0415
+
+    return evaluate_semantic_design(forge_document).evidence.to_dict()
+
+
 def _record_generation(
     bound,  # noqa: ANN001 — _BoundAdapter
     *,
@@ -207,6 +271,8 @@ def _record_generation(
             repair_attempts=repair_attempts,
             ai_calls=ai_calls,
             design_language_roles=design_roles_in(forge_document),
+            design_decisions=_design_decisions(context, forge_document),
+            visual_structure=_visual_structure(forge_document),
         )
     )
     # **番号を返す。** 013はここで捨てていた。捨てると、後から
@@ -515,6 +581,11 @@ class PromptPipeline:
                 natural_language,
                 bridge,
                 clarification_answers=clarification_answers,
+                # FORGE-R1-CLOSURE-015 §5: Design Languageの語彙を**注入する**。
+                # forge_aiはbackendをimportしないので、渡さなければAIは
+                # roleを選ばない。ここを外すとProductionでDesign Intentが
+                # 動かなくなり、対応するテストが落ちる。
+                design_language=design_language_guidance(),
                 # FORGE-HANDOFF-LOCAL-AI-UX-004(2026-08-13): `/converse`が
                 # ユーザー自身の短い言葉を渡す。アプリのタイトルを
                 # `build_brief`(説明文)ではなくユーザーの言葉から導出する

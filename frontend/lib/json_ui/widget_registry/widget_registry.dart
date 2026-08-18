@@ -8,6 +8,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../renderer/design_language.dart';
 import '../renderer/forge_runtime_state.dart';
 import '../schema/forge_document.dart';
 import 'widget_registry_core.dart';
@@ -77,7 +78,16 @@ Widget _buildTextField(BuildContext context, ForgeWidgetNode node, ForgeRuntimeS
 
 Widget _buildButton(BuildContext context, ForgeWidgetNode node, ForgeRuntimeState state, Widget Function(ForgeWidgetNode) build) {
   final n = node as ForgeButtonWidgetNode;
-  return ElevatedButton(
+  // v1.12(FORGE-R1-CLOSURE-015 §6.1)。**意味を見た目に出す。**
+  //
+  // それまで button.primary と button.secondary は同じ ElevatedButton で
+  // 描かれており、role は Evidence に残るだけで画面上は区別できなかった。
+  // 「AIは意味を決める。Forgeは品質を保証する」の後半が成立していない。
+  //
+  // Material の emphasis 体系に乗せる(filled > outlined)。生の色を
+  // 固定しないので Light/Dark どちらでも成立する。
+  return forgeEmphasisButton(
+    emphasis: buttonEmphasisFor(ForgeRoleScope.roleOf(context)),
     onPressed: () => state.dispatch(n.action),
     child: Text(n.label),
   );

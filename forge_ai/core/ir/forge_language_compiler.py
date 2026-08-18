@@ -146,7 +146,15 @@ from forge_ai.core.compiler import (
     clamp_title,
     design_tokens_for_style,
 )
-from forge_ai.core.ir.ir_types import Entity, FieldType, ForgeIR, ViewKind
+from forge_ai.core.ir.ir_types import (
+    Entity,
+    Field,
+    FieldType,
+    ForgeIR,
+    MeasureSemantics,
+    ViewKind,
+    preferred_aggregate,
+)
 from forge_ai.core.ir.solution_shape import SolutionShape, select_solution_shape
 
 # FORGE v1.0新規(Product Quality Sprint1)。Entityの`visual_style`
@@ -208,6 +216,25 @@ _ROLE_FIELD_LABEL = "text.label"
 # のに、出力先のWidgetが無いまま置かれていた（TD69）。`metric_view` を
 # 足したことで、初めて実際の画面へ出るようになった。
 _ROLE_HERO_METRIC = "metric.primary"
+# v1.12(FORGE-R1-CLOSURE-015 §2.3)。お金の**向き**を意味として言う。
+# `state.success`/`state.danger`で兼用しない——**支出はエラーではない**。
+_ROLE_INCOME = "finance.income"
+_ROLE_EXPENSE = "finance.expense"
+
+
+# 集計方法ごとの見出し。**「合計」と書いてあるのに最大値、を作らない。**
+_METRIC_LABELS: dict[str, str] = {
+    "sum": "{label}の合計",
+    "average": "{label}の平均",
+    "max": "{label}の最大",
+    "min": "{label}の最小",
+    "latest": "最新の{label}",
+    "count": "{label}の件数",
+}
+
+
+def _metric_label(label: str, aggregate: str) -> str:
+    return _METRIC_LABELS.get(aggregate, "{label}").format(label=label)
 
 
 def _intent_role(design_intent: "DesignIntent | None", axis: str, fallback: str) -> str:
@@ -357,7 +384,7 @@ class ForgeLanguageCompiler:
         return ForgeIRDocument(
             # section_header(v1.5)・design_tokens(v1.5)を使うため。
             # RECORD_CRUD経路と揃えて"1.8"(上位互換)を宣言する。
-            version="1.11",
+            version="1.12",
             initial_screen_id=screen.id,
             screens=(screen,),
             app_title=title,
@@ -417,7 +444,17 @@ class ForgeLanguageCompiler:
                 ForgeIRWidget(
                     type="form",
                     id="record_form",
-                    properties={"submit_label": "保存", "submit_action": create_submit_action},
+                    properties={
+                        # v1.12(§6.1)。**このアプリの主要操作は「記録を
+                        # 増やすこと」**である。Runtimeはこのroleを見て
+                        # 送信ボタンを塗りつぶし(filled)にする。
+                        #
+                        # 編集formには付けない——同じ文書に主要操作が
+                        # 2つあると「一番大事なもの」が2つになり、
+                        # 階層が消える(Semantic Design Criticが見る)。
+                        "style_role": _ROLE_PRIMARY_BUTTON,
+                        "submit_label": "保存", "submit_action": create_submit_action,
+                    },
                     children=tuple(create_form_children),
                 ),
             ),
@@ -481,9 +518,10 @@ class ForgeLanguageCompiler:
         # わけではない——**開いた瞬間に答えが目に入る**のが、家計簿を
         # 家計簿たらしめている部分である。一覧の下に置くと、それは
         # 「一覧のおまけの合計」になってしまう。
-        hero_metric_widget = self._build_hero_metric_widget(entity, records_state_id)
-        if hero_metric_widget is not None:
-            list_tab_children.insert(0, hero_metric_widget)
+        # v1.12: お金の出入りを持つEntityは、**収入・支出・残高の3つ**を出す。
+        # 持たないEntityは従来どおり単一のHero KPIだけ。
+        for widget in reversed(self._build_metric_widgets(entity, records_state_id)):
+            list_tab_children.insert(0, widget)
 
         bar_chart_widget = self._build_bar_chart_widget(entity, records_state_id)
         if bar_chart_widget is not None:
@@ -568,7 +606,7 @@ class ForgeLanguageCompiler:
             # v1.8(2026-08-11、Widget Vocabulary Expansion第3弾):
             # sliderはv1.8専用のため(それ以前のWidgetは既に追加済み。
             # v1.8はいずれの上位互換、無変更)。
-            version="1.11",
+            version="1.12",
             initial_screen_id=screen.id,
             screens=(screen,),
             app_title=title,
@@ -717,32 +755,128 @@ class ForgeLanguageCompiler:
             children.append(ForgeIRWidget(type="text_field", id=f"{state_id}{id_suffix}", properties=field_properties))
         return children, field_states
 
-    def _build_hero_metric_widget(self, entity: Entity, records_state_id: str) -> ForgeIRWidget | None:
-        """v1.11新規（FORGE-R1、TD69）。Entityが数値Fieldを持つ場合のみ、
-        その合計を**画面で一番大きい単一の数値**として置く。
+    def _build_metric_widgets(self, entity: Entity, records_state_id: str) -> list[ForgeIRWidget]:
+        """一覧の前に置く数値。**お金の出入りがあるかで形が変わる。**
 
         ---
 
-        ## なぜ合計なのか（平均でも件数でもなく）
+        ## お金を扱うEntityの場合（v1.12、§2.3）
 
-        「今月いくら使ったか」「今月の残高」——数値Fieldを持つ記録型
-        アプリで最初に知りたいのは、ほぼ常に**積み上がった量**である。
-        平均は「1回あたり」を知りたいときの問いで、それは後から
-        利用者が言えばよい（Revisionの仕事）。
+        ```
+        残高    metric.primary    収入 − 支出   ← 一番大きい
+        収入    finance.income    収入だけの合計
+        支出    finance.expense   支出だけの合計
+        ```
 
-        数値Fieldを持たないEntity（habit/todo/diary）には**何も置かない**。
-        `bar_chart`と同じ判断で、「根拠のない集計を発明しない」。
-        件数を出すことはできるが、「習慣が3件ある」は画面で一番大きく
-        出すべき数値ではない。**出せるからといって出さない。**
+        **`metric.primary`は残高だけ**である。3つとも主KPIにすると
+        「一番大事なもの」が3つあることになり、階層が消える
+        (Design Criticがこれを見る)。
+
+        単純な`amount`の合計を「残高」と呼ばないのが要点である。収入と
+        支出を区別しない合計は、いくら記録しても
+        「今いくら残っているか」に答えていない。
+
+        ## それ以外のEntity
+
+        意味的に妥当な単一KPIを1つだけ（`_build_hero_metric_widget`）。
+        """
+        flow = entity.monetary_flow
+        if flow is None:
+            single = self._build_hero_metric_widget(entity, records_state_id)
+            return [single] if single is not None else []
+
+        amount = next(f for f in entity.fields if f.name == flow.amount_field)
+        direction = next(f for f in entity.fields if f.name == flow.direction_field)
+        inflow_values = [c for c in direction.choices if c != flow.outflow_value]
+        # 収入側の選択肢が無い(全部が支出)なら、収入の見出しを出さない
+        # ——常に0が出るだけで、何も伝えない。
+        inflow_value = inflow_values[0] if inflow_values else None
+
+        def metric(widget_id: str, role: str, label: str, **extra: object) -> ForgeIRWidget:
+            return ForgeIRWidget(
+                type="metric_view", id=widget_id,
+                properties={
+                    "style_role": role,
+                    "state_ref": records_state_id,
+                    "value_field": amount.name,
+                    "aggregate": "sum",
+                    "label": label,
+                    "empty_text": "まだ記録がありません",
+                    **extra,
+                },
+            )
+
+        widgets = [
+            metric(
+                "records_balance_metric", _ROLE_HERO_METRIC, "残高",
+                # 支出を負として合計する。これが「残高」の定義そのもの。
+                sign_field=direction.name, negative_when=flow.outflow_value,
+            ),
+        ]
+        if inflow_value is not None:
+            widgets.append(metric(
+                "records_income_metric", _ROLE_INCOME, f"{inflow_value}の合計",
+                filter_field=direction.name, filter_value=inflow_value,
+            ))
+        widgets.append(metric(
+            "records_expense_metric", _ROLE_EXPENSE, f"{flow.outflow_value}の合計",
+            filter_field=direction.name, filter_value=flow.outflow_value,
+        ))
+        return widgets
+
+    def _build_hero_metric_widget(self, entity: Entity, records_state_id: str) -> ForgeIRWidget | None:
+        """v1.11（FORGE-R1、TD69）。**意味的に妥当な**単一KPIを1つ置く。
+
+        ---
+
+        ## 2026-08-17に直した実バグ（FORGE-R1-CLOSURE-015 §2）
+
+        最初の実装は「Entityの最初のNUMBER Fieldを合計する」だった。
+        実際に生成されていたもの:
+
+        ```
+        読書記録  rating(評価5段階) → **評価の合計**
+        釣果記録  size(サイズcm)   → **魚のサイズの合計**
+        ```
+
+        どちらも意味を成さない。**「数値である」ことと「足すと意味の
+        ある量である」ことは別**なのに、型だけで後者を推測していた。
+        分からないものを「合計できる」という楽観側へ倒していた
+        (`CLAUDE.md` §3)。
+
+        ## いまの判断
+
+        `Field.measure`(`MeasureSemantics`)から、その量について
+        **最初に知りたいこと**を引く。
+
+        ```
+        additive     → sum      金額・数量。「全部でいくら」
+        averageable  → average  評価・点数。合計は無意味
+        level        → latest   体温・残高。「今いくつか」
+        extremum     → max      サイズ・自己ベスト。「一番大きかったのは」
+        identifier   → 出さない 年号・番号。量ではない
+        unknown      → 出さない **分からないなら作らない**
+        ```
+
+        ## 分からないときに出さない
+
+        `UNKNOWN`でHero KPIを作らないのが要点である。「出せるから
+        出す」をすると、意味の無い数値が画面で一番大きくなる——それは
+        何も無いより悪い(利用者はそれを事実だと読む)。
+
+        数値Fieldを持たないEntity(habit/todo/diary)に何も置かないのも
+        同じ判断である。件数は数えられるが、「習慣が3件ある」は画面で
+        一番大きく出すべき数値ではない。
 
         ## 値を決めない
 
         `metric.primary`が何pxで何色になるかはRuntimeが保証する。
         Compilerは「これは主KPIである」という意味だけを言う。
         """
-        value_field = next((f for f in entity.fields if f.type == FieldType.NUMBER), None)
-        if value_field is None:
+        candidate = self._choose_measure_field(entity)
+        if candidate is None:
             return None
+        value_field, aggregate = candidate
 
         return ForgeIRWidget(
             type="metric_view", id="records_hero_metric",
@@ -750,13 +884,34 @@ class ForgeLanguageCompiler:
                 "style_role": _ROLE_HERO_METRIC,
                 "state_ref": records_state_id,
                 "value_field": value_field.name,
-                "aggregate": "sum",
-                "label": f"{value_field.label}の合計",
+                "aggregate": aggregate,
+                "label": _metric_label(value_field.label, aggregate),
                 # まだ1件も無いときに 0 とだけ出ると「0円だ」という
                 # **事実でない読み取り**を招く。記録が無いことを言う。
                 "empty_text": "まだ記録がありません",
             },
         )
+
+    def _choose_measure_field(self, entity: Entity) -> tuple[Field, str] | None:
+        """主KPIにしてよい数値Fieldと、その集計方法を選ぶ。
+
+        **最初のNUMBERを採らない。** 意味が分かっているFieldだけを
+        候補にし、その中から選ぶ。1つも無ければ`None`——Hero KPIは
+        出ない。
+        """
+        candidates = [
+            (field, preferred_aggregate(field.measure))
+            for field in entity.fields
+            if field.type == FieldType.NUMBER
+        ]
+        usable = [(field, agg) for field, agg in candidates if agg is not None]
+        if not usable:
+            return None
+        # 複数あるときは**足せる量を優先する**。「全部でいくら」は、
+        # 「一番大きかったのは」より画面の主KPIに向く場面が多い
+        # (家計簿のamount と 付随的なメモ的数値が並ぶ場合など)。
+        additive = [pair for pair in usable if pair[0].measure is MeasureSemantics.ADDITIVE]
+        return (additive or usable)[0]
 
     def _build_bar_chart_widget(self, entity: Entity, records_state_id: str) -> ForgeIRWidget | None:
         """v1.6新規。Entityが数値Fieldを持つ場合のみ、一覧の直後に
@@ -774,7 +929,15 @@ class ForgeLanguageCompiler:
         if value_field is None:
             return None
 
-        candidates = [f for f in entity.fields if f.name != value_field.name]
+        # **収支の別(支出/収入)をグラフの軸にしない。** 選択肢が2つしか
+        # なく、しかもその内訳は収入・支出のKPIが既に示している。
+        # 「何に使ったか」(カテゴリ)の方が、グラフとして遥かに情報量が
+        # 多い(v1.12でentry_typeを足したとき、これを除外しないと
+        # カテゴリ別グラフがentry_type別グラフに置き換わった)。
+        excluded = {value_field.name}
+        if entity.monetary_flow is not None:
+            excluded.add(entity.monetary_flow.direction_field)
+        candidates = [f for f in entity.fields if f.name not in excluded]
         label_field = (
             next((f for f in candidates if f.type == FieldType.CHOICE), None)
             or next((f for f in candidates if f.type == FieldType.STRING), None)

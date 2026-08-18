@@ -60,6 +60,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from forge_ai.contracts.design_language_contract import DesignLanguageGuidance
 from forge_ai.prompt.prompt_builder import PromptBuilder
 from forge_ai.provider.provider_interface import AIProvider
 
@@ -113,21 +114,22 @@ class DesignIntentSelector:
         provider: AIProvider,
         prompt_builder: PromptBuilder | None = None,
         *,
-        axes: tuple[dict[str, Any], ...] | None = None,
-        validator: Any = None,
+        guidance: DesignLanguageGuidance | None = None,
     ) -> None:
         self._provider = provider
         self._prompt_builder = prompt_builder or PromptBuilder()
-        # 語彙はbackend側にある（`app/ai/runtime/design_language.py`）。
-        # forge_ai は backend を import しないので、**呼び出し側が渡す**。
-        # 渡されなければ何も選ばせない（既定値のまま）。
-        self._axes = axes or ()
-        self._validator = validator
+        # 語彙の**中身**はforge_aiの外にある。ここが知っているのは
+        # `DesignLanguageGuidance`という形だけで、`app.*`というモジュール
+        # 名は1文字も現れない（§5、`design_language_contract.py`参照）。
+        #
+        # 渡されなければ何も選ばせない（既定値のまま）。これは「壊れて
+        # いる」ではなく「語彙を渡されていない」という状態である。
+        self._guidance = guidance or DesignLanguageGuidance()
 
     def select(
         self, *, need_summary: str, entity_label: str, field_labels: tuple[str, ...]
     ) -> DesignIntent:
-        if not self._axes or self._validator is None:
+        if not self._guidance.is_usable:
             return DesignIntent.default()
 
         try:
@@ -136,7 +138,7 @@ class DesignIntentSelector:
                     need_summary=need_summary,
                     entity_label=entity_label,
                     field_labels=field_labels,
-                    axes=self._axes,
+                    axes=self._guidance.to_prompt_axes(),
                 )
             )
             raw = response.structured if isinstance(response.structured, dict) else {}
@@ -147,12 +149,12 @@ class DesignIntentSelector:
 
         choices: dict[str, str] = {}
         fallbacks: list[str] = []
-        for entry in self._axes:
-            axis = str(entry.get("axis", ""))
+        for entry in self._guidance.axes:
+            axis = entry.axis
             if not axis:
                 continue
             answer = raw.get(axis)
-            if self._validator(axis, answer):
+            if self._guidance.validate(axis, answer):
                 choices[axis] = str(answer)
             else:
                 # 語彙全体に含まれていても、**その軸の答えでなければ通さない**。

@@ -3,7 +3,7 @@
 現在のForgeが「どこまで動くか」を一枚で示す。詳細な履歴は`CHANGELOG.md`、
 未解消の課題は`TECH_DEBT.md`・`KNOWN_ISSUES.md`を参照。
 
-**最終更新**: 2026-08-17(TD69クローズ: Design Intent + Hero KPI)
+**最終更新**: 2026-08-17(FORGE-R1-CLOSURE-015: R1 Design Language 閉じ込め)
 
 > このファイルはFORGE-CONVERSATION-READY-001指示書15章の要請で新設した。
 > それ以前は同等の役割を`KNOWN_ISSUES.md`と各`*-report.md`が分担しており、
@@ -33,16 +33,22 @@
 | Forge Language生成 | 動作 | Curated 5 Domain + 合成経路 |
 | Solution Shape選択 | 動作 | CHECKLIST / RECORD_CRUD の2形 |
 | Validator / Repair / Critic | 動作 | Validator最大3回・Repair最大2回 |
-| Flutter Runtime | 動作 | Widget **20種**、v1.11(`metric_view`= Hero KPI)。**Flutter側は当環境で未実行、CIで確認** |
+| Flutter Runtime | 動作 | Widget 20種、**v1.12**(metric_viewへ絞り込み/符号付け。Widget型は増やさない)。**Flutter側は当環境で未実行、CIで確認** |
 | 「はい、どうぞ」UX | 動作 | `conversation_flow_screen.dart` |
 | Conversation Metrics | 記録のみ | プロセス内メモリ。外部送出は未実装 |
 | AI Router | 動作 | Quota/健全性/Circuit Breaker。**全AI呼び出しが経由**(迂回を回帰で固定) |
 | Model Gateway | **削除** | `AIRouter`と責務が重複し本番未使用だった(TD59)。同じ層を2つ残さない |
 | Provider Registry | 動作 | Providerの唯一の宣言。名前・鍵の変数名・実装状況・protocol |
 | Provider Auto Discovery | 動作 | 環境変数が揃ったProviderだけが候補になる |
-| Design Language V1 | 動作 | 33 role。Schema v1.11/Validator/Compiler/Runtime/Evidenceまで接続 |
+| Design Language V1 | 動作 | 33 role。Schema v1.12/Validator/Compiler/Runtime/Evidenceまで接続 |
+| └ roleの視覚差 | **動作** | button(filled/outlined)・metric.primaryの実描画・density 3段・surface 2種・意味色のLight/Dark。**Flutter側の確認はCI** |
+| └ Semantic Design Critic | **動作** | 主KPI乱立・被覆不足・持ち上げすぎ・finance/state混同を評価。壊れていればrelease_readyにしない |
+| └ Visual Structure Evidence | **動作** | 主KPI数・被覆率・階層深さ等の決定的な事実。「美しさ」は測っていない |
+| └ AI/fallback provenance | **動作** | AIが選んだroleとForgeが既定で埋めたroleを型で分離 |
+| └ 数値の意味(MeasureSemantics) | **動作** | 評価は平均・サイズは最大・金額は合計。**分からない数値はKPIにしない** |
+| └ お金の出入り(MonetaryFlow) | **動作** | 残高=収入−支出。単純な合計を「残高」と呼ばない |
 | └ Hero KPI Widget | **動作** | `metric_view`(v1.11)。数値Fieldを持つEntityの一覧の**前**に出る。数値が無ければ出さない |
-| └ AIによるrole選択 | **動作** | `design_intent`段。軸ごとの択一をAIへ提示し、**軸ごとに検証**して外れたら既定値+`fallback_axes`記録。Curatedでも1回AIを呼ぶようになった(**TD70**) |
+| └ AIによるrole選択 | **動作** | `design_intent`段。軸ごとの択一をAIへ提示し、**軸ごとに検証**して外れたら既定値+記録。語彙はbackendから**注入**(forge_aiはbackendを知らない)。Curatedでも1回AIを呼ぶ(**TD70**、推奨解を記録済み) |
 | Model fallback(Provider内) | 動作 | 一時的失敗・Model廃止・PER_MODEL枠切れのとき、同じProviderの別Modelへ進む。Provider Identityは増やさない(011 §1) |
 | **Gemini無料枠** | **観測1 Modelで20** | 実測は429本文の`quotaValue=20`・`quotaId=PerProjectPerModel`のみ。合計値と枠の単位(Project/鍵)は**未検証**(TD66)。検証作業だけで上限到達したので実運用には足りない |
 | Local Provider | 実装済/未実測 | OpenAI互換。実モデル未実行(環境制約、TD51) |

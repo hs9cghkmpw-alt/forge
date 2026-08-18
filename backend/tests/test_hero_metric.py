@@ -54,12 +54,33 @@ class TestTheHeroMetricReachesTheGeneratedApp(unittest.TestCase):
     def _all_widgets(self, document: dict) -> list[dict]:
         return [w for s in document["screens"] for w in _widgets(s["body"])]
 
-    def test_a_money_app_gets_a_hero_metric(self) -> None:
+    def test_a_money_app_gets_income_expense_and_balance(self) -> None:
+        """v1.12(§2.3)。**単純な合計を「残高」と呼ばない。**
+
+        収入と支出を区別しない合計は、いくら記録しても
+        「今いくら残っているか」に答えていない。
+        """
         document = self._document("家計の支出をカテゴリ別に管理したい")
-        metrics = [w for w in self._all_widgets(document) if w["type"] == "metric_view"]
-        self.assertEqual(len(metrics), 1, "家計簿に主KPIが出ていない")
-        self.assertEqual(metrics[0]["aggregate"], "sum")
-        self.assertEqual(metrics[0]["style_role"], "metric.primary")
+        metrics = {w["style_role"]: w for w in self._all_widgets(document)
+                   if w["type"] == "metric_view"}
+        self.assertEqual(
+            set(metrics), {"metric.primary", "finance.income", "finance.expense"},
+            "収入・支出・残高が揃っていない",
+        )
+        balance = metrics["metric.primary"]
+        self.assertEqual(balance["label"], "残高")
+        self.assertEqual(balance["aggregate"], "sum")
+        self.assertEqual(balance["negative_when"], "支出", "支出を負として足していない")
+        self.assertEqual(metrics["finance.income"]["filter_value"], "収入")
+        self.assertEqual(metrics["finance.expense"]["filter_value"], "支出")
+
+    def test_only_the_balance_is_the_primary_metric(self) -> None:
+        """3つとも主KPIにすると「一番大事なもの」が3つになり階層が消える。"""
+        document = self._document("家計の支出をカテゴリ別に管理したい")
+        primaries = [w for w in self._all_widgets(document)
+                     if w.get("style_role") == "metric.primary"]
+        self.assertEqual(len(primaries), 1)
+        self.assertEqual(primaries[0]["label"], "残高")
 
     def test_the_role_metric_primary_now_has_an_output_target(self) -> None:
         """**このテストがTD69の本体である。**
