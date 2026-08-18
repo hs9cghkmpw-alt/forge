@@ -3306,3 +3306,45 @@ Curatedの価値は「速い・安定・無料」である。Geminiの実測枠�
 `ai_calls <= 2` をテストで固定している
 （`backend/tests/test_generation_evidence.py`）。実Providerでの
 回数は**測っていない**。
+
+---
+
+## TD71. Widget種別の網羅switchが2つあり、Widget追加のたびにCIが落ちる（2026-08-17）
+
+### 事実
+
+`ForgeWidgetNode`（sealed class）の網羅switchが**2箇所**にある。
+
+| 場所 | 役割 |
+|---|---|
+| `frontend/lib/json_ui/widget_registry/widget_registry_core.dart` の `typeNameOf()` | Runtime本体 |
+| `frontend/test/features/app_generation/data/datasources/mock_generator_renderer_contract_test.dart` の `_typeNameOf()` | テスト用の**手書きの複製** |
+
+後者は「Runtime実装をブラックボックスとして検証するため」に意図的な
+複製として置かれている。
+
+**この複製への追加を忘れて、CIが落ちたのは今回で3回目である。**
+
+* v1.3（`record_list_view`）— コメントに「実バグ」として記録あり
+* v1.6/v1.7 — 同上
+* v1.11（`metric_view`、今回）— `flutter analyze` が
+  `non_exhaustive_switch_expression` で停止
+
+同じ場所で3回同じ失敗をしている。**忘れずに更新する設計になっている
+から忘れられる**（`CLAUDE.md` §3）。
+
+### 救いのある点
+
+**黙って壊れることはない。** sealed classの網羅性検査があるので、
+足し忘れは必ずコンパイルエラーになる。壊れたアプリが出荷される種類の
+負債ではなく、**CIを1往復無駄にする**種類の負債である。
+
+### 直す案（未着手）
+
+1. **複製を消し、`typeNameOf()`を使う** — 「ブラックボックス検証」と
+   いう当初の意図は失われるが、その意図が守っているものと、3回の
+   CI往復のどちらが高いかは検討に値する
+2. **`kRegisteredWidgetTypes`（手書きのSet）を
+   `buildDefaultForgeRegistry().registeredTypes`から導出する** —
+   こちらは網羅性検査が効かないので、**足し忘れても落ちない**。
+   1より優先度が高いかもしれない

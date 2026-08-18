@@ -237,9 +237,36 @@ tab_view root_tabs                      density.normal   ← AIが選ぶ軸
 | Flutter（`metric_view` の描画・`aggregateAll`） | **未検証**。この環境にFlutter SDKが無く、`flutter analyze` / `flutter test` を実行できない。**CIのfrontend jobの結果を待つ** |
 | 実Cloud APIでのDesign Intent選択 | **未検証**。014の指示どおり実APIを呼んでいない（Gemini枠を消費しない） |
 
-**Flutterのテストは書いたが実行していない。** 新規2ファイル
-（`v1_11_metric_view_test.dart` 11件 / `forge_aggregate_all_test.dart`
-10件）はCIで初めて走る。落ちたら直す。
+**Flutterのテストは書いたが、この環境では実行していない。** 新規2
+ファイル（`v1_11_metric_view_test.dart` / `forge_aggregate_all_test.dart`）
+はCIで初めて走った。
+
+### CI 1回目（`27b3597`）: frontend job が落ちた
+
+backend 3ジョブは通り、`flutter analyze` が1件で停止した。
+
+```
+error • The type 'ForgeWidgetNode' isn't exhaustively matched by the
+switch cases since it doesn't match the pattern
+'ForgeMetricViewWidgetNode()'
+  • test/features/app_generation/data/datasources/
+    mock_generator_renderer_contract_test.dart:52
+```
+
+**原因**: `ForgeWidgetNode` の網羅switchが2箇所にある。Runtime本体の
+`typeNameOf()` は直したが、テスト側にある**手書きの複製**
+`_typeNameOf()` を直していなかった。
+
+**同じ場所で落ちたのは3回目である**（v1.3 / v1.6+v1.7 / 今回）。
+コード中のコメントにも過去2回が「実バグ」として記録されていた。
+TD71として登録した——「忘れずに更新する設計だから忘れられる」典型で
+ある。
+
+なお sealed class の網羅性検査があるため、**黙って壊れることはない**。
+壊れたアプリが出荷される種類の失敗ではなく、CIを1往復無駄にする種類の
+失敗である。
+
+修正して再push。
 
 ---
 

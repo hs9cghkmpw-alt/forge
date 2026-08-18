@@ -36,6 +36,8 @@ const Set<String> kRegisteredWidgetTypes = {
   'record_list_view',
   'section_header',
   'choice_field', 'bar_chart', 'date_field', 'tab_view', 'slider',
+  // v1.11(2026-08-17、FORGE-R1 / TD69)。Hero KPI。
+  'metric_view',
 };
 
 /// sealed ForgeWidgetNode の全14派生型(13 Widget種 + Unknown)を網羅する。
@@ -78,6 +80,11 @@ String _typeNameOf(ForgeWidgetNode node) => switch (node) {
       // 同じくMock Generatorの12レガシーカテゴリは生成しないが、
       // `widget_registry_core.dart`の`typeNameOf()`との同期のため追加。
       ForgeSliderWidgetNode() => 'slider',
+      // v1.11新規(2026-08-17、FORGE-R1 / TD69)。Hero KPI。
+      // **この複製switchへ足し忘れて実際にCIが落ちた**(3度目)。
+      // Runtime本体の`typeNameOf()`だけ直しても、テスト側のこの複製が
+      // sealed classの非網羅switchとしてコンパイルエラーになる。
+      ForgeMetricViewWidgetNode() => 'metric_view',
       ForgeUnknownWidgetNode() => 'unknown',
     };
 
