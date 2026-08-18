@@ -53,7 +53,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from app.ai.gateway.ai_router import AIRouter, ModelDescriptor  # noqa: E402
-from app.ai.gateway.provider_registry import definition_for  # noqa: E402
+from app.ai.gateway.provider_registry import (  # noqa: E402
+    Deployment,
+    ImplementationStatus,
+    configured_providers,
+    definition_for,
+)
 from app.ai.gateway.tasks import ForgeTask  # noqa: E402
 from app.ai.runtime.provider_router import ProviderRouter  # noqa: E402
 
@@ -91,17 +96,154 @@ _PROBE_SCHEMA = {
 }
 
 
+# 運用者が「このProviderを試したい」と名指しできる口。
+#
+# **無いと、新しく足したProviderを狙って試せない。** Registryの順で
+# 選ぶと、既に設定済みのGeminiが常に先に当たり、今日追加したばかりの
+# Providerには一度も届かない——「設定したのに何も起きない」になる。
+_LIVE_PROVIDER_ENV = "FORGE_LIVE_PROVIDER"
+
+
+class LiveProviderNotUsable(RuntimeError):
+    """名指しされたProviderが叩けない。**黙ってSKIPしない**ためにある。"""
+
+
 def _live_provider_id() -> str | None:
     """実際に叩ける実装済みCloud Providerを1つ選ぶ。
 
     複数設定されていても**1つだけ**にする——全部叩けば、その分だけ
     枠を消費する(§38)。
+
+    ---
+
+    ## 2026-08-17に直した実バグ
+
+    以前はここが `("gemini", "cloud")` という**固定の名前**を見ていた。
+    しかし`cloud`は011で廃止されている——「今日Groq・明日Cerebrasを
+    同じ名前で受けると統計が混ざる」ため、`groq`/`cerebras`/…と
+    Identityを分けたからである。
+
+    結果として**第二CloudをどれだけきちんとdefaultしてもLive Testは
+    Geminiしか叩かず、新しいProviderは黙ってSKIPされていた**。
+    「設定したのに何も起きない」という、原因の分からない無反応である
+    (TD67の検証がずっと進まなかった一因)。
+
+    固定の名前をやめ、**Registryが実際に持っているもの**から選ぶ。
+    Providerが増えてもここを直す必要が無い——直し忘れが起きない形に
+    する(`CLAUDE.md` §3)。
     """
-    for provider_id in ("gemini", "cloud"):
-        definition = definition_for(provider_id)
-        if definition is not None and definition.is_usable:
-            return provider_id
+    named = os.environ.get(_LIVE_PROVIDER_ENV, "").strip()
+    if named:
+        definition = definition_for(named)
+        if definition is None:
+            raise LiveProviderNotUsable(
+                f"{_LIVE_PROVIDER_ENV}={named!r} だが、その名前のProviderが無い。"
+                f"FORGE_EXTRA_PROVIDERS への追加を忘れていないか。"
+            )
+        if not definition.is_usable:
+            missing = [
+                name for name in definition.required_variables
+                if not os.environ.get(name, "").strip()
+            ]
+            raise LiveProviderNotUsable(
+                f"{_LIVE_PROVIDER_ENV}={named!r} だが叩けない。"
+                f"未設定の環境変数: {missing or '(不明)'}"
+            )
+        return named
+
+    # 名指しが無ければ、**設定が揃っている実装済みCloud**から選ぶ。
+    for definition in configured_providers():
+        if (
+            definition.deployment is Deployment.CLOUD
+            and definition.implementation_status is ImplementationStatus.IMPLEMENTED
+            and not definition.test_only
+        ):
+            return definition.provider_id
     return None
+
+
+class TestTheLiveProviderSelection(unittest.TestCase):
+    """**実APIを1回も呼ばない。** どのProviderを叩くかを決める部分だけを見る。
+
+    このクラスは`FORGE_LIVE_TEST`で囲っていない——常に走る。
+
+    理由: 2026-08-17に見つけた実バグは「`_live_provider_id()`が
+    廃止済みの`cloud`という名前を見ていたため、第二Cloudを設定しても
+    黙ってSKIPされる」というものだった。**選択ロジックの誤りは、
+    Live実行しないと分からない**形になっていたので、いつまでも
+    見つからなかった。
+
+    ここを常時実行にすることで、同じ誤りは鍵が無くても落ちる。
+    """
+
+    _KEYS = (
+        "FORGE_EXTRA_PROVIDERS", "FORGE_LIVE_PROVIDER",
+        "FORGE_FAKECLOUD_BASE_URL", "FORGE_FAKECLOUD_API_KEY", "FORGE_FAKECLOUD_MODEL",
+    )
+
+    def setUp(self) -> None:
+        self._saved = {k: os.environ.get(k) for k in self._KEYS}
+
+    def tearDown(self) -> None:
+        for key, value in self._saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def _configure_fake_cloud(self) -> None:
+        os.environ["FORGE_EXTRA_PROVIDERS"] = "fakecloud"
+        os.environ["FORGE_FAKECLOUD_BASE_URL"] = "http://127.0.0.1:9/v1"
+        os.environ["FORGE_FAKECLOUD_API_KEY"] = "dummy-value-not-a-real-key"
+        os.environ["FORGE_FAKECLOUD_MODEL"] = "some-model"
+
+    def test_a_provider_added_by_configuration_can_be_selected(self) -> None:
+        """**これが直したバグの本体。**
+
+        以前は固定の名前(`gemini` / 廃止済みの`cloud`)しか見ていな
+        かったので、設定で足したProviderには決して届かなかった。
+        """
+        self._configure_fake_cloud()
+        os.environ["FORGE_LIVE_PROVIDER"] = "fakecloud"
+        self.assertEqual(_live_provider_id(), "fakecloud")
+
+    def test_naming_an_unknown_provider_fails_loudly(self) -> None:
+        """**黙ってSKIPしない。** 「設定したのに何も起きない」を防ぐ。"""
+        os.environ["FORGE_LIVE_PROVIDER"] = "no_such_provider"
+        with self.assertRaises(LiveProviderNotUsable):
+            _live_provider_id()
+
+    def test_naming_a_half_configured_provider_says_what_is_missing(self) -> None:
+        self._configure_fake_cloud()
+        del os.environ["FORGE_FAKECLOUD_MODEL"]
+        os.environ["FORGE_LIVE_PROVIDER"] = "fakecloud"
+        with self.assertRaises(LiveProviderNotUsable) as caught:
+            _live_provider_id()
+        self.assertIn("FORGE_FAKECLOUD_MODEL", str(caught.exception))
+
+    def test_it_never_selects_the_test_double(self) -> None:
+        """`mock`を実APIテストの相手にしない。通ってしまうと
+        「実APIで確認済み」という嘘の実績が残る(§22)。"""
+        os.environ.pop("FORGE_LIVE_PROVIDER", None)
+        self.assertNotEqual(_live_provider_id(), "mock")
+
+    def test_it_never_selects_a_stub(self) -> None:
+        """`openai`/`claude`はスタブ(呼ぶとNotImplementedError)である。"""
+        os.environ.pop("FORGE_LIVE_PROVIDER", None)
+        selected = _live_provider_id()
+        if selected is None:
+            self.skipTest("この環境には設定済みCloud Providerが無い")
+        definition = definition_for(selected)
+        self.assertIs(definition.implementation_status, ImplementationStatus.IMPLEMENTED)
+        self.assertIs(definition.deployment, Deployment.CLOUD)
+
+    def test_the_retired_cloud_id_no_longer_exists(self) -> None:
+        """011で`cloud`という汎用名は廃止した。**この名前へ戻さない。**
+
+        戻すと「今日Groq・明日Cerebras」が同じ名前になり、Benchmarkと
+        Quotaの記録が混ざる。
+        """
+        self.assertIsNone(definition_for("cloud"))
 
 
 @unittest.skipUnless(_LIVE_ENABLED, "FORGE_LIVE_TEST=1 のときだけ実行する(実APIを消費するため)")

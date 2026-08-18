@@ -16,6 +16,11 @@
 2026-08-17、CEOから**OpenAIのAPIキー**をチャットで頂きました。
 先に伝えるべきことが3つあります。
 
+> **「どこかに使った？」への回答**: 使っていません。送信も0回です
+> （接続の入口で遮断されたので、鍵はネットワークへ出ていません）。
+> 検査結果と**試験のやり方**は
+> **`docs/API-KEY-TEST-GUIDE.md`** にまとめました。
+
 #### 1. このキーは失効させてください（至急）
 
 **チャットに平文で流れたので、会話ログに残っています。**
@@ -278,7 +283,8 @@ CI               全4 job green（commit bc16fb9、run 32095320829）
 
 | 文書 | 内容 |
 |---|---|
-| `docs/reports/FORGE-R1-HERO-METRIC-AND-DESIGN-INTENT-report.md` | **最新**。Design Intent / Hero KPI / 配線破壊試験12件 |
+| `docs/API-KEY-TEST-GUIDE.md` | **APIキーの扱いと試験手順**（CEO向け、コピペで実行できる形） |
+| `docs/reports/FORGE-R1-HERO-METRIC-AND-DESIGN-INTENT-report.md` | Design Intent / Hero KPI / 配線破壊試験12件 |
 | `docs/reports/FORGE-R1-DESIGN-LANGUAGE-014-report.md` | 014の全項目 |
 | `docs/spec/DESIGN-LANGUAGE-V1.md` | Semantic Vocabulary 33 role |
 | `docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md` | 013 |

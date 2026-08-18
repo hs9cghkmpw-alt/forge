@@ -3371,3 +3371,42 @@ Curatedの価値は「速い・安定・無料」である。Geminiの実測枠�
    `buildDefaultForgeRegistry().registeredTypes`から導出する** —
    こちらは網羅性検査が効かないので、**足し忘れても落ちない**。
    1より優先度が高いかもしれない
+
+---
+
+## TD72. Live Testが廃止済みのprovider_idを見ていた（2026-08-17、修正済み）
+
+### 事実
+
+`backend/tests/test_live_api.py` の `_live_provider_id()` が、叩く相手を
+`("gemini", "cloud")` という**固定の名前**から選んでいた。
+
+`cloud` は011で廃止した名前である——「今日Groq・明日Cerebrasを同じ名前
+で受けると、BenchmarkとQuotaの記録が混ざる」ため、`groq`/`cerebras`/…と
+Identityを分けた。
+
+結果、**第二のCloud Providerをどれだけ正しく設定しても、Live Testは
+Geminiしか叩かず、新しいProviderは黙ってSKIPされていた。**
+「設定したのに何も起きない」という原因の分からない無反応であり、
+TD67（第二Cloudが実API未検証）が進まなかった一因でもある。
+
+### なぜ見つからなかったか
+
+**この誤りは実APIを呼ばないと表に出ない形**になっていた。
+`_LIVE_ENABLED`（`FORGE_LIVE_TEST=1`）で囲われた中にしか検査が無く、
+鍵が無い通常のテスト実行では全部SKIPされる。SKIPは緑である。
+
+### 直したこと
+
+* 固定の名前をやめ、`configured_providers()` が実際に持っているものから
+  **実装済み・設定済み・非test_onlyのCloud**を選ぶ。Providerが増えても
+  ここを直す必要が無い（直し忘れが起きない形、`CLAUDE.md` §3）
+* `FORGE_LIVE_PROVIDER` で**狙って指名できる**ようにした。無いと、
+  既存のGeminiが常に先に当たり、今日足したProviderへは一生届かない
+* 指名したProviderが叩けないときは**黙ってSKIPせず**、欠けている
+  環境変数名を挙げて `LiveProviderNotUsable` で失敗する
+
+### 再発防止
+
+選択ロジックの検査を**`_LIVE_ENABLED`の外**へ出した（常時実行、実API
+呼び出し0回）。旧実装へ戻すと3件落ちることを確認済み。
