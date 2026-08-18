@@ -195,10 +195,8 @@ void main() {
 
       expect(elevated.elevation ?? 0, greaterThan(card.elevation ?? 0),
           reason: 'elevated が card より持ち上がっていない');
-      expect(
-        (elevated.padding! as EdgeInsets).vertical,
-        greaterThan((card.padding! as EdgeInsets).vertical),
-      );
+      // `ForgeRoleStyle.padding` は既に `EdgeInsets?` なのでキャスト不要。
+      expect(elevated.padding!.vertical, greaterThan(card.padding!.vertical));
     });
 
     testWidgets('surface.card は実際に面として描かれる', (tester) async {
