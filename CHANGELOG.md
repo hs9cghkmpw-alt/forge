@@ -2,6 +2,27 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task079 — 追加Cloud Providerの配線を実測で確認(2026-08-17、TD67)
+
+CEOからAPIキーを受け取ったのを機に、「設定だけでCloud Providerを
+増やせる」という**設計上の主張**を、実際に動かして確かめた。
+
+`FORGE_EXTRA_PROVIDERS`で足したProviderが、Registryに拾われ、環境変数
+から解決され、**実際に`POST /v1/chat/completions`をBearer認証で送る**
+ところまでを、localhostのOpenAI互換偽サーバで確認した。
+
+**コード変更は1行も要らなかった。** 011 §1（Protocol駆動でAdapterを
+共有する）が実際に効いていることの確認でもある。
+
+* `backend/tests/test_extra_cloud_provider.py`（7件、新設）
+* 配線破壊試験3件（追加Provider検出 / 予約語保護 / 設定欠落時の除外）
+
+**検証区分**: Forge側の配線 = 実測（Test Double） /
+実エンドポイント = **未検証**。TD67は半分だけ解消。この開発環境は
+`api.openai.com`へegress禁止（403）で、実APIは1回も呼べていない。
+
+---
+
 ## Task078 — R1残件クローズ: Design Intent と Hero KPI(2026-08-17、TD69)
 
 Task077で **R1 = NO-GO** とした理由は2件あり、その両方を閉じた。

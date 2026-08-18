@@ -46,7 +46,7 @@
 | Model fallback(Provider内) | 動作 | 一時的失敗・Model廃止・PER_MODEL枠切れのとき、同じProviderの別Modelへ進む。Provider Identityは増やさない(011 §1) |
 | **Gemini無料枠** | **観測1 Modelで20** | 実測は429本文の`quotaValue=20`・`quotaId=PerProjectPerModel`のみ。合計値と枠の単位(Project/鍵)は**未検証**(TD66)。検証作業だけで上限到達したので実運用には足りない |
 | Local Provider | 実装済/未実測 | OpenAI互換。実モデル未実行(環境制約、TD51) |
-| 2つ目のCloud枠(`cloud`) | 実装済/未実測 | OpenAI互換なら環境変数3つで載る。**実APIでは未検証** |
+| 2つ目のCloud枠 | **配線は実測/実API未検証** | `FORGE_EXTRA_PROVIDERS`+環境変数3つで載ることを、localhostの偽OpenAI互換サーバで確認(TD67)。**実エンドポイントは未検証**——この環境はegress禁止 |
 | Provider Benchmark | 動作 | Impact分類16ケース。harness実行確認済み |
 | Benchmark → Routing接続 | **配線済/データ待ち** | 実測(REAL)が2 Provider揃えば品質順になる。今は記録が無く宣言順 |
 | Local AI 学習基盤 | **記録開始** | R0で`/converse`・`/generate`・`/update`から実際に記録。実Geminiで確認済み。学習・永続化は未着手 |

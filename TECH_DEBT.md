@@ -3083,6 +3083,29 @@ Google Cloud Consoleの表示を見る等、APIを叩かない方法を先に試
 
 ## TD67. 第二Cloud Providerは「設計済み」であって「実API検証済み」ではない(2026-08-17)
 
+### 進捗（2026-08-17 夜）: 配線は実測で確認、実APIは依然未検証
+
+`FORGE_EXTRA_PROVIDERS`で足したOpenAI互換Providerが、
+
+* Registryに拾われる
+* 環境変数（`FORGE_<ID>_BASE_URL` / `_API_KEY` / `_MODEL`）から解決される
+* **実際にHTTPを話す** — `POST /v1/chat/completions`、Bearer認証、
+  指定modelを送る
+
+ところまでを、localhostに立てたOpenAI互換の偽サーバで確認した
+（`backend/tests/test_extra_cloud_provider.py`、7件。配線破壊試験3件で
+「外すと落ちる」ことも確認済み）。
+
+**これはTest Doubleである。** 検証したのは*Forge側の配線*であって、
+Groq/Cerebras/OpenAI等の**実エンドポイントの挙動ではない**。
+構造化出力の形式差・エラー本文の違いは、実接続で初めて分かる。
+
+CEOからOpenAIのキーを受け取ったが、この開発環境は`api.openai.com`へ
+egress禁止（`CONNECT tunnel failed, 403`）のため、**ここでは1回も
+呼べていない**。実APIの検証はCEOのPCでしかできない。
+
+---
+
 **2026-08-17に表現を訂正した。** それまでHANDOFFやreportに
 「コード変更は不要です」と、Production事実であるかのように書いていた。
 
