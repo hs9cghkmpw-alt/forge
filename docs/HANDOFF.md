@@ -1,7 +1,8 @@
 # Forge 申し送り（最新）
 
 **最終更新: 2026-08-17 / branch `claude/forge-master-handoff-k46jns`**
-**最新: FORGE-R1-CLOSURE-015（R1 Design Language 閉じ込め）/ CI結果待ち**
+**最新commit: `a90d850` / CI 全4 job green（run 32121954849）**
+**R1 DESIGN LANGUAGE = GO**
 
 > このファイルは**毎回の作業のたびに上書き更新して push される**。
 > パスは固定なので、`docs/HANDOFF.md` だけ見れば最新状況が分かる。
@@ -230,17 +231,22 @@ Forgeが埋めた」のかが**区別できませんでした**。このまま�
 ## 3. 今の状態
 
 ```
-backend/tests    1258 passed / 16 skipped   ← 実測（+63件）
-forge_ai/tests    521 passed                ← 実測
-frontend          この環境にFlutter SDKが無く、実行できていません
-                  （新規17件はCIで初めて走ります）
-CI               このpushの結果待ち
-配線破壊試験       8件中7件で「外すと落ちる」を確認。1件はFlutter側でCI待ち
+backend/tests    1258 passed / 16 skipped   （+63件）
+forge_ai/tests    521 passed
+frontend          508 passed（修正前は476）/ analyze 0件 / build web 成功
+CI               全4 job green（commit a90d850）
+配線破壊試験       8件中7件で「外すと落ちる」を確認
 ```
 
-> **正直に**: 見た目に関わる部分（文字の大きさ・ボタン・色）は、
-> **この環境では一度も動かしていません**。コードとテストは書きましたが、
-> 確認はCIに委ねています。落ちたら直します。
+> **正直に2点**。
+>
+> 1. 見た目に関わる部分は**この環境では動かせず**、CIで確認しました
+>    （SDKが無いため）。1回目は私が書いたテストの書き方の問題で
+>    analyzeが止まり、直して2回目で全部通っています。
+> 2. **Flutter側だけ「壊したら落ちるか」を確かめていません**（TD74）。
+>    テストは通っていますが、通ることと効いていることは別です——実際
+>    今回、Python側で「外しても落ちないテスト」を1件作ってしまい、
+>    破壊試験で見つけて直しました。同じ確認がFlutter側でできていません。
 
 | 機能 | 状態 |
 |---|---|
@@ -250,7 +256,7 @@ CI               このpushの結果待ち
 | **AIがDesign Roleを選ぶ** | 動作（軸ごとに検証。外れたら既定値＋記録） |
 | **数値の意味を判断する** | **動作**（評価は平均・サイズは最大・分からないなら出さない） |
 | **収入/支出/残高** | **動作**（単純合計を残高と呼ばない） |
-| **roleが見た目を変える** | 動作（Python側は実測。**描画確認はCI待ち**） |
+| **roleが見た目を変える** | 動作（描画までCIで確認済み） |
 | **良いDesignかの評価** | **動作**（階層が壊れていればrelease_readyにしない） |
 | Local AIの学習 | 未着手（記録は貯まるが、Dataset化もLoRAもまだ） |
 | Knowledge / RAG | 未着手（**次はここ**） |
@@ -258,8 +264,7 @@ CI               このpushの結果待ち
 
 ## 4. 次にやること
 
-1. **CIの結果を確認する**（Flutter側が初回実行。落ちていれば直す）
-2. **R2（Forge Knowledge / RAG）へ進む** — Local AI優先順位 #1
+1. **R2（Forge Knowledge / RAG）へ進む** — Local AI優先順位 #1
 3. **TD70を直す** — Curatedが1回AIを呼ぶ件。比較した結果、
    **Local AIにDesign Intentを選ばせるのが本命**と結論しました
    （択一はLocal AIに最も向いた仕事で、それ自体が訓練になり、
@@ -285,7 +290,7 @@ CI               このpushの結果待ち
 | 14 | Widget種別の網羅switchが2箇所にあり、追加のたびにCIが落ちる（3回目） | TD71 |
 | 15 | Live Testが廃止済みのprovider_idを見ていた（修正済み） | TD72 |
 | 16 | **roleの反映はWidgetごとの対応が要る**（1箇所で被せれば効く、は成立しない） | TD73 |
-| 17 | **Flutter側が当環境で未実行**（SDK無し、CI待ち） | 015 report §12 |
+| 17 | **Flutter側の配線破壊試験ができていない**（SDK無し） | TD74 |
 
 ---
 
@@ -307,4 +312,4 @@ CI               このpushの結果待ち
 | `docs/ROADMAP-TO-TARGET.md` | 完成図までの段取り |
 | `CLAUDE.md` | AIエージェントの作業ルール |
 | `CHANGELOG.md` | Taskごとの記録 |
-| `TECH_DEBT.md` | 技術的負債 TD1〜TD73 |
+| `TECH_DEBT.md` | 技術的負債 TD1〜TD74 |

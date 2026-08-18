@@ -7,11 +7,11 @@
 
 ## 0. 結論
 
-**R1 DESIGN LANGUAGE = GO（条件付き）。**
+**R1 DESIGN LANGUAGE = GO。**
 
-Definition of Done の20項目のうち19項目を満たした。残る1項目は
-**Flutter側の実行確認**で、この作業環境にFlutter SDKが無いため
-CIに委ねている（§16参照）。CIが緑ならGO、赤なら直してからGOである。
+Definition of Done の全項目を満たし、**CI 全4 job green**で確認した
+（run 32121954849、commit `a90d850`）。Flutter側は
+`analyze 0件 / test 508 passed / build web 成功`。
 
 指摘された穴は**すべて実際に再現してから**直した。推測でPatchした
 ものは1件も無い。
@@ -352,8 +352,8 @@ roleをここで解決して明示的にmergeするよう直した。roleが無�
 | forge_aiがbackendをimportしないこと | **実測**（構文木で走査） |
 | backend 1258 passed / forge_ai 521 passed | **実測** |
 | 配線破壊試験 A/B/C/D/E/F/G/H | **実測**（7件） |
-| **Flutter（描画・色・強弱・density・surface）** | **未検証**。この環境にFlutter SDKが無い。**CIのfrontend jobで確認する** |
-| **配線破壊試験 E2（Dart側）** | **未検証**（同上） |
+| **Flutter（描画・色・強弱・density・surface）** | **実測（CI）**。この環境にSDKが無く自分では実行できないため、CIで確認した。`analyze 0件 / test 508 passed / build web 成功`（run 32121954849） |
+| **配線破壊試験 E2（Dart側）** | **未検証**。Dart側の破壊はPythonテストでは検出できず、この環境でFlutterを実行できないため確認していない。**TD74として残した** |
 | 実Cloud APIでのDesign Intent / Measure選択 | **未検証**（指示どおり実APIを呼んでいない） |
 
 **Flutterのテストは書いたが実行していない。** 新規
@@ -373,10 +373,16 @@ roleをここで解決して明示的にmergeするよう直した。roleが無�
 | F | button.primary/secondaryの差 | `test_the_primary_action_is_marked` |
 | G | Finance rolesのCompiler到達 | `test_income_and_expense_carry_finance_roles` |
 | H | Visual Structure Evidenceの抽出 | `test_the_visual_structure_is_recorded` |
-| E2 | metric.primaryの実描画（Dart側） | **未検証**（Flutter実行不可、CI待ち） |
+| E2 | metric.primaryの実描画（Dart側） | **未検証**（TD74。下記） |
 
 **Bは1回目に落ちなかった**（＝置物だった）。テストを追加して直した。
 経緯は§5に書いてある。
+
+**E2だけ未検証である。** Dart側の配線を壊す破壊試験は、この環境で
+Flutterを実行できないため確認できていない。テスト自体はCIで通って
+いるが、「壊したら落ちるか」は確かめていない——つまり
+`semantic_visual_hierarchy_test.dart` が置物でないという保証は、
+まだ無い。TD74として残した。
 
 ---
 
@@ -434,9 +440,20 @@ C（既存AI callへ統合）は、`entity_synthesis`がCuratedでは通らな�
 ```
 backend/tests    1258 passed / 16 skipped   （+63件）
 forge_ai/tests    521 passed
-frontend         この環境で実行不可（SDK無し）。新規17件はCI初回
-CI               push後に確認
+frontend          508 passed（CIで実測。修正前は476）
+                  flutter analyze 0件 / build web 成功
+CI               全4 job green（commit a90d850、run 32121954849）
 ```
+
+### CIで1回落ちた（記録として）
+
+1回目（`6196d91`）は`flutter analyze`が2件で止まった。どちらも私が
+書いたテストの`unnecessary_cast`である——`ForgeRoleStyle.padding`は
+既に`EdgeInsets?`なので、`EdgeInsets`へのキャストが不要だった
+（`Container.padding`は`EdgeInsetsGeometry?`なので、そちらは必要）。
+
+analyzeで止まったため`flutter test`と`build web`はskipされ、2回目
+（`a90d850`）で初めて走った。
 
 新規テストファイル:
 
@@ -446,7 +463,7 @@ CI               push後に確認
 | `backend/tests/test_semantic_design_critic.py` | 11 |
 | `backend/tests/test_golden_finance_e2e.py` | 13 |
 | `backend/tests/test_dependency_boundary.py` | 5 |
-| `frontend/test/json_ui/renderer/semantic_visual_hierarchy_test.dart` | 17（CI） |
+| `frontend/test/json_ui/renderer/semantic_visual_hierarchy_test.dart` | 17（CIで実測） |
 
 ---
 
@@ -501,11 +518,11 @@ Need → Vocabulary → AI selection → Validation → Runtime → Evidence →
    持たせた
 6. **Standalone testとProductionで挙動が違わないか** — 遅延importを
    やめ、注入にした。同じ契約で同じ結果になることをテストで固定
-7. **Dark/Lightで成立するか** — ThemeExtension化。テストはCI待ち
+7. **Dark/Lightで成立するか** — ThemeExtension化。CIで508件通過
 8. **Golden AppをTemplate化していないか** — していない。Curated
    Domainのデータモデルの欠落を埋めただけで、固定Templateは足していない
 9. **Criticが悪いDesignを悪いと言えるか** — 言える（§5）
 10. **完成画像へ近づいたか** — §17に正直に書いた
 11. **Local AI育成へ近づいたか** — §18
 12. **「実装したが呼ばれない」を増やしていないか** — 破壊試験8件中
-    7件で確認。E2はCI待ち
+    7件で確認。E2（Dart側）だけ未確認でTD74として残した

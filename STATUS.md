@@ -33,7 +33,7 @@
 | Forge Language生成 | 動作 | Curated 5 Domain + 合成経路 |
 | Solution Shape選択 | 動作 | CHECKLIST / RECORD_CRUD の2形 |
 | Validator / Repair / Critic | 動作 | Validator最大3回・Repair最大2回 |
-| Flutter Runtime | 動作 | Widget 20種、**v1.12**(metric_viewへ絞り込み/符号付け。Widget型は増やさない)。**Flutter側は当環境で未実行、CIで確認** |
+| Flutter Runtime | 動作 | Widget 20種、**v1.12**(metric_viewへ絞り込み/符号付け。Widget型は増やさない)。**Flutter 508 passed（CIで確認）** |
 | 「はい、どうぞ」UX | 動作 | `conversation_flow_screen.dart` |
 | Conversation Metrics | 記録のみ | プロセス内メモリ。外部送出は未実装 |
 | AI Router | 動作 | Quota/健全性/Circuit Breaker。**全AI呼び出しが経由**(迂回を回帰で固定) |
@@ -41,7 +41,7 @@
 | Provider Registry | 動作 | Providerの唯一の宣言。名前・鍵の変数名・実装状況・protocol |
 | Provider Auto Discovery | 動作 | 環境変数が揃ったProviderだけが候補になる |
 | Design Language V1 | 動作 | 33 role。Schema v1.12/Validator/Compiler/Runtime/Evidenceまで接続 |
-| └ roleの視覚差 | **動作** | button(filled/outlined)・metric.primaryの実描画・density 3段・surface 2種・意味色のLight/Dark。**Flutter側の確認はCI** |
+| └ roleの視覚差 | **動作** | button(filled/outlined)・metric.primaryの実描画・density 3段・surface 2種・意味色のLight/Dark。Flutter 508 passed（CI） |
 | └ Semantic Design Critic | **動作** | 主KPI乱立・被覆不足・持ち上げすぎ・finance/state混同を評価。壊れていればrelease_readyにしない |
 | └ Visual Structure Evidence | **動作** | 主KPI数・被覆率・階層深さ等の決定的な事実。「美しさ」は測っていない |
 | └ AI/fallback provenance | **動作** | AIが選んだroleとForgeが既定で埋めたroleを型で分離 |

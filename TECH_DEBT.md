@@ -3491,3 +3491,52 @@ FORGE-R1-CLOSURE-015 §8で、`metric.primary`が**実際には描画へ効い�
 3. **視覚回帰テストを増やす** — Widgetを足すたびに
    `semantic_visual_hierarchy_test.dart`へ1件足すことを規約にする。
    規約は忘れられるので、1か2の方が確実である
+
+---
+
+## TD74. Flutter側の配線破壊試験ができていない（2026-08-17）
+
+### 事実
+
+FORGE-R1-CLOSURE-015 §15の配線破壊試験A〜Hのうち、**Dart側を壊す
+E2だけ確認できていない**。
+
+Pythonの配線を壊す試験（A〜H）は、この作業環境でbackend/forge_aiの
+テストを実際に走らせて「外すと落ちる」を確認した。しかし
+`ForgeRoleScope`のroleを渡さないようにする、といったDart側の破壊は、
+**この環境にFlutter SDKが無いため実行できない**。
+
+### なぜ問題か
+
+`semantic_visual_hierarchy_test.dart`（17件）はCIで通っている。
+しかし**「通っている」と「壊したら落ちる」は別**である。
+
+実際、同じTaskの中で`semantic_design`軸のテストが**外しても落ちない
+置物だった**ことが判明している（§3）。CIが緑であることは、テストが
+効いていることの証明にはならない。
+
+### 直す案（未着手）
+
+1. **CIへ破壊試験ジョブを足す** — 意図的に壊したbranchでFlutter
+   テストを走らせ、**落ちることを確認して初めて緑**にする。
+   仕組みとしては確実だが、CIの実行時間が倍になる
+2. **CEOのWindows環境で1度だけ確認する** — `frontend/`で
+   `flutter test` を走らせ、`forge_renderer.dart`の`role: role`を
+   `role: null`に変えて再実行し、落ちることを見る。手作業なので
+   1回きりの確認にしかならない
+3. **この環境へFlutter SDKを入れる** — 一番素直だが、SDKの取得に
+   ネットワークが要り、egress制限の影響を受ける
+
+### CEOの環境で確認する手順（案2）
+
+```
+cd frontend
+flutter test test/json_ui/renderer/semantic_visual_hierarchy_test.dart
+# → 通ることを確認
+
+# lib/json_ui/renderer/forge_renderer.dart の
+#   role: role,   を   role: null,   へ一時的に変更
+flutter test test/json_ui/renderer/semantic_visual_hierarchy_test.dart
+# → **落ちれば**そのテストは効いている（置物ではない）
+# 変更は必ず元へ戻すこと
+```
