@@ -320,6 +320,7 @@ class TestRevisionEvidence(unittest.TestCase):
         stored = self.store.record(
             RevisionRecord(
                 base_generation_ref=7, validator_passed=True,
+                source=GenerationSource.CLOUD_AI,
                 runtime_outcome=RuntimeOutcome.RENDERED,
             )
         )
@@ -332,11 +333,104 @@ class TestRevisionEvidence(unittest.TestCase):
         stored = self.store.record(
             RevisionRecord(
                 base_generation_ref=7, validator_passed=True,
+                source=GenerationSource.CLOUD_AI,
                 runtime_outcome=RuntimeOutcome.FAILED,
                 user_acceptance=AcceptanceSignal.ACCEPTED,
             )
         )
         self.assertFalse(stored.is_positive_example)
+
+
+class TestRevisionTrainingProvenance(unittest.TestCase):
+    """**由来が分からない/本物でない変更を教師データにしない**
+    （FORGE-017A §1）。
+
+    commit Bの実装は`source`を見ておらず、既定の`UNKNOWN`のまま
+    「利用者が受け入れた」だけでTraining Candidateになっていた。
+    生成側(`GenerationRecord`)は013から`is_usable_for_training`を
+    要求していたので、**同じ語彙で片方だけ緩い**状態だった。
+    """
+
+    def setUp(self) -> None:
+        self.store = RevisionEvidenceStore()
+
+    def _revision(self, source: GenerationSource) -> RevisionRecord:
+        return self.store.record(
+            RevisionRecord(
+                base_generation_ref=7,
+                source=source,
+                validator_passed=True,
+                runtime_outcome=RuntimeOutcome.RENDERED,
+                user_acceptance=AcceptanceSignal.ACCEPTED,
+            )
+        )
+
+    def test_unknown_source_is_not_a_positive_example(self) -> None:
+        """記録し忘れを「安全」へ倒さない。"""
+        self.assertFalse(self._revision(GenerationSource.UNKNOWN).is_positive_example)
+
+    def test_test_double_source_is_not_a_positive_example(self) -> None:
+        """**Mockの出力を教師にすると、Mockの癖を学ぶ。**
+
+        テストは`mock` Providerで大量に走るので、これを許すと
+        実運用よりテストの方が「正例」を多く生む。
+        """
+        self.assertFalse(self._revision(GenerationSource.TEST_DOUBLE).is_positive_example)
+
+    def test_cloud_ai_source_is_a_candidate(self) -> None:
+        self.assertTrue(self._revision(GenerationSource.CLOUD_AI).is_positive_example)
+
+    def test_local_ai_source_is_a_candidate(self) -> None:
+        self.assertTrue(self._revision(GenerationSource.LOCAL_AI).is_positive_example)
+
+    def test_curated_source_is_a_candidate(self) -> None:
+        """Curatedは由来が分かっていて本物である（AI呼び出し0回だが、
+        それは欠損ではない——013でGenerationRecordを作った理由）。"""
+        self.assertTrue(self._revision(GenerationSource.CURATED).is_positive_example)
+
+    def test_the_default_source_is_not_usable(self) -> None:
+        """**既定値が楽観側へ倒れていないこと。**"""
+        stored = self.store.record(
+            RevisionRecord(
+                base_generation_ref=7, validator_passed=True,
+                runtime_outcome=RuntimeOutcome.RENDERED,
+                user_acceptance=AcceptanceSignal.ACCEPTED,
+            )
+        )
+        self.assertIs(stored.source, GenerationSource.UNKNOWN)
+        self.assertFalse(stored.is_positive_example)
+
+    def test_training_candidates_matches_generation_side(self) -> None:
+        """Storeの候補抽出も生成側と同じ形であること。"""
+        self._revision(GenerationSource.UNKNOWN)
+        self._revision(GenerationSource.TEST_DOUBLE)
+        self._revision(GenerationSource.CLOUD_AI)
+
+        candidates = self.store.training_candidates()
+        self.assertEqual(len(candidates), 1)
+        self.assertIs(candidates[0].source, GenerationSource.CLOUD_AI)
+
+    def test_revision_and_generation_apply_the_same_rule(self) -> None:
+        """**同じ4条件であること自体を固定する。**
+
+        片方だけ条件が増減すると、突き合わせたときに静かに嘘になる。
+        """
+        generations = GenerationEvidenceStore()
+        for source in (GenerationSource.UNKNOWN, GenerationSource.TEST_DOUBLE,
+                       GenerationSource.CLOUD_AI, GenerationSource.LOCAL_AI,
+                       GenerationSource.CURATED, GenerationSource.COMPOSITION):
+            generation = generations.record(
+                GenerationRecord(
+                    source=source, domain="household_budget", validator_passed=True,
+                    runtime_outcome=RuntimeOutcome.RENDERED,
+                    user_acceptance=AcceptanceSignal.ACCEPTED,
+                )
+            )
+            revision = self._revision(source)
+            self.assertEqual(
+                generation.is_positive_example, revision.is_positive_example,
+                f"{source.value}: 生成と変更で判定が食い違っている",
+            )
 
     def test_user_corrected_roles_are_separated_from_ai_choices(self) -> None:
         """AIが選んだものと利用者が直させたものを混ぜない（§4）。"""

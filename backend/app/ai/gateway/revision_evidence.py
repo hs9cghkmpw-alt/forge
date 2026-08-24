@@ -154,12 +154,39 @@ class RevisionRecord:
     def is_positive_example(self) -> bool:
         """教師データの候補になるか。
 
-        **Validator合格だけでは足りない。** 利用者が明示的に受け入れた
-        ものだけを正例とする（Product Direction §5）。
+        **`GenerationRecord.is_positive_example`と同じ4条件を要求する**
+        （FORGE-017A §1で追加、2026-08-24）。
+
+        1. Validatorを通った
+        2. 利用者が明示的に受け入れた（Product Direction §5）
+        3. **由来が学習に使えるものである**
+        4. Runtimeで落ちていない
+
+        ---
+
+        ## 3 が抜けていた（実際の欠陥）
+
+        commit Bの実装は 1・2・4 しか見ておらず、`source`を無視して
+        いた。`source`の既定は`UNKNOWN`なので、
+
+            RevisionRecord(validator_passed=True, user_acceptance=ACCEPTED)
+
+        がそのまま**Training Candidate**になっていた。由来を記録し
+        忘れた変更も、`mock`が作った変更（`TEST_DOUBLE`）も、
+        利用者が「これでいい」と言えば教師データになる。
+
+        `TEST_DOUBLE`が特に悪い。Mockの出力を教師にすると**Mockの癖を
+        学ぶ**。テストは`mock` Providerで大量に走るので、実運用より
+        テストの方が「正例」を多く生む状態だった。
+
+        生成側は013から`source.is_usable_for_training`を要求していた。
+        **同じ語彙を使いながら片方だけ緩い**——これは011 §5で一度
+        踏んだ形そのものである。揃えた。
         """
         return (
             self.validator_passed
             and self.user_acceptance.is_positive
+            and self.source.is_usable_for_training
             and self.runtime_outcome is not RuntimeOutcome.FAILED
         )
 
@@ -229,6 +256,13 @@ class RevisionEvidenceStore:
         return tuple(
             r for r in self.all_records() if r.base_generation_ref == generation_ref
         )
+
+    def training_candidates(self) -> tuple[RevisionRecord, ...]:
+        """教師データの候補。**判断はここでしない**——条件は
+        `RevisionRecord.is_positive_example`が持つ
+        （`GenerationEvidenceStore.training_candidates()`と同じ形）。
+        """
+        return tuple(r for r in self.all_records() if r.is_positive_example)
 
     def next_sequence(self, generation_ref: int) -> int:
         """その生成物への何回目の変更になるか。"""
