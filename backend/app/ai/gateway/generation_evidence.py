@@ -391,6 +391,21 @@ class GenerationRecord:
     """この生成物のために呼んだAIの回数。**Curatedなら0**。
     0が異常値ではないことが、この型を作った理由である。"""
 
+    knowledge_references: tuple[str, ...] = ()
+    """この生成に渡した知識の**識別子と版**(FORGE-016A commit D)。
+
+    `design_role.metric.primary@v1`のような形。**本文は入らない**
+    (016 §12.1「raw retrieved textではなくIdentifierだけ」)。
+
+    残す理由は、知識を直したあとで「どの版の知識で作られたものか」を
+    辿れるようにするためである。辿れないと、生成物の品質が上がった/
+    下がったときに、知識の変更が効いたのかAIが変わったのかを分けられ
+    ない。
+
+    空は「知識を渡していない」——会話ステップのようにDesign Language
+    を必要としないTaskでは、それが正しい状態である。
+    """
+
     recorded_at: float = 0.0
     ref: int = 0
 
@@ -456,6 +471,7 @@ class GenerationRecord:
             "capabilities": list(self.capabilities),
             "design_language_roles": list(self.design_language_roles),
             "design_decisions": [d.to_dict() for d in self.design_decisions],
+            "knowledge_references": list(self.knowledge_references),
             "visual_structure": dict(self.visual_structure),
             "forge_language_version": self.forge_language_version,
             "runtime_outcome": self.runtime_outcome.value,

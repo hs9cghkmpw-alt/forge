@@ -58,6 +58,7 @@ from app.ai.gateway.generation_evidence import (
     default_generation_store,
     source_for_generated,
 )
+from app.ai.gateway.intelligence_context import default_intelligence_resolver
 from app.ai.runtime.design_language import design_language_guidance, design_roles_in
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.runtime.forge_ai_adapter import (
@@ -250,6 +251,7 @@ def _record_generation(
     forge_document: dict,
     validator_passed: bool,
     repair_attempts: int,
+    knowledge_references: tuple[str, ...] = (),
 ) -> int:
     """**生成物そのもの**のEvidenceを残す(013 §4、TD65)。
 
@@ -273,6 +275,7 @@ def _record_generation(
             design_language_roles=design_roles_in(forge_document),
             design_decisions=_design_decisions(context, forge_document),
             visual_structure=_visual_structure(forge_document),
+            knowledge_references=knowledge_references,
         )
     )
     # **番号を返す。** 013はここで捨てていた。捨てると、後から
@@ -576,6 +579,14 @@ class PromptPipeline:
         # 呼ばない、Blueprint v1.3 Task1.2)。`CognitiveOrchestrator`は
         # `NotImplementedError`を意図的に捕捉せず伝播させるため
         # (Blueprint 6.2節)、ここでの捕捉は既存の挙動と同じ。
+        # **Provider選択の前に知識を解決する**(FORGE-016A commit D /
+        # 017A §8・§15)。CloudとLocalで渡す知識が変わると、「同じ問いに
+        # 同じ知識で答えた」という比較ができなくなり、Benchmarkの前提が
+        # 崩れる。ここで1回だけ決めて、以降は同じものを使う。
+        knowledge_context = default_intelligence_resolver().resolve(
+            ForgeTask.COGNITIVE_STAGE
+        )
+
         try:
             outcome = run_cognitive_pipeline(
                 natural_language,
@@ -700,6 +711,7 @@ class PromptPipeline:
                 decision_trace=_decision_trace_to_dicts(context.decision_trace),
                 forge_document=forge_document, validator_passed=True,
                 repair_attempts=repair_attempts,
+                knowledge_references=knowledge_context.references,
             )
         else:
             # **失敗も残す。** 合格したものだけ記録すると、
@@ -713,6 +725,7 @@ class PromptPipeline:
                 decision_trace=_decision_trace_to_dicts(context.decision_trace),
                 forge_document=forge_document, validator_passed=False,
                 repair_attempts=repair_attempts,
+                knowledge_references=knowledge_context.references,
             )
             raise ForgeValidationError(
                 f"Repair({repair_attempts}回)後もValidatorに合格しませんでした。",
