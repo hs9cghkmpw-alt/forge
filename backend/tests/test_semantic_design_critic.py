@@ -114,14 +114,114 @@ class TestTheCriticSeesTheHierarchyNotJustThePresence(unittest.TestCase):
         self.assertEqual(finding.evidence.elevated_surface_count, 5)
         self.assertTrue(finding.issues)
 
-    def test_mixing_finance_and_state_colours_is_reported(self) -> None:
-        """**支出はエラーではない。** 兼用していれば言う。"""
+    def test_the_same_value_carrying_both_vocabularies_is_reported(self) -> None:
+        """**支出はエラーではない。** 同じ値に両方の意味を持たせたら言う。
+
+        これが015 §9で防ぎたかった実際の誤りである——支出を危険として
+        塗ること。
+        """
         finding = evaluate_semantic_design(_document([
-            _metric("income", "finance.income"),
-            {"type": "text", "id": "err", "value": "x", "style_role": "state.danger"},
+            {"type": "metric_view", "id": "spent", "state_ref": "records",
+             "value_field": "amount", "aggregate": "sum", "style_role": "finance.expense"},
+            {"type": "metric_view", "id": "warn", "state_ref": "records",
+             "value_field": "amount", "aggregate": "sum", "style_role": "state.danger"},
         ]))
         self.assertTrue(finding.evidence.finance_state_conflict)
-        self.assertTrue(finding.issues)
+        self.assertTrue(any("amount" in i.evidence for i in finding.issues))
+
+    def test_finance_and_state_on_different_values_is_not_a_conflict(self) -> None:
+        """**家計簿は正当に両方を使う**（FORGE-017A §14で直した誤検知）。
+
+            finance.expense … 支出（お金が出ていく向き）
+            state.danger    … 予算を超えた（状態が悪い）
+
+        これは兼用ではなく、別々のことを別々の語彙で言っている
+        ——015 §9が求めた姿そのものである。それを弾いていた。
+        """
+        finding = evaluate_semantic_design(_document([
+            {"type": "metric_view", "id": "spent", "state_ref": "records",
+             "value_field": "amount", "aggregate": "sum", "style_role": "finance.expense"},
+            {"type": "metric_view", "id": "over", "state_ref": "records",
+             "value_field": "over_budget", "aggregate": "sum", "style_role": "state.danger"},
+        ]))
+        self.assertFalse(
+            finding.evidence.finance_state_conflict,
+            "支出と『予算超過』を別々に言っているだけで誤りにしている",
+        )
+
+    def test_a_widget_without_a_bound_value_is_not_judged(self) -> None:
+        """**分からないものを誤り側へ倒さない**（`CLAUDE.md` §3）。
+
+        どの値を見せているか分からないWidgetは判定しない。倒すと、また
+        誤検知になる。
+        """
+        finding = evaluate_semantic_design(_document([
+            {"type": "metric_view", "id": "spent", "state_ref": "records",
+             "value_field": "amount", "aggregate": "sum", "style_role": "finance.expense"},
+            {"type": "text", "id": "err", "value": "x", "style_role": "state.danger"},
+        ]))
+        self.assertFalse(finding.evidence.finance_state_conflict)
+
+
+class TestSingularRolesAreCountedPerScreen(unittest.TestCase):
+    """**画面ごとに数える**（FORGE-017A §14で直した誤検知）。
+
+    以前は全画面のWidgetを1つの配列へ潰してから数えていた。そのため
+
+        一覧画面に metric.primary が1つ
+        詳細画面に metric.primary が1つ
+
+    という**正しい設計**が「metric.primaryが2個ある」として弾かれた。
+    指摘文自身が「metric.primaryは**画面で**1つだけにする」と書いて
+    いるのに、数えるのは文書全体だった。
+
+    **画面が増えるほど誤検知が増える**ので、複数画面のアプリを作るほど
+    Criticが役に立たなくなる形だった。
+    """
+
+    @staticmethod
+    def _two_screens(first: list[dict], second: list[dict]) -> dict:
+        return {
+            "version": "1.12", "initial_screen_id": "s1",
+            "screens": [
+                {"id": "s1", "title": "一覧", "state": {},
+                 "body": {"type": "column", "id": "r1", "children": first}},
+                {"id": "s2", "title": "詳細", "state": {},
+                 "body": {"type": "column", "id": "r2", "children": second}},
+            ],
+        }
+
+    def test_one_primary_metric_per_screen_is_fine(self) -> None:
+        finding = evaluate_semantic_design(self._two_screens(
+            [_metric("a", "metric.primary")], [_metric("b", "metric.primary")],
+        ))
+        self.assertEqual(
+            finding.evidence.duplicated_singular_roles, (),
+            "別々の画面がそれぞれ主KPIを1つ持つのは正しい設計である",
+        )
+        self.assertFalse(any(i.severity == "high" for i in finding.issues))
+
+    def test_two_primary_metrics_on_one_screen_is_still_reported(self) -> None:
+        """**緩めすぎていないこと。** 同一画面の重複は依然として誤り。"""
+        finding = evaluate_semantic_design(self._two_screens(
+            [_metric("a", "metric.primary"), _metric("b", "metric.primary")],
+            [_metric("c", "metric.primary")],
+        ))
+        self.assertEqual(finding.evidence.duplicated_singular_roles, ("metric.primary",))
+        self.assertTrue(any(i.severity == "high" for i in finding.issues))
+
+    def test_the_message_names_the_screen(self) -> None:
+        """どの画面を直せばよいか分かること。"""
+        finding = evaluate_semantic_design(self._two_screens(
+            [_metric("a", "metric.primary"), _metric("b", "metric.primary")], [],
+        ))
+        self.assertTrue(any("s1" in i.evidence for i in finding.issues))
+
+    def test_one_primary_action_per_screen_is_fine(self) -> None:
+        button = {"type": "button", "id": "go", "label": "保存",
+                  "action": {"type": "noop"}, "style_role": "button.primary"}
+        finding = evaluate_semantic_design(self._two_screens([button], [dict(button, id="go2")]))
+        self.assertEqual(finding.evidence.duplicated_singular_roles, ())
 
 
 class TestTheCriticReportCarriesTheAxis(unittest.TestCase):

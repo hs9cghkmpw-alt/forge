@@ -129,6 +129,79 @@ def _walk(widget: dict, depth: int = 1):
         yield from _walk(child, depth + 1)
 
 
+def _duplicated_singular_roles(
+    per_screen: "list[tuple[str, list[tuple[dict, int]]]]",
+) -> dict[str, dict[str, int]]:
+    """1画面に2つ以上ある**単一であるべきrole**を、画面ごとに返す。
+
+    **文書全体では数えない**(FORGE-017A §14)。別々の画面がそれぞれ
+    主KPIを1つ持つのは正しい設計であり、画面が増えるほど誤検知が
+    増える形にしてはいけない。
+    """
+    result: dict[str, dict[str, int]] = {}
+    for screen_id, widgets in per_screen:
+        counts: dict[str, int] = {}
+        for widget, _ in widgets:
+            role = widget.get("style_role")
+            if isinstance(role, str) and role in _SINGULAR_ROLES:
+                counts[role] = counts.get(role, 0) + 1
+        duplicated = {role: n for role, n in counts.items() if n > 1}
+        if duplicated:
+            result[screen_id] = duplicated
+    return result
+
+
+def _bound_field(widget: dict) -> str | None:
+    """そのWidgetが**どの値を見せているか**。無ければ`None`。"""
+    for key in ("value_field", "field", "label_field"):
+        value = widget.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _finance_state_conflicts(
+    per_screen: "list[tuple[str, list[tuple[dict, int]]]]",
+) -> tuple[str, ...]:
+    """**同じ値**にお金の向きと状態の良し悪しが両方付いている箇所。
+
+    ---
+
+    ## 「同じ文書に両方ある」を誤りにしていた（FORGE-017A §14）
+
+    以前は`finance.*`と`state.*`が同じ文書に現れるだけで指摘していた。
+    しかし家計簿アプリは、**正当に両方を使う**。
+
+        finance.expense  … 支出（お金が出ていく向き）
+        state.danger     … 予算を超えた（状態が悪い）
+
+    これは兼用ではなく、**別々のことを別々の語彙で言っている**——
+    015 §9が求めた姿そのものである。それを弾いていた。
+
+    本当の誤りは「支出を危険として塗る」こと、つまり**同じ値**に
+    両方の意味を持たせることである。Widgetは`value_field`等で
+    「どの値を見せているか」を持っているので、そこで判定する。
+
+    値の結び付きが分からないWidget（`value_field`が無い）は
+    **判定しない**——分からないものを誤り側へ倒すと、また誤検知になる。
+    """
+    conflicts: set[str] = set()
+    for _, widgets in per_screen:
+        finance_fields: set[str] = set()
+        state_fields: set[str] = set()
+        for widget, _ in widgets:
+            role = widget.get("style_role")
+            field_name = _bound_field(widget)
+            if not isinstance(role, str) or field_name is None:
+                continue
+            if role in _FINANCE_ROLES:
+                finance_fields.add(field_name)
+            elif role in _STATE_ROLES:
+                state_fields.add(field_name)
+        conflicts |= finance_fields & state_fields
+    return tuple(sorted(conflicts))
+
+
 def _issue(category: str, severity: str, evidence: str, fix: str) -> CriticIssue:
     return CriticIssue(
         category=category, severity=severity, evidence=evidence,
@@ -141,11 +214,27 @@ def evaluate_semantic_design(document: dict) -> SemanticDesignFinding:
 
     AIを呼ばない。同じ文書なら常に同じ結果になる。
     """
-    widgets: list[tuple[dict, int]] = []
-    for screen in document.get("screens", []) or ():
+    # **画面ごとに見る**(FORGE-017A §14)。
+    #
+    # 以前は全画面のWidgetを1つの配列へ潰してから数えていた。そのため
+    #
+    #     一覧画面に metric.primary が1つ
+    #     詳細画面に metric.primary が1つ
+    #
+    # という**正しい設計**が「metric.primaryが2個ある」として弾かれて
+    # いた。指摘文自身が「metric.primaryは**画面で**1つだけにする」と
+    # 書いているのに、数えるのは文書全体だった。
+    #
+    # 画面が増えるほど誤検知が増えるので、複数画面のアプリを作るほど
+    # Criticが役に立たなくなる形だった。
+    per_screen: list[tuple[str, list[tuple[dict, int]]]] = []
+    for index, screen in enumerate(document.get("screens", []) or ()):
         body = screen.get("body")
         if isinstance(body, dict):
-            widgets.extend(_walk(body))
+            screen_id = str(screen.get("id") or f"screen[{index}]")
+            per_screen.append((screen_id, list(_walk(body))))
+
+    widgets: list[tuple[dict, int]] = [w for _, ws in per_screen for w in ws]
 
     roles = [w.get("style_role") for w, _ in widgets if isinstance(w.get("style_role"), str)]
     role_counts: dict[str, int] = {}
@@ -156,10 +245,10 @@ def evaluate_semantic_design(document: dict) -> SemanticDesignFinding:
     covered = [w for w in expected if isinstance(w.get("style_role"), str)]
     coverage = (len(covered) / len(expected)) if expected else 1.0
 
-    duplicated = tuple(sorted(r for r in _SINGULAR_ROLES if role_counts.get(r, 0) > 1))
+    duplicates_by_screen = _duplicated_singular_roles(per_screen)
+    duplicated = tuple(sorted({role for roles_ in duplicates_by_screen.values() for role in roles_}))
     elevated = role_counts.get(_ELEVATED_ROLE, 0)
-    finance_used = bool(_FINANCE_ROLES & set(role_counts))
-    state_used = bool(_STATE_ROLES & set(role_counts))
+    conflicting_fields = _finance_state_conflicts(per_screen)
 
     evidence = VisualStructureEvidence(
         primary_metric_count=role_counts.get("metric.primary", 0),
@@ -170,20 +259,21 @@ def evaluate_semantic_design(document: dict) -> SemanticDesignFinding:
         role_coverage_ratio=coverage,
         elevated_surface_count=elevated,
         duplicated_singular_roles=duplicated,
-        finance_state_conflict=finance_used and state_used,
+        finance_state_conflict=bool(conflicting_fields),
     )
 
     issues: list[CriticIssue] = []
     penalties = 0.0
 
-    for role in duplicated:
-        # **これが「roleがあるだけ」を弾く判定である。**
-        issues.append(_issue(
-            "semantic_design", "high",
-            f"'{role}'が同一文書に{role_counts[role]}個ある",
-            f"{role}は画面で1つだけにする。残りは補助的な役割へ落とす",
-        ))
-        penalties += 0.4
+    for screen_id, roles_ in sorted(duplicates_by_screen.items()):
+        for role, count in sorted(roles_.items()):
+            # **これが「roleがあるだけ」を弾く判定である。**
+            issues.append(_issue(
+                "semantic_design", "high",
+                f"画面'{screen_id}'に'{role}'が{count}個ある",
+                f"{role}は1画面に1つだけにする。残りは補助的な役割へ落とす",
+            ))
+            penalties += 0.4
 
     if not roles:
         issues.append(_issue(
@@ -208,11 +298,11 @@ def evaluate_semantic_design(document: dict) -> SemanticDesignFinding:
         ))
         penalties += 0.2
 
-    if evidence.finance_state_conflict:
+    for field_name in conflicting_fields:
         issues.append(_issue(
             "semantic_design", "medium",
-            "同じ文書でfinance.*とstate.*を併用している",
-            "支出はエラーではない。お金の向きと状態の良し悪しを兼用しない",
+            f"'{field_name}'に finance.* と state.* の両方が付いている",
+            "支出はエラーではない。同じ値にお金の向きと状態の良し悪しを兼用しない",
         ))
         penalties += 0.2
 

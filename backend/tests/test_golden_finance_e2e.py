@@ -188,3 +188,133 @@ class TestGoldenFinanceReachesSemanticRoles(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# `/converse` — **会話から**同じ地点へ到達すること（FORGE-017A §14）
+# ---------------------------------------------------------------------------
+
+
+class TestGoldenFinanceThroughConversation(unittest.TestCase):
+    """**会話の入口からも**、意味的役割まで到達すること。
+
+    ---
+
+    ## なぜ`/generate`だけでは足りないのか
+
+    上のテストは`/generate`（1発で作る入口）を通っている。しかし
+    **実機で利用者が実際に通るのは`/converse`**である——話しかけて、
+    Forgeが聞き返して、BUILDへ至る経路。
+
+    この2つは同じ`PromptPipeline`を通るが、**入口が違う**。
+    `/converse`側は
+
+        ConversationEngine → build_brief（Forgeが書いた説明文）→ Pipeline
+
+    と1段挟まる。`build_brief`は利用者の言葉そのものではないので、
+    ここで意味が痩せると、`/generate`は通るのに`/converse`は通らない
+    という状態になりうる。**実際に利用者が使う方が壊れる**形である。
+
+    013で`/generate`と`/update`の両方にRouter迂回があったのも、
+    「片方だけ直して終わりにした」ことが原因だった。同じ形にしない。
+
+    ## 何を確かめるか
+
+    `/generate`側と**同じ地点**——残高が主KPIであること、収入と支出が
+    finance語彙であること、Evidenceが残ること——へ、会話から到達できる
+    こと。ASKで止まった場合は、そこも会話の正常な結果なので区別して扱う。
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import app.ai.runtime.prompt_pipeline as pipeline_module
+
+        cls.store = default_generation_store()
+        cls.store.reset()
+
+        original = pipeline_module.run_cognitive_pipeline
+
+        def patched(text, provider=None, **kwargs):  # noqa: ANN001, ANN202
+            return original(text, _AiAnswersDesignIntent(provider), **kwargs)
+
+        pipeline_module.run_cognitive_pipeline = patched
+        client = TestClient(app)
+        try:
+            cls.body = cls._converse_until_build(client)
+        finally:
+            pipeline_module.run_cognitive_pipeline = original
+
+    @staticmethod
+    def _converse_until_build(client: TestClient) -> dict:
+        """BUILDへ届くまで会話する。**無限には続けない。**"""
+        session_id = None
+        body: dict = {}
+        for _ in range(6):
+            payload: dict = {"message": _NEED, "provider": "mock"}
+            if session_id:
+                payload["session_id"] = session_id
+            response = client.post("/api/v1/ai/converse", json=payload)
+            assert response.status_code == 200, response.text
+            body = response.json()
+            session_id = body.get("session_id")
+            if body.get("status") in ("build", "update"):
+                break
+        return body
+
+    def test_the_conversation_reaches_a_build(self) -> None:
+        """**会話からBUILDへ到達できること。**
+
+        ここで`ask`のまま止まるなら、利用者は永久にアプリを得られない。
+        """
+        self.assertEqual(
+            self.body.get("status"), "build",
+            f"6往復してもBUILDへ到達しなかった（status={self.body.get('status')}）",
+        )
+
+    def test_the_built_document_is_valid(self) -> None:
+        document = self.body["result"]["forge_document"]
+        result = validate_forge_document(document)
+        self.assertTrue(result.valid, [e.to_dict() for e in result.errors])
+
+    def test_the_conversation_path_also_carries_semantic_roles(self) -> None:
+        """**入口が違っても意味が痩せないこと。**"""
+        document = self.body["result"]["forge_document"]
+        roles = {
+            w["style_role"]
+            for screen in document["screens"]
+            for w in _widgets(screen["body"])
+            if isinstance(w.get("style_role"), str)
+        }
+        self.assertTrue(roles, "会話経由の生成物にstyle_roleが1つも無い")
+        self.assertIn(
+            "metric.primary", roles,
+            "会話から作ると主KPIが消える（/generateでは出ている）",
+        )
+
+    def test_the_conversation_path_leaves_generation_evidence(self) -> None:
+        """**会話経由でもEvidenceが残ること。**
+
+        残らなければ、実機で最もよく通る経路の成功例が1件も学習素材に
+        ならない（TD65と同じ形）。
+        """
+        self.assertTrue(
+            self.store.all_records(),
+            "会話経由の生成物がGenerationRecordを1件も残していない",
+        )
+
+    def test_the_conversation_path_hands_back_an_artifact_handle(self) -> None:
+        """**評価を書き戻せること**（017A §3）。
+
+        `/generate`にだけハンドルが付いて`/converse`に付かないと、
+        実機で最もよく通る経路から評価を受け取れない。
+        """
+        artifact = self.body["result"].get("artifact")
+        self.assertIsNotNone(artifact, "会話経由の結果にartifactが付いていない")
+        self.assertTrue(artifact["artifact_id"])
+        self.assertTrue(artifact["version_token"])
+
+    def test_no_free_text_leaks_into_the_evidence_from_the_conversation(self) -> None:
+        """会話経由でも、利用者の発話が記録へ入らないこと（006 §22）。"""
+        dumped = repr([r.to_dict() for r in self.store.all_records()])
+        for phrase in ("目立たせたい", "記録したい", _NEED):
+            self.assertNotIn(phrase, dumped)
