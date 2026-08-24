@@ -289,12 +289,26 @@ class DesignDecisionSource(str, Enum):
     CURATED = "curated"
     """人手で書いたCurated定義に由来する。"""
 
+    USER_CORRECTION = "user_correction"
+    """**利用者が「違う」と言って直させた。**（FORGE-016A §4、2026-08-24）
+
+    AIの選択でもForgeの既定でもなく、**利用者の意思**である。
+
+    これを`AI`と混ぜてはならない——「AIがelevatedを選んで受け入れられた」
+    と「AIはcardを選んだが利用者がelevatedへ直させた」は、Local AIに
+    とって正反対の教師信号である。前者はAIの成功例だが、後者はAIの
+    **失敗例**であり、同時に「利用者が何を望むか」の正例である。"""
+
     UNKNOWN = "unknown"
     """由来を記録し損ねた。**既定値。** 楽観側(AI)へ倒さない。"""
 
     @property
     def is_ai_evidence(self) -> bool:
-        """AIの選択の成否を語ってよいか。"""
+        """AIの選択の成否を語ってよいか。
+
+        **`USER_CORRECTION`は含まない。** 利用者が直したものは、AIが
+        選んで受け入れられた証拠ではない（むしろAIが外した証拠である）。
+        """
         return self is DesignDecisionSource.AI
 
 
@@ -483,6 +497,15 @@ class GenerationEvidenceStore:
             self._records[ref] = replace(existing, runtime_outcome=outcome)
             written += 1
         return written
+
+    def get(self, ref: int) -> GenerationRecord | None:
+        """1件を引く(FORGE-016A §3)。
+
+        `ArtifactFeedbackService`が「もう評価が付いているか」をここで
+        確かめる。Service側に写しを持つと、Storeだけをresetしたときに
+        食い違う——**Storeを唯一の真実にする**ために必要な口である。
+        """
+        return self._records.get(ref)
 
     def all_records(self) -> tuple[GenerationRecord, ...]:
         return tuple(self._records.values())

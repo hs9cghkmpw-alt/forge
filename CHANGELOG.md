@@ -2,6 +2,66 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task084 — 016A commit B: Feedback / Revision Foundation（2026-08-24）
+
+**「これでいい」をForgeが受け取る口が、本番に1本も無かった。** それを作った。
+
+### 実測した欠陥
+
+`AcceptanceSignal`も`note_user_acceptance()`も011から実装済み。013で
+`generation_ref`を`PipelineRunResult`へ載せるところまで直してあった。
+**しかしHTTP層でそれが止まっていた**——`app/routers/`に`generation_ref`の
+出現が0件、`note_user_acceptance`の本番呼び出しが0件。
+
+結果、`user_acceptance`は本番で永久に`UNKNOWN`であり、明示的な承認を
+要求する`is_positive_example`は**構造上、必ずFalse**だった。「教師データを
+貯める」と書いてある仕組みが、貯める口を持っていなかった。
+
+「作ったが本番から呼ばれない」の**5例目**（TD59 / 007 §10 / 010 Phase B /
+TD64 / TD69）。
+
+### 入れたもの
+
+* `app/ai/gateway/artifact_feedback.py` — `ArtifactRegistry` /
+  `ArtifactFeedbackService` / `document_fingerprint()` / `FeedbackRejected`
+* `app/ai/gateway/revision_evidence.py` — `RevisionRecord` /
+  `DesignRevision` / `RevisionEvidenceStore`（TD68の設計をProduction型へ）
+* `POST /api/v1/ai/feedback` — 評価を書く**唯一の口**
+* `result.artifact = {artifact_id, fingerprint}` を成功レスポンスへ
+* `GenerationEvidenceStore.get(ref)`
+* `DesignDecisionSource.USER_CORRECTION`（`is_ai_evidence`から除外）
+
+### 主な設計判断
+
+* **登録は`_result_dto()`の中**。成功レスポンスの経路3つが全てここを通る。
+  呼び出し側3箇所に書く案は採らなかった——それが4回失敗した形（`CLAUDE.md` §3）
+* **Clientへ内部refを出さない**。任意のrefを信用すると、見てもいない
+  生成物へ「受け入れた」を書ける＝学習素材の捏造。`secrets.token_urlsafe(16)`
+* **Serviceは「記録済み」を覚えない**。写しが2箇所にできるとずれる。
+  `store.get(ref)`でEvidence自身に聞く
+* Revision側の`note_user_acceptance()`を生成側と同じ規則（first-wins /
+  `UNKNOWN`は上書きしない）へ揃えた。同じ語彙で規則が違うと静かに嘘になる
+
+### 配線破壊試験 6round
+
+外した配線 → 落ちたテスト、全て確認済み（詳細はreport §4）。うち2つは
+指示書§15指定の break B（任意refを許す）/ break E（生の発話を入れる）。
+
+### まだ無いもの
+
+Flutter側の👍ボタン、`/update`から`RevisionRecord`を書く配線、
+`ArtifactRegistry`の永続化。**現時点で`user_acceptance`が実データで
+埋まるわけではない。**
+
+### テスト
+
+`backend/tests/test_artifact_feedback.py` 37件。
+backend 1304 passed / forge_ai 521 passed。
+
+### 文書
+
+* `docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md`（新規）
+
 ## Task082 — 「伝えたらデザインを直す」の設計（2026-08-18、実装なし）
 
 CEOから最優先方針が来た。**実装はせず、設計案・依存関係・実装順・

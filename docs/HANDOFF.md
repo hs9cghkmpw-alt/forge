@@ -1,8 +1,8 @@
 # Forge 申し送り（最新）
 
-**最終更新: 2026-08-18 / branch `claude/forge-master-handoff-k46jns`**
-**最新commit: `c78c3be` / R1完了時（`a90d850`）から実装は入っていない**
-**R1 DESIGN LANGUAGE = GO / 次の方針を設計中（実装前）**
+**最終更新: 2026-08-24 / branch `claude/forge-master-handoff-k46jns`**
+**最新commit: 016A commit B（Feedback / Revision Foundation）**
+**進行中: FORGE-016A（A→B完了、C以降）+ FORGE-017 Growing AI Architecture（Review中）**
 
 > このファイルは**毎回の作業のたびに上書き更新して push される**。
 > パスは固定なので、`docs/HANDOFF.md` だけ見れば最新状況が分かる。
@@ -131,229 +131,113 @@ Curatedを消さず、AIを無理に通さず、閉ループへ載せられま�
 
 ---
 
-## 2. いまの状況（2026-08-18）
+## 2. いまの状況（2026-08-24）
 
-### 方針が変わりました
+### 直近のcommit
 
-CEOから**最優先方針**が来ています。
+| 単位 | 内容 | 状態 |
+|---|---|---|
+| **A** | MeasureSemantics消失の実バグ修正（`FieldSpec`の`required`補正でmetadataが落ちていた） | ✅ push済み `50b2c3d` |
+| **B** | Feedback / Revision Foundation | ✅ このpush |
+| C | 残R1 Hardening（screen単位Critic / finance-state誤検知 / Golden Finance E2E） | 未着手 |
+| D | R2 Forge Knowledge / RAG | 未着手 |
+| E | Growing AI Learning Event Foundation（017） | Review中 |
+| F | Semantic Design Revision | 未着手 |
 
-> **ユーザーが見た画面に対して普通の日本語で指摘すると、
-> その意図を理解してデザインを直せること**
+### commit B で直した「本当に効いていなかったもの」
 
-```
-「残高をもっと目立たせて」   「一覧がごちゃごちゃしてる」
-「このカードだけ目立たせて」 「赤が強すぎる」
-「追加ボタンが目立ちすぎる」 「もっとシンプルにして」
-```
+**「これでいい」をForgeが受け取る口が、本番に1本も無かった。**
 
-対象は最終的に7分類すべて。優先順位は
-**①情報階層・強調 → ②レイアウト/余白/密度 → ③コンポーネントの見せ方
-→ ④Semantic Color/Theme → ⑤タイポグラフィ → ⑥細かな装飾
-→ ⑦アニメーション・遷移**。
+`AcceptanceSignal`も`note_user_acceptance()`も011から実装済みだった。
+013で`generation_ref`をPipelineから返すところまで直してあった。
+**しかしHTTP層でそれが止まっていた**——`app/routers/`に`generation_ref`
+の出現が0件、`note_user_acceptance`の本番呼び出しが0件。
 
-**これは見た目の便利機能ではありません。**
+結果、明示的な承認を要求する`is_positive_example`は**構造上、必ず
+False**だった。「Local AIの教師データを貯める」と書いてある仕組みが、
+貯める口を持っていなかった。
 
-```
-User Correction → Revision Evidence → Forge Knowledge → Local AI Improvement
-```
+これは「作ったが本番から呼ばれない」の**5例目**である。
 
-を閉じる経路として設計します。閉ループの最重要の辺（TD65）が
-ここで初めて繋がります。
+#### 入れたもの
 
-### いま何をしたか
+* `POST /api/v1/ai/feedback` — 評価を書く**唯一の口**
+* `result.artifact = {artifact_id, fingerprint}` を成功レスポンスへ
+* `ArtifactRegistry` / `ArtifactFeedbackService` / `document_fingerprint()`
+* `RevisionRecord` / `DesignRevision` / `RevisionEvidenceStore`（TD68の型）
+* `DesignDecisionSource.USER_CORRECTION`（AIの成功例と混ぜない）
 
-**設計案だけ作りました。実装は1行も入れていません**（CEO指示）。
+#### 忘れられない場所へ置いた
 
-| 文書 | 内容 |
-|---|---|
-| `docs/spec/DESIGN-REVISION-PROPOSAL.md` | 「見て、言って、直る」の設計案 |
-| `docs/tasks/FORGE-016-STATE.md` | 016を完了可能な7単位へ分割 |
-| `docs/OPEN-DECISIONS.md` | 判断待ち・制約・技術的負債 |
+登録は`_result_dto()`の中に置いた。成功レスポンスの経路3つ
+（`/generate`・`/generate/confirm`・`/converse` BUILD）が**全部ここを
+通る**ので、4つ目の経路を足した人が呼び忘れても登録される。
+呼び出し側3箇所に書く案は採らなかった——それが4回失敗した形である。
 
-### 調べて分かったこと — 土台はかなり揃っている
+#### 配線破壊試験 6round（全て確認済み）
 
-推測せず実コードを読んで確認しました。
+外すと落ちること、戻すと通ることを**実際に外して**確認した。
+詳細は `docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md` §4。
 
-| 既にあるもの | 効き方 |
-|---|---|
-| **widget単位のrole適用**（`screen.styleRoles[node.id]`） | **「このカードだけ」が実現できる** |
-| `RevisionRecord` の設計（TD68） | **型の設計は済んでいる**。実装が無いだけ |
-| `classify_correction` の3段判定（態度→対比→対象） | 「違う」の解釈の土台 |
-| `AcceptanceSignal`（ACCEPTED/CORRECTED/…） | 対を残す語彙 |
-| `note_user_acceptance()` | 承認を書き足すAPI |
-| Design Language 33 role・軸ごとの検証・Critic | 変更先の語彙と、直した結果の検査 |
-
-### 見つかった致命的な欠け 2件
-
-**1. `apply_update()` はデザインを知らない**
-
-会話でアプリを直す経路はありますが、プロンプトに `style_role` も
-Design Language も**一言も出てきません**（Widget型とstate型の話だけ）。
-しかも変更要求と現在のJSON全部を渡して、**AIにJSON全体を書き直させて
-います**。
-
-「残高をもっと目立たせて」と言った結果、AIが支出のKPIを落としても、
-**Validatorは構造しか見ないので通ります**。利用者は言っていないものを
-失います。
-
-**2. 承認を受けるHTTP口が1つも無い**
-
-`note_user_acceptance()` は実装済みなのに、**それを呼ぶendpointが
-存在しません**（grep済み）。Forgeが4回繰り返した
-「作ったが本番から呼ばれない」の状態にあります。
-
-### 一番大きな設計判断: 全体書き直しをやめる
-
-AIに返させるのを **Document ではなく意味の変更指示** にします。
-
-```
-target : records_list_view    ← どのWidget
-axis   : list_surface         ← どの軸
-from   : surface.card         ← Forgeが埋める
-to     : surface.elevated     ← AIが閉じた選択肢から選ぶ
-```
-
-Forgeがこれを**局所適用**します。触っていない場所は1バイトも
-変わりません。
-
-* 残高が消える事故が**構造的に**起きない（触らないから）
-* 「何が嫌で、何をどう直したか」がそのまま記録になる
-* AI呼び出しは1回（今のUPDATEと同じ。追加コストなし）
-
-### なぜこのデータが価値を持つか
-
-```
-初回生成  surface.card
-利用者    「もっと浮かせて」
-修正      surface.elevated
-利用者    「これでいい」
-
-→ CORRECTED: surface.card    （外した選択）
-→ ACCEPTED : surface.elevated （受け入れられた選択）
-```
-
-**この対は、完成Documentを何千個集めても得られません。**
-Local AIが学ぶべきは「何が良いか」だけでなく、
-「何を外したか」「どう直したら通ったか」だからです。
+---
 
 ## 3. 今の状態
 
 ```
-backend/tests    1258 passed / 16 skipped
-forge_ai/tests    521 passed
-frontend          508 passed / analyze 0件 / build web 成功
-CI               全4 job green（commit a90d850）
+backend  : 1304 passed, 16 skipped
+forge_ai :  521 passed
+ruff（変更ファイル）: All checks passed
 ```
 
-**R1完了時（`a90d850`）から実装は増えていません。** 以降のcommitは
-文書だけです。
+### 動くもの
 
-> **016（P0バグ4件 + R2 Knowledge/RAG）は未着手です。**
-> 押し忘れではなく、前回の応答が **API 529 Overloaded**（Anthropic側の
-> サーバ混雑。一時的なもので、コードやリポジトリの問題ではありません）で
-> 着手前に中断したためです。失われた作業はありません。
+* 会話 →ヒアリング→ 生成 → Validator → Critic → Flutter描画
+* Design Language 33 role・軸ごとの検証・Semantic Design Critic
+* Provider Registry / AI Router / quota-aware fallback
+* Generation Evidence（由来つき）・Experience Evidence
+* **NEW** Artifact Feedback（`/feedback`）と Revision Evidence の型
 
-| 機能 | 状態 |
-|---|---|
-| 自然言語 → アプリ生成 | 動作（実Geminiで確認済み） |
-| 会話（/converse） | 動作 |
-| AIがDesign Roleを選ぶ | 動作（軸2つ。軸ごとに検証、外れたら既定値＋記録） |
-| 数値の意味を判断する | 動作（評価は平均・サイズは最大・分からないなら出さない） |
-| 収入/支出/残高 | 動作（単純合計を残高と呼ばない） |
-| roleが見た目を変える | 動作（描画までCIで確認済み） |
-| 良いDesignかの評価 | 動作（階層が壊れていればrelease_readyにしない） |
-| **会話でデザインを直す** | **未実装**（設計案のみ。上記§2） |
-| **利用者の承認を受け取る** | **未実装**（APIは在るが口が無い、TD65） |
-| Knowledge / RAG | 未着手 |
-| Local AIの学習 | 未着手 |
-| Widget | 20種（Forge Language v1.12） |
+### まだ無いもの（正直に）
 
-## 4. 次にやること（CEO判断待ち）
+* **Flutter側の👍ボタン。** Backendの口はできたが、**利用者が押せる
+  ボタンはまだ無い。** 現時点で`user_acceptance`が実データで埋まる
+  わけではない
+* `/update`から`RevisionRecord`を書く配線（commit F）
+* `ArtifactRegistry`の永続化（プロセス内メモリのみ、TD41と同じ制約）
+* Forge Knowledge / RAG（commit D）
 
-### 提案する順番
+---
 
-```
-016 単位1（MeasureSemantics消失バグ）   ← 先に潰すべき。修正は小さい
-   ↓
-R3-1 承認を受ける口                     ← 単独で閉ループが1本繋がる
-   ↓
-R3-2 RevisionRecord 実装（TD68の設計をそのまま使う）
-   ↓
-R3-3 Semantic Patch（局所適用）
-   ↓
-R3-4 優先1「情報階層・強調」の軸を追加
-   ↓
-R3-5 対象特定（AIにwidget idを選ばせる）
-```
+## 4. 次にやること
 
-**なぜ単位1が先か**: AIが決めた「足せる量か」が保存時に消えるバグです
-（`measure` がコピーされていない）。意味が消える状態のまま上へ機能を
-積むと、後から原因が分からなくなります。
+1. **FORGE-017 Architecture Review**（§27）——既存コードとの重複調査。
+   新しい巨大parallel architectureを作らないことが目的
+2. `docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md` を正式記録
+3. commit C（残R1 Hardening）
+4. commit D（R2 Forge Knowledge / RAG）
 
-**なぜR3-1（承認の口）が次か**: それ単独で閉ループが1本繋がるからです。
-「これでいい」を受け取れるようになるだけで、デザイン修正が1つも
-実装されていなくても `ACCEPTED / CORRECTED` が貯まり始めます。
+**017の型・境界（Learning Event Contract / scope / consent / provenance）は
+C・Dを実装する時点から意識する。** 後から全面書き換えにしない（017 §24）。
 
-**016は捨てません。** P0の4件はどれもDesign Revisionの土台になります
-（画面単位Critic＝直した結果の検査、finance誤判定＝「赤が強すぎる」の
-扱い、/converse E2E＝Revisionも同じ道を通る）。
-
-### 判断をお願いしたいこと
-
-| # | 判断 | 影響 |
-|---|---|---|
-| 1 | **色をAIに触らせるか** | 案は「`#RRGGBB`ではなく、意味の色に `strong/normal/soft` の強度を持たせる」。触らせないなら優先④は後退します |
-| 2 | **承認の口（R3-1）を先に単独で入れるか** | 入れると閉ループが1本繋がります |
-| 3 | **対象特定をUIまで作るか** | AIにid を選ばせる方式だけなら、UI変更なしで始められます |
-| 4 | **`latest` の意味**（下記§5） | 確定しないとKnowledgeへ書けません |
+---
 
 ## 5. 未解決として抱えているもの
 
-| # | 内容 | 参照 |
-|---|---|---|
-| 1 | Experience/Generationが永続化されない（再起動で消える） | TD41 / TD64 |
-| 2 | `ABANDONED`（会話の放棄）を検出していない | TD64 |
-| 3 | **`runtime_outcome`が常にUNKNOWN** — Flutterから結果が戻る経路が無い | TD65 |
-| 4 | **生成物への「これで良い」をUIが聞いていない** — 閉ループの最重要の辺が細い | TD65 |
-| 5 | Privacy Policy未完成 | TD60 |
-| 6 | Gemini枠の合計値・単位が未検証 | TD66 |
-| 7 | 第二Cloudが実API未検証 | TD67 |
-| 8 | JWT検証が`NotImplementedError` | `core/security.py` |
-| 9 | Local AI実モデル実行0回 | TD51 |
-| 10 | ~~AIがDesign Roleを選んでいない~~ → **解消** | TD69 |
-| 11 | ~~Hero KPI Widgetが無い~~ → **解消** | TD69 |
-| 12 | UPDATE/Revision Evidenceは設計のみ（実装はR2） | TD68 |
-| 13 | **CuratedがAIを1回呼ぶ**（推奨解は記録済み） | TD70 |
-| 14 | Widget種別の網羅switchが2箇所にあり、追加のたびにCIが落ちる（3回目） | TD71 |
-| 15 | Live Testが廃止済みのprovider_idを見ていた（修正済み） | TD72 |
-| 16 | **roleの反映はWidgetごとの対応が要る**（1箇所で被せれば効く、は成立しない） | TD73 |
-| 17 | **Flutter側の配線破壊試験ができていない**（SDK無し） | TD74 |
-| 18 | **`latest`の意味が曖昧** — 実装は「最後に追加した行」。「日付が一番新しい行」とは違う。確定しないとKnowledgeへ書けない | 016 §17 |
-| 19 | **コントラスト比を測っていない** — 「Dark対応」と「読みやすさの保証」は別物 | 016 §18 |
-| 20 | **`apply_update`がDesign Languageを知らない** — JSON全体を書き直させている | 設計案 §2 |
-| 21 | **承認を受けるHTTP口が無い** — `note_user_acceptance`は実装済みなのに呼ぶ口が無い | TD65 |
+| 項目 | 状態 |
+|---|---|
+| OpenAI API鍵の失効（§1 依頼1） | **CEO対応待ち** |
+| 実Cloud Providerでの`/feedback`往復 | 未検証（実APIを呼んでいない） |
+| CORS障害が実際に起きているか（§1 依頼2） | CEO回答待ち |
+| `anonymous_user_id`の名称（017 §6） | 設計で再検討する |
+| Personal / App / Global の境界の実装 | 017 E で扱う |
 
 ---
 
 ## 6. 詳しい報告
 
-| 文書 | 内容 |
-|---|---|
-| `docs/spec/DESIGN-REVISION-PROPOSAL.md` | **最新**。「伝えたら直る」の設計案 |
-| `docs/tasks/FORGE-016-STATE.md` | 016の状態と、完了可能な7単位への分割 |
-| `docs/OPEN-DECISIONS.md` | 判断待ち・制約・技術的負債の一覧 |
-| `docs/reports/FORGE-R1-CLOSURE-015-report.md` | R1完了時の全項目・配線破壊試験・検証区分 |
-| `docs/spec/METRIC-SEMANTICS-V1.md` | 数値が「どういう量か」の語彙 |
-| `docs/API-KEY-TEST-GUIDE.md` | APIキーの扱いと試験手順（CEO向け） |
-| `docs/reports/FORGE-R1-HERO-METRIC-AND-DESIGN-INTENT-report.md` | Design Intent / Hero KPI / 配線破壊試験12件 |
-| `docs/reports/FORGE-R1-DESIGN-LANGUAGE-014-report.md` | 014の全項目 |
-| `docs/spec/DESIGN-LANGUAGE-V1.md` | Semantic Vocabulary 33 role |
-| `docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md` | 013 |
-| `docs/reports/FORGE-ROADMAP-R0-report.md` | R0 / CI / R0.1 |
-| `docs/reports/FORGE-AI-FOUNDATION-011-report.md` | 011の7点への回答 |
-| `docs/reports/FORGE-AI-FOUNDATION-010-report.md` | その前段 |
-| `docs/PRODUCT-DIRECTION.md` | **最上位方針（変更不可）** |
-| `docs/ROADMAP-TO-TARGET.md` | 完成図までの段取り |
-| `CLAUDE.md` | AIエージェントの作業ルール |
-| `CHANGELOG.md` | Taskごとの記録 |
-| `TECH_DEBT.md` | 技術的負債 TD1〜TD74 |
+* `docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md`（今回）
+* `docs/reports/FORGE-R1-CLOSURE-015-report.md`
+* `docs/spec/DESIGN-REVISION-PROPOSAL.md`
+* `docs/tasks/FORGE-016-STATE.md`
+* `docs/API-KEY-TEST-GUIDE.md`
+* `CHANGELOG.md` Task084

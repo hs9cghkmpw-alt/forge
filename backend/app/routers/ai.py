@@ -47,6 +47,8 @@ from app.ai.runtime.confirmation_store import (
     default_confirmation_store,
 )
 from app.ai.gateway.ai_router import NoProviderAvailableError, default_router
+from app.ai.gateway.artifact_feedback import default_artifact_registry, default_feedback_service
+from app.ai.gateway.learning_foundation import AcceptanceSignal
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.runtime.conversation_engine import ConversationEngine
 from app.ai.runtime.conversation_metrics import record_conversation_event
@@ -69,6 +71,7 @@ from app.ai.runtime.pipeline_errors import (
 from app.ai.runtime.prompt_pipeline import PipelineNeedsConfirmationResult, PromptPipeline
 from app.ai.runtime.provider_router import ProviderRouter
 from app.schemas.ai import (
+    ArtifactRefDTO,
     ConfirmationAnswerRequest,
     ConfirmationDTO,
     ConverseAskResponse,
@@ -79,6 +82,8 @@ from app.schemas.ai import (
     CriticResultDTO,
     DiagnosticsDTO,
     ErrorEnvelope,
+    FeedbackRequest,
+    FeedbackResponse,
     GenerateNeedsConfirmationResponse,
     GenerateRequest,
     GenerateResultDTO,
@@ -168,8 +173,35 @@ def _diagnostics_dto(diagnostics) -> DiagnosticsDTO:  # noqa: ANN001 — app.ai.
     )
 
 
-def _result_dto(result) -> GenerateResultDTO:  # noqa: ANN001 — PipelineRunResult
+def _artifact_ref(result, *, session_id: str | None) -> ArtifactRefDTO | None:  # noqa: ANN001 — PipelineRunResult
+    """この生成物を後から指せるようにする(FORGE-016A §3)。
+
+    **`_result_dto()`の中から呼ぶ。** 成功レスポンスを組み立てる経路は
+    `/generate`・`/generate/confirm`・`/converse`(BUILD)の3つあるが、
+    どれも最後は`_result_dto()`を通る。ここへ置けば、**新しい経路を
+    足した人が呼び忘れても登録される**。
+
+    「呼び出し側が忘れずに呼ぶ」設計にしないのは、Forgeがそれで4回
+    失敗しているからである(TD59 / 007 §10 / 010 Phase B / TD64)。
+    忘れずに呼ばれる保証が無いものは忘れられる(`CLAUDE.md` §3)。
+
+    `generation_ref`が無い場合(Evidenceを残していない)は`None`を返す。
+    **架空のIDを発行しない**——指す先が無いIDは、評価を捨てる口になる。
+    """
+    generation_ref = getattr(result, "generation_ref", None)
+    if generation_ref is None:
+        return None
+    identity = default_artifact_registry().register(
+        generation_ref=generation_ref,
+        document=result.forge_document,
+        session_id=session_id,
+    )
+    return ArtifactRefDTO(artifact_id=identity.artifact_id, fingerprint=identity.fingerprint)
+
+
+def _result_dto(result, *, session_id: str | None = None) -> GenerateResultDTO:  # noqa: ANN001 — PipelineRunResult
     return GenerateResultDTO(
+        artifact=_artifact_ref(result, session_id=session_id),
         forge_document=result.forge_document,
         validation=ValidationResultDTO(
             valid=result.validation.valid,
@@ -640,7 +672,7 @@ def converse(request: ConverseRequest):
     build_provider_name = result.diagnostics.provider_used or provider_name
     return ConverseBuildResponse(
         session_id=session.session_id, need_model=need_model_dto, build_brief=build_brief,
-        result=_result_dto(result), readiness=step_result.readiness.value,
+        result=_result_dto(result, session_id=session.session_id), readiness=step_result.readiness.value,
         provider=build_provider_name, simulated=router.is_simulated(build_provider_name),
     )
 
@@ -697,4 +729,50 @@ def update(request: UpdateRequest):
             ),
             attempts=result.attempts,
         )
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/ai/feedback — 「これでいい / そこは違う」を記録する
+# (FORGE-016A §3、2026-08-24)。
+#
+# ## なぜこれが必要だったのか
+#
+# `AcceptanceSignal`も`note_user_acceptance()`も、011から実装されて
+# いた。**しかしそれを呼ぶHTTP経路が1つも無かった。** つまり
+# `user_acceptance`は本番で永久に`UNKNOWN`のままであり、
+# `is_positive_example`(明示的な承認を要求する)は**構造上、必ず
+# Falseだった**。
+#
+# 「Local AIの教師データを貯める」と書いてある仕組みが、貯める口を
+# 持っていなかった——Forgeが5回繰り返した「作ったが本番から呼ばれ
+# ない」の5例目である(TD65)。
+#
+# ## 入口を1つに保つ
+#
+# 将来UIに👍ボタンが付いても、`/converse`が「これでいいですね」を
+# 検出するようになっても、**通り道はここ1本にする**。近道を作ると、
+# 記録の意味が経路ごとにずれる。
+# ---------------------------------------------------------------------------
+
+
+@router.post("/feedback", response_model=FeedbackResponse, responses=_GENERATE_ERROR_RESPONSES)
+def feedback(request: FeedbackRequest) -> FeedbackResponse:
+    """利用者の評価をEvidenceへ書く。
+
+    **成功でなくても200で返す。** 「その生成物は知らない」「もう評価が
+    付いている」はClientの誤りではなく、正常に起こりうる状態である
+    (画面を開いたまま再生成した等)。理由を`rejected`で返し、Client側が
+    「記録された」と思い込まないようにする。
+    """
+    result = default_feedback_service().record(
+        signal=AcceptanceSignal(request.signal),
+        artifact_id=request.artifact_id,
+        session_id=request.session_id,
+        seen_fingerprint=request.seen_fingerprint,
+    )
+    return FeedbackResponse(
+        recorded=result.recorded,
+        signal=result.signal.value,
+        rejected=result.rejected.value if result.rejected is not None else None,
     )

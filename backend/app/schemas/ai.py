@@ -121,11 +121,33 @@ class DiagnosticsDTO(BaseModel):
     safety_report: dict[str, Any] | None = None
 
 
+class ArtifactRefDTO(BaseModel):
+    """利用者が**いま見ている生成物**を後から指すためのID
+    (FORGE-016A §3、2026-08-24)。
+
+    「これでいい」「そこは違う」が来たとき、Forgeは**どの生成物への
+    評価なのか**を知らなければ記録できない。013で`generation_ref`を
+    Pipelineから返すようにしたが、HTTPまで届いていなかったので、
+    結局`note_user_acceptance()`を呼ぶ経路が1本も無かった(TD65)。
+
+    **内部のrefは出さない。** 出すと、Clientが任意のrefへ「受け入れた」
+    を書けてしまう——それは学習素材の捏造である。不透明なIDを発行し、
+    Forge自身が解決する。
+    """
+
+    artifact_id: str = Field(..., description="この生成物を指す不透明なID。/api/v1/ai/feedback へそのまま返す")
+    fingerprint: str = Field(..., description="この世代のDocumentの指紋。古い世代へ評価を書かないための照合用(内容は復元できない)")
+
+
 class GenerateResultDTO(BaseModel):
     forge_document: dict[str, Any] = Field(..., description="Forge Language準拠のJSON。Validator合格済みのもののみ(ADR 2.3節)")
     validation: ValidationResultDTO
     quality: CriticResultDTO | None = None
     diagnostics: DiagnosticsDTO
+    artifact: ArtifactRefDTO | None = Field(
+        default=None,
+        description="この生成物のID(FORGE-016A §3)。Evidenceを記録していない場合はnull",
+    )
 
 
 class GenerateSuccessResponse(BaseModel):
@@ -385,3 +407,53 @@ class ConverseUpdateResponse(SimulatedOutputMixin):
     need_model: NeedModelDTO
     change_request: str
     result: UpdateResultDTO
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/ai/feedback — 「これでいい / そこは違う」(FORGE-016A §3、
+# 2026-08-24)。
+#
+# **入口はここ1つだけである。** Evidence Storeを直接叩く近道を作らない
+# (`app/ai/gateway/artifact_feedback.py`の冒頭を参照)。入口が増えるたび
+# に記録の意味が経路ごとにずれ、集計が静かに嘘になる。
+# ---------------------------------------------------------------------------
+
+
+class FeedbackRequest(BaseModel):
+    """利用者がその生成物をどう扱ったか。
+
+    **内部refは受け取らない。** `artifact_id`(Forgeが発行した不透明な
+    ID)か`session_id`のどちらかで指す。任意のrefを信用すると、見ても
+    いない生成物へ「受け入れた」を書けてしまう。
+
+    **発話は受け取らない。** 何と言って評価したかは記録しない
+    (006 §22 / 016A §10のPrivacy境界)。ここにあるのは「どう扱われたか」
+    という閉じた語彙だけである。
+    """
+
+    signal: Literal["accepted", "corrected", "abandoned"] = Field(
+        ..., description="accepted=明示的に承認 / corrected=訂正された / abandoned=そこで終わった。unknownは受け付けない(沈黙は情報ではない)"
+    )
+    artifact_id: str | None = Field(default=None, description="generate/converseのresult.artifact.artifact_id")
+    session_id: str | None = Field(default=None, description="artifact_idが無い場合の代替。そのセッションの最新の生成物へ書く")
+    seen_fingerprint: str | None = Field(
+        default=None,
+        description="利用者が見ていた世代の指紋。いまの世代と違えばstale_artifactとして拒否する(§5)",
+    )
+
+
+class FeedbackResponse(BaseModel):
+    """記録できたか、できなかったならなぜか。
+
+    **黙って捨てない。** 拒否した理由を返さないと、Client側は
+    「記録された」と思い込んだまま動き続ける。
+    """
+
+    version: Literal["1.0"] = "1.0"
+    status: Literal["success"] = "success"
+    recorded: bool
+    signal: str
+    rejected: str | None = Field(
+        default=None,
+        description="unknown_artifact / stale_artifact / already_recorded のいずれか。recordedがtrueならnull",
+    )
