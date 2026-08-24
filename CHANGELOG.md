@@ -2,6 +2,69 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task082 — 「伝えたらデザインを直す」の設計（2026-08-18、実装なし）
+
+CEOから最優先方針が来た。**実装はせず、設計案・依存関係・実装順・
+テスト戦略までを作った**（CEO指示）。
+
+### 方針
+
+> ユーザーが見た画面に対して普通の日本語で指摘すると、
+> その意図を理解してデザインを直せること
+
+見た目の便利機能ではなく、
+`User Correction → Revision Evidence → Forge Knowledge → Local AI Improvement`
+を閉じる経路として設計する。閉ループの最重要の辺（TD65）がここで繋がる。
+
+### 調査で分かった既存資産
+
+実コードを読んで確認した。土台の多くは既にある。
+
+* **widget単位のrole適用**（`screen.styleRoles[node.id]`）
+  → 「このカードだけ」が実現できる
+* **`RevisionRecord`の設計**（TD68）→ 型の設計は済んでいる
+* `classify_correction` の3段判定（態度→対比→対象）
+* `AcceptanceSignal` / `note_user_acceptance()`
+* Design Language 33 role・軸ごとの検証・Semantic Design Critic
+
+### 見つかった致命的な欠け2件
+
+1. **`apply_update()`がDesign Languageを知らない。** プロンプトに
+   `style_role`が一言も無く、AIにJSON全体を書き直させている。
+   「残高を目立たせて」の結果、支出のKPIが落ちてもValidatorは構造しか
+   見ないので通る
+2. **承認を受けるHTTP口が1つも無い。** `note_user_acceptance()`は実装済み
+   なのに呼ぶ口が無い——「作ったが呼ばれない」の状態
+
+### 主な設計判断
+
+* **全体書き直しをやめ Semantic Patch（局所適用）にする。** AIに返させる
+  のはDocumentではなく意味の変更指示（target/axis/from/to）。触っていない
+  場所は1バイトも変わらないので、残高が消える事故が構造的に起きない
+* 対象/不満/望む変化 の3段に分ける（「もっとシンプルに」は複数軸を動かす）
+* 対象特定はAIにwidget idを選ばせ、存在しないidはUNCLEARへ倒して聞き返す
+  （**曖昧なまま全体へ適用しない**）
+* 色は`#RRGGBB`を書かせず、意味の色に`strong/normal/soft`の強度を持たせる案
+  （CEO判断待ち）
+* Evidenceは生の発話を持たず、`complaint_kind`/`delta`という閉じた識別子
+* 実装順は**承認の口を最初に**（単独で閉ループが1本繋がるため）
+
+### 016の整理
+
+016（P0バグ4件 + R2 Knowledge/RAG）は未着手のまま。前回の応答が
+API 529 Overloadedで着手前に中断したためで、押し忘れではない。
+独立してcommit/push/CIまで到達できる**7単位へ分割**した。
+016はDesign Revisionの土台になるので捨てない。
+
+### 新規文書
+
+* `docs/spec/DESIGN-REVISION-PROPOSAL.md`
+* `docs/tasks/FORGE-016-STATE.md`
+* `docs/OPEN-DECISIONS.md`
+* `docs/HANDOFF.md` を全面更新（ChatGPTが最初に見る固定パス）
+
+---
+
 ## Task081 — R1 Design Language の閉じ込め(2026-08-17、FORGE-R1-CLOSURE-015)
 
 指摘された穴を**すべて再現してから**直した。推測でPatchしたものは無い。
