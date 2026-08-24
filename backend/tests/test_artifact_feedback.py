@@ -27,6 +27,7 @@ TD64 / TD69）。共通するのは「呼び出し側が忘れずに呼ぶ」設
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import unittest
@@ -38,10 +39,16 @@ os.environ.setdefault("FORGE_FEATURE_WORKSPACE", "true")
 os.environ.setdefault("FORGE_FEATURE_FOLDER", "true")
 
 from app.ai.gateway.artifact_feedback import (  # noqa: E402
+    ArtifactEvidenceId,
     ArtifactFeedbackService,
+    ArtifactHandle,
     ArtifactRegistry,
+    EvidenceKind,
+    FeedbackEventLog,
     FeedbackRejected,
+    FeedbackSource,
     document_fingerprint,
+    new_version_token,
 )
 from app.ai.gateway.generation_evidence import (  # noqa: E402
     DesignDecisionSource,
@@ -94,8 +101,17 @@ class _Harness:
         self.registry = ArtifactRegistry()
         self.generations = GenerationEvidenceStore()
         self.revisions = RevisionEvidenceStore()
+        self.events = FeedbackEventLog()
         self.service = ArtifactFeedbackService(
-            registry=self.registry, generations=self.generations, revisions=self.revisions
+            registry=self.registry, generations=self.generations,
+            revisions=self.revisions, events=self.events,
+        )
+
+    def register(self, ref: int, *, session_id: str | None = None) -> ArtifactHandle:
+        record = self.generations.get(ref)
+        assert record is not None
+        return self.registry.register(
+            generation_ref=ref, generation_uid=record.uid, session_id=session_id
         )
 
 
@@ -110,13 +126,14 @@ class TestFeedbackRecording(unittest.TestCase):
 
     def test_accepted_is_written_to_the_generation_record(self) -> None:
         ref = _generation(self.h.generations)
-        identity = self.h.registry.register(generation_ref=ref, document=_DOCUMENT)
+        handle = self.h.register(ref)
 
         result = self.h.service.record(
-            signal=AcceptanceSignal.ACCEPTED, artifact_id=identity.artifact_id
+            signal=AcceptanceSignal.ACCEPTED, artifact_id=handle.handle
         )
 
         self.assertTrue(result.recorded)
+        self.assertTrue(result.summary_updated)
         self.assertIsNone(result.rejected)
         self.assertIs(self.h.generations.get(ref).user_acceptance, AcceptanceSignal.ACCEPTED)
 
@@ -125,89 +142,89 @@ class TestFeedbackRecording(unittest.TestCase):
         ref = _generation(self.h.generations, runtime_outcome=RuntimeOutcome.RENDERED)
         self.assertEqual(self.h.generations.training_candidates(), ())
 
-        identity = self.h.registry.register(generation_ref=ref, document=_DOCUMENT)
-        self.h.service.record(signal=AcceptanceSignal.ACCEPTED, artifact_id=identity.artifact_id)
+        self.h.service.record(
+            signal=AcceptanceSignal.ACCEPTED, artifact_id=self.h.register(ref).handle
+        )
 
         self.assertEqual(len(self.h.generations.training_candidates()), 1)
 
     def test_corrected_is_recorded_and_is_not_a_training_candidate(self) -> None:
         ref = _generation(self.h.generations, runtime_outcome=RuntimeOutcome.RENDERED)
-        identity = self.h.registry.register(generation_ref=ref, document=_DOCUMENT)
 
         result = self.h.service.record(
-            signal=AcceptanceSignal.CORRECTED, artifact_id=identity.artifact_id
+            signal=AcceptanceSignal.CORRECTED, artifact_id=self.h.register(ref).handle
         )
 
         self.assertTrue(result.recorded)
         self.assertIs(self.h.generations.get(ref).user_acceptance, AcceptanceSignal.CORRECTED)
         self.assertEqual(self.h.generations.training_candidates(), ())
 
-    def test_first_signal_wins(self) -> None:
-        """後から塗り替えると「その時点でどう扱われたか」が消える。"""
+    def test_the_summary_keeps_the_first_signal(self) -> None:
+        """要約は最初の信号が勝つ——塗り替えると「その時点でどう扱われたか」
+        が消える。**ただし2つ目を捨てるわけではない**（下のTestを参照）。"""
         ref = _generation(self.h.generations)
-        identity = self.h.registry.register(generation_ref=ref, document=_DOCUMENT)
+        handle = self.h.register(ref)
 
-        self.h.service.record(signal=AcceptanceSignal.ACCEPTED, artifact_id=identity.artifact_id)
+        self.h.service.record(signal=AcceptanceSignal.ACCEPTED, artifact_id=handle.handle)
         second = self.h.service.record(
-            signal=AcceptanceSignal.CORRECTED, artifact_id=identity.artifact_id
+            signal=AcceptanceSignal.CORRECTED, artifact_id=handle.handle
         )
 
-        self.assertFalse(second.recorded)
-        self.assertIs(second.rejected, FeedbackRejected.ALREADY_RECORDED)
+        self.assertTrue(second.recorded, "2つ目の評価が事実として残っていない")
+        self.assertFalse(second.summary_updated)
         self.assertIs(self.h.generations.get(ref).user_acceptance, AcceptanceSignal.ACCEPTED)
 
     def test_unknown_artifact_is_rejected_with_a_reason(self) -> None:
         result = self.h.service.record(
-            signal=AcceptanceSignal.ACCEPTED, artifact_id="そんなIDは発行していない"
+            signal=AcceptanceSignal.ACCEPTED, artifact_id="そんなハンドルは発行していない"
         )
         self.assertFalse(result.recorded)
         self.assertIs(result.rejected, FeedbackRejected.UNKNOWN_ARTIFACT)
 
     def test_stale_artifact_is_rejected(self) -> None:
-        """利用者が見ていた世代と、いまの世代が違う（§5）。"""
+        """利用者が見ていた世代と、いまの世代が違う。"""
         ref = _generation(self.h.generations)
-        identity = self.h.registry.register(generation_ref=ref, document=_DOCUMENT)
+        handle = self.h.register(ref)
 
         result = self.h.service.record(
             signal=AcceptanceSignal.ACCEPTED,
-            artifact_id=identity.artifact_id,
-            seen_fingerprint=document_fingerprint({"version": "1.11", "app": {"title": "別物"}}),
+            artifact_id=handle.handle,
+            seen_version_token=new_version_token(),
         )
 
         self.assertFalse(result.recorded)
         self.assertIs(result.rejected, FeedbackRejected.STALE_ARTIFACT)
         self.assertIs(self.h.generations.get(ref).user_acceptance, AcceptanceSignal.UNKNOWN)
+        self.assertEqual(self.h.events.size(), 0, "拒否したのにEventが残っている")
 
-    def test_matching_fingerprint_is_accepted(self) -> None:
+    def test_matching_version_token_is_accepted(self) -> None:
         ref = _generation(self.h.generations)
-        identity = self.h.registry.register(generation_ref=ref, document=_DOCUMENT)
+        handle = self.h.register(ref)
 
         result = self.h.service.record(
             signal=AcceptanceSignal.ACCEPTED,
-            artifact_id=identity.artifact_id,
-            seen_fingerprint=document_fingerprint(_DOCUMENT),
+            artifact_id=handle.handle,
+            seen_version_token=handle.version_token,
         )
         self.assertTrue(result.recorded)
 
     def test_unknown_signal_is_not_recorded(self) -> None:
         """沈黙は情報ではない（`AcceptanceSignal.UNKNOWN`）。"""
         ref = _generation(self.h.generations)
-        identity = self.h.registry.register(generation_ref=ref, document=_DOCUMENT)
 
         result = self.h.service.record(
-            signal=AcceptanceSignal.UNKNOWN, artifact_id=identity.artifact_id
+            signal=AcceptanceSignal.UNKNOWN, artifact_id=self.h.register(ref).handle
         )
         self.assertFalse(result.recorded)
+        self.assertIs(result.rejected, FeedbackRejected.UNUSABLE_SIGNAL)
         self.assertIs(self.h.generations.get(ref).user_acceptance, AcceptanceSignal.UNKNOWN)
+        self.assertEqual(self.h.events.size(), 0)
 
     def test_session_id_resolves_to_the_latest_artifact_of_that_session(self) -> None:
         old_ref = _generation(self.h.generations)
         new_ref = _generation(self.h.generations)
-        self.h.registry.register(generation_ref=old_ref, document=_DOCUMENT, session_id="s-1")
-        self.h.registry.register(
-            generation_ref=new_ref, document={"version": "1.11", "app": {"title": "二つ目"}},
-            session_id="s-1",
-        )
+        self.h.register(old_ref, session_id="s-1")
+        self.h.register(new_ref, session_id="s-1")
 
         result = self.h.service.record(signal=AcceptanceSignal.ACCEPTED, session_id="s-1")
 
@@ -221,43 +238,253 @@ class TestFeedbackRecording(unittest.TestCase):
         self.assertIs(result.rejected, FeedbackRejected.UNKNOWN_ARTIFACT)
 
 
-class TestArtifactIdentity(unittest.TestCase):
-    def test_artifact_id_is_not_guessable(self) -> None:
-        """連番だと、他人の生成物へ評価を書けてしまう。"""
-        registry = ArtifactRegistry()
-        ids = {registry.register(generation_ref=i, document=_DOCUMENT).artifact_id for i in range(20)}
-        self.assertEqual(len(ids), 20)
-        for artifact_id in ids:
-            self.assertGreaterEqual(len(artifact_id), 16)
-            self.assertFalse(artifact_id.isdigit())
+class TestFeedbackIsAppendOnly(unittest.TestCase):
+    """**利用者Feedbackの時系列そのものがEvidenceである**（FORGE-017A §2）。
 
-    def test_fingerprint_is_stable_under_key_order(self) -> None:
-        """キーの順序が違うだけで「古い扱い」にしない。"""
+    commit Bは2つ目の信号を捨てていた。「最初は良いと言ったが、使って
+    みたら直した」は、最初から`CORRECTED`だったものとまるで意味が違う
+    ——前者は「一見よく見えるが実際には外している」という、Local AIに
+    とって最も価値のある系列である。1つのfieldに潰すと区別できない。
+    """
+
+    def setUp(self) -> None:
+        self.h = _Harness()
+        self.ref = _generation(self.h.generations)
+        self.handle = self.h.register(self.ref)
+
+    def test_both_signals_survive_in_order(self) -> None:
+        self.h.service.record(signal=AcceptanceSignal.ACCEPTED, artifact_id=self.handle.handle)
+        self.h.service.record(signal=AcceptanceSignal.CORRECTED, artifact_id=self.handle.handle)
+
+        history = self.h.service.history(self.handle.evidence_id)
+        self.assertEqual(
+            [e.signal for e in history],
+            [AcceptanceSignal.ACCEPTED, AcceptanceSignal.CORRECTED],
+        )
+
+    def test_sequence_counts_from_one(self) -> None:
+        self.h.service.record(signal=AcceptanceSignal.ACCEPTED, artifact_id=self.handle.handle)
+        self.h.service.record(signal=AcceptanceSignal.CORRECTED, artifact_id=self.handle.handle)
+        self.h.service.record(signal=AcceptanceSignal.ABANDONED, artifact_id=self.handle.handle)
+
+        self.assertEqual([e.sequence for e in self.h.service.history(self.handle.evidence_id)],
+                         [1, 2, 3])
+
+    def test_events_of_different_artifacts_do_not_mix(self) -> None:
+        other_ref = _generation(self.h.generations)
+        other = self.h.register(other_ref)
+
+        self.h.service.record(signal=AcceptanceSignal.ACCEPTED, artifact_id=self.handle.handle)
+        self.h.service.record(signal=AcceptanceSignal.CORRECTED, artifact_id=other.handle)
+
+        self.assertEqual(len(self.h.service.history(self.handle.evidence_id)), 1)
+        self.assertEqual(len(self.h.service.history(other.evidence_id)), 1)
+
+    def test_event_ids_are_unique(self) -> None:
+        for _ in range(5):
+            self.h.service.record(
+                signal=AcceptanceSignal.ACCEPTED, artifact_id=self.handle.handle
+            )
+        ids = {e.event_id for e in self.h.service.history(self.handle.evidence_id)}
+        self.assertEqual(len(ids), 5)
+
+    def test_an_event_points_at_the_durable_evidence_id_not_the_handle(self) -> None:
+        """**ハンドルはEventに現れない**（017A §3）。失効するIDを系譜へ
+        使うと、失効した時点で系譜が切れる。"""
+        self.h.service.record(signal=AcceptanceSignal.ACCEPTED, artifact_id=self.handle.handle)
+        event = self.h.service.history(self.handle.evidence_id)[0]
+
+        self.assertEqual(event.artifact_evidence_ref.uid, self.h.generations.get(self.ref).uid)
+        self.assertNotIn(self.handle.handle, repr(event.to_dict()))
+
+    def test_the_event_log_has_no_update_or_delete(self) -> None:
+        """**追記専用であること自体を固定する。**"""
+        for forbidden in ("update", "delete", "remove", "set_signal", "overwrite"):
+            self.assertFalse(
+                hasattr(FeedbackEventLog, forbidden),
+                f"FeedbackEventLog に {forbidden} が生えている（追記専用が壊れる）",
+            )
+
+
+class TestFeedbackIdempotency(unittest.TestCase):
+    """**同じ送信の繰り返しと、本当の再評価を区別する**（FORGE-017A §2）。"""
+
+    def setUp(self) -> None:
+        self.h = _Harness()
+        self.ref = _generation(self.h.generations)
+        self.handle = self.h.register(self.ref)
+
+    def test_the_same_key_twice_is_a_duplicate(self) -> None:
+        first = self.h.service.record(
+            signal=AcceptanceSignal.ACCEPTED, artifact_id=self.handle.handle,
+            idempotency_key="req-1",
+        )
+        second = self.h.service.record(
+            signal=AcceptanceSignal.ACCEPTED, artifact_id=self.handle.handle,
+            idempotency_key="req-1",
+        )
+
+        self.assertTrue(first.recorded)
+        self.assertFalse(second.recorded)
+        self.assertIs(second.rejected, FeedbackRejected.DUPLICATE_REQUEST)
+        self.assertEqual(len(self.h.service.history(self.handle.evidence_id)), 1)
+
+    def test_a_duplicate_returns_the_original_event(self) -> None:
+        first = self.h.service.record(
+            signal=AcceptanceSignal.ACCEPTED, artifact_id=self.handle.handle,
+            idempotency_key="req-1",
+        )
+        second = self.h.service.record(
+            signal=AcceptanceSignal.ACCEPTED, artifact_id=self.handle.handle,
+            idempotency_key="req-1",
+        )
+        self.assertEqual(second.event.event_id, first.event.event_id)
+
+    def test_different_keys_are_different_evaluations(self) -> None:
+        self.h.service.record(
+            signal=AcceptanceSignal.ACCEPTED, artifact_id=self.handle.handle,
+            idempotency_key="req-1",
+        )
+        self.h.service.record(
+            signal=AcceptanceSignal.CORRECTED, artifact_id=self.handle.handle,
+            idempotency_key="req-2",
+        )
+        self.assertEqual(len(self.h.service.history(self.handle.evidence_id)), 2)
+
+    def test_no_key_means_not_a_retry(self) -> None:
+        """**分からないものを「たぶん再送」へ倒さない。**
+
+        倒すと、本物の再評価が静かに消える。
+        """
+        for _ in range(3):
+            self.h.service.record(
+                signal=AcceptanceSignal.CORRECTED, artifact_id=self.handle.handle
+            )
+        self.assertEqual(len(self.h.service.history(self.handle.evidence_id)), 3)
+
+
+class TestFeedbackSourceIsNotOptimistic(unittest.TestCase):
+    def test_inferred_feedback_is_not_supervision(self) -> None:
+        """**Forgeの推定を「利用者がそう言った」として学習しない。**
+
+        推定を教師にすると、Forge自身の思い込みを増幅する。
+        """
+        self.assertFalse(FeedbackSource.INFERRED.is_usable_as_supervision)
+        self.assertFalse(FeedbackSource.SYSTEM.is_usable_as_supervision)
+        self.assertFalse(FeedbackSource.UNKNOWN.is_usable_as_supervision)
+        self.assertTrue(FeedbackSource.USER_EXPLICIT.is_usable_as_supervision)
+
+    def test_the_default_source_is_unknown(self) -> None:
+        log = FeedbackEventLog()
+        event = log.append(
+            evidence_id=ArtifactEvidenceId(EvidenceKind.GENERATION, "uid-1", 1),
+            signal=AcceptanceSignal.ACCEPTED,
+        )
+        self.assertIs(event.source, FeedbackSource.UNKNOWN)
+
+
+class TestIdentitySeparation(unittest.TestCase):
+    """**3つのIDを混ぜない**（FORGE-017A §3・§4）。
+
+    | | 何のためか | 寿命 | Cloudへ |
+    |---|---|---|---|
+    | `handle` | Clientが評価を送り返す | 失効する | **出さない** |
+    | `ArtifactEvidenceId` | Dataset Lineage | 記録に貼り付く | 出す |
+    | `version_token` | 世代照合 | ハンドルと同じ | 出さない |
+    """
+
+    def setUp(self) -> None:
+        self.h = _Harness()
+
+    def test_handle_is_not_guessable(self) -> None:
+        """連番だと、他人の生成物へ評価を書けてしまう。"""
+        handles = {
+            self.h.registry.register(generation_ref=i, generation_uid=f"u{i}").handle
+            for i in range(20)
+        }
+        self.assertEqual(len(handles), 20)
+        for handle in handles:
+            self.assertGreaterEqual(len(handle), 16)
+            self.assertFalse(handle.isdigit())
+
+    def test_the_evidence_id_is_the_record_uid_not_the_store_position(self) -> None:
+        """**`ref`は系譜に使えない。** プロセスを跨ぐと別の記録を指す
+        （1番は次のプロセスでも1番だが、中身は別物である）。"""
+        ref = _generation(self.h.generations)
+        record = self.h.generations.get(ref)
+        handle = self.h.register(ref)
+
+        self.assertEqual(handle.evidence_id.uid, record.uid)
+        self.assertNotEqual(handle.evidence_id.uid, str(ref))
+        # 系譜として書き出す形に `ref` は含まれない。
+        self.assertNotIn("ref", handle.evidence_id.to_dict())
+
+    def test_the_handle_never_appears_in_the_lineage_id(self) -> None:
+        """**失効するIDを系譜へ流用しない**（017A §3・自己監査3/4）。"""
+        ref = _generation(self.h.generations)
+        handle = self.h.register(ref)
+        self.assertNotIn(handle.handle, repr(handle.evidence_id.to_dict()))
+
+    def test_what_goes_to_the_client_carries_no_lineage_id(self) -> None:
+        ref = _generation(self.h.generations)
+        handle = self.h.register(ref)
+
+        client_view = handle.to_client_dict()
+        self.assertEqual(set(client_view), {"artifact_id", "version_token"})
+        self.assertNotIn(handle.evidence_id.uid, repr(client_view))
+
+    def test_two_uids_differ_even_for_identical_content(self) -> None:
+        """記録が別なら身元も別。内容の同一性とは無関係である。"""
+        first = _generation(self.h.generations)
+        second = _generation(self.h.generations)
+        self.assertNotEqual(
+            self.h.generations.get(first).uid, self.h.generations.get(second).uid
+        )
+
+    def test_a_revision_handle_points_at_the_revision(self) -> None:
+        """変更後の評価は、変更へ付く——生成へ付けると意味が変わる。"""
+        handle = self.h.registry.register(
+            generation_ref=7, generation_uid="gen-uid",
+            revision_ref=3, revision_uid="rev-uid",
+        )
+        self.assertIs(handle.evidence_id.kind, EvidenceKind.REVISION)
+        self.assertEqual(handle.evidence_id.uid, "rev-uid")
+
+    def test_a_handle_without_a_revision_points_at_the_generation(self) -> None:
+        handle = self.h.registry.register(generation_ref=7, generation_uid="gen-uid")
+        self.assertIs(handle.evidence_id.kind, EvidenceKind.GENERATION)
+        self.assertEqual(handle.evidence_id.uid, "gen-uid")
+
+
+class TestVersionTokenIsNotAContentHash(unittest.TestCase):
+    """**世代照合とContent Identityを混ぜない**（FORGE-017A §4）。"""
+
+    def test_the_token_does_not_depend_on_the_document(self) -> None:
+        """同じ内容でも毎回違う値になる。**それで正しい**——別々の
+        利用者の生成物を突き合わせられない。"""
+        self.assertNotEqual(new_version_token(), new_version_token())
+
+    def test_the_registry_does_not_take_a_document(self) -> None:
+        """**見ないなら受け取らない。** 受け取れば、いつか誰かが内容から
+        何かを作る。"""
+        import inspect
+
+        params = set(inspect.signature(ArtifactRegistry.register).parameters)
+        self.assertNotIn("document", params)
+        self.assertNotIn("fingerprint", params)
+
+    def test_two_registrations_get_different_tokens(self) -> None:
+        registry = ArtifactRegistry()
+        first = registry.register(generation_ref=1, generation_uid="u1")
+        second = registry.register(generation_ref=1, generation_uid="u1")
+        self.assertNotEqual(first.version_token, second.version_token)
+
+    def test_the_internal_fingerprint_still_exists_for_internal_use(self) -> None:
+        """内部専用として残してある（消したのではなく、用途を絞った）。"""
         a = {"version": "1.11", "app": {"title": "x"}}
         b = {"app": {"title": "x"}, "version": "1.11"}
         self.assertEqual(document_fingerprint(a), document_fingerprint(b))
-
-    def test_fingerprint_changes_when_the_document_changes(self) -> None:
-        a = {"version": "1.11", "app": {"title": "x"}}
-        b = {"version": "1.11", "app": {"title": "y"}}
-        self.assertNotEqual(document_fingerprint(a), document_fingerprint(b))
-
-    def test_fingerprint_does_not_contain_the_document_text(self) -> None:
-        """指紋から本文は復元できない（006 §22のPrivacy境界）。"""
-        fingerprint = document_fingerprint({"app": {"title": "医療費の記録"}})
-        self.assertNotIn("医療費", fingerprint)
-        self.assertTrue(all(c in "0123456789abcdef" for c in fingerprint))
-
-    def test_evidence_ref_points_at_the_revision_when_there_is_one(self) -> None:
-        """変更後の評価は、変更へ付く——生成へ付けると意味が変わる。"""
-        registry = ArtifactRegistry()
-        identity = registry.register(generation_ref=7, document=_DOCUMENT, revision_ref=3)
-        self.assertEqual(identity.evidence_ref, ("revision", 3))
-
-    def test_evidence_ref_points_at_the_generation_when_there_is_no_revision(self) -> None:
-        registry = ArtifactRegistry()
-        identity = registry.register(generation_ref=7, document=_DOCUMENT)
-        self.assertEqual(identity.evidence_ref, ("generation", 7))
+        self.assertNotEqual(document_fingerprint(a), document_fingerprint({"app": {}}))
 
 
 # ---------------------------------------------------------------------------
@@ -522,12 +749,12 @@ class TestFeedbackOverHttp(unittest.TestCase):
         self.assertEqual(body["status"], "success")
         return body["result"]
 
-    def test_generate_returns_an_artifact_id(self) -> None:
+    def test_generate_returns_an_artifact_handle(self) -> None:
         """**この配線が無いと、評価を書く先が本番に存在しない。**"""
         result = self._build()
         self.assertIsNotNone(result.get("artifact"), "生成結果にartifactが付いていない")
         self.assertTrue(result["artifact"]["artifact_id"])
-        self.assertTrue(result["artifact"]["fingerprint"])
+        self.assertTrue(result["artifact"]["version_token"])
 
     def test_generate_does_not_expose_internal_refs(self) -> None:
         """内部refを出すと、任意のrefへ「受け入れた」を書けてしまう。"""
@@ -535,11 +762,37 @@ class TestFeedbackOverHttp(unittest.TestCase):
         self.assertNotIn("generation_ref", result["artifact"])
         self.assertNotIn("generation_ref", result)
 
-    def test_fingerprint_matches_the_returned_document(self) -> None:
+    def test_the_response_never_carries_a_hash_of_the_document(self) -> None:
+        """**内容の指紋をClientへ返さない**（FORGE-017A §4）。
+
+        内容が同じなら誰が作っても同じ値になるので、外へ出すと利用者を
+        跨いだ突き合わせに使える。内容の候補が少なければ総当たりで中身を
+        言い当てられる。世代照合に必要なのは「さっきと同じものか」だけで、
+        内容の同一性ではない。
+        """
         result = self._build()
-        self.assertEqual(
-            result["artifact"]["fingerprint"], document_fingerprint(result["forge_document"])
+        fingerprint = document_fingerprint(result["forge_document"])
+
+        self.assertNotEqual(result["artifact"]["version_token"], fingerprint)
+        self.assertNotIn(
+            fingerprint, json.dumps(result["artifact"]),
+            "Documentの内容ハッシュがHTTPレスポンスに現れている",
         )
+
+    def test_two_generations_of_the_same_input_get_different_tokens(self) -> None:
+        """同じ入力でもtokenが違うこと——内容から作っていない証拠。"""
+        first = self._build()["artifact"]["version_token"]
+        second = self._build()["artifact"]["version_token"]
+        self.assertNotEqual(first, second)
+
+    def test_the_response_never_carries_the_lineage_uid(self) -> None:
+        """**系譜のIDをClientへ出さない**（FORGE-017A §3）。"""
+        from app.ai.gateway.artifact_feedback import default_artifact_registry
+
+        result = self._build()
+        handle = default_artifact_registry().resolve(result["artifact"]["artifact_id"])
+        self.assertIsNotNone(handle)
+        self.assertNotIn(handle.evidence_id.uid, json.dumps(result))
 
     def test_feedback_round_trip_records_the_signal(self) -> None:
         from app.ai.gateway.artifact_feedback import default_artifact_registry
@@ -555,12 +808,66 @@ class TestFeedbackOverHttp(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         body = response.json()
         self.assertTrue(body["recorded"])
+        self.assertTrue(body["summary_updated"])
         self.assertIsNone(body["rejected"])
 
-        identity = default_artifact_registry().resolve(artifact_id)
-        self.assertIsNotNone(identity)
-        record = default_generation_store().get(identity.generation_ref)
+        handle = default_artifact_registry().resolve(artifact_id)
+        self.assertIsNotNone(handle)
+        record = default_generation_store().get(handle.evidence_id.ref)
         self.assertIs(record.user_acceptance, AcceptanceSignal.ACCEPTED)
+
+    def test_feedback_round_trip_appends_an_event(self) -> None:
+        """**時系列がEvidenceとして残ること**（FORGE-017A §2）。"""
+        from app.ai.gateway.artifact_feedback import (
+            default_artifact_registry,
+            default_feedback_service,
+        )
+
+        result = self._build()
+        artifact_id = result["artifact"]["artifact_id"]
+
+        for signal in ("accepted", "corrected"):
+            response = self.client.post(
+                "/api/v1/ai/feedback",
+                json={"signal": signal, "artifact_id": artifact_id},
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertTrue(response.json()["recorded"], f"{signal}が捨てられている")
+
+        handle = default_artifact_registry().resolve(artifact_id)
+        history = default_feedback_service().history(handle.evidence_id)
+        self.assertEqual(
+            [e.signal.value for e in history], ["accepted", "corrected"],
+            "2つ目の評価が消えている（時系列がEvidenceである）",
+        )
+
+    def test_the_second_signal_does_not_change_the_summary(self) -> None:
+        result = self._build()
+        artifact_id = result["artifact"]["artifact_id"]
+
+        self.client.post(
+            "/api/v1/ai/feedback", json={"signal": "accepted", "artifact_id": artifact_id}
+        )
+        second = self.client.post(
+            "/api/v1/ai/feedback", json={"signal": "corrected", "artifact_id": artifact_id}
+        ).json()
+
+        self.assertTrue(second["recorded"])
+        self.assertFalse(second["summary_updated"])
+
+    def test_the_same_idempotency_key_is_not_appended_twice(self) -> None:
+        result = self._build()
+        artifact_id = result["artifact"]["artifact_id"]
+        payload = {
+            "signal": "accepted", "artifact_id": artifact_id, "idempotency_key": "retry-1",
+        }
+
+        first = self.client.post("/api/v1/ai/feedback", json=payload).json()
+        second = self.client.post("/api/v1/ai/feedback", json=payload).json()
+
+        self.assertTrue(first["recorded"])
+        self.assertFalse(second["recorded"])
+        self.assertEqual(second["rejected"], "duplicate_request")
 
     def test_feedback_for_an_unknown_artifact_returns_a_reason_not_a_crash(self) -> None:
         response = self.client.post(
@@ -571,14 +878,14 @@ class TestFeedbackOverHttp(unittest.TestCase):
         self.assertFalse(body["recorded"])
         self.assertEqual(body["rejected"], "unknown_artifact")
 
-    def test_feedback_with_a_stale_fingerprint_is_rejected(self) -> None:
+    def test_feedback_with_a_stale_version_token_is_rejected(self) -> None:
         result = self._build()
         response = self.client.post(
             "/api/v1/ai/feedback",
             json={
                 "signal": "accepted",
                 "artifact_id": result["artifact"]["artifact_id"],
-                "seen_fingerprint": document_fingerprint({"app": {"title": "別の世代"}}),
+                "seen_version_token": new_version_token(),
             },
         )
         self.assertEqual(response.status_code, 200, response.text)
@@ -603,7 +910,7 @@ class TestFeedbackOverHttp(unittest.TestCase):
         self.assertFalse(body["recorded"])
         self.assertEqual(body["rejected"], "unknown_artifact")
 
-    def test_every_generation_gets_its_own_artifact_id(self) -> None:
+    def test_every_generation_gets_its_own_handle(self) -> None:
         first = self._build()["artifact"]["artifact_id"]
         second = self._build()["artifact"]["artifact_id"]
         self.assertNotEqual(first, second)

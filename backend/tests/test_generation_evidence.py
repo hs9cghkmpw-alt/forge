@@ -280,7 +280,11 @@ class TestTheRecordCannotHoldContent(unittest.TestCase):
             if f.type in ("str", "str | None")
         }
         self.assertEqual(
-            text_fields, {"domain", "forge_language_version"},
+            # `uid`は**この記録自身の身元**であり、内容ではない
+            # (FORGE-017A §3、Dataset Lineage用の永続ID)。
+            # 追加するときは「識別子か、内容か」を必ず判断すること
+            # ——このテストは判断を強制するために在る。
+            text_fields, {"domain", "forge_language_version", "uid"},
             f"内容を入れられるフィールドが増えている: {text_fields}",
         )
 

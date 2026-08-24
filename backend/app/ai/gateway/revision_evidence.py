@@ -45,6 +45,7 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
+from uuid import uuid4
 
 from app.ai.gateway.generation_evidence import (
     DesignDecisionSource,
@@ -150,6 +151,11 @@ class RevisionRecord:
     recorded_at: float = 0.0
     ref: int = 0
 
+    uid: str = ""
+    """**Dataset Lineage用の永続ID**（FORGE-017A §3）。
+    `GenerationRecord.uid`と同じ役割——`ref`はStore内の位置なので、
+    プロセスを跨ぐと別の記録を指す。"""
+
     @property
     def is_positive_example(self) -> bool:
         """教師データの候補になるか。
@@ -206,6 +212,7 @@ class RevisionRecord:
         """診断・集計用。**本文が現れないことが不変条件である。**"""
         return {
             "ref": self.ref,
+            "uid": self.uid,
             "base_generation_ref": self.base_generation_ref,
             "previous_revision_ref": self.previous_revision_ref,
             "sequence": self.sequence,
@@ -236,7 +243,8 @@ class RevisionEvidenceStore:
 
     def record(self, record: RevisionRecord) -> RevisionRecord:
         stored = replace(
-            record, ref=self._next_ref, recorded_at=record.recorded_at or float(self._now()),
+            record, ref=self._next_ref, uid=record.uid or uuid4().hex,
+            recorded_at=record.recorded_at or float(self._now()),
         )
         self._records[stored.ref] = stored
         self._next_ref += 1

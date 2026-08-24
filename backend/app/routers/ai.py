@@ -48,6 +48,7 @@ from app.ai.runtime.confirmation_store import (
 )
 from app.ai.gateway.ai_router import NoProviderAvailableError, default_router
 from app.ai.gateway.artifact_feedback import default_artifact_registry, default_feedback_service
+from app.ai.gateway.generation_evidence import default_generation_store
 from app.ai.gateway.learning_foundation import AcceptanceSignal
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.runtime.conversation_engine import ConversationEngine
@@ -191,12 +192,19 @@ def _artifact_ref(result, *, session_id: str | None) -> ArtifactRefDTO | None:  
     generation_ref = getattr(result, "generation_ref", None)
     if generation_ref is None:
         return None
-    identity = default_artifact_registry().register(
+    record = default_generation_store().get(generation_ref)
+    if record is None:
+        # 記録が見当たらないなら**ハンドルを発行しない**。指す先が無い
+        # IDは、評価を捨てる口になる。
+        return None
+    handle = default_artifact_registry().register(
         generation_ref=generation_ref,
-        document=result.forge_document,
+        generation_uid=record.uid,
         session_id=session_id,
     )
-    return ArtifactRefDTO(artifact_id=identity.artifact_id, fingerprint=identity.fingerprint)
+    return ArtifactRefDTO(
+        artifact_id=handle.handle, version_token=handle.version_token
+    )
 
 
 def _result_dto(result, *, session_id: str | None = None) -> GenerateResultDTO:  # noqa: ANN001 — PipelineRunResult
@@ -769,10 +777,12 @@ def feedback(request: FeedbackRequest) -> FeedbackResponse:
         signal=AcceptanceSignal(request.signal),
         artifact_id=request.artifact_id,
         session_id=request.session_id,
-        seen_fingerprint=request.seen_fingerprint,
+        seen_version_token=request.seen_version_token,
+        idempotency_key=request.idempotency_key or "",
     )
     return FeedbackResponse(
         recorded=result.recorded,
         signal=result.signal.value,
+        summary_updated=result.summary_updated,
         rejected=result.rejected.value if result.rejected is not None else None,
     )

@@ -133,10 +133,25 @@ class ArtifactRefDTO(BaseModel):
     **内部のrefは出さない。** 出すと、Clientが任意のrefへ「受け入れた」
     を書けてしまう——それは学習素材の捏造である。不透明なIDを発行し、
     Forge自身が解決する。
+
+    ---
+
+    ## `artifact_id`は認可ではない（FORGE-017A §13）
+
+    推測できないだけの**Bearer Capability**である。持っている人が
+    評価を書ける。「不透明なIDだから権限を確認済み」とは扱わない。
+    Cloud / 複数利用者へ広げるときは、所有者・App・Subjectの境界と
+    必ず結びつける必要がある。
+
+    ## Dataset Lineageのidではない（FORGE-017A §3）
+
+    これは**失効する**（プロセス内・上限あり）。系譜には
+    `ArtifactEvidenceId`（Evidence側の永続ID）を使う。
+    **`artifact_id`をCloudのLearning Eventへ載せない。**
     """
 
-    artifact_id: str = Field(..., description="この生成物を指す不透明なID。/api/v1/ai/feedback へそのまま返す")
-    fingerprint: str = Field(..., description="この世代のDocumentの指紋。古い世代へ評価を書かないための照合用(内容は復元できない)")
+    artifact_id: str = Field(..., description="この生成物へ評価を送るための一時的なハンドル。/api/v1/ai/feedback へそのまま返す。プロセス内でのみ有効で失効する")
+    version_token: str = Field(..., description="この世代を表すランダムなtoken。古い世代へ評価を書かないための照合用。**内容から作らない**ので、同じDocumentでも毎回違う値になる(FORGE-017A §4)")
 
 
 class GenerateResultDTO(BaseModel):
@@ -436,9 +451,19 @@ class FeedbackRequest(BaseModel):
     )
     artifact_id: str | None = Field(default=None, description="generate/converseのresult.artifact.artifact_id")
     session_id: str | None = Field(default=None, description="artifact_idが無い場合の代替。そのセッションの最新の生成物へ書く")
-    seen_fingerprint: str | None = Field(
+    seen_version_token: str | None = Field(
         default=None,
-        description="利用者が見ていた世代の指紋。いまの世代と違えばstale_artifactとして拒否する(§5)",
+        description="利用者が見ていた世代のtoken。いまの世代と違えばstale_artifactとして拒否する",
+    )
+    idempotency_key: str | None = Field(
+        default=None,
+        max_length=128,
+        description=(
+            "同じ送信の繰り返しを見分けるためのキー(FORGE-017A §2)。"
+            "一致すると duplicate_request として追記しない。"
+            "**省略した場合は再送とみなさず、別の評価として追記する**"
+            "——分からないものを『たぶん再送』へ倒すと、本物の再評価が静かに消える"
+        ),
     )
 
 
@@ -451,9 +476,17 @@ class FeedbackResponse(BaseModel):
 
     version: Literal["1.0"] = "1.0"
     status: Literal["success"] = "success"
-    recorded: bool
+    recorded: bool = Field(..., description="評価をEventとして追記できたか")
     signal: str
+    summary_updated: bool = Field(
+        default=False,
+        description=(
+            "要約(user_acceptance)を更新したか。2回目以降はfalseになる"
+            "——要約は最初の信号が勝つ。**recorded=true かつ summary_updated=false は正常**であり、"
+            "「事実は残したが要約は変えなかった」という意味(FORGE-017A §2)"
+        ),
+    )
     rejected: str | None = Field(
         default=None,
-        description="unknown_artifact / stale_artifact / already_recorded のいずれか。recordedがtrueならnull",
+        description="unknown_artifact / stale_artifact / duplicate_request / unusable_signal のいずれか。recordedがtrueならnull",
     )

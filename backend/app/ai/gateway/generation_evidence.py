@@ -107,6 +107,7 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
+from uuid import uuid4
 
 from app.ai.gateway.learning_foundation import AcceptanceSignal
 
@@ -393,6 +394,25 @@ class GenerationRecord:
     recorded_at: float = 0.0
     ref: int = 0
 
+    uid: str = ""
+    """**Dataset Lineage用の永続ID**(FORGE-017A §3、2026-08-24)。
+
+    `ref`との違いが要点である。
+
+    * `ref` … `GenerationEvidenceStore`**内の位置**。プロセスを跨いで
+      意味を持たない。プロセス内でこの記録を引くためのもの
+    * `uid` … この**記録そのもの**の身元。記録に貼り付いて動くので、
+      書き出しても・別のStoreへ移しても同じものを指す
+
+    Learning Event / Dataset の系譜（どのEventからどのDatasetを作ったか）
+    は`uid`で辿る。`ref`で辿ると、プロセスが再起動した瞬間に
+    **別の生成物を指すID**になる（1番は次のプロセスでも1番だが、
+    中身は別物である）。
+
+    Clientへ渡すハンドル(`ArtifactHandle`)とも別物である
+    ——あちらは失効する capability であり、系譜のIDではない。
+    """
+
     @property
     def is_positive_example(self) -> bool:
         """教師データの候補になるか。
@@ -429,6 +449,7 @@ class GenerationRecord:
         """診断・集計用。**本文が現れないことが不変条件である。**"""
         return {
             "ref": self.ref,
+            "uid": self.uid,
             "source": self.source.value,
             "domain": self.domain,
             "validator_passed": self.validator_passed,
@@ -462,7 +483,9 @@ class GenerationEvidenceStore:
     def record(self, entry: GenerationRecord) -> GenerationRecord:
         if entry.recorded_at <= 0:
             entry = replace(entry, recorded_at=self._now())
-        entry = replace(entry, ref=self._next_ref)
+        # **uidはStoreが付ける。** 呼び出し側に任せると、付け忘れた記録が
+        # 系譜から静かに落ちる(「呼び出し側が忘れずに呼ぶ」設計にしない)。
+        entry = replace(entry, ref=self._next_ref, uid=entry.uid or uuid4().hex)
         self._next_ref += 1
         self._records[entry.ref] = entry
         while len(self._records) > self._MAX_RECORDS:
