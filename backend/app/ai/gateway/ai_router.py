@@ -61,6 +61,7 @@ from app.ai.gateway.learning_foundation import (
     default_experience_store,
 )
 from app.ai.gateway.tasks import ForgeTask
+from app.ai.gateway.local_promotion import LocalPromotionGate
 from app.ai.gateway.provider_registry import (
     Deployment,
     ImplementationStatus,
@@ -307,6 +308,9 @@ class AIRouter:
         self._experience = experience
         self._now = now
         self._monotonic = monotonic
+        # 017A §7: Local昇格の判定。**同じEvidenceを見る**——別のStoreを
+        # 渡せるようにすると、順位付けと昇格判定が別の実測で動きうる。
+        self._promotion_gate = LocalPromotionGate(evidence)
 
     @property
     def states(self) -> ProviderStateStore:
@@ -392,15 +396,60 @@ class AIRouter:
         """
         if self._evidence is None:
             return list(models)
+
+        ordered = list(models)
         ranking = self._evidence.ranking_for(task)
-        if not ranking:
-            return list(models)
-        # 順位に載っていないProviderは**後ろへ回すだけで落とさない**。
-        # 測っていないことは、悪いことの証拠ではない。
-        priority = {provider: index for index, provider in enumerate(ranking)}
-        return sorted(
-            models, key=lambda model: priority.get(model.provider, len(priority))
+        if ranking:
+            # 順位に載っていないProviderは**後ろへ回すだけで落とさない**。
+            # 測っていないことは、悪いことの証拠ではない。
+            priority = {provider: index for index, provider in enumerate(ranking)}
+            ordered = sorted(
+                ordered, key=lambda model: priority.get(model.provider, len(priority))
+            )
+
+        return self._local_first(ordered, task)
+
+    def _local_first(self, models: list[ModelDescriptor], task: ForgeTask) -> list[ModelDescriptor]:
+        """**製品水準を満たしたLocalを前へ出す**(FORGE-017A §7)。
+
+        ---
+
+        ## Best Score Wins をやめた
+
+        上の`ranking_for()`だけで並べると、Cloudが1点でも高ければ毎回
+        Cloudが選ばれる。**Localは永久に使われない。** それは
+        「Local First」ではない。
+
+        かといって「Localだから先」に戻すと、上のdocstringが退けた
+        「測っていない品質を賭けてQuotaを節約する」へ戻る。
+
+        そこで**Quality Gate**にした——`LocalPromotionGate`が
+        「製品として通用する水準か」を実測から判定し、**満たしたものだけ**
+        を前へ出す。一番良いものではなく、十分に良いかで決める。
+
+        満たしていれば、Cloudが少し上でもLocalを選ぶ理由がある
+        (Quotaを使わない・データを外へ出さない)。満たしていなければ
+        従来どおりCloudへ落ちる。
+
+        ## いま何件通るか
+
+        **0件である。** Localのbenchmark記録が1件も無い(実測)。
+        つまりこの配線は**今は何も変えない**。データが入れば効き始める
+        ——「基盤はあるのに本番では使っていない」を繰り返さないため、
+        配線済み・データ待ちの状態にしてある(`_order()`と同じ方針)。
+        """
+        promoted = set(
+            self._promotion_gate.promoted_providers(
+                task,
+                [(model.provider, model.is_local) for model in models],
+                now=self._now(),
+            )
         )
+        if not promoted:
+            return models
+        # **安定ソート。** 昇格したLocal同士の順序と、Cloud同士の順序は
+        # 上で決めたものを保つ。
+        return sorted(models, key=lambda model: 0 if model.provider in promoted else 1)
 
     # -- 実行 -------------------------------------------------------------
 
