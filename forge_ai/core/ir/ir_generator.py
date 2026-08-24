@@ -64,6 +64,8 @@ Language間で共有する」という文書化済みの判断だったため、
 
 from __future__ import annotations
 
+from dataclasses import KW_ONLY, dataclass
+
 from forge_ai.core.ir.ir_types import (
     Action,
     ActionKind,
@@ -83,6 +85,7 @@ from forge_ai.core.ir.ir_types import (
 from forge_ai.core.planner import ApplicationPlan
 
 
+@dataclass(frozen=True, slots=True)
 class FieldSpec:
     """Entity定義を書く際のシンタックスシュガー。`_ENTITY_DEFINITIONS`の
     記述を簡潔にするためのもので、IRそのものではない(IRは`ir_types.Field`)。
@@ -99,34 +102,43 @@ class FieldSpec:
     必要が生じた(合成された定義と手書きの定義が、以降の全経路で
     区別されないことが、この設計の要点である)。旧名`_FieldSpec`は
     このモジュール内の後方互換エイリアスとして残している。
+
+    ## なぜdataclassなのか（FORGE-016A §2、2026-08-24）
+
+    以前は`__slots__`と手書き`__init__`だった。そのため「1属性だけ
+    変えたい」ときに**全属性を手で書き写す**必要があり、実際に事故が
+    起きた。
+
+    `_sanitize_fields()`の「全項目が任意なら最初を必須にする」補正で
+    FieldSpecを組み直しており、そこで`measure`を書き写し忘れていた。
+
+    ```
+    AI:  amount / number / measure=additive / required=false
+                 ↓ 必須へ補正
+    実際: amount / number / measure=unknown  / required=true
+    ```
+
+    R1で入れた「足せる量か」が失われ、**Hero KPI（残高など）が出なく
+    なる**。再現済み。
+
+    frozen dataclassにすれば`dataclasses.replace(spec, required=True)`
+    で済み、**今後metadataを増やしても書き写し忘れが起きない**
+    （`unit`・`currency`・`temporal_semantics`等を足す予定がある）。
     """
 
-    __slots__ = ("name", "label", "field_type", "required", "choices", "min_value", "max_value", "measure")
-
-    def __init__(
-        self,
-        name: str,
-        label: str,
-        *,
-        field_type: FieldType = FieldType.STRING,
-        required: bool = True,
-        choices: tuple[str, ...] = (),
-        min_value: float | None = None,
-        max_value: float | None = None,
-        measure: MeasureSemantics = MeasureSemantics.UNKNOWN,
-    ) -> None:
-        self.name = name
-        self.label = label
-        self.field_type = field_type
-        self.required = required
-        self.choices = choices
-        # v1.8新規。両方指定された場合のみForge Language Compilerが
-        # `slider`Widgetを選ぶ(`ir_types.Field`のdocコメント参照)。
-        self.min_value = min_value
-        self.max_value = max_value
-        # FORGE-R1-CLOSURE-015: この数値が**どういう量か**。
-        # 既定はUNKNOWN——書き忘れたFieldがHero KPIになることは無い。
-        self.measure = measure
+    name: str
+    label: str
+    _: KW_ONLY
+    field_type: FieldType = FieldType.STRING
+    required: bool = True
+    choices: tuple[str, ...] = ()
+    # v1.8新規。両方指定された場合のみForge Language Compilerが
+    # `slider`Widgetを選ぶ(`ir_types.Field`のdocコメント参照)。
+    min_value: float | None = None
+    max_value: float | None = None
+    # FORGE-R1-CLOSURE-015: この数値が**どういう量か**。
+    # 既定はUNKNOWN——書き忘れたFieldがHero KPIになることは無い。
+    measure: MeasureSemantics = MeasureSemantics.UNKNOWN
 
 
 class EntitySpec:

@@ -36,6 +36,7 @@ Question Policy(LLBの`next_action`を決定的に上書きする)と同じ設�
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Any
 
 from forge_ai.core.ir.ir_generator import EntitySpec, FieldSpec
@@ -179,12 +180,19 @@ class EntitySynthesizer:
         # 無いため決定的に担保する。1つもrequiredが無いと、何も入力せずに
         # 空レコードを追加できてしまい、一覧が空行で埋まる。
         if not any(s.required for s in specs):
-            first = specs[0]
-            specs[0] = FieldSpec(
-                first.name, first.label,
-                field_type=first.field_type, required=True,
-                choices=first.choices, min_value=first.min_value, max_value=first.max_value,
-            )
+            # **`replace`で1属性だけ変える。**
+            #
+            # 以前はここでFieldSpecを手で組み直しており、`measure`を
+            # 書き写し忘れていた（FORGE-016A §2、再現済み）。
+            #
+            #   AI:  amount / number / measure=additive / required=false
+            #                ↓ 必須へ補正
+            #   実際: amount / number / measure=unknown  / required=true
+            #
+            # R1で入れた「足せる量か」が失われ、Hero KPI（残高など）が
+            # 出なくなっていた。`replace`なら**今後metadataを増やしても
+            # 書き写し忘れが起きない**。
+            specs[0] = replace(specs[0], required=True)
         return tuple(specs)
 
 
