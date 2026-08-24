@@ -3,6 +3,31 @@
 2026-08-14 / 起点: CEO提示の完成図（AI-NATIVE APP BUILDER）
 **上位文書**: `docs/PRODUCT-DIRECTION.md`（変更不可）
 
+> **2026-08-24 追記 — AI/Learning領域の正式Architectureができた。**
+>
+> このロードマップが「Knowledge → Retrieval → Experience → Benchmark
+> へ順次接続する」と書いていた部分は、
+> **`docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md`** が
+> 正式なArchitectureとして引き受ける（FORGE-017）。
+>
+> 位置付けは `PRODUCT-DIRECTION`（最上位）→ Growing AI Architecture
+> （AI/Learning領域）→ このロードマップ（段取り）。矛盾したら上が勝つ。
+>
+> 直近の実装順は次に固定された（017 §24）。
+>
+> | | 内容 | 状態 |
+> |---|---|---|
+> | A | MeasureSemantics消失修正 | ✅ `50b2c3d` |
+> | B | Feedback / Revision Foundation | ✅ `fe2664c` |
+> | C | 残R1 Hardening | ⬜ |
+> | D | R2 Forge Knowledge / RAG | ⬜ |
+> | E | Growing AI Learning Event Foundation | ⬜ |
+> | F | Semantic Design Revision | ⬜ |
+>
+> **DでKnowledgeを作るときは、`scope`（global/app/personal）と
+> `app_id`を型に含める。** 後から遡って付けると全面書き換えになる。
+> `app_id`は現在コードに1箇所も存在しない（grep実測0件）。
+
 ---
 
 ## 0. 前版（同日）の撤回

@@ -2,6 +2,78 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task085 — Growing AI Architecture を正式Architectureとして統合（2026-08-24、実装なし）
+
+CEOから FORGE-GROWING-AI-ARCHITECTURE-017 が来た。**§27のArchitecture
+Reviewを先に実施してから**、正式Architectureとして記録した。実装は無い。
+
+### Reviewで分かったこと（実コードを読んだ）
+
+**017の要素の約4割は、既に別の名前で実装済みだった。**
+
+| 017の要素 | 既存 |
+|---|---|
+| Provider Interface | `ProviderDefinition` / `Deployment(LOCAL\|CLOUD)` |
+| Task Router | `AIRouter` + `TaskProfile` + `ForgeTask` |
+| Evaluation | `BenchmarkRun` / `Verification` / `ranking_for()` |
+| provenance / training rights | `TrainingProvenance`（UNKNOWNを既に通さない） |
+| artifact_ref / fingerprint | `ArtifactIdentity` / `document_fingerprint()`（commit B） |
+| accepted | `AcceptanceSignal` |
+
+→ **新しい階層を上に積まず、既存を Growing AI の構成部品として
+名付け直す**方針にした。`ForgeEvalStore`や`IntelligenceRouter`のような
+並列実装を作らない線引きをReport §6に明文化した。
+
+### 本当に無かったもの（5つ）
+
+1. Learning Event共通Contract
+2. **Global / App / Personal の境界**——`app_id`がコードに**1箇所も無い**（grep実測0件）
+3. Consent（module自体が無い）
+4. Retention / Deletion / Dataset Lineage
+5. Intelligence Resolver
+
+### 見つかった衝突（3件）
+
+* 🔴 **§6の仮名IDは、既存の明文の約束と衝突する。**
+  `ExperienceRecord.ref`のdocstringが「セッションを跨いで個人を辿れる
+  識別子を持たない」と宣言している。017 §5はそれを必須にする。
+  **方針の転換なので黙って入れず、OPEN-DECISIONS Fとして起票した**
+  （推奨: 二層化。Consentを通って外へ出るEventにだけ付ける）
+* 🟡 §2 Local First と、`AIRouter._order()`が**実装した上で退けた**
+  「Local優先」。docstringに「Benchmarkが無いのにLocalを優先するのは、
+  測っていない品質を賭けてQuotaを節約しているだけ」とある。
+  → **`ranking_for()`が順位を返せたときの同点処理としてのみ**入れる
+* 🟡 §7の「全ユーザー共通で単純hashするのは避ける」は、
+  **commit Bで実装した`document_fingerprint()`に当たる**（salt無しsha256）。
+  現状はプロセス内専用で実害無し。Learning Eventへ載せるときは
+  event-scopedなsalt/HMACの別関数にする
+
+### C・Dへの申し送り（後で全面書き換えにしないため）
+
+1. **DのKnowledgeEntry型に`scope`と`app_id`を含める**
+2. **Consentを見る場所だけDで決める**（実装はE）
+
+### 新規文書
+
+* `docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md`（正式Architecture）
+* `docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md`（§27 Review）
+* `docs/spec/LEARNING-EVENT-V1.md`（契約のみ・未実装）
+
+`INTELLIGENCE-LAYERS-V1.md`は**書かなかった**。Architecture §3以上に
+書けることが実装前には無く、重複した文書は保守負債になるため（§1
+Maintainability First）。
+
+### 更新
+
+`docs/ROADMAP-TO-TARGET.md`（位置付けと実装順A〜F）/
+`docs/OPEN-DECISIONS.md`（判断項目F）/ `docs/HANDOFF.md`
+
+### 実装状態の表記を徹底した
+
+Architecture文書の全項目に ✅実装済み / 🟨部分的 / ⬜未実装 /
+🚫今回作らない を付けた。**✅はReviewで実際にファイルを読んで確認した
+ものだけ**である（017 §26「実装していないものを実装済みと書かない」）。
+
 ## Task084 — 016A commit B: Feedback / Revision Foundation（2026-08-24）
 
 **「これでいい」をForgeが受け取る口が、本番に1本も無かった。** それを作った。

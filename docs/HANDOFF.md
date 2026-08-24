@@ -1,8 +1,8 @@
 # Forge 申し送り（最新）
 
 **最終更新: 2026-08-24 / branch `claude/forge-master-handoff-k46jns`**
-**最新commit: 016A commit B（Feedback / Revision Foundation）**
-**進行中: FORGE-016A（A→B完了、C以降）+ FORGE-017 Growing AI Architecture（Review中）**
+**最新commit: 017 Growing AI Architecture 正式化（文書のみ）**
+**進行中: FORGE-016A（A→B完了、C以降）/ FORGE-017（Review完了・Architecture記録済み）**
 
 > このファイルは**毎回の作業のたびに上書き更新して push される**。
 > パスは固定なので、`docs/HANDOFF.md` だけ見れば最新状況が分かる。
@@ -179,6 +179,21 @@ False**だった。「Local AIの教師データを貯める」と書いてあ�
 外すと落ちること、戻すと通ることを**実際に外して**確認した。
 詳細は `docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md` §4。
 
+### FORGE-017 — Growing AI Architecture を正式化した（文書のみ、実装なし）
+
+**§27のReviewを先にやった。実コードを読んで照合した結果:**
+
+* **017の要素の約4割は、既に別の名前で実装済みだった**
+  （Provider Registry / AIRouter / BenchmarkRun / TrainingProvenance など）
+  → 新しい階層を上に積まず、**既存を名付け直す**方針にした
+* **本当に無いのは5つ**——Learning Event契約 / Global・App・Personalの
+  境界 / Consent / Retention・Lineage / Intelligence Resolver
+* **衝突が3件**。うち1件（仮名ID）はCEO判断が要る（§4参照）
+
+Architecture文書は全項目に ✅実装済み / 🟨部分的 / ⬜未実装 /
+🚫今回作らない を付けてある。**✅は実際にファイルを読んで確認したもの
+だけ**で、書いていないものを「ある」ことにしていない。
+
 ---
 
 ## 3. 今の状態
@@ -210,14 +225,41 @@ ruff（変更ファイル）: All checks passed
 
 ## 4. 次にやること
 
-1. **FORGE-017 Architecture Review**（§27）——既存コードとの重複調査。
-   新しい巨大parallel architectureを作らないことが目的
-2. `docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md` を正式記録
-3. commit C（残R1 Hardening）
-4. commit D（R2 Forge Knowledge / RAG）
+### 🔴 CEOの判断が要るもの（先に読んでください）
 
-**017の型・境界（Learning Event Contract / scope / consent / provenance）は
-C・Dを実装する時点から意識する。** 後から全面書き換えにしない（017 §24）。
+**`docs/OPEN-DECISIONS.md` の判断項目 F**を新設しました。
+
+> **端末を跨いで辿れる仮名IDを持つか。**
+
+017 §6 がこれを必須にしていますが、**いまのForgeは「セッションを跨いで
+個人を辿れる識別子を持たない」をコードの明文にしています。** 方針の転換
+なので、黙って進めませんでした。
+
+* ① 二層化（**推奨**）— ローカルの記録は今のまま。Consentを出して
+  外へ送ると決めたものにだけ付ける
+* ② 常に付ける — 単純だが、Consentと無関係にローカル記録の性質が変わる
+* ③ 持たない — 約束は守れるが、**Poisoning対策（1人が大量投稿して
+  Global AIを偏らせるのを防ぐ）が原理的に作れない**
+
+**この判断が決まらなくても、次のCとDは進められます。**
+
+### 実装の順（017 §24で固定）
+
+| | 内容 | 状態 |
+|---|---|---|
+| A | MeasureSemantics消失修正 | ✅ `50b2c3d` |
+| B | Feedback / Revision Foundation | ✅ `fe2664c` |
+| **C** | **残R1 Hardening**（screen単位Critic / finance-state誤検知 / Golden Finance E2E） | **次はここ** |
+| D | R2 Forge Knowledge / RAG | ⬜ |
+| E | Growing AI Learning Event Foundation | ⬜ |
+| F | Semantic Design Revision | ⬜ |
+
+### C・Dで忘れてはいけないこと（Reviewの申し送り）
+
+1. **DのKnowledgeEntry型に `scope`（global/app/personal）と `app_id` を
+   含める。** 後から遡って付けると全面書き換えになる。
+   `app_id`はいまコードに**1箇所も無い**（実測0件）
+2. **Consentを見る場所だけDで決める**（実装はEでよい）
 
 ---
 
@@ -228,16 +270,21 @@ C・Dを実装する時点から意識する。** 後から全面書き換えに
 | OpenAI API鍵の失効（§1 依頼1） | **CEO対応待ち** |
 | 実Cloud Providerでの`/feedback`往復 | 未検証（実APIを呼んでいない） |
 | CORS障害が実際に起きているか（§1 依頼2） | CEO回答待ち |
-| `anonymous_user_id`の名称（017 §6） | 設計で再検討する |
-| Personal / App / Global の境界の実装 | 017 E で扱う |
+| **仮名IDを持つか（017 §6）** | 🔴 **CEO判断待ち（OPEN-DECISIONS F）** |
+| Personal / App / Global の境界の実装 | 017 E。`app_id`が実測0件 |
+| `document_fingerprint()`はsalt無し | Learning Eventへ載せる前にsalted版を作る（Architecture §7） |
+| Local First をRoutingへ入れる形 | Benchmarkの同点処理としてのみ（Architecture §2） |
 
 ---
 
 ## 6. 詳しい報告
 
-* `docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md`（今回）
+* `docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md`（**AI/Learningの正式Architecture**）
+* `docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md`（既存コードとの照合）
+* `docs/spec/LEARNING-EVENT-V1.md`（契約のみ・未実装）
+* `docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md`
 * `docs/reports/FORGE-R1-CLOSURE-015-report.md`
 * `docs/spec/DESIGN-REVISION-PROPOSAL.md`
 * `docs/tasks/FORGE-016-STATE.md`
 * `docs/API-KEY-TEST-GUIDE.md`
-* `CHANGELOG.md` Task084
+* `CHANGELOG.md` Task084 / Task085

@@ -1,0 +1,171 @@
+# Learning Event V1（契約のみ・未実装）
+
+2026-08-24 / FORGE-GROWING-AI-ARCHITECTURE-017 §5
+
+> **この文書は契約の定義であり、実装は存在しない。**
+> `docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md` が上位。
+> 実装状況はそちらの✅/🟨/⬜表記を見ること。
+
+---
+
+## 1. なぜ「上位契約」なのか
+
+Forgeには既に**4つの事実の記録**がある。Learning Event はこれらを
+**置き換えない**。変換して作る。
+
+```
+ExperienceRecord … 1回のAI呼び出し    ✅ backend/app/ai/gateway/learning_foundation.py
+GenerationRecord … 1つの生成物        ✅ backend/app/ai/gateway/generation_evidence.py
+RevisionRecord   … 1回の変更          ✅ backend/app/ai/gateway/revision_evidence.py
+BenchmarkRun     … 1回の測定          ✅ backend/app/ai/gateway/benchmark_evidence.py
+```
+
+置き換えない理由は2つある。
+
+1. **粒度が違う。** 1つの生成物に対してAI呼び出しは0〜N回ある
+   （Curated Domainは生成stageでAIを1回も呼ばない）。1つの型へ潰すと、
+   どちらかの母数が壊れる
+2. **意味が違う。** `validator_passed` は生成では「作れたか」、変更では
+   「壊さなかったか」である。013で `/update` を `GenerationRecord` から
+   除外した理由がこれで、B でも `RevisionRecord` を別型にした
+
+---
+
+## 2. フィールド
+
+### 2.1 識別と版
+
+| field | 型 | 由来 | 備考 |
+|---|---|---|---|
+| `schema_version` | str | ⬜ 新規 | このEvent契約の版 |
+| `event_id` | str | ⬜ 新規 | 不透明。連番にしない |
+| `event_type` | enum | ⬜ 新規 | `generation` / `revision` / `ai_call` / `benchmark` |
+| `task_type` | enum | ✅ `ForgeTask` | **既存をそのまま使う。新しい語彙を作らない** |
+| `created_at` | float | ✅ `recorded_at` | |
+
+### 2.2 境界（**Dで型に入れる**）
+
+| field | 型 | 由来 | 備考 |
+|---|---|---|---|
+| `scope` | enum | ⬜ 新規 | `global` / `app` / `personal` |
+| `app_id` | str \| None | ⬜ 新規 | **コードに1箇所も無い**（grep実測0件）。App Intelligenceの境界の起点 |
+
+> **後から付けられない。** Knowledge/RAG（commit D）で `KnowledgeEntry`
+> を作る時点で `scope` と `app_id` を持たせる。後から全Entryへ遡ると
+> 全面書き換えになる（017 §24）。
+
+### 2.3 識別子（🔴 判断待ち）
+
+| field | 型 | 状態 |
+|---|---|---|
+| `pseudonymous_install_id` | str \| None | 🔴 **OPEN-DECISIONS F** |
+
+既存コードは「セッションを跨いで個人を辿れる識別子を持たない」を
+**明文の約束**にしている（`ExperienceRecord.ref` のdocstring、006 §22）。
+017 §5 がこれを必須にすることは方針の転換であり、黙って入れない。
+
+**推奨は二層化**（Architecture §6）:
+ローカルのEvidenceは識別子を持たないまま、Consent + Sanitize を通って
+Cloudへ出るEventにだけ付ける。
+
+> **§14（Poisoning対策）の `per-user contribution limits` はこの判断に
+> 依存する。** 辿れる識別子が無ければ原理的に効かない。セットで決める。
+
+### 2.4 モデルとProvider
+
+| field | 由来 |
+|---|---|
+| `provider_id` | ✅ `ExperienceRecord.provider` |
+| `deployment` | ✅ `ProviderDefinition.deployment`（`local` / `cloud`） |
+| `base_model_id` / `base_model_version` | 🟨 `ExperienceRecord.model` はあるが version は無い |
+| `adapter_id` / `adapter_version` | ⬜ Adapterが存在しない |
+
+### 2.5 Forgeの版
+
+| field | 由来 |
+|---|---|
+| `forge_language_version` | ✅ `GenerationRecord.forge_language_version` |
+| `forge_ai_version` | ⬜ |
+| `knowledge_version` | ⬜ |
+| `prompt_policy_version` | ⬜ |
+
+### 2.6 内容（**識別子だけ**）
+
+| field | 由来 |
+|---|---|
+| `capability_ids` | ✅ `GenerationRecord.capabilities` |
+| `design_role_ids` | ✅ `design_language_roles` / `DesignRoleDecision` |
+| `artifact_ref` | ✅ `ArtifactIdentity.artifact_id`（016A commit B） |
+
+> **ここに本文は入らない。** 利用者の発話も、生成されたDocumentの本文も、
+> Providerの生出力も、この契約では表現できない。既存3 Record と同じ
+> Privacy境界（006 §22）を上位契約でも保つ。
+
+### 2.7 結果
+
+| field | 由来 | 備考 |
+|---|---|---|
+| `accepted` | ✅ `AcceptanceSignal` | `accepted`/`corrected`/`abandoned`/`unknown` |
+| `repair_attempts` | ✅ 既存名 | 017は`retry_count`だが**既存名に寄せる**。Forgeの`repair`は「Validator不合格→修復」で情報量が多い |
+| `validator_result` | ✅ `validator_passed` (bool) | |
+| `runtime_result` | ✅ `RuntimeOutcome` | `rendered`/`failed`/`unknown` |
+| `build_result` / `test_result` | ⬜ | |
+| `latency_ms` | ✅ | |
+| `token_usage` | ⬜ | |
+
+### 2.8 Consent と利用可否
+
+| field | 状態 |
+|---|---|
+| `consent_snapshot_id` | ⬜ Consent module自体が無い |
+| `privacy_policy_version` | ⬜ |
+| `sanitizer_version` | ⬜ |
+| `training_use` | ⬜ `allowed` / `forbidden` / `unknown` |
+| `provenance` | 🟨 `TrainingProvenance`(✅) と**隣接するが別物** |
+
+> `TrainingProvenance` は**Modelがどう育ったか**、`training_use` は
+> **そのデータを学習に使ってよいか**。統合しない。
+
+---
+
+## 3. 既定値の向き
+
+**分からないものを楽観側へ倒さない**（`CLAUDE.md` §3）。
+
+| field | 既定 | 楽観側へ倒すと何が起きるか |
+|---|---|---|
+| `accepted` | `unknown` | 沈黙が「承認」になり、教師データが捏造される |
+| `training_use` | `unknown` | 使ってはいけないデータがTrainingへ入る |
+| `provenance` | `unknown` | 出所不明のModelが「検証済み」になる |
+| `runtime_result` | `unknown` | 「確かめていない」が「落ちなかった」になる |
+| `scope` | **既定を作らない（必須）** | Personal がGlobalへ混ざる |
+
+`unknown` は **Weight Training へ入れない**（017 §12、既存
+`ModelProvenance.may_be_used_where_provenance_matters` と同じ規則）。
+
+---
+
+## 4. 変換層は1つだけ
+
+```
+ExperienceRecord ─┐
+GenerationRecord ─┼→ [変換層 1つ] → LearningEvent → (Consent/Sanitize) → Cloud
+RevisionRecord   ─┤
+BenchmarkRun     ─┘
+```
+
+**入口を複数作らない。** 016A commit B で `ArtifactFeedbackService` を
+「評価を書く唯一のService」にしたのと同じ理由である——入口が増えるたびに
+記録の意味が経路ごとにずれ、集計が静かに嘘になる。
+
+---
+
+## 5. まだ書けないもの
+
+* Event の永続化先（Supabase `learning_events`）のschema
+  → §23。**現在段階でStage 3インフラを作らない**
+* Sanitizer の具体的な検出規則
+  → Consent と一緒に決める（commit E）
+* `event-scoped fingerprint` の算法
+  → salt/HMACのkey管理を決めてから。`document_fingerprint()`（salt無し）
+    を**そのまま流用しない**（Architecture §7）
