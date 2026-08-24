@@ -222,6 +222,27 @@ https://claude.ai/code/artifact/3ccc697a-13d9-4f93-922f-874ec705551c
 
 ---
 
+## 7.5 CEOから来た新方針（2026-08-18）
+
+「伝えたらデザインを直す」が**最優先方針**になった。7分類すべてを
+最終的に対象とし、優先順位は
+
+1. 情報階層・強調 → 2. レイアウト/余白/密度 → 3. コンポーネントの見せ方
+→ 4. Semantic Color / Theme → 5. タイポグラフィ → 6. 細かな装飾
+→ 7. アニメーション・遷移
+
+これは見た目の便利機能ではなく、
+
+```
+User Correction → Revision Evidence → Forge Knowledge → Local AI Improvement
+```
+
+を閉じる経路として設計する。設計案は
+**`docs/spec/DESIGN-REVISION-PROPOSAL.md`**、016の状態整理は
+**`docs/tasks/FORGE-016-STATE.md`**。
+
+---
+
 ## 8. 参照
 
 | 文書 | 内容 |
