@@ -69,8 +69,8 @@ Flutter Host / 会話
 | backend | **1,496 passed / 16 skipped** |
 | forge_ai | **521 passed** |
 | ruff（変更ファイル） | All checks passed |
-| flutter test / analyze / build web | **UNVERIFIED**（この環境にSDKが無い） |
-| CI 4 job | push 後に確認する |
+| flutter analyze / test / build web | **CI で success**（run `32815471451`） |
+| CI 4 job | **すべて success**（`d31f48c`） |
 
 | guard の種類 | 数 |
 |---|---|
@@ -94,10 +94,15 @@ Flutter Host / 会話
 
 ### Visual Review は UNVERIFIED
 
-**この環境に Flutter SDK が無く、実描画を見ていない。** AGENTS.md の
-「実描画を見ていなければ `UNVERIFIED`」「PNGを生成しただけを Visual
-Review と呼ばない」に照らし、**作図を作っただけの今回も Visual Review
-とは呼べない**。
+CI で `flutter analyze` / `test` / `build web` は通っている
+（run `32815471451`）。しかし **CI はビルドとテストが通ることしか
+言っていない**——画面を開いて overlap / overflow / clipping /
+alignment を目で確かめてはいない。
+
+この環境に Flutter SDK が無いため、**実描画を人が見ていない**。
+AGENTS.md の「実描画を見ていなければ `UNVERIFIED`」「PNGを生成した
+だけを Visual Review と呼ばない」に照らし、**作図を作っただけの今回も
+Visual Review とは呼べない**。
 
 実描画できる環境でやること: `python scripts/export_revision_visual_fixture.py`
 → `scripts/start_dev.ps1` → `scripts/capture_forge_019_visual.ps1` →
@@ -108,7 +113,8 @@ hierarchy / mobile usability / primary metric visibility を確認。
 
 ## UNVERIFIED
 
-- Flutter 一式（test / analyze / build web / 実描画・撮影）
+- **実描画を人が見ること**（この環境に Flutter SDK が無い）。
+  `analyze` / `test` / `build web` 自体は CI で通っている
 - 実 Cloud Provider での往復（実APIを呼んでいない）
 - ブラウザ自動操作で `/update → render → feedback` を1セッションで回すこと
 - Runtime outcome は `UNKNOWN` のまま（描画できた事実を RevisionRecord へ
