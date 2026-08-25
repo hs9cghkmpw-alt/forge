@@ -62,15 +62,16 @@ Dart 側は `ForgeDocument.fromJson` が通ることしか見ておらず、Vali
 
 ## 実描画の状態 — UNVERIFIED
 
-**この作業環境には Flutter SDK が無い。** したがって 019A では
+**この作業環境には Flutter SDK が無い。**
 
-- `flutter test`
-- `flutter analyze`
-- `flutter build web`
-- ブラウザでの実描画とスクリーンショット取得
+`flutter analyze` / `flutter test` / `flutter build web` は
+**CI で実際に走って通っている**（run `32815471451` / `d31f48c`、
+4 job すべて success）。したがってそれらは UNVERIFIED ではない。
 
-を**実行できていない**。AGENTS.md の規定どおり、実描画を自分で見て
-いない以上、視覚確認の結果は `UNVERIFIED` とする。
+しかし **CI はビルドとテストが通ることしか言っていない**。ブラウザで
+描画してスクリーンショットを取り、**人が見て確かめる**ところは誰も
+やっていない。AGENTS.md の規定どおり、視覚確認の結果は
+`UNVERIFIED` とする。
 
 代わりに用意したもの:
 
