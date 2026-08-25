@@ -613,7 +613,7 @@ Level 1 以降は Level 0 を前提とするので、**現時点ではどれも�
 | 19 | Novel Generation の評価 | 🟨 採点契約（`novel-v1`）。Widget数はKPIに**入れていない** |
 | 20 | Template AI へ退化させない | ✅ ジャンル名の Knowledge 登録を**拒否**する Gate |
 | 21 | Skill として一般化 | 🟨 `ExtractedSkill` / `SkillLifecycle` の契約 |
-| 22 | Capability Registry | ⬜ **未実装**（`capability.py` は別目的） |
+| 22 | Capability Registry | 🟨 **在る。ただし §22 が警告している形**（下記） |
 | 23 | Self-Extension | ⬜ 契約のみ。**生成経路は未実装** |
 | 24 | Dataset Builder | ✅ 品質Gate + テスト。UNKNOWN/TEST_DOUBLE を落とす |
 | 25 | Training は段階的に | 🟨 順序は契約に在る。**SFT 以降は未実施** |
@@ -649,10 +649,59 @@ Level 1 以降は Level 0 を前提とするので、**現時点ではどれも�
 | 実行していないものは UNVERIFIED | 各文書の UNVERIFIED 節 |
 | 二重系統を作らない | `LocalModelProvider` は既存 Provider Registry を使う。並行 Router を作っていない |
 
+## §22 Capability Registry についての訂正（2026-08-25）
+
+**この文書の初版は「未実装」と書いたが、それは誤りだった。**
+`backend/app/ai/runtime/capability.py` に **Capability Registry は実在し、
+本番から呼ばれている**（`conversation_engine.py` → `resolve_capability_turn()`）。
+
+§22 の前半——「既存 Capability で可能か / 不足は何か を判断できる」——は
+**満たしている**。
+
+```
+DataCapability   何を記録するか   text / number / date / choice / bool
+ViewCapability   どう見せるか     list / grid / bar_chart / tabs / metric
+EffectCapability 外へ何をするか   share / notify / camera / location …
+```
+
+`supported=False` のものも**検出のためだけに**列挙してあり
+（`data.photo` / `view.map` / `view.calendar` / `view.line_chart` 等）、
+`missing_capabilities()` と `nearest_supported_id` で
+「作れないものを名指しし、作れる形を出す」ができる。
+**実装済みだと偽らないための一覧**になっている。
+
+### しかし §22 の後半は満たしていない
+
+> 単なる Widget Registry にしない。
+
+現在の Registry は、まさにそれに近い。
+
+| | いまの姿 |
+|---|---|
+| `supported` の根拠 | **Widget Registry（20種）と 1:1 で人手維持** |
+| 語彙の粒度 | Widget に対応する単位（`view.bar_chart` 等） |
+| 生成的 primitive | **無い**——Scene / Entity / State Machine / Rule Graph / Input / Animation / Game Loop / Collision / Grid / Drag / Timeline / Event が1つも無い |
+| 増やし方 | Validator・Runtime・Registry の3箇所を**手で**同時更新（TD37） |
+
+つまり **§20（Template AI へ退化させない）が禁じている方向へ、
+Registry の構造そのものが引っ張っている。** Widget を1つ足せば
+Capability も1つ増える、という対応になっているからである。
+
+§23 Self-Extension が「不足 Capability を作る」とき、作る先がこの
+Registry では、**結局 Widget を増やすことにしかならない。**
+
+### したがって埋めるべき穴は「作る」ではなく「作り直す」
+
+Registry が無いのではない。**生成的 primitive を表現できる Registry が
+無い。** ここを取り違えると、既に在るものをもう1つ作って二重系統になる
+（§41「既存 Forge Architecture と二重系統を作らない」）。
+
 ## 次に埋めるべき穴（優先順）
 
 1. **Level 0**——実 Local Model。環境の判断が要る（`docs/HANDOFF.md` 冒頭）
-2. **§22 Capability Registry**——§23 Self-Extension の前提。現在無い
+2. **§22 の後半**——Capability Registry を Widget 1:1 から
+   **生成的 primitive** へ広げる。既存 `capability.py` を**作り直す**
+   のであって、新しい Registry を並べて作らない
 3. **§26 能力単位の Dataset**——完成物単位しか作れていない
 4. **§33 学習イベントの網羅**——列挙のうち実際に出しているのは一部
 5. **§17/§18 を実際に走らせる**——Gym も Novel Benchmark も run 0件

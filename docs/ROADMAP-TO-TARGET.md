@@ -55,8 +55,10 @@
 > **それは「到達した」ではない**（`docs/LEARNABLE-LOCAL-AI-VISION.md` 現況節）。
 >
 > 次に埋めるべき穴（Vision 現況節より）:
-> Level 0 → §22 Capability Registry → §26 能力単位 Dataset →
-> §33 学習イベントの網羅 → §17/§18 を実際に走らせる。
+> Level 0 → §22 Capability Registry の**作り直し**（Registry は在るが
+> Widget と 1:1 の人手維持であり、生成的 primitive を表現できない）→
+> §26 能力単位 Dataset → §33 学習イベントの網羅 →
+> §17/§18 を実際に走らせる。
 
 > **2026-08-24 追記 — AI/Learning領域の正式Architectureができた。**
 >

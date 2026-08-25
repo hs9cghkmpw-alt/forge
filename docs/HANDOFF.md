@@ -96,7 +96,10 @@ LearningEvent 0 / 版 0 / replay 0**。
 次に埋めるべき穴（優先順）:
 
 1. **Level 0** — 実 Local Model（下の「CEOへの依頼」）
-2. **Capability Registry** — Self-Extension の前提。現在無い
+2. **Capability Registry の作り直し** — Registry は**在る**
+   （`capability.py`、本番配線済み）。無いのは**生成的 primitive を
+   表現できる形**である。いまは Widget Registry と 1:1 の人手維持なので、
+   ここへ能力を足すことは Widget を足すことと同じになる（§20 が禁じた方向）
 3. **能力単位の Dataset** — 完成物単位しか作れていない
 4. **学習イベントの網羅** — 列挙のうち実際に出しているのは一部
 5. **Gym / Novel Benchmark を実際に走らせる** — どちらも run 0件
