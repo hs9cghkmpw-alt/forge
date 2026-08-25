@@ -24,7 +24,8 @@
 > | A3 | Learning Contract + Local Promotion Gate | ✅ `2db1fcd`（017A §5-§7,§10） |
 > | C | 残R1 Hardening | ✅ `a514a37`（017A §14） |
 > | D | R2 Forge Knowledge / RAG | ✅ `e40c861`（017A §8,§15） |
-> | E | Growing AI Learning Event Foundation | ⬜ |
+> | E | Growing AI Learning Event Foundation | ✅ `6abc3a8` |
+> | E-A | Learning Boundary Hardening + Agent Protocol | ✅ FORGE-018A |
 > | F | Semantic Design Revision | ⬜ |
 >
 > **Dで`scope`と`app_id`は型に入った**（`KnowledgeEntry`）。
@@ -339,3 +340,15 @@ HTTP実経路でemit済み。RevisionはFORGE-019、BUILD/COMPILE/TEST/RUNTIME�
 Cloud送信はAuth/RLS/server-issued identityが無いため既定OFF。Local Eventと
 拒否理由付きlineageは残るが、送信済みとは扱わない。次はFORGE-019でSemantic
 Design RevisionとFlutter host feedbackを同じ閉ループへ繋ぐ。
+
+## 8. 2026-08-25 FORGE-018A更新 — Boundary Hardening
+
+FORGE-019前のBlocking Reviewを閉じた。Cloud収集とDataset/Weight Trainingの
+権限を分離し、Event provenanceをModel training provenanceから別型にした。
+Local Event生成はsubject Consentに依存せず、Cloud境界でrequest-scopedな
+Consent/App Identityを明示評価する。Rejected評価はEvaluation Recordへ残し、
+Dataset Candidateは本当にTraining eligibleなEventだけになった。
+
+次はFORGE-019 Semantic Design Revision。ただしCloud送信、durable outbox、
+Supabase Auth/RLS/server identityは未実装のままであり、FORGE-019がそれらを
+実装済みと仮定してはならない。

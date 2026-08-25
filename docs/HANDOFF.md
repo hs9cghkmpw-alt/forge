@@ -1,130 +1,118 @@
 # Forge 申し送り（最新）
 
-**最終更新: 2026-08-25**
+**最終更新:** 2026-08-25
 
-**branch:** `claude/forge-master-handoff-k46jns`
-
-**start HEAD:** `7f31aa46785d6db7fbcc4bbf7097b9bd889c927e`
-
-**implementation HEAD:** `6abc3a802227fc2f0bba220cf3fcc6c907847cc5`
-
-**final HEAD:** このCI実測追補を含むcommit（Git logの先頭を正とする）
-
-**current phase:** Growing AI / Learning Event Foundation
-
-**current task:** FORGE-018 commit E — 実装・push・CI確認完了
-
-**next task:** FORGE-019 Semantic Design Revision
+- branch: `claude/forge-master-handoff-k46jns`
+- start HEAD: `166487a02c2a9601f0adb8dacff0603ba4abd478`
+- final HEAD: この文書を含むFORGE-018A commit（Git log先頭）
+- current phase: Growing AI / Learning Boundary Hardening
+- current task: FORGE-018A — 実装・ローカル検証完了、push/CI確認前
+- next task: FORGE-019 Semantic Design Revision
 
 ## 継続中のCEO依頼
 
-- 過去にチャットへ貼られたOpenAI API keyは使用・保存していないが、失効と
-  再発行が必要。新keyはチャットでなく`backend/.env`へ直接設定する
+- 過去にチャットへ貼られたOpenAI API keyは使用・保存していない。失効と
+  再発行が必要で、新keyはチャットでなく`backend/.env`へ直接設定する
 - CEO環境でCORS障害が続く場合はブラウザconsoleの実エラーが必要
 
-## 現在地
+## 現在地 / 実装内容
 
-既存の`ExperienceRecord` / `GenerationRecord` / `RevisionRecord` /
-`ArtifactFeedbackEvent`をSource of Truthのまま維持し、全Storeの記録直後が
-単一の`LearningEventProjector`を必ず通るProduction Pathを実装した。
+FORGE-018独立Reviewで見つかったBlocking設計問題を修正した。Local Learning
+Event projectionはConsent/App Contextを読まない。Cloud境界でsubject-scopedな
+`ConsentSnapshot`と`ProjectionContext`を明示的に渡すため、A利用者の同意が
+B利用者へ漏れるprocess-global mutable stateは無い。
 
 ```
-AI call / generation / POST /feedback
-  → existing append-only evidence
-  → LearningEventProjector（入口1つ）
-  → Local LearningEvent（raw本文なし）
-  → Consent + Sanitizer + TrainingEligibilityPolicy
-  → ExportDecision + DatasetCandidate lineage
-  → CloudLearningEnvelope outbox（全条件成立時のみ）
+Existing Evidence
+  -> Local LearningEvent
+  -> scoped CloudExportPolicy (collection rights)
+  -> ExportDecision / optional in-memory outbox
+  -> TrainingEligibilityPolicy (training rights)
+  -> eligible only: DatasetCandidate
+     all results: LearningEventEvaluationRecord
 ```
 
-Production既定は`PERSONAL / LOCAL_ONLY / contribution NONE /
-training_use UNKNOWN`、Consentは6カテゴリすべてOFF。通常のHTTP実行でLocal
-Eventと拒否理由付きDataset Candidateは残るが、Cloud Outboxは0件である。
+Collection RightsとTraining Rightsは分離した。`training_use=FORBIDDEN`でも明示的
+usage statistics consent等を満たす安全なmetadata EventはCloud collection候補に
+できるが、Dataset Candidateにはならない。Cloud export可だけではTraining可に
+ならない。
 
-## 実装内容 / Production wiring
+Event provenanceはModel用`TrainingProvenance`から独立した
+`LearningDataProvenance`へ変更。Cloud AI outputはprovider training termsが
+明示TrueでなければTraining不可。Provider deploymentはRegistryをSource of
+Truthとし、Mock/CuratedをLocal AI実績へ数えない。
 
-- `LearningEvent` Production型、単一Projector、Local Event Store
-- AI_CALL / GENERATION / FEEDBACKのProduction emit
-- Revision projector（Store入力対応のみ。`/update`配線はFORGE-019）
-- 6カテゴリ`ConsentSnapshot`（既定ALL OFF）
-- Local Eventと`CloudLearningEnvelope`を別型に分離
-- `ContributorIdentityProvider`境界（Production実装なし、fail closed）
-- `AppIdentity` / `AppTrustTier`の最小trust boundary
-- Learning Sanitizer、Retention、Learning Artifact契約、Dataset lineage
-- 中央`TrainingEligibilityPolicy`
-- `knowledge_references`を本文なしでEventへ継承
+## Consent / Privacy / Retention
 
-FastAPI `TestClient`で`POST /generate`からAI_CALLとGENERATIONを確認。同じ
-artifactへ`POST /feedback`でACCEPTED→CORRECTEDを送り、FEEDBACK 2件が順番を
-保って残ることを確認した。実測はAI_CALL 1 / GENERATION 1 / FEEDBACK 2 /
-Dataset Candidate 4 / Cloud Outbox 0。Client handle/version tokenはCloud型に
-存在しない。
+- Consentは6カテゴリ・既定ALL OFF・immutable choices
+- 変更/撤回はnew snapshot ID + previous snapshot ID + effective_atの追記
+- Event Type別中央routing。REVISIONはsemantic corrections、未知はfail closed
+- withdrawal後は未送信Outbox削除、Dataset Candidate REVOKED、旧snapshot再利用拒否
+- RetentionをLocal Event、Export Decision/Evaluation、Outbox、Dataset Candidate、
+  Learning Artifactへ適用
+- LearningEventにraw発話/会話/response/Document/secret/handle/tokenなし
+- 既学習weightのunlearning、完全PII検出は未実装
 
-FlutterはBackendのartifact handle/version tokenを`GenerationSuccess`へ保持
-していない。ボタンだけ足すと対象世代を安全に指せないため今回は追加せず、
-Backend API contractを固定した。FORGE-019でDomain層とhost previewを接続する。
+## Production wiring
 
-## Consent / Privacy / Cloud
+Experience/Generation/Revision/Feedback Store直後の単一Projector配線を維持。
+AI_CALL / GENERATION / FEEDBACKはHTTP/Store経路でLocal Eventをemitする。
+Learning projector障害はfailure counter/error typeを残すが、Evidence/生成成功を
+壊さない。配線を外すと正常wiring testはFAILする。
 
-- 同意なしでもLocal Evidence / Local Event / Forge基本機能は動く
-- withdrawal後は未送信Outboxを消し、将来exportを止める
-- 既学習weightのunlearningは未実装
-- LearningEventにraw発話/会話/response/Document/secret/handle/tokenは無い
-- Sanitizerは明白なsecret/PIIを拒否するが100%除去とは主張しない
-- Supabase送信、migration、RLS、Auth、Object Storage送信は未実装
-- Production Cloud exportはserver-issued identity不在のためblocked
-- Test DoubleでのみEnvelope生成を実証
+Production既定では自動Cloud評価を行わず、Local Eventだけ残る。Cloud network
+送信、durable outbox、Supabase、Auth/RLS、Production server-issued identityは
+未実装。Test Double identityでEnvelope boundaryだけを確認した。
+
+## Agent Protocol
+
+root `AGENTS.md`を新設。GitHub/MarkdownをSource of Truthとし、開始監査、
+未commit差分保護、Implementation Agent 1つ、commit/pushで交代、Reviewer独立
+確認、UNVERIFIED、Production wiring + mutation + MD + push + CIを恒久Rule化。
+`CLAUDE.md`冒頭もroot Protocolを正として読むよう更新した。
 
 ## Tests
 
-- FORGE-018 focused: **18 passed**
-- backend full: **1424 passed, 17 skipped**
+- FORGE-018A focused: **19 passed**
+- backend full: **1425 passed, 17 skipped**
 - forge_ai full: **521 passed**
-- ruff（変更Python）: **All checks passed**
+- Ruff: **All checks passed**
 - Flutter test: **508 passed**
-- flutter analyze: **No issues found**
-- flutter build web: **成功**（font warningあり、既知の非致命warning）
-- CI run `32800818759`: **success**（implementation HEAD `6abc3a8`）
-  - frontend (Flutter): success
-  - backend + forge_ai (Python 3.12): success
-  - backend smoke (起動 + CORS): success
-  - backend + forge_ai (Python 3.11): success
+- Flutter analyze: **No issues found**
+- Flutter build web: **success**
+- CI: push後確認（Python 3.11 / 3.12 / backend smoke / Flutter）
 
 ## Intentional break / mutation
 
-13 roundすべてでFAILを確認し、復元後focused 18件PASS:
+10 roundすべてFAIL確認後に復元:
 
-1. Experience→Projector配線を外す
-2. Consent既定をON
-3. UNKNOWN/FORBIDDEN training_useを許可
-4. TEST_DOUBLEを許可
-5. Feedback 2件目を捨てる
-6. `raw_output` fieldを追加
-7. LOCAL_ONLYをCloudへ通す
-8. sanitizer失敗を無視
-9. `knowledge_references`を落とす
-10. `artifact_handle` fieldを追加
-11. fake client contributor IDを許可
-12. untrusted appのGlobal寄与を許可
-13. expired Eventを許可
+1. Collection PolicyへTrainingUseを混入
+2. Training Policyからtraining_useを除去
+3. REVISIONをusage statisticsへ誤routing
+4. Event provenanceをTrainingProvenanceへ戻す
+5. AのConsentをBへ共有
+6. withdrawal後もCandidateを残す
+7. Dataset retentionを無効化
+8. provider名hard-codeへ戻す
+9. CURATEDをLOCAL_AIとして数える
+10. AGENTS.mdを削除
 
 ## 未検証 / Technical Debt
 
-- Outboxはin-memoryでdurableではない
-- Supabase learning tables / RLS / Auth / server identity未実装
-- 実Cloud送信0件。実Local Model生成0回
-- Flutter feedback UI未実装（artifact identityがDomain層で失われる）
-- Learning Artifactは契約のみ。Dataset CandidateはTraining Datasetではない
-- token usage等、既存Evidenceが持たない値はNone
+- 全Learning Store/Consent/diagnosticはin-memory、再起動で失われる
+- Cloud network/Supabase/Auth/RLS/server identity未実装、実Cloud送信0件
+- Cloud provider terms取得経路なし。UNKNOWNはTraining不可
+- 実Local Model生成0回、実Training 0回
+- Learning ArtifactのProduction保存/送信なし
+- Sanitizerは既知patternのみ
+- Flutter Feedback UIとRevision HTTP wiringはFORGE-019
+
+詳細は`docs/reports/FORGE-018A-LEARNING-BOUNDARY-HARDENING-report.md`。
 
 ## 次のTask / 次の3手
 
-次はFORGE-019 Semantic Design Revision。「残高をもっと目立たせて」等を
-Target resolution → typed operation → local patch → Validator/Critic → Revision
-Evidence → Feedback → Learning EventまでProductionで閉じる。
+FORGE-018Aのpush/CIがgreenになってからFORGE-019 Semantic Design Revisionへ進む。
 
-1. Flutter Domain層へartifact handle/version tokenを通し、「これでOK」/
-   「直したい」を`POST /feedback`へ接続
-2. `/update`を`RevisionRecord`へ接続し、局所Semantic Patchを実装
-3. Auth/RLS/server identity実測後、durable Supabase Outboxを実装
+1. artifact handle/version tokenをFlutter Domain層へ安全に通しFeedback UIを接続
+2. Semantic target resolution/typed operation/local patchを`/update`へ接続
+3. Revision Evidence -> Feedback -> Learning EventをValidator/Critic込みで閉じる

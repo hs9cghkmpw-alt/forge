@@ -244,14 +244,16 @@ BenchmarkRun     … 1回の測定の事実                ✅ benchmark_evidenc
 
 Learning Event はこれらから**変換して作る**。変換層は1つだけにする。
 
-### 語彙は実装済み、Event本体は未実装
+### 語彙・Local Event・安全境界は実装済み
 
 | | 状態 |
 |---|---|
 | `LearningEventType`（構想どおりの広さ・`is_emitted_today`付き） | ✅ `learning_contract.py` |
 | `LearningTaskId`（namespaced・自由文禁止・全ForgeTaskをmapping） | ✅ 同上 |
 | `IntelligenceScope` / `DataResidency` / `ContributionTarget` | ✅ 同上 |
-| **`LearningEvent`本体を組み立てて送る経路** | ⬜ commit E |
+| **`LearningEvent`本体と単一Projector** | ✅ `learning_events.py` |
+| **Cloud収集権限とTraining権限の分離** | ✅ FORGE-018A |
+| **Cloud Network送信 / durable outbox** | ⬜ 未実装 |
 
 > **Event種類をEvidence Storeの型に固定しない**（FORGE-017A §5）。
 > `build` / `compile` / `test` / `runtime` / `crash` / `tool_result` は
@@ -916,3 +918,23 @@ Cloud Envelope境界、Dataset Candidate lineage、Learning Artifact契約。
 安全上未実装: Supabase送信、durable outbox、Auth/RLS、Production
 server-issued contributor identity、Object Storage。ProductionのCloud送信は
 0件・fail closed。Test DoubleでEnvelope構築までのみ実証した。
+
+## 28. FORGE-018A Learning Boundary Hardening（2026-08-25）
+
+独立Reviewで、Collection RightsとTraining Rightsの混同、Model用
+`TrainingProvenance`のEvent流用、process-global Consent/Context、全Eventを
+Rejected Dataset Candidateと呼ぶ曖昧さを再現した。
+
+Local projectionとsubject-scoped export phaseを分離し、`CloudExportPolicy`と
+`TrainingEligibilityPolicy`を独立させた。Event由来は閉じた
+`LearningDataProvenance`、Provider deploymentはRegistryをSource of Truthと
+する。Curated/Test DoubleはLocal AI実績へ数えない。
+
+Consentはimmutable snapshot履歴となり、Event Type別の中央routingを通る。
+撤回は新snapshotを追記し、旧snapshotの将来利用を拒否、未送信Outboxを削除、
+未学習Dataset CandidateをREVOKED化する。RetentionはLocal Event、Export
+Decision/Evaluation、Outbox、Dataset Candidate、Learning Artifactへ適用する。
+
+Evidence Storeからの観測はProduction配線を維持しつつ、Projector障害を
+診断counterへ記録して利用者の成功処理を壊さない。Cloud Network送信、
+durable storage、既学習weightのunlearningは引き続き未実装である。

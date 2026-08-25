@@ -3562,3 +3562,25 @@ GeneratedAppHostShellを一緒に接続する。世代照合なしのボタン�
 API key/Bearer/JWT/private key/env secret/email/phone/address-like値を拒否するが、
 RegexでPII 100%検出はできない。Cloud export有効化前に構造別allowlist、
 検出器versioning、false positive/negative評価が必要。
+
+---
+
+## TD78. Consent/Retention/Outboxは履歴型だがin-memory（2026-08-25）
+
+FORGE-018AでConsent Snapshotをimmutableな追記履歴へ変更し、撤回による
+Outbox削除とDataset Candidate revoke、全in-memory storeへのRetention適用を
+実装した。ただしprocess再起動を跨ぐ永続履歴ではない。Supabase schema、
+transaction、Auth subjectとの結合、RLS、削除jobは未実装である。
+
+## TD79. Cloud AI training termsを取得するProduction経路が無い（2026-08-25）
+
+`LearningDataProvenance.CLOUD_AI_OUTPUT`はprovider termsが明示的に許可されない
+限りTraining eligibleにならない。現在Registry/Authにterms review結果を安全に
+供給するProduction経路が無いため、Cloud outputのDataset Candidate化は既定で
+blocked。UNKNOWNを許可へ倒さない。
+
+## TD80. Learning観測diagnosticはprocess-local counterのみ（2026-08-25）
+
+Projector障害でEvidence/生成成功を壊さない`SafeLearningObserver`相当の境界と
+failure count/error typeを実装した。ただしdurable監視、alert、再処理queueは
+未実装。raw Evidenceや秘密をerror recordへ保存しない制約は維持する。

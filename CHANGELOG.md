@@ -2,6 +2,16 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task088 — FORGE-018A Learning Boundary Hardening + Agent Protocol（2026-08-25）
+
+独立Reviewで再現したCollection/Training権限混同、Event provenance型違反、
+process-global Consent/Context、Consent routing/retention/deploymentの穴を修正。
+Local projectionとsubject-scoped exportを分離し、Dataset Candidateを本当に
+Training eligibleなEventだけへ限定した。観測障害は診断を残しつつ利用者の
+成功処理を壊さない。root `AGENTS.md`へ全Agent共通Protocolを追加した。
+
+詳細: `docs/reports/FORGE-018A-LEARNING-BOUNDARY-HARDENING-report.md`
+
 ## Task087 — FORGE-018 Growing AI Learning Event Foundation（2026-08-25）
 
 既存EvidenceをSource of Truthのまま、単一`LearningEventProjector`からLocal

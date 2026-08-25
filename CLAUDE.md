@@ -1,5 +1,9 @@
 # Forge — 作業ルール
 
+> **全Agent共通Protocolはroot `AGENTS.md`を正とする。Claude Codeも
+> 作業開始時に最初に読むこと。** この文書はClaude/Repository固有の補足で
+> あり、共通Protocolを置き換えない。
+
 このファイルは、このリポジトリで作業するAIエージェント（Claude Code等）
 への恒久的な指示である。**セッションを跨いで有効。**
 

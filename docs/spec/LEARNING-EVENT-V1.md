@@ -1,11 +1,12 @@
-# Learning Event V1（語彙は実装済み・Event本体は未実装）
+# Learning Event V1（Production Local Event実装済み）
 
 2026-08-24 / 017 §5、**FORGE-017A §5・§6・§10で改訂**
 
-> **語彙（`LearningEventType` / `LearningTaskId` / `IntelligenceScope` /
-> `DataResidency` / `ContributionTarget`）は実装済み**
-> （`backend/app/ai/gateway/learning_contract.py`）。
-> **`LearningEvent`本体を組み立てて送る経路は未実装**（commit E）。
+> 語彙と`LearningEvent`本体、既存Evidenceからの単一Projector、Local Event、
+> scoped Consentを使うCloud Export Candidate、Training Eligibility、Retention、
+> Dataset Candidate lineageは実装済み。
+> **Cloud Network送信、durable outbox、Supabase、Production server-issued
+> identity、実Trainingは未実装**である。
 > `docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md` が上位。
 > 実装状況はそちらの✅/🟨/⬜表記を見ること。
 
@@ -136,10 +137,11 @@ Consentを出していない利用者のローカル記録は**性質が変わ�
 | `privacy_policy_version` | ⬜ |
 | `sanitizer_version` | ⬜ |
 | `training_use` | ⬜ `allowed` / `forbidden` / `unknown` |
-| `provenance` | 🟨 `TrainingProvenance`(✅) と**隣接するが別物** |
+| `provenance` | ✅ `LearningDataProvenance`。`TrainingProvenance`とは別型 |
 
-> `TrainingProvenance` は**Modelがどう育ったか**、`training_use` は
-> **そのデータを学習に使ってよいか**。統合しない。
+> `TrainingProvenance` は**Modelがどう育ったか**、
+> `LearningDataProvenance`は**Eventのデータがどこから来たか**、
+> `training_use`は**そのデータを学習へ使ってよいか**。統合しない。
 
 ---
 
@@ -204,3 +206,27 @@ Consent全OFF。raw本文fieldとClient handle/version tokenは型に存在し�
 Cloud EnvelopeはLocal Eventと別型で、trusted server-issued identityが無ければ
 作られない。Production identity providerとSupabase送信は未実装なので、
 現時点のCloud送信は0件である。
+
+## 7. Boundary Hardening（FORGE-018A、2026-08-25）
+
+Local projectionはConsent/App Contextを読まず、常にcontent-freeなLocal Eventを
+作る。利用者単位の`ConsentSnapshot`と`ProjectionContext`は
+`evaluate_for_export()`呼び出しへ明示的に渡し、process-global mutable stateへ
+保存しない。
+
+権利判定は二段階である。
+
+1. `CloudExportPolicy`: relevant consent、residency、scope、contribution target、
+   sanitizer、app trust、server identity、expiryを判定する
+2. `TrainingEligibilityPolicy`: collection可を前提に、training use、data
+   provenance、provider terms、TEST_DOUBLE、validator/runtime evidenceを判定する
+
+したがって`training_use=forbidden`でも安全な統計Eventの収集は可能だが、
+Dataset Candidateにはならない。Dataset CandidateはTraining eligibleなEventに
+だけ作り、不適格理由は`LearningEventEvaluationRecord`へ残す。
+
+Consent routingはEvent Typeごとの中央mappingで、REVISIONは
+`semantic_corrections`、FEEDBACKは`ai_feedback`、CRASH/RUNTIMEは
+`runtime_crash`、未知Eventはfail closed。Consent変更は新しいsnapshot IDと
+`previous_snapshot_id`を持つ追記であり、撤回後は未送信Outbox削除と未学習
+Dataset CandidateのREVOKED化を行う。

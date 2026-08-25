@@ -1,10 +1,13 @@
-"""FORGE-018 Learning Event foundation and production wiring tests."""
+"""FORGE-018A Learning boundary, isolation, and production wiring tests."""
 
 from __future__ import annotations
 
 import dataclasses
 import time
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from types import MappingProxyType
 
 from app.ai.gateway.artifact_feedback import (
     ArtifactEvidenceId, EvidenceKind, FeedbackEventLog, FeedbackSource,
@@ -12,15 +15,19 @@ from app.ai.gateway.artifact_feedback import (
 from app.ai.gateway.generation_evidence import (
     GenerationEvidenceStore, GenerationRecord, GenerationSource, RuntimeOutcome,
 )
-from app.ai.gateway.learning_contract import ContributionTarget, DataResidency, IntelligenceScope
+from app.ai.gateway.learning_contract import (
+    ContributionTarget, DataResidency, IntelligenceScope, LearningEventType,
+)
 from app.ai.gateway.learning_events import (
     AppIdentity, AppTrustTier, ConsentCategory, ConsentSnapshot, DatasetCandidate,
-    LearningEvent, LearningEventService, ProjectionContext, QualityState,
-    TrainingUse, default_learning_event_service,
+    Deployment, LearningArtifact, LearningDataProvenance, LearningEvent,
+    LearningEventService, ProjectionContext, QualityState, TrainingUse,
+    consent_category_for_event, default_learning_event_service,
 )
 from app.ai.gateway.learning_foundation import (
-    AcceptanceSignal, ExperienceRecord, ExperienceStore,
+    AcceptanceSignal, ExperienceRecord, ExperienceStore, TrainingProvenance,
 )
+from app.ai.gateway.revision_evidence import RevisionRecord
 from app.ai.gateway.tasks import ForgeTask
 
 
@@ -29,188 +36,304 @@ class _TrustedIdentity:
         return "server-issued-opaque-test-id"
 
 
-def _consent(*categories: ConsentCategory) -> ConsentSnapshot:
-    return ConsentSnapshot(
-        "consent-1", "1", {item: item in categories for item in ConsentCategory}, time.time()
+def _consent(*categories: ConsentCategory, now: float | None = None) -> ConsentSnapshot:
+    return ConsentSnapshot.create(
+        {item: item in categories for item in ConsentCategory}, now=now,
     )
 
 
-class LearningEventContractTests(unittest.TestCase):
-    def test_learning_event_cannot_hold_raw_content_or_capability_handles(self) -> None:
-        names = {field.name for field in dataclasses.fields(LearningEvent)}
+def _global_context(
+    training_use: TrainingUse = TrainingUse.ALLOWED, *,
+    provider_terms: bool | None = True,
+) -> ProjectionContext:
+    return ProjectionContext(
+        IntelligenceScope.GLOBAL, DataResidency.CLOUD_ELIGIBLE,
+        ContributionTarget.GLOBAL,
+        AppIdentity("forge", AppTrustTier.FORGE_CORE),
+        training_use, provider_terms,
+    )
+
+
+def _generation(
+    source: GenerationSource = GenerationSource.CURATED, *,
+    recorded_at: float | None = None,
+) -> GenerationRecord:
+    return GenerationRecord(
+        source, "finance", True,
+        user_acceptance=AcceptanceSignal.ACCEPTED,
+        runtime_outcome=RuntimeOutcome.RENDERED,
+        recorded_at=time.time() if recorded_at is None else recorded_at,
+    )
+
+
+class LearningBoundaryContractTests(unittest.TestCase):
+    def test_event_has_no_raw_content_or_capability_handles(self) -> None:
+        names = {item.name for item in dataclasses.fields(LearningEvent)}
         forbidden = {
-            "utterance", "message", "prompt", "raw_output", "conversation", "secret",
-            "token", "raw_provider_response", "forge_document", "artifact_handle", "version_token",
+            "utterance", "message", "prompt", "raw_output", "conversation",
+            "secret", "token", "raw_provider_response", "forge_document",
+            "artifact_handle", "version_token",
         }
         self.assertFalse(names & forbidden)
 
-    def test_consent_defaults_all_off(self) -> None:
-        snapshot = ConsentSnapshot.all_off()
-        self.assertTrue(all(not snapshot.allows(category) for category in ConsentCategory))
-
-    def test_unknown_test_double_and_withdrawn_are_rejected(self) -> None:
-        service = LearningEventService(identity_provider=_TrustedIdentity())
-        service.consent = _consent(ConsentCategory.USAGE_STATISTICS)
-        service.context = ProjectionContext(
-            IntelligenceScope.GLOBAL, DataResidency.CLOUD_ELIGIBLE,
-            ContributionTarget.GLOBAL, AppIdentity("forge", AppTrustTier.FORGE_CORE),
-            TrainingUse.ALLOWED,
+    def test_learning_provenance_is_not_model_training_provenance(self) -> None:
+        field_type = next(
+            item.type for item in dataclasses.fields(LearningEvent)
+            if item.name == "provenance"
         )
-        event = service.observe(ExperienceRecord(ForgeTask.COGNITIVE_STAGE, "mock", "mock", True))
-        self.assertEqual(event.source, "test_double")
-        self.assertIn("source_not_trainable", service.export_decisions[-1].reasons)
-        self.assertFalse(service.outbox)
-        service.withdraw_consent()
-        self.assertTrue(service.consent.withdrawn)
+        self.assertIn("LearningDataProvenance", str(field_type))
+        self.assertNotIn("TrainingProvenance", str(field_type))
+        self.assertNotEqual(LearningDataProvenance, TrainingProvenance)
 
-    def test_unknown_and_forbidden_training_use_are_independently_rejected(self) -> None:
-        for training_use in (TrainingUse.UNKNOWN, TrainingUse.FORBIDDEN):
-            with self.subTest(training_use=training_use):
-                service = LearningEventService(identity_provider=_TrustedIdentity())
-                service.consent = _consent(ConsentCategory.USAGE_STATISTICS)
-                service.context = ProjectionContext(
-                    IntelligenceScope.GLOBAL, DataResidency.CLOUD_ELIGIBLE,
-                    ContributionTarget.GLOBAL, AppIdentity("forge", AppTrustTier.FORGE_CORE),
-                    training_use,
-                )
-                service.observe(GenerationRecord(
-                    GenerationSource.CURATED, "finance", True,
-                    runtime_outcome=RuntimeOutcome.RENDERED, recorded_at=time.time(),
-                ))
-                self.assertIn("training_use_not_allowed", service.export_decisions[-1].reasons)
-                self.assertFalse(service.outbox)
-
-    def test_local_only_is_independently_rejected(self) -> None:
-        service = LearningEventService(identity_provider=_TrustedIdentity())
-        service.consent = _consent(ConsentCategory.USAGE_STATISTICS)
-        service.context = ProjectionContext(
-            IntelligenceScope.GLOBAL, DataResidency.LOCAL_ONLY,
-            ContributionTarget.GLOBAL, AppIdentity("forge", AppTrustTier.FORGE_CORE),
-            TrainingUse.ALLOWED,
+    def test_consent_is_immutable_all_off_and_append_only(self) -> None:
+        first = ConsentSnapshot.all_off(now=1.0)
+        self.assertTrue(all(not first.allows(item) for item in ConsentCategory))
+        self.assertIsInstance(first.choices, MappingProxyType)
+        with self.assertRaises(TypeError):
+            first.choices[ConsentCategory.AI_FEEDBACK] = True  # type: ignore[index]
+        second = ConsentSnapshot.create(
+            {ConsentCategory.AI_FEEDBACK: True}, now=2.0, previous=first,
         )
-        service.observe(GenerationRecord(
-            GenerationSource.CURATED, "finance", True,
-            runtime_outcome=RuntimeOutcome.RENDERED, recorded_at=time.time(),
+        self.assertNotEqual(first.snapshot_id, second.snapshot_id)
+        self.assertEqual(second.previous_snapshot_id, first.snapshot_id)
+        self.assertEqual(second.effective_at, 2.0)
+        self.assertFalse(first.allows(ConsentCategory.AI_FEEDBACK))
+
+    def test_central_consent_routing_is_event_specific_and_fail_closed(self) -> None:
+        self.assertIs(
+            consent_category_for_event(LearningEventType.GENERATION),
+            ConsentCategory.USAGE_STATISTICS,
+        )
+        self.assertIs(
+            consent_category_for_event(LearningEventType.FEEDBACK),
+            ConsentCategory.AI_FEEDBACK,
+        )
+        self.assertIs(
+            consent_category_for_event(LearningEventType.REVISION),
+            ConsentCategory.SEMANTIC_CORRECTIONS,
+        )
+        self.assertIs(
+            consent_category_for_event(LearningEventType.CRASH),
+            ConsentCategory.RUNTIME_CRASH,
+        )
+        self.assertIsNone(consent_category_for_event(LearningEventType.REGENERATION))
+
+    def test_revision_cannot_export_with_usage_statistics_only(self) -> None:
+        service = LearningEventService(identity_provider=_TrustedIdentity())
+        event = service.observe(RevisionRecord(
+            base_generation_ref=1, source=GenerationSource.CURATED,
+            validator_passed=True, runtime_outcome=RuntimeOutcome.RENDERED,
+            user_acceptance=AcceptanceSignal.ACCEPTED, recorded_at=time.time(),
         ))
-        self.assertIn("local_only", service.export_decisions[-1].reasons)
-        self.assertFalse(service.outbox)
-
-    def test_untrusted_app_cannot_contribute_to_global_dataset(self) -> None:
-        service = LearningEventService(identity_provider=_TrustedIdentity())
-        service.consent = _consent(ConsentCategory.USAGE_STATISTICS)
-        service.context = ProjectionContext(
-            IntelligenceScope.GLOBAL, DataResidency.CLOUD_ELIGIBLE,
-            ContributionTarget.GLOBAL, AppIdentity("client-value", AppTrustTier.UNTRUSTED),
-            TrainingUse.ALLOWED,
+        decision = service.evaluate_for_export(
+            event, consent=_consent(ConsentCategory.USAGE_STATISTICS),
+            context=_global_context(),
         )
-        service.observe(GenerationRecord(
-            GenerationSource.CURATED, "finance", True,
-            runtime_outcome=RuntimeOutcome.RENDERED, recorded_at=time.time(),
-        ))
-        self.assertIn("untrusted_app", service.export_decisions[-1].reasons)
-        self.assertFalse(service.outbox)
+        self.assertFalse(decision.eligible)
+        self.assertIn("collection_consent_missing_or_withdrawn", decision.reasons)
 
-    def test_local_provider_metadata_fits_same_contract_without_claiming_real_run(self) -> None:
-        service = LearningEventService()
+    def test_collection_rights_are_independent_from_training_rights(self) -> None:
+        service = LearningEventService(identity_provider=_TrustedIdentity())
+        event = service.observe(_generation())
+        decision = service.evaluate_for_export(
+            event, consent=_consent(ConsentCategory.USAGE_STATISTICS),
+            context=_global_context(TrainingUse.FORBIDDEN),
+        )
+        self.assertTrue(decision.eligible, decision.reasons)
+        self.assertEqual(len(service.outbox), 1)
+        self.assertFalse(service.dataset_candidates)
+        evaluation = service.evaluations[-1]
+        self.assertTrue(evaluation.export_eligible)
+        self.assertFalse(evaluation.training_eligible)
+        self.assertIn("training_use_not_allowed", evaluation.training_reasons)
+        self.assertNotIn("training_use_not_allowed", evaluation.export_reasons)
+
+    def test_cloud_output_terms_unknown_never_becomes_dataset_candidate(self) -> None:
+        service = LearningEventService(identity_provider=_TrustedIdentity())
+        event = service.observe(_generation(GenerationSource.CLOUD_AI))
+        decision = service.evaluate_for_export(
+            event, consent=_consent(ConsentCategory.USAGE_STATISTICS),
+            context=_global_context(provider_terms=None),
+        )
+        self.assertTrue(decision.eligible)
+        self.assertFalse(service.dataset_candidates)
+        self.assertIn(
+            "provider_training_terms_not_allowed",
+            service.evaluations[-1].training_reasons,
+        )
+
+    def test_test_double_can_be_collected_but_not_trained(self) -> None:
+        service = LearningEventService(identity_provider=_TrustedIdentity())
         event = service.observe(ExperienceRecord(
-            ForgeTask.COGNITIVE_STAGE, "local", "local-model-v1", True,
+            ForgeTask.COGNITIVE_STAGE, "mock", "mock", True,
+            validator_passed=True, recorded_at=time.time(),
+        ))
+        decision = service.evaluate_for_export(
+            event, consent=_consent(ConsentCategory.USAGE_STATISTICS),
+            context=_global_context(),
+        )
+        self.assertTrue(decision.eligible)
+        self.assertIs(event.provenance, LearningDataProvenance.TEST_DOUBLE)
+        self.assertFalse(service.dataset_candidates)
+
+    def test_only_training_eligible_events_create_dataset_candidates(self) -> None:
+        service = LearningEventService(identity_provider=_TrustedIdentity())
+        event = service.observe(_generation())
+        service.evaluate_for_export(
+            event, consent=_consent(ConsentCategory.USAGE_STATISTICS),
+            context=_global_context(),
+        )
+        self.assertEqual(len(service.dataset_candidates), 1)
+        candidate: DatasetCandidate = service.dataset_candidates[0]
+        self.assertEqual(candidate.source_event_ids, (event.event_id,))
+        self.assertEqual(candidate.quality_state, QualityState.CANDIDATE)
+
+    def test_missing_identity_and_local_boundary_fail_closed(self) -> None:
+        service = LearningEventService()
+        event = service.observe(_generation())
+        decision = service.evaluate_for_export(
+            event, consent=_consent(ConsentCategory.USAGE_STATISTICS),
+            context=ProjectionContext(training_use=TrainingUse.ALLOWED),
+        )
+        self.assertIn("server_issued_identity_unavailable", decision.reasons)
+        self.assertIn("local_only", decision.reasons)
+        self.assertIn("personal_scope", decision.reasons)
+        self.assertFalse(service.outbox)
+
+    def test_sanitizer_and_untrusted_app_fail_closed(self) -> None:
+        service = LearningEventService(identity_provider=_TrustedIdentity())
+        event = service.observe(ExperienceRecord(
+            ForgeTask.COGNITIVE_STAGE, "person@example.com", "model", True,
             recorded_at=time.time(),
         ))
-        self.assertEqual(event.deployment.value, "local")
-        self.assertEqual(event.provider_id, "local")
-        self.assertEqual(event.base_model_id, "local-model-v1")
-
-    def test_personal_local_only_never_crosses_cloud_boundary(self) -> None:
-        service = LearningEventService(identity_provider=_TrustedIdentity())
-        service.consent = _consent(ConsentCategory.USAGE_STATISTICS)
-        service.context = ProjectionContext(training_use=TrainingUse.ALLOWED)
-        service.observe(ExperienceRecord(ForgeTask.COGNITIVE_STAGE, "gemini", "model", True))
-        reasons = service.export_decisions[-1].reasons
-        self.assertIn("local_only", reasons)
-        self.assertIn("personal_scope", reasons)
-        self.assertFalse(service.outbox)
-
-    def test_sanitizer_rejects_obvious_secret_and_pii_in_structured_values(self) -> None:
-        service = LearningEventService(identity_provider=_TrustedIdentity())
-        service.consent = _consent(ConsentCategory.USAGE_STATISTICS)
-        service.context = ProjectionContext(
-            IntelligenceScope.GLOBAL, DataResidency.CLOUD_ELIGIBLE,
-            ContributionTarget.GLOBAL, AppIdentity("forge", AppTrustTier.FORGE_CORE),
-            TrainingUse.ALLOWED,
+        context = dataclasses.replace(
+            _global_context(),
+            app_identity=AppIdentity("client-value", AppTrustTier.UNTRUSTED),
         )
-        service.observe(ExperienceRecord(
-            ForgeTask.COGNITIVE_STAGE, "person@example.com", "model", True
-        ))
-        self.assertIn("sanitization_failed", service.export_decisions[-1].reasons)
-        self.assertFalse(service.outbox)
-
-    def test_expired_event_is_purged_and_ineligible(self) -> None:
-        now = [10000000.0]
-        service = LearningEventService(now=lambda: now[0], identity_provider=_TrustedIdentity())
-        service.consent = _consent(ConsentCategory.USAGE_STATISTICS)
-        service.context = ProjectionContext(
-            IntelligenceScope.GLOBAL, DataResidency.CLOUD_ELIGIBLE,
-            ContributionTarget.GLOBAL, AppIdentity("forge", AppTrustTier.FORGE_CORE),
-            TrainingUse.ALLOWED,
+        decision = service.evaluate_for_export(
+            event, consent=_consent(ConsentCategory.USAGE_STATISTICS),
+            context=context,
         )
-        event = service.observe(ExperienceRecord(
-            ForgeTask.COGNITIVE_STAGE, "gemini", "model", True,
-            validator_passed=True, recorded_at=1.0,
-        ))
-        self.assertIn("expired", service.export_decisions[-1].reasons)
-        self.assertEqual(service.purge_expired(), 1)
-        self.assertNotIn(event, service.local_events)
+        self.assertIn("sanitization_failed", decision.reasons)
+        self.assertIn("untrusted_app", decision.reasons)
 
-    def test_valid_boundary_builds_outbox_but_sends_nothing(self) -> None:
+
+class IsolationRetentionAndDeploymentTests(unittest.TestCase):
+    def test_subject_consent_isolation_sequential_and_parallel(self) -> None:
         service = LearningEventService(identity_provider=_TrustedIdentity())
-        service.consent = _consent(ConsentCategory.USAGE_STATISTICS)
-        service.context = ProjectionContext(
-            IntelligenceScope.GLOBAL, DataResidency.CLOUD_ELIGIBLE,
-            ContributionTarget.GLOBAL, AppIdentity("forge", AppTrustTier.FORGE_CORE),
-            TrainingUse.ALLOWED,
+        event_a = service.observe(_generation())
+        event_b = service.observe(_generation())
+        on = _consent(ConsentCategory.USAGE_STATISTICS)
+        off = ConsentSnapshot.all_off()
+
+        first = service.evaluate_for_export(
+            event_a, consent=on, context=_global_context(TrainingUse.FORBIDDEN),
         )
-        service.observe(GenerationRecord(
-            GenerationSource.CURATED, "finance", True,
-            runtime_outcome=RuntimeOutcome.RENDERED, recorded_at=time.time(),
-        ))
+        second = service.evaluate_for_export(
+            event_b, consent=off, context=_global_context(TrainingUse.FORBIDDEN),
+        )
+        self.assertTrue(first.eligible)
+        self.assertFalse(second.eligible)
+
+        service.reset()
+        events = [service.observe(_generation()), service.observe(_generation())]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [
+                pool.submit(
+                    service.evaluate_for_export, events[0], consent=on,
+                    context=_global_context(TrainingUse.FORBIDDEN),
+                ),
+                pool.submit(
+                    service.evaluate_for_export, events[1], consent=off,
+                    context=_global_context(TrainingUse.FORBIDDEN),
+                ),
+            ]
+        results = [item.result() for item in futures]
+        self.assertEqual([item.eligible for item in results], [True, False])
+        self.assertEqual(
+            {item.consent_snapshot_id for item in service.outbox},
+            {on.snapshot_id},
+        )
+
+    def test_withdrawal_appends_snapshot_clears_outbox_and_revokes_dataset(self) -> None:
+        service = LearningEventService(identity_provider=_TrustedIdentity(), now=lambda: 20.0)
+        consent = _consent(ConsentCategory.USAGE_STATISTICS, now=10.0)
+        event = service.observe(_generation(recorded_at=20.0))
+        service.evaluate_for_export(
+            event, consent=consent, context=_global_context(),
+        )
         self.assertEqual(len(service.outbox), 1)
-        self.assertEqual(service.outbox[0].pseudonymous_contributor_id, "server-issued-opaque-test-id")
-        self.assertNotIn("artifact_handle", service.outbox[0].event.to_dict())
+        self.assertEqual(len(service.dataset_candidates), 1)
+        withdrawn = service.withdraw_consent(consent)
+        self.assertNotEqual(withdrawn.snapshot_id, consent.snapshot_id)
+        self.assertEqual(withdrawn.previous_snapshot_id, consent.snapshot_id)
+        self.assertFalse(service.outbox)
+        self.assertEqual(
+            service.dataset_candidates[0].quality_state, QualityState.REVOKED,
+        )
+        self.assertEqual(service.dataset_candidates[0].revoked_at, 20.0)
+        future = service.evaluate_for_export(
+            event, consent=consent, context=_global_context(),
+        )
+        self.assertFalse(future.eligible)
+        self.assertIn(
+            "collection_consent_missing_or_withdrawn", future.reasons,
+        )
 
-    def test_missing_server_identity_blocks_otherwise_valid_candidate(self) -> None:
+    def test_retention_purges_all_implemented_stores(self) -> None:
+        now = [10.0]
+        service = LearningEventService(
+            identity_provider=_TrustedIdentity(), now=lambda: now[0],
+        )
+        consent = _consent(ConsentCategory.USAGE_STATISTICS, now=10.0)
+        event = service.observe(_generation(recorded_at=10.0))
+        service.evaluate_for_export(
+            event, consent=consent, context=_global_context(),
+        )
+        service.learning_artifacts.append(LearningArtifact(
+            "a", event.event_id, "sanitized_document", True, "1",
+            TrainingUse.ALLOWED, LearningDataProvenance.CURATED,
+            QualityState.CANDIDATE, 10.0,
+        ))
+        self.assertTrue(service.local_events)
+        self.assertTrue(service.export_decisions)
+        self.assertTrue(service.evaluations)
+        self.assertTrue(service.outbox)
+        self.assertTrue(service.dataset_candidates)
+        self.assertTrue(service.learning_artifacts)
+        now[0] = 200 * 86400
+        self.assertGreaterEqual(service.purge_expired(), 6)
+        self.assertFalse(service.local_events)
+        self.assertFalse(service.export_decisions)
+        self.assertFalse(service.evaluations)
+        self.assertFalse(service.outbox)
+        self.assertFalse(service.dataset_candidates)
+        self.assertFalse(service.learning_artifacts)
+
+    def test_provider_registry_is_deployment_source_of_truth(self) -> None:
         service = LearningEventService()
-        service.consent = _consent(ConsentCategory.USAGE_STATISTICS)
-        service.context = ProjectionContext(
-            IntelligenceScope.GLOBAL, DataResidency.CLOUD_ELIGIBLE,
-            ContributionTarget.GLOBAL, AppIdentity("forge", AppTrustTier.FORGE_CORE),
-            TrainingUse.ALLOWED,
-        )
-        service.observe(GenerationRecord(
-            GenerationSource.CURATED, "finance", True,
-            runtime_outcome=RuntimeOutcome.RENDERED, recorded_at=time.time(),
+        local = service.observe(ExperienceRecord(
+            ForgeTask.COGNITIVE_STAGE, "local", "model", True,
+            recorded_at=time.time(),
         ))
-        self.assertIn("server_issued_identity_unavailable", service.export_decisions[-1].reasons)
-        self.assertFalse(service.outbox)
-
-    def test_withdrawal_clears_unsent_outbox_and_blocks_future_export(self) -> None:
-        service = LearningEventService(identity_provider=_TrustedIdentity())
-        service.consent = _consent(ConsentCategory.USAGE_STATISTICS)
-        service.context = ProjectionContext(
-            IntelligenceScope.GLOBAL, DataResidency.CLOUD_ELIGIBLE,
-            ContributionTarget.GLOBAL, AppIdentity("forge", AppTrustTier.FORGE_CORE),
-            TrainingUse.ALLOWED,
+        mock = service.observe(ExperienceRecord(
+            ForgeTask.COGNITIVE_STAGE, "mock", "mock", True,
+            recorded_at=time.time(),
+        ))
+        curated = service.observe(_generation())
+        unknown = service.observe(ExperienceRecord(
+            ForgeTask.COGNITIVE_STAGE, "ollama-unregistered", "model", True,
+            recorded_at=time.time(),
+        ))
+        self.assertIs(local.deployment, Deployment.LOCAL)
+        self.assertIs(
+            local.provenance, LearningDataProvenance.LOCAL_AI_OUTPUT,
         )
-        evidence = GenerationRecord(
-            GenerationSource.CURATED, "finance", True,
-            runtime_outcome=RuntimeOutcome.RENDERED, recorded_at=time.time(),
-        )
-        service.observe(evidence)
-        self.assertEqual(len(service.outbox), 1)
-        service.withdraw_consent()
-        self.assertFalse(service.outbox)
-        service.observe(evidence)
-        self.assertIn("consent_missing_or_withdrawn", service.export_decisions[-1].reasons)
-        self.assertFalse(service.outbox)
+        self.assertIs(mock.deployment, Deployment.UNKNOWN)
+        self.assertIs(mock.provenance, LearningDataProvenance.TEST_DOUBLE)
+        self.assertIs(curated.deployment, Deployment.NOT_APPLICABLE)
+        self.assertIs(curated.provenance, LearningDataProvenance.CURATED)
+        self.assertIs(unknown.deployment, Deployment.UNKNOWN)
 
 
 class ProductionStoreWiringTests(unittest.TestCase):
@@ -218,50 +341,74 @@ class ProductionStoreWiringTests(unittest.TestCase):
         self.service = default_learning_event_service()
         self.service.reset()
 
-    def test_experience_store_emits_ai_call(self) -> None:
+    def test_all_existing_stores_emit_without_exporting(self) -> None:
         ExperienceStore().record(ExperienceRecord(
-            ForgeTask.CONVERSATION_STEP, "mock", "mock", True
+            ForgeTask.CONVERSATION_STEP, "mock", "mock", True,
         ))
-        self.assertEqual(self.service.local_events[-1].event_type.value, "ai_call")
-
-    def test_generation_store_emits_generation_with_knowledge_lineage(self) -> None:
         stored = GenerationEvidenceStore().record(GenerationRecord(
             GenerationSource.CURATED, "finance", True,
             capabilities=("crud",), design_language_roles=("metric.primary",),
             knowledge_references=("design_role.metric.primary@v1",),
         ))
-        event = self.service.local_events[-1]
-        self.assertEqual(event.event_type.value, "generation")
-        self.assertEqual(event.artifact_evidence_id, stored.uid)
-        self.assertEqual(event.knowledge_references, ("design_role.metric.primary@v1",))
-        candidate: DatasetCandidate = self.service.dataset_candidates[-1]
-        self.assertEqual(candidate.source_event_ids, (event.event_id,))
-        self.assertEqual(candidate.source_artifact_ids, (stored.uid,))
-
-    def test_feedback_history_emits_every_event_in_order(self) -> None:
-        recorded_at = time.time()
-        log = FeedbackEventLog(now=lambda: recorded_at)
-        evidence = ArtifactEvidenceId(EvidenceKind.GENERATION, "generation-uid", 1)
-        first = log.append(evidence_id=evidence, signal=AcceptanceSignal.ACCEPTED, source=FeedbackSource.USER_EXPLICIT)
-        second = log.append(evidence_id=evidence, signal=AcceptanceSignal.CORRECTED, source=FeedbackSource.USER_EXPLICIT)
-        events = self.service.local_events[-2:]
-        self.assertEqual([e.acceptance for e in events], [AcceptanceSignal.ACCEPTED, AcceptanceSignal.CORRECTED])
-        self.assertEqual([e.feedback_event_ids for e in events], [(first.event_id,), (second.event_id,)])
-        self.assertEqual([first.sequence, second.sequence], [1, 2])
-
-    def test_default_production_path_is_fail_closed_and_lineage_is_not_lost(self) -> None:
-        GenerationEvidenceStore().record(GenerationRecord(
-            GenerationSource.CLOUD_AI, "finance", True,
-            runtime_outcome=RuntimeOutcome.RENDERED,
-        ))
+        feedback_log = FeedbackEventLog()
+        evidence_id = ArtifactEvidenceId(
+            EvidenceKind.GENERATION, stored.uid, stored.ref,
+        )
+        feedback_log.append(
+            evidence_id=evidence_id, signal=AcceptanceSignal.ACCEPTED,
+            source=FeedbackSource.USER_EXPLICIT,
+        )
+        feedback_log.append(
+            evidence_id=evidence_id, signal=AcceptanceSignal.CORRECTED,
+            source=FeedbackSource.USER_EXPLICIT,
+        )
+        types = [item.event_type for item in self.service.local_events]
+        self.assertIn(LearningEventType.AI_CALL, types)
+        self.assertIn(LearningEventType.GENERATION, types)
+        self.assertEqual(types.count(LearningEventType.FEEDBACK), 2)
+        generation = next(
+            item for item in self.service.local_events
+            if item.event_type is LearningEventType.GENERATION
+        )
+        self.assertEqual(
+            generation.knowledge_references,
+            ("design_role.metric.primary@v1",),
+        )
+        self.assertFalse(self.service.export_decisions)
+        self.assertFalse(self.service.dataset_candidates)
         self.assertFalse(self.service.outbox)
-        self.assertEqual(self.service.dataset_candidates[-1].quality_state, QualityState.REJECTED)
-        self.assertIn("consent_missing_or_withdrawn", self.service.export_decisions[-1].reasons)
+
+    def test_learning_failure_does_not_break_evidence_and_is_diagnosed(self) -> None:
+        original = self.service.projector.project
+        before = self.service.diagnostics.failure_count
+
+        def broken(_evidence: object) -> LearningEvent:
+            raise RuntimeError("projector-bug")
+
+        self.service.projector.project = broken  # type: ignore[method-assign]
+        try:
+            stored = ExperienceStore().record(ExperienceRecord(
+                ForgeTask.CONVERSATION_STEP, "mock", "mock", True,
+            ))
+        finally:
+            self.service.projector.project = original  # type: ignore[method-assign]
+        self.assertEqual(stored.ref, 1)
+        self.assertEqual(self.service.diagnostics.failure_count, before + 1)
+        self.assertEqual(self.service.diagnostics.last_error_type, "RuntimeError")
+
+    def test_repository_agent_protocol_is_present(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        protocol = (root / "AGENTS.md").read_text(encoding="utf-8")
+        claude = (root / "CLAUDE.md").read_text(encoding="utf-8")
+        for phrase in (
+            "GitHub", "Source of Truth", "1つ", "commit", "push", "mutation",
+            "CI", "UNVERIFIED", "ChatGPT Reviewer",
+        ):
+            self.assertIn(phrase, protocol)
+        self.assertIn("AGENTS.md", claude.splitlines()[2])
 
 
 class HTTPProductionWiringTests(unittest.TestCase):
-    """Touch only HTTP; AI_CALL/GENERATION/FEEDBACK must appear downstream."""
-
     def setUp(self) -> None:
         from fastapi.testclient import TestClient
         from app.main import app
@@ -270,39 +417,27 @@ class HTTPProductionWiringTests(unittest.TestCase):
         self.service = default_learning_event_service()
         self.service.reset()
 
-    def test_generate_then_two_feedback_events_close_the_three_paths(self) -> None:
-        response = self.client.post(
-            "/api/v1/ai/generate",
-            json={"input": {
-                "natural_language": "家計の支出をカテゴリ別に管理したい",
-                "generation_options": {"provider": "mock"},
-            }},
-        )
+    def test_generate_then_feedback_keeps_local_projection_only(self) -> None:
+        response = self.client.post("/api/v1/ai/generate", json={"input": {
+            "natural_language": "家計の支出をカテゴリ別に管理したい",
+            "generation_options": {"provider": "mock"},
+        }})
         self.assertEqual(response.status_code, 200, response.text)
         artifact = response.json()["result"]["artifact"]
-        types = [event.event_type.value for event in self.service.local_events]
-        self.assertIn("ai_call", types)
-        self.assertIn("generation", types)
-
         for sequence, signal in enumerate(("accepted", "corrected"), start=1):
             feedback = self.client.post("/api/v1/ai/feedback", json={
                 "artifact_id": artifact["artifact_id"],
                 "seen_version_token": artifact["version_token"],
                 "signal": signal,
-                "idempotency_key": f"learning-http-{sequence}",
+                "idempotency_key": f"learning-http-018a-{sequence}",
             })
             self.assertEqual(feedback.status_code, 200, feedback.text)
-            self.assertTrue(feedback.json()["recorded"])
-
-        feedback_events = [
-            event for event in self.service.local_events if event.event_type.value == "feedback"
-        ]
-        self.assertEqual(
-            [event.acceptance for event in feedback_events],
-            [AcceptanceSignal.ACCEPTED, AcceptanceSignal.CORRECTED],
-        )
-        self.assertTrue(all(event.feedback_event_ids for event in feedback_events))
-        self.assertFalse(self.service.outbox, "Production default must never export without consent")
+        types = [item.event_type for item in self.service.local_events]
+        self.assertIn(LearningEventType.AI_CALL, types)
+        self.assertIn(LearningEventType.GENERATION, types)
+        self.assertEqual(types.count(LearningEventType.FEEDBACK), 2)
+        self.assertFalse(self.service.export_decisions)
+        self.assertFalse(self.service.outbox)
 
 
 if __name__ == "__main__":
