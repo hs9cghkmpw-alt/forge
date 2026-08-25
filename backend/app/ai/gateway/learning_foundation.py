@@ -374,6 +374,8 @@ class ExperienceStore:
         self._records[entry.ref] = entry
         while len(self._records) > self._MAX_RECORDS:
             del self._records[next(iter(self._records))]
+        from app.ai.gateway.learning_events import observe_evidence  # noqa: PLC0415
+        observe_evidence(entry)
         return entry
 
     # --- 後から分かる事実を書き足す(R0)---------------------------------

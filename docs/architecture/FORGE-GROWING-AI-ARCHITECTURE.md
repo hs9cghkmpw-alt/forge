@@ -901,3 +901,18 @@ Adapter OTA配信 / Personal LoRA / Global Learning SDK公開
 * **Flutter側の👍ボタンが無い。** Backendの口は揃ったが、
   `user_acceptance`が実データで埋まるわけではない。「実装した」と
   「使われている」を混同しない（PRODUCT-DIRECTION §7）
+
+---
+
+## 27. FORGE-018実装状態（2026-08-25）
+
+`LearningEventProjector` / `LearningEventService`をProductionへ接続した。
+既存Evidenceは置換せず、全Storeの記録直後が単一変換入口を通る。
+
+実装済み: AI_CALL / GENERATION / FEEDBACK、Local Event、6カテゴリConsent
+（既定OFF）、Learning Sanitizer、中央Eligibility、Retention Policy、
+Cloud Envelope境界、Dataset Candidate lineage、Learning Artifact契約。
+
+安全上未実装: Supabase送信、durable outbox、Auth/RLS、Production
+server-issued contributor identity、Object Storage。ProductionのCloud送信は
+0件・fail closed。Test DoubleでEnvelope構築までのみ実証した。

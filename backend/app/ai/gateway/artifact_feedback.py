@@ -350,6 +350,8 @@ class FeedbackEventLog:
         while len(self._events) > self._MAX_EVENTS:
             dropped = self._events.pop(0)
             self._by_idempotency.pop(dropped.idempotency_key, None)
+        from app.ai.gateway.learning_events import observe_evidence  # noqa: PLC0415
+        observe_evidence(event)
         return event
 
     def find_by_idempotency_key(self, key: str) -> ArtifactFeedbackEvent | None:

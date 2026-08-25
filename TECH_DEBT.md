@@ -3540,3 +3540,25 @@ flutter test test/json_ui/renderer/semantic_visual_hierarchy_test.dart
 # → **落ちれば**そのテストは効いている（置物ではない）
 # 変更は必ず元へ戻すこと
 ```
+
+---
+
+## TD75. Learning Outbox / Consent / Identityはプロセス内Foundation（2026-08-25）
+
+FORGE-018でLearning EventからExportDecision/DatasetCandidateまでProduction
+接続したが、保存先はプロセス内でdurableではない。Supabase learning tables、
+Auth、RLS、trusted backend発行のcontributor identityが未実装なので、Cloud
+network exportは意図的に無効。再起動でLocal Event/Outboxは失われる。
+
+## TD76. Flutterがartifact feedback identityを捨てている（2026-08-25）
+
+Backendは生成成功時にartifact handle/version tokenを返すが、Flutterの
+`GenerationSuccess` parserは保持しない。このためForge host UIから安全に
+`POST /feedback`を呼べない。FORGE-019でDomain entity、repository parser、
+GeneratedAppHostShellを一緒に接続する。世代照合なしのボタン追加は禁止。
+
+## TD77. Learning Sanitizerは既知patternのみ（2026-08-25）
+
+API key/Bearer/JWT/private key/env secret/email/phone/address-like値を拒否するが、
+RegexでPII 100%検出はできない。Cloud export有効化前に構造別allowlist、
+検出器versioning、false positive/negative評価が必要。

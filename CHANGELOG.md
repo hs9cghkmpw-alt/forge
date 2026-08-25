@@ -2,6 +2,16 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task087 — FORGE-018 Growing AI Learning Event Foundation（2026-08-25）
+
+既存EvidenceをSource of Truthのまま、単一`LearningEventProjector`からLocal
+Learning Event、Consent/Sanitizer/Eligibility、Cloud Export判定、Dataset
+Candidate lineageまでProduction接続した。HTTPでAI_CALL / GENERATION /
+FEEDBACK（ACCEPTED→CORRECTEDの2件）を実測。既定はConsent全OFF・Local-onlyで、
+Supabase/Auth/RLS/server identity未実装のためCloud送信は0件・fail closed。
+
+詳細: `docs/reports/FORGE-018-GROWING-AI-LEARNING-EVENT-FOUNDATION-report.md`
+
 ## Task086 — 017A Learning Contract Hardening + 残R1 + R2 Knowledge（2026-08-24）
 
 CEOのReview（FORGE-017A）で commit B の契約に4つの穴が指摘された。

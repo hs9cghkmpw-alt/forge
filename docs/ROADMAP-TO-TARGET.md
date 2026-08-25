@@ -325,3 +325,17 @@ Definition of Done §7 の禁止事項そのものになる。
 * **未検証**: 完成図の3画面が R1〜R5 で実際に描けるかは、**描いてみる
   まで分からない**。R1完了時点で1画面を手で組んで確かめ、差分をここへ
   反映する
+
+---
+
+## 7. 2026-08-25 FORGE-018更新 — Learning Event Foundation
+
+R2 Knowledgeの次の閉ループ辺として、既存Evidenceから単一Projectorを経て
+Local Learning Event、Consent/Sanitization、Cloud Export判定、Dataset
+Candidate lineageまでProduction接続した。AI_CALL / GENERATION / FEEDBACKは
+HTTP実経路でemit済み。RevisionはFORGE-019、BUILD/COMPILE/TEST/RUNTIME等は
+契約のみで未emit。
+
+Cloud送信はAuth/RLS/server-issued identityが無いため既定OFF。Local Eventと
+拒否理由付きlineageは残るが、送信済みとは扱わない。次はFORGE-019でSemantic
+Design RevisionとFlutter host feedbackを同じ閉ループへ繋ぐ。

@@ -188,3 +188,19 @@ BenchmarkRun     ─┘
     へ変えた（`new_version_token()`）。内容ハッシュはもう外へ出ない
 * `pseudonymous_contributor_id` の発行主体
   → server-issued token を採る方針だけ決まっている（017A §11）
+
+---
+
+## 6. Production実装（FORGE-018、2026-08-25）
+
+`backend/app/ai/gateway/learning_events.py`がこの契約のProduction型である。
+AI_CALL / GENERATION / FEEDBACKを既存Evidenceから単一Projectorでemitする。
+REVISIONはProjector対応のみでHTTP Production配線はFORGE-019。
+
+Consent/Sanitizer/Eligibility/Retention/Dataset Candidate/Cloud Envelope境界を
+実装した。既定はPersonal + Local-only + contribution none + training unknown +
+Consent全OFF。raw本文fieldとClient handle/version tokenは型に存在しない。
+
+Cloud EnvelopeはLocal Eventと別型で、trusted server-issued identityが無ければ
+作られない。Production identity providerとSupabase送信は未実装なので、
+現時点のCloud送信は0件である。

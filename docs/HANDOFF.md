@@ -1,268 +1,124 @@
 # Forge 申し送り（最新）
 
-**最終更新: 2026-08-24 / branch `claude/forge-master-handoff-k46jns`**
-**最新commit: 017A Learning Contract Hardening（A1/A2/A3/C/D）**
-**次: commit E（Learning Event Foundation）→ commit F（Semantic Design Revision）**
+**最終更新: 2026-08-25**
 
-> このファイルは**毎回の作業のたびに上書き更新して push される**。
-> パスは固定なので、`docs/HANDOFF.md` だけ見れば最新状況が分かる。
-> 過去の詳細は `docs/reports/` と `CHANGELOG.md` に残る。
+**branch:** `claude/forge-master-handoff-k46jns`
 
----
+**start HEAD:** `7f31aa46785d6db7fbcc4bbf7097b9bd889c927e`
 
-## 1. CEOへの依頼
+**final HEAD:** この文書を含むFORGE-018 commit（Git logの先頭を正とする）
 
-### 🔴 依頼1: 受け取ったキーについて（**至急3点**）
+**current phase:** Growing AI / Learning Event Foundation
 
-2026-08-17、CEOから**OpenAIのAPIキー**をチャットで頂きました。
-先に伝えるべきことが3つあります。
+**current task:** FORGE-018 commit E — 実装・ローカル検証完了、push/CI確認中
 
-> **「どこかに使った？」への回答**: 使っていません。送信も0回です
-> （接続の入口で遮断されたので、鍵はネットワークへ出ていません）。
-> 検査結果と**試験のやり方**は
-> **`docs/API-KEY-TEST-GUIDE.md`** にまとめました。
+**next task:** FORGE-019 Semantic Design Revision
 
-#### 1. このキーは失効させてください（至急）
+## 継続中のCEO依頼
 
-**チャットに平文で流れたので、会話ログに残っています。**
-Forgeのルール（`CLAUDE.md` §4「Git追跡対象に持ってよいのは環境変数の
-名前だけ。値は持たない」）が守れる場所ではありません。
+- 過去にチャットへ貼られたOpenAI API keyは使用・保存していないが、失効と
+  再発行が必要。新keyはチャットでなく`backend/.env`へ直接設定する
+- CEO環境でCORS障害が続く場合はブラウザconsoleの実エラーが必要
 
-**私はこのキーをどこにも保存していません**（リポジトリにも、この
-作業環境の`.env`にも書いていません）。それでも会話ログには残るので、
-**OpenAIのコンソールで一度失効させ、新しい鍵を作り直してください。**
-新しい鍵は、チャットではなく**CEOのPCの`backend/.env`へ直接**
-書いてください。
+## 現在地
 
-#### 2. OpenAIのAPIには無料枠がありません
-
-これは想定と違う可能性があります。お願いしていたのは
-**Groq / Cerebras / OpenRouter の無料枠**でした。
-
-OpenAIのAPIは**前払いのクレジット制**で、残高が無いと
-`429 insufficient_quota` を返します。つまり、
-
-* アカウントにクレジットが入っている → 使えます（**有料**）
-* クレジットが無い → **1回も呼べません**
-
-「Geminiの1日20回が足りない」という元の問題に対しては、
-**有料での解決**になります。無料で枠を増やしたいのであれば、
-Groq等の取得を別途お願いしたいです。どちらでも設定できます。
-
-#### 3. この作業環境からは検証できませんでした
-
-`api.openai.com` へ接続しようとしましたが、この開発セッションの
-egressポリシーで遮断されました（`CONNECT tunnel failed, 403`）。
-環境のドキュメントは「回避せず報告せよ」としているので、回避して
-いません。
+既存の`ExperienceRecord` / `GenerationRecord` / `RevisionRecord` /
+`ArtifactFeedbackEvent`をSource of Truthのまま維持し、全Storeの記録直後が
+単一の`LearningEventProjector`を必ず通るProduction Pathを実装した。
 
 ```
-実施したこと : GET https://api.openai.com/v1/models
-結果         : HTTP 000 / curl(56) CONNECT tunnel failed, response 403
-意味         : キーが有効かどうかは**分かりません**（キーの問題では
-               なく、ここから外へ出られないという問題）
+AI call / generation / POST /feedback
+  → existing append-only evidence
+  → LearningEventProjector（入口1つ）
+  → Local LearningEvent（raw本文なし）
+  → Consent + Sanitizer + TrainingEligibilityPolicy
+  → ExportDecision + DatasetCandidate lineage
+  → CloudLearningEnvelope outbox（全条件成立時のみ）
 ```
 
-**キーが生きているかの確認は、CEOのPCでしかできません。**
+Production既定は`PERSONAL / LOCAL_ONLY / contribution NONE /
+training_use UNKNOWN`、Consentは6カテゴリすべてOFF。通常のHTTP実行でLocal
+Eventと拒否理由付きDataset Candidateは残るが、Cloud Outboxは0件である。
 
----
+## 実装内容 / Production wiring
 
-### ✅ 私の側で用意できたこと: コード変更なしで載ります
+- `LearningEvent` Production型、単一Projector、Local Event Store
+- AI_CALL / GENERATION / FEEDBACKのProduction emit
+- Revision projector（Store入力対応のみ。`/update`配線はFORGE-019）
+- 6カテゴリ`ConsentSnapshot`（既定ALL OFF）
+- Local Eventと`CloudLearningEnvelope`を別型に分離
+- `ContributorIdentityProvider`境界（Production実装なし、fail closed）
+- `AppIdentity` / `AppTrustTier`の最小trust boundary
+- Learning Sanitizer、Retention、Learning Artifact契約、Dataset lineage
+- 中央`TrainingEligibilityPolicy`
+- `knowledge_references`を本文なしでEventへ継承
 
-**追加の実装は要りませんでした。** 既にある「設定だけでProviderを
-増やす口」がそのまま使えます。実際にlocalhostへ偽のOpenAI互換
-サーバを立てて、**Forge側の配線が本当にHTTPを話せること**を
-確認しました（`backend/tests/test_extra_cloud_provider.py`、7件）。
+FastAPI `TestClient`で`POST /generate`からAI_CALLとGENERATIONを確認。同じ
+artifactへ`POST /feedback`でACCEPTED→CORRECTEDを送り、FEEDBACK 2件が順番を
+保って残ることを確認した。実測はAI_CALL 1 / GENERATION 1 / FEEDBACK 2 /
+Dataset Candidate 4 / Cloud Outbox 0。Client handle/version tokenはCloud型に
+存在しない。
 
-CEOのPCの `backend/.env` に、次の4行を足してください。
+FlutterはBackendのartifact handle/version tokenを`GenerationSuccess`へ保持
+していない。ボタンだけ足すと対象世代を安全に指せないため今回は追加せず、
+Backend API contractを固定した。FORGE-019でDomain層とhost previewを接続する。
 
-```
-FORGE_EXTRA_PROVIDERS=openai_platform
-FORGE_OPENAI_PLATFORM_BASE_URL=https://api.openai.com/v1
-FORGE_OPENAI_PLATFORM_API_KEY=（新しく作り直した鍵）
-FORGE_OPENAI_PLATFORM_MODEL=（コンソールで使えるモデル名。例: gpt-4o-mini）
-```
+## Consent / Privacy / Cloud
 
-> **`BASE_URL`と`MODEL`は私が確認したものではありません。** ここから
-> OpenAIの公式ドキュメントへ到達できないため、記憶から書いています。
-> **コンソールの表示で確かめてください。** 違っていれば、その2行を
-> 直すだけです（コードは触りません）。
+- 同意なしでもLocal Evidence / Local Event / Forge基本機能は動く
+- withdrawal後は未送信Outboxを消し、将来exportを止める
+- 既学習weightのunlearningは未実装
+- LearningEventにraw発話/会話/response/Document/secret/handle/tokenは無い
+- Sanitizerは明白なsecret/PIIを拒否するが100%除去とは主張しない
+- Supabase送信、migration、RLS、Auth、Object Storage送信は未実装
+- Production Cloud exportはserver-issued identity不在のためblocked
+- Test DoubleでのみEnvelope生成を実証
 
-設定すると Auto Discovery が拾い、Geminiが枠切れのとき自動で
-こちらへ回ります。`gemini`のような既存の名前は**上書きできない**
-ようになっています（統計が混ざらないように）。
+## Tests
 
-**検証区分**: Forge側の配線 = **実測（Test Double）** /
-実際のOpenAI API = **未検証**。TD67は半分だけ解消です。
+- FORGE-018 focused: **18 passed**
+- backend full: **1424 passed, 17 skipped**
+- forge_ai full: **521 passed**
+- ruff（変更Python）: **All checks passed**
+- Flutter test: **508 passed**
+- flutter analyze: **No issues found**
+- flutter build web: **成功**（font warningあり、既知の非致命warning）
+- CI: push前、未実行
 
-### 🟡 依頼2: 確認したいこと — CORS障害は実際に起きていますか
+## Intentional break / mutation
 
-ChatGPTの監査で「localhost Originで既にCORS障害を踏んでいる」という
-指摘を受けましたが、**私の環境では再現しませんでした。**
+13 roundすべてでFAILを確認し、復元後focused 18件PASS:
 
-* 実コードのregexは正しい形（履歴を全部追っても壊れた版は存在しない）
-* HTTPレベルで10 Origin叩いて、期待と1件も違わなかった
+1. Experience→Projector配線を外す
+2. Consent既定をON
+3. UNKNOWN/FORBIDDEN training_useを許可
+4. TEST_DOUBLEを許可
+5. Feedback 2件目を捨てる
+6. `raw_output` fieldを追加
+7. LOCAL_ONLYをCloudへ通す
+8. sanitizer失敗を無視
+9. `knowledge_references`を落とす
+10. `artifact_handle` fieldを追加
+11. fake client contributor IDを許可
+12. untrusted appのGlobal寄与を許可
+13. expired Eventを許可
 
-ただし**HTTPで確かめるテストが1つも無かった**のは事実なので、契約テスト
-とCI smokeを追加しました（regexを壊すと実際に落ちます）。
+## 未検証 / Technical Debt
 
-**もしCEOの環境で実際にCORSエラーが出ているなら、原因は別にあります**
-（proxy、ブラウザキャッシュ、`FORGE_ENV`がdevelopment以外、等）。
-**その場合はブラウザのコンソールに出るエラー文をそのまま頂けますか。**
+- Outboxはin-memoryでdurableではない
+- Supabase learning tables / RLS / Auth / server identity未実装
+- 実Cloud送信0件。実Local Model生成0回
+- Flutter feedback UI未実装（artifact identityがDomain層で失われる）
+- Learning Artifactは契約のみ。Dataset CandidateはTraining Datasetではない
+- token usage等、既存Evidenceが持たない値はNone
 
----
+## 次のTask / 次の3手
 
-### ✅ 解決済み: Curated DomainとAIの関係（前版の依頼2）
+次はFORGE-019 Semantic Design Revision。「残高をもっと目立たせて」等を
+Target resolution → typed operation → local patch → Validator/Critic → Revision
+Evidence → Feedback → Learning EventまでProductionで閉じる。
 
-前版は3択でCEO判断待ちにしていましたが、**第4の案を設計して実装しました。**
-
-**AI呼び出しの記録**とは別に、**生成物の記録**(`GenerationRecord`)を
-持つようにしました。`source = curated | cloud_ai | local_ai | ...` で
-由来を区別するので、**AIを呼ばずに作った成功例も、同じ形の学習素材と
-して並びます。**
-
-Curatedを消さず、AIを無理に通さず、閉ループへ載せられました。
-（学習データを作るためだけにCuratedへAIを通すのは本末転倒です——速くて
-安定していて無料な経路を、記録の都合で遅く不安定に有料にすることに
-なります。）
-
-なお前版の「Curated DomainはAIを1回も呼ばない」は**測った範囲より広い
-書き方**でした。会話そのものはAIを呼んでいます。訂正済みです。
-
----
-
-## 2. いまの状況（2026-08-24）
-
-### 進捗
-
-| | 内容 | 状態 |
-|---|---|---|
-| A | MeasureSemantics消失修正 | ✅ `50b2c3d` |
-| B | Feedback / Revision Foundation | ✅ `fe2664c` |
-| A1 | Revision training provenance | ✅ `b61b36d` |
-| A2 | Feedback Event + ID分離 | ✅ `d163e6f` |
-| A3 | Learning Contract + Local Promotion Gate | ✅ `2db1fcd` |
-| C | 残R1 Hardening | ✅ `a514a37` |
-| D | R2 Forge Knowledge / RAG | ✅ `e40c861` |
-| E | Growing AI Learning Event Foundation | ⬜ **次はここ** |
-| F | Semantic Design Revision | ⬜ |
-
-### 017AのReviewで指摘された4つの穴 — 全部塞いだ
-
-CEOの指摘は**全て正しかった**。commit Bで作った契約には次があった。
-
-1. **由来不明/Test DoubleのRevisionが教師データになっていた。**
-   `source`を見ていなかったので、既定の`UNKNOWN`のまま「利用者が受け
-   入れた」だけで正例になった。テストは`mock`で大量に走るので、
-   **実運用よりテストの方が「正例」を多く生む**状態だった
-2. **Feedbackの時系列を捨てていた。** 「最初は良いと言ったが使ってみたら
-   直した」は、最初から`CORRECTED`だったものとまるで意味が違う
-   （前者は「一見よく見えるが実際には外している」）
-3. **失効するハンドルを系譜のIDにしていた。** しかもそれは持っている人が
-   評価を書けるToken。Cloudへ載せると誰でも評価を書き換えられる
-4. **内容ハッシュをClientへ返していた。** 同じ内容なら誰が作っても同じ値
-   になるので、利用者を跨いだ突き合わせに使える
-
-### Semantic Critic の誤検知2件（再現してから直した）
-
-* 単一であるべきroleを**文書全体**で数えていた。別画面がそれぞれ主KPIを
-  1つ持つ**正しい設計**が弾かれ、画面が増えるほど誤検知が増える形だった
-* 家計簿は`finance.expense`（お金の向き）と`state.danger`（予算超過）を
-  **正当に両方使う**。それを弾いていた
-
-### Knowledgeが本番から呼ばれるようになった（TD69解消）
-
-`knowledge_entries()`は014から存在したが、本番から1度も呼ばれていなかった。
-`IntelligenceContextResolver`が**Provider選択の前に**解決し、
-`GenerationRecord.knowledge_references`へ版付きで残るようになった。
-
-`app_id`はコードに1箇所も無かった。**Knowledge型が最初の1箇所**である。
-
----
-
-## 3. 今の状態
-
-```
-backend  : 1407 passed, 16 skipped
-forge_ai :  521 passed
-ruff（変更ファイル）: All checks passed
-配線破壊試験: 24 round すべて確認
-```
-
-### 動くもの
-
-* 会話 → ヒアリング → 生成 → Validator → Critic → Flutter描画
-* Design Language 33 role・Semantic Design Critic（誤検知2件を修正）
-* Provider Registry / AI Router / quota-aware fallback
-* Generation / Experience / Revision / Benchmark Evidence
-* `POST /api/v1/ai/feedback`（評価を書く唯一の口、時系列で残る）
-* Forge Knowledge + Intelligence Context Resolver（本番から呼ばれる）
-* Local Promotion Gate（**昇格0件。データ待ち**）
-
-### まだ無いもの（正直に）
-
-* **Flutter側の👍ボタン。** Backendの口は揃ったが、**利用者が押せる
-  ボタンはまだ無い。** `user_acceptance`が実データで埋まるわけではない
-* **Learning Eventを作って送る経路**（commit E）。語彙と契約はあるが、
-  Eventを組み立てるコードは無い
-* **Consent / Sanitizer / Retention / Dataset Lineage**（commit E）
-* **`/update`から`RevisionRecord`を書く配線**（commit F）
-* **実Local Modelでの生成は0回。** Provider抽象があることと、Localで
-  実際に作れることは別である（Architectureの「Base Model = ✅」は
-  過大評価だったので訂正した）
-
----
-
-## 4. 次にやること
-
-### commit E — Growing AI Learning Event Foundation
-
-語彙（`LearningEventType` / `LearningTaskId` / scope 3軸）は入った。
-次はEvent本体と、それに付く Consent / Sanitizer / Retention。
-
-**決まっていること**（017A §11、判断F決着）:
-
-```
-Local Evidence      cross-session identityを持たない。いまのまま
-      ↓ Consentを通ったEventだけ
-Cloud Learning Event  pseudonymous contributor identity を持つ
-```
-
-ただし **client-generated install ID だけを Poisoning 防止の Truth に
-しない**（端末側で作り直せる）。server-issued token が要る。
-**IDを持っただけでSybil対策が済んだとは言わない。**
-
-### commit F — Semantic Design Revision
-
-「伝えたらデザインを直す」の本体。型（`RevisionRecord` /
-`DesignRevision`）とStoreはできているので、`/update`から書く配線と
-Semantic Patch（局所適用）を作る。
-
----
-
-## 5. 未解決として抱えているもの
-
-| 項目 | 状態 |
-|---|---|
-| OpenAI API鍵の失効（§1 依頼1） | **CEO対応待ち** |
-| CORS障害が実際に起きているか（§1 依頼2） | CEO回答待ち |
-| 仮名IDの発行主体（server-issued token） | 方針だけ決定。実装はE |
-| `app_id`をClientから受ける経路 | **無い。** SDK公開前に必ず要る（017A §12） |
-| 実Cloud Providerでの`/feedback`往復 | 未検証（実APIを呼んでいない） |
-| Local Modelでの実生成 | **0回。未検証** |
-| Flutter側の👍ボタン | 未実装 |
-
----
-
-## 6. 詳しい報告
-
-* `docs/reports/FORGE-017A-LEARNING-CONTRACT-HARDENING-report.md`（**今回**）
-* `docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md`（**AI/Learningの正式Architecture**）
-* `docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md`（既存コードとの照合）
-* `docs/spec/LEARNING-EVENT-V1.md`（契約のみ・未実装）
-* `docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md`
-* `docs/reports/FORGE-R1-CLOSURE-015-report.md`
-* `docs/spec/DESIGN-REVISION-PROPOSAL.md`
-* `docs/tasks/FORGE-016-STATE.md`
-* `docs/API-KEY-TEST-GUIDE.md`
-* `CHANGELOG.md` Task084 / Task085 / Task086
+1. Flutter Domain層へartifact handle/version tokenを通し、「これでOK」/
+   「直したい」を`POST /feedback`へ接続
+2. `/update`を`RevisionRecord`へ接続し、局所Semantic Patchを実装
+3. Auth/RLS/server identity実測後、durable Supabase Outboxを実装

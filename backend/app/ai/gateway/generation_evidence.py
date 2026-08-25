@@ -506,6 +506,8 @@ class GenerationEvidenceStore:
         self._records[entry.ref] = entry
         while len(self._records) > self._MAX_RECORDS:
             del self._records[next(iter(self._records))]
+        from app.ai.gateway.learning_events import observe_evidence  # noqa: PLC0415
+        observe_evidence(entry)
         return entry
 
     def note_user_acceptance(self, refs: Sequence[int], signal: AcceptanceSignal) -> int:

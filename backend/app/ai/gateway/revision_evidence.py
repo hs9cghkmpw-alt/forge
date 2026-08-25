@@ -251,6 +251,8 @@ class RevisionEvidenceStore:
         if len(self._records) > self._MAX_RECORDS:
             for ref in sorted(self._records)[: len(self._records) - self._MAX_RECORDS]:
                 del self._records[ref]
+        from app.ai.gateway.learning_events import observe_evidence  # noqa: PLC0415
+        observe_evidence(stored)
         return stored
 
     def get(self, ref: int) -> RevisionRecord | None:

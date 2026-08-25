@@ -120,9 +120,7 @@ class LearningEventType(str, Enum):
         """
         return self in {
             LearningEventType.GENERATION,
-            LearningEventType.REVISION,
             LearningEventType.AI_CALL,
-            LearningEventType.BENCHMARK,
             LearningEventType.FEEDBACK,
         }
 
