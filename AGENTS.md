@@ -1,5 +1,9 @@
 # Forge Agent Protocol
 
+## Visual evidence for UI work
+
+Any task that changes UI, renderer behavior, Design Language, or generated-app appearance is incomplete without a real render and visual evidence. The implementation agent must start the relevant preview, render at the relevant viewport, capture representative before/after screenshots, open and inspect the images, fix observed defects, and record findings in the task report and visual manifest. Unit tests alone never justify “looks correct.” If the agent did not inspect a real render, the result is `UNVERIFIED`.
+
 GitHub上のこのRepositoryと、commit/pushされたMarkdownを全Agent間の
 Source of Truthとする。Codex/Claude固有のローカルhandoffは補助情報であり、
 この文書を置き換えない。

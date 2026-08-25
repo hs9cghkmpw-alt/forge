@@ -33,6 +33,10 @@
 
 ---
 
+## 2026-08-25 — FORGE-019
+
+Semantic Design Revision and Visual Dev Loop v1 are implemented pending independent review/CI. The next planned task is FORGE-020 Real Local Model Runtime + Benchmark / Local Promotion v1; a blocking review defect takes precedence as FORGE-019A.
+
 ## 0. 前版（同日）の撤回
 
 **このファイルの初版は Product Direction に違反していた。** 撤回して

@@ -5,6 +5,10 @@
 
 ---
 
+## FORGE-019 implemented v1 (2026-08-25)
+
+Production supports `SelectPrimaryMetric` through `TargetResolver → local semantic patch → Validator → Semantic Design Critic`. The resolver uses semantic widget identity and never accepts an LLM-authored JSON path. Ambiguous/missing targets fail closed; unsupported intent is explicitly `FULL_REGEN_FALLBACK`. `/update` checks artifact/version, records RevisionEvidence, emits a local REVISION LearningEvent, and rotates the token. Runtime acknowledgement and additional operations remain future work.
+
 ## 0. これは見た目の便利機能ではない
 
 CEOの指示を、Forgeの用語で言い直す。

@@ -1,5 +1,13 @@
 # TECH_DEBT.md
 
+## FORGE-019 follow-ups (2026-08-25)
+
+- Browser capture does not yet drive live `/update` and capture its response in one transaction.
+- Revision runtime outcome remains UNKNOWN until a trusted preview acknowledgement exists.
+- Full-regeneration fallback does not yet record all richer semantic revision fields.
+- Artifact/evidence/outbox remain in-memory; Auth/RLS/server identity/Supabase export are unimplemented.
+- Actual Local Model semantic revision runs remain 0.
+
 ## KNOWN_ISSUES.mdとの違い
 
 - **KNOWN_ISSUES.md**: 今、ユーザーまたは開発者が実際に困る/困りうる制約

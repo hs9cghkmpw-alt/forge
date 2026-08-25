@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 2026-08-25 — FORGE-019
+
+- Added typed semantic target resolution and local primary-metric patching to production `/update`.
+- Added artifact concurrency, Revision/Learning/Feedback wiring, and evaluation policy snapshots.
+- Added Flutter feedback/correction host controls and retained artifact identity.
+- Added preview/capture scripts, inspected Golden Finance screenshots, visual tests, and AGENTS visual policy.
+
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
 ## Task088 — FORGE-018A Learning Boundary Hardening + Agent Protocol（2026-08-25）

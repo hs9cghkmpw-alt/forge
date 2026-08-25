@@ -1,5 +1,9 @@
 # Forge Growing AI Architecture
 
+## FORGE-019 revision evidence path
+
+Semantic corrections flow through artifact/version check → typed target resolution → local patch → Validator/Critic → RevisionRecord → REVISION LearningEvent. Lineage stores operation/target/design-role IDs and a local visual-manifest reference, not raw correction text or ArtifactHandle. Export evaluation has a privacy-safe policy-context snapshot. Screenshots are local evidence only, not cloud/training artifacts.
+
 **位置付け: AI / Learning 領域の正式Architecture**
 制定 2026-08-24 / 指示書 FORGE-GROWING-AI-ARCHITECTURE-017
 
