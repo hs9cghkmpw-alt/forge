@@ -1,8 +1,8 @@
 # Forge 申し送り（最新）
 
 **最終更新: 2026-08-24 / branch `claude/forge-master-handoff-k46jns`**
-**最新commit: 017 Growing AI Architecture 正式化（文書のみ）**
-**進行中: FORGE-016A（A→B完了、C以降）/ FORGE-017（Review完了・Architecture記録済み）**
+**最新commit: 017A Learning Contract Hardening（A1/A2/A3/C/D）**
+**次: commit E（Learning Event Foundation）→ commit F（Semantic Design Revision）**
 
 > このファイルは**毎回の作業のたびに上書き更新して push される**。
 > パスは固定なので、`docs/HANDOFF.md` だけ見れば最新状況が分かる。
@@ -133,133 +133,110 @@ Curatedを消さず、AIを無理に通さず、閉ループへ載せられま�
 
 ## 2. いまの状況（2026-08-24）
 
-### 直近のcommit
+### 進捗
 
-| 単位 | 内容 | 状態 |
+| | 内容 | 状態 |
 |---|---|---|
-| **A** | MeasureSemantics消失の実バグ修正（`FieldSpec`の`required`補正でmetadataが落ちていた） | ✅ push済み `50b2c3d` |
-| **B** | Feedback / Revision Foundation | ✅ このpush |
-| C | 残R1 Hardening（screen単位Critic / finance-state誤検知 / Golden Finance E2E） | 未着手 |
-| D | R2 Forge Knowledge / RAG | 未着手 |
-| E | Growing AI Learning Event Foundation（017） | Review中 |
-| F | Semantic Design Revision | 未着手 |
+| A | MeasureSemantics消失修正 | ✅ `50b2c3d` |
+| B | Feedback / Revision Foundation | ✅ `fe2664c` |
+| A1 | Revision training provenance | ✅ `b61b36d` |
+| A2 | Feedback Event + ID分離 | ✅ `d163e6f` |
+| A3 | Learning Contract + Local Promotion Gate | ✅ `2db1fcd` |
+| C | 残R1 Hardening | ✅ `a514a37` |
+| D | R2 Forge Knowledge / RAG | ✅ `e40c861` |
+| E | Growing AI Learning Event Foundation | ⬜ **次はここ** |
+| F | Semantic Design Revision | ⬜ |
 
-### commit B で直した「本当に効いていなかったもの」
+### 017AのReviewで指摘された4つの穴 — 全部塞いだ
 
-**「これでいい」をForgeが受け取る口が、本番に1本も無かった。**
+CEOの指摘は**全て正しかった**。commit Bで作った契約には次があった。
 
-`AcceptanceSignal`も`note_user_acceptance()`も011から実装済みだった。
-013で`generation_ref`をPipelineから返すところまで直してあった。
-**しかしHTTP層でそれが止まっていた**——`app/routers/`に`generation_ref`
-の出現が0件、`note_user_acceptance`の本番呼び出しが0件。
+1. **由来不明/Test DoubleのRevisionが教師データになっていた。**
+   `source`を見ていなかったので、既定の`UNKNOWN`のまま「利用者が受け
+   入れた」だけで正例になった。テストは`mock`で大量に走るので、
+   **実運用よりテストの方が「正例」を多く生む**状態だった
+2. **Feedbackの時系列を捨てていた。** 「最初は良いと言ったが使ってみたら
+   直した」は、最初から`CORRECTED`だったものとまるで意味が違う
+   （前者は「一見よく見えるが実際には外している」）
+3. **失効するハンドルを系譜のIDにしていた。** しかもそれは持っている人が
+   評価を書けるToken。Cloudへ載せると誰でも評価を書き換えられる
+4. **内容ハッシュをClientへ返していた。** 同じ内容なら誰が作っても同じ値
+   になるので、利用者を跨いだ突き合わせに使える
 
-結果、明示的な承認を要求する`is_positive_example`は**構造上、必ず
-False**だった。「Local AIの教師データを貯める」と書いてある仕組みが、
-貯める口を持っていなかった。
+### Semantic Critic の誤検知2件（再現してから直した）
 
-これは「作ったが本番から呼ばれない」の**5例目**である。
+* 単一であるべきroleを**文書全体**で数えていた。別画面がそれぞれ主KPIを
+  1つ持つ**正しい設計**が弾かれ、画面が増えるほど誤検知が増える形だった
+* 家計簿は`finance.expense`（お金の向き）と`state.danger`（予算超過）を
+  **正当に両方使う**。それを弾いていた
 
-#### 入れたもの
+### Knowledgeが本番から呼ばれるようになった（TD69解消）
 
-* `POST /api/v1/ai/feedback` — 評価を書く**唯一の口**
-* `result.artifact = {artifact_id, fingerprint}` を成功レスポンスへ
-* `ArtifactRegistry` / `ArtifactFeedbackService` / `document_fingerprint()`
-* `RevisionRecord` / `DesignRevision` / `RevisionEvidenceStore`（TD68の型）
-* `DesignDecisionSource.USER_CORRECTION`（AIの成功例と混ぜない）
+`knowledge_entries()`は014から存在したが、本番から1度も呼ばれていなかった。
+`IntelligenceContextResolver`が**Provider選択の前に**解決し、
+`GenerationRecord.knowledge_references`へ版付きで残るようになった。
 
-#### 忘れられない場所へ置いた
-
-登録は`_result_dto()`の中に置いた。成功レスポンスの経路3つ
-（`/generate`・`/generate/confirm`・`/converse` BUILD）が**全部ここを
-通る**ので、4つ目の経路を足した人が呼び忘れても登録される。
-呼び出し側3箇所に書く案は採らなかった——それが4回失敗した形である。
-
-#### 配線破壊試験 6round（全て確認済み）
-
-外すと落ちること、戻すと通ることを**実際に外して**確認した。
-詳細は `docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md` §4。
-
-### FORGE-017 — Growing AI Architecture を正式化した（文書のみ、実装なし）
-
-**§27のReviewを先にやった。実コードを読んで照合した結果:**
-
-* **017の要素の約4割は、既に別の名前で実装済みだった**
-  （Provider Registry / AIRouter / BenchmarkRun / TrainingProvenance など）
-  → 新しい階層を上に積まず、**既存を名付け直す**方針にした
-* **本当に無いのは5つ**——Learning Event契約 / Global・App・Personalの
-  境界 / Consent / Retention・Lineage / Intelligence Resolver
-* **衝突が3件**。うち1件（仮名ID）はCEO判断が要る（§4参照）
-
-Architecture文書は全項目に ✅実装済み / 🟨部分的 / ⬜未実装 /
-🚫今回作らない を付けてある。**✅は実際にファイルを読んで確認したもの
-だけ**で、書いていないものを「ある」ことにしていない。
+`app_id`はコードに1箇所も無かった。**Knowledge型が最初の1箇所**である。
 
 ---
 
 ## 3. 今の状態
 
 ```
-backend  : 1304 passed, 16 skipped
+backend  : 1407 passed, 16 skipped
 forge_ai :  521 passed
 ruff（変更ファイル）: All checks passed
+配線破壊試験: 24 round すべて確認
 ```
 
 ### 動くもの
 
-* 会話 →ヒアリング→ 生成 → Validator → Critic → Flutter描画
-* Design Language 33 role・軸ごとの検証・Semantic Design Critic
+* 会話 → ヒアリング → 生成 → Validator → Critic → Flutter描画
+* Design Language 33 role・Semantic Design Critic（誤検知2件を修正）
 * Provider Registry / AI Router / quota-aware fallback
-* Generation Evidence（由来つき）・Experience Evidence
-* **NEW** Artifact Feedback（`/feedback`）と Revision Evidence の型
+* Generation / Experience / Revision / Benchmark Evidence
+* `POST /api/v1/ai/feedback`（評価を書く唯一の口、時系列で残る）
+* Forge Knowledge + Intelligence Context Resolver（本番から呼ばれる）
+* Local Promotion Gate（**昇格0件。データ待ち**）
 
 ### まだ無いもの（正直に）
 
-* **Flutter側の👍ボタン。** Backendの口はできたが、**利用者が押せる
-  ボタンはまだ無い。** 現時点で`user_acceptance`が実データで埋まる
-  わけではない
-* `/update`から`RevisionRecord`を書く配線（commit F）
-* `ArtifactRegistry`の永続化（プロセス内メモリのみ、TD41と同じ制約）
-* Forge Knowledge / RAG（commit D）
+* **Flutter側の👍ボタン。** Backendの口は揃ったが、**利用者が押せる
+  ボタンはまだ無い。** `user_acceptance`が実データで埋まるわけではない
+* **Learning Eventを作って送る経路**（commit E）。語彙と契約はあるが、
+  Eventを組み立てるコードは無い
+* **Consent / Sanitizer / Retention / Dataset Lineage**（commit E）
+* **`/update`から`RevisionRecord`を書く配線**（commit F）
+* **実Local Modelでの生成は0回。** Provider抽象があることと、Localで
+  実際に作れることは別である（Architectureの「Base Model = ✅」は
+  過大評価だったので訂正した）
 
 ---
 
 ## 4. 次にやること
 
-### 🔴 CEOの判断が要るもの（先に読んでください）
+### commit E — Growing AI Learning Event Foundation
 
-**`docs/OPEN-DECISIONS.md` の判断項目 F**を新設しました。
+語彙（`LearningEventType` / `LearningTaskId` / scope 3軸）は入った。
+次はEvent本体と、それに付く Consent / Sanitizer / Retention。
 
-> **端末を跨いで辿れる仮名IDを持つか。**
+**決まっていること**（017A §11、判断F決着）:
 
-017 §6 がこれを必須にしていますが、**いまのForgeは「セッションを跨いで
-個人を辿れる識別子を持たない」をコードの明文にしています。** 方針の転換
-なので、黙って進めませんでした。
+```
+Local Evidence      cross-session identityを持たない。いまのまま
+      ↓ Consentを通ったEventだけ
+Cloud Learning Event  pseudonymous contributor identity を持つ
+```
 
-* ① 二層化（**推奨**）— ローカルの記録は今のまま。Consentを出して
-  外へ送ると決めたものにだけ付ける
-* ② 常に付ける — 単純だが、Consentと無関係にローカル記録の性質が変わる
-* ③ 持たない — 約束は守れるが、**Poisoning対策（1人が大量投稿して
-  Global AIを偏らせるのを防ぐ）が原理的に作れない**
+ただし **client-generated install ID だけを Poisoning 防止の Truth に
+しない**（端末側で作り直せる）。server-issued token が要る。
+**IDを持っただけでSybil対策が済んだとは言わない。**
 
-**この判断が決まらなくても、次のCとDは進められます。**
+### commit F — Semantic Design Revision
 
-### 実装の順（017 §24で固定）
-
-| | 内容 | 状態 |
-|---|---|---|
-| A | MeasureSemantics消失修正 | ✅ `50b2c3d` |
-| B | Feedback / Revision Foundation | ✅ `fe2664c` |
-| **C** | **残R1 Hardening**（screen単位Critic / finance-state誤検知 / Golden Finance E2E） | **次はここ** |
-| D | R2 Forge Knowledge / RAG | ⬜ |
-| E | Growing AI Learning Event Foundation | ⬜ |
-| F | Semantic Design Revision | ⬜ |
-
-### C・Dで忘れてはいけないこと（Reviewの申し送り）
-
-1. **DのKnowledgeEntry型に `scope`（global/app/personal）と `app_id` を
-   含める。** 後から遡って付けると全面書き換えになる。
-   `app_id`はいまコードに**1箇所も無い**（実測0件）
-2. **Consentを見る場所だけDで決める**（実装はEでよい）
+「伝えたらデザインを直す」の本体。型（`RevisionRecord` /
+`DesignRevision`）とStoreはできているので、`/update`から書く配線と
+Semantic Patch（局所適用）を作る。
 
 ---
 
@@ -268,17 +245,18 @@ ruff（変更ファイル）: All checks passed
 | 項目 | 状態 |
 |---|---|
 | OpenAI API鍵の失効（§1 依頼1） | **CEO対応待ち** |
-| 実Cloud Providerでの`/feedback`往復 | 未検証（実APIを呼んでいない） |
 | CORS障害が実際に起きているか（§1 依頼2） | CEO回答待ち |
-| **仮名IDを持つか（017 §6）** | 🔴 **CEO判断待ち（OPEN-DECISIONS F）** |
-| Personal / App / Global の境界の実装 | 017 E。`app_id`が実測0件 |
-| `document_fingerprint()`はsalt無し | Learning Eventへ載せる前にsalted版を作る（Architecture §7） |
-| Local First をRoutingへ入れる形 | Benchmarkの同点処理としてのみ（Architecture §2） |
+| 仮名IDの発行主体（server-issued token） | 方針だけ決定。実装はE |
+| `app_id`をClientから受ける経路 | **無い。** SDK公開前に必ず要る（017A §12） |
+| 実Cloud Providerでの`/feedback`往復 | 未検証（実APIを呼んでいない） |
+| Local Modelでの実生成 | **0回。未検証** |
+| Flutter側の👍ボタン | 未実装 |
 
 ---
 
 ## 6. 詳しい報告
 
+* `docs/reports/FORGE-017A-LEARNING-CONTRACT-HARDENING-report.md`（**今回**）
 * `docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md`（**AI/Learningの正式Architecture**）
 * `docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md`（既存コードとの照合）
 * `docs/spec/LEARNING-EVENT-V1.md`（契約のみ・未実装）
@@ -287,4 +265,4 @@ ruff（変更ファイル）: All checks passed
 * `docs/spec/DESIGN-REVISION-PROPOSAL.md`
 * `docs/tasks/FORGE-016-STATE.md`
 * `docs/API-KEY-TEST-GUIDE.md`
-* `CHANGELOG.md` Task084 / Task085
+* `CHANGELOG.md` Task084 / Task085 / Task086

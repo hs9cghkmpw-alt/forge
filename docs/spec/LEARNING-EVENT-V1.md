@@ -1,8 +1,11 @@
-# Learning Event V1（契約のみ・未実装）
+# Learning Event V1（語彙は実装済み・Event本体は未実装）
 
-2026-08-24 / FORGE-GROWING-AI-ARCHITECTURE-017 §5
+2026-08-24 / 017 §5、**FORGE-017A §5・§6・§10で改訂**
 
-> **この文書は契約の定義であり、実装は存在しない。**
+> **語彙（`LearningEventType` / `LearningTaskId` / `IntelligenceScope` /
+> `DataResidency` / `ContributionTarget`）は実装済み**
+> （`backend/app/ai/gateway/learning_contract.py`）。
+> **`LearningEvent`本体を組み立てて送る経路は未実装**（commit E）。
 > `docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md` が上位。
 > 実装状況はそちらの✅/🟨/⬜表記を見ること。
 
@@ -39,8 +42,8 @@ BenchmarkRun     … 1回の測定          ✅ backend/app/ai/gateway/benchmark
 |---|---|---|---|
 | `schema_version` | str | ⬜ 新規 | このEvent契約の版 |
 | `event_id` | str | ⬜ 新規 | 不透明。連番にしない |
-| `event_type` | enum | ⬜ 新規 | `generation` / `revision` / `ai_call` / `benchmark` |
-| `task_type` | enum | ✅ `ForgeTask` | **既存をそのまま使う。新しい語彙を作らない** |
+| `event_type` | enum | ✅ `LearningEventType` | **Evidence Storeの型に固定しない**（下記） |
+| `task_type` | `LearningTaskId` | ✅ | `ForgeTask`は**AI Routingの語彙**なので別に持ち、mappingする（下記） |
 | `created_at` | float | ✅ `recorded_at` | |
 
 ### 2.2 境界（**Dで型に入れる**）
@@ -58,18 +61,24 @@ BenchmarkRun     … 1回の測定          ✅ backend/app/ai/gateway/benchmark
 
 | field | 型 | 状態 |
 |---|---|---|
-| `pseudonymous_install_id` | str \| None | 🔴 **OPEN-DECISIONS F** |
+| `pseudonymous_contributor_id` | str \| None | ⬜ **二層化を採用**（017A §11、判断F決着） |
 
-既存コードは「セッションを跨いで個人を辿れる識別子を持たない」を
-**明文の約束**にしている（`ExperienceRecord.ref` のdocstring、006 §22）。
-017 §5 がこれを必須にすることは方針の転換であり、黙って入れない。
+```
+Local Evidence（既存3 Record）  cross-session identityを持たない。いまのまま
+        ↓ Consentを通ったEventだけ
+Cloud Learning Event           pseudonymous contributor identity を持つ
+```
 
-**推奨は二層化**（Architecture §6）:
-ローカルのEvidenceは識別子を持たないまま、Consent + Sanitize を通って
-Cloudへ出るEventにだけ付ける。
+Consentを出していない利用者のローカル記録は**性質が変わらない**
+（017 §9「OFFでも基本Forge / Local AI / Personal Memory が使えること」）。
 
-> **§14（Poisoning対策）の `per-user contribution limits` はこの判断に
-> 依存する。** 辿れる識別子が無ければ原理的に効かない。セットで決める。
+> **client-generated install ID だけを Poisoning 防止の Truth にしない**
+> （017A §11）。端末側で作り直せるので、作り直すだけで制限を外せる。
+> 将来は **server-issued contributor token** または
+> **authenticated pseudonymous subject** を使い、
+> rotation / revocation / deletion に対応する。
+>
+> **IDを持っただけでSybil対策が済んだとは言わない。**
 
 ### 2.4 モデルとProvider
 
@@ -95,7 +104,12 @@ Cloudへ出るEventにだけ付ける。
 |---|---|
 | `capability_ids` | ✅ `GenerationRecord.capabilities` |
 | `design_role_ids` | ✅ `design_language_roles` / `DesignRoleDecision` |
-| `artifact_ref` | ✅ `ArtifactIdentity.artifact_id`（016A commit B） |
+| `artifact_ref` | ✅ **`ArtifactEvidenceId`**（`kind` + `uid`） |
+| `knowledge_references` | ✅ `GenerationRecord.knowledge_references`（`design_role.metric.primary@v1`） |
+
+> **`ArtifactHandle.handle`を`artifact_ref`にしてはいけない**
+> （FORGE-017A §3）。あれは失効するBearer Capabilityであり、系譜のID
+> ではない。Cloudへ載せると、記録を見た人が誰でも評価を書き換えられる。
 
 > **ここに本文は入らない。** 利用者の発話も、生成されたDocumentの本文も、
 > Providerの生出力も、この契約では表現できない。既存3 Record と同じ
@@ -107,6 +121,7 @@ Cloudへ出るEventにだけ付ける。
 |---|---|---|
 | `accepted` | ✅ `AcceptanceSignal` | `accepted`/`corrected`/`abandoned`/`unknown` |
 | `repair_attempts` | ✅ 既存名 | 017は`retry_count`だが**既存名に寄せる**。Forgeの`repair`は「Validator不合格→修復」で情報量が多い |
+| `feedback_events` | ✅ `ArtifactFeedbackEvent`（追記専用） | **時系列そのものがEvidence**。1つのfieldに潰さない（017A §2） |
 | `validator_result` | ✅ `validator_passed` (bool) | |
 | `runtime_result` | ✅ `RuntimeOutcome` | `rendered`/`failed`/`unknown` |
 | `build_result` / `test_result` | ⬜ | |
@@ -168,4 +183,8 @@ BenchmarkRun     ─┘
   → Consent と一緒に決める（commit E）
 * `event-scoped fingerprint` の算法
   → salt/HMACのkey管理を決めてから。`document_fingerprint()`（salt無し）
-    を**そのまま流用しない**（Architecture §7）
+    を**そのまま流用しない**（Architecture §7）。
+    なお017A §4で、**Clientへ返す世代tokenは内容と無関係なランダム値**
+    へ変えた（`new_version_token()`）。内容ハッシュはもう外へ出ない
+* `pseudonymous_contributor_id` の発行主体
+  → server-issued token を採る方針だけ決まっている（017A §11）

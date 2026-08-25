@@ -2,6 +2,108 @@
 
 バージョンではなくTaskごとに記録する(`docs/tasks/`と対応。詳細な差分は各taskNNN.mdを参照)。
 
+## Task086 — 017A Learning Contract Hardening + 残R1 + R2 Knowledge（2026-08-24）
+
+CEOのReview（FORGE-017A）で commit B の契約に4つの穴が指摘された。
+**全て正しかった。** 塞いだ上で、残R1 HardeningとR2 Knowledgeまで進めた。
+
+### commit（すべて独立にpush・CI）
+
+| | 内容 |
+|---|---|
+| `b61b36d` | Revision training provenance（§1） |
+| `d163e6f` | Feedback Event + Handle/EvidenceId/VersionToken分離（§2-§4） |
+| `2db1fcd` | Learning Contract語彙 + Local Promotion Gate（§5-§7,§10） |
+| `a514a37` | Semantic Critic誤検知2件 + `/converse` Golden E2E（§14） |
+| `e40c861` | Forge Knowledge + Intelligence Context Resolver（§8,§15） |
+
+### 塞いだ穴
+
+1. **由来不明/Test DoubleのRevisionが教師データになっていた。**
+   `source`を見ていなかったので、既定の`UNKNOWN`のまま「利用者が受け
+   入れた」だけでTraining Candidateになった。`TEST_DOUBLE`が特に悪く、
+   テストは`mock`で大量に走るので**実運用よりテストの方が「正例」を
+   多く生む**状態だった
+2. **Feedbackの時系列を捨てていた。** 「最初は良いと言ったが使ってみたら
+   直した」は、最初から`CORRECTED`だったものとまるで意味が違う（前者は
+   「一見よく見えるが実際には外している」）。追記専用のEventにした
+3. **失効するハンドルを系譜のIDにしていた。** さらにそれはBearer
+   Capabilityなので、Cloudへ載せると記録を見た人が誰でも評価を書き
+   換えられる。3つのIDへ分けた
+4. **内容ハッシュをClientへ返していた。** 同じ内容なら誰が作っても同じ
+   値になるので利用者を跨いだ突き合わせに使え、低entropyな内容は総当たり
+   で言い当てられる。**内容と無関係なランダムtoken**にした
+
+### 契約を構想から縮小しない（§5・§6）
+
+`LearningEventType`は`build`/`compile`/`test`/`runtime`/`crash`/
+`tool_result`まで持ち、`is_emitted_today`で「いま作れるか」を分ける。
+**実装が無いものを「未実装」として持つのと、構想から消すのは違う。**
+
+`LearningTaskId`を`ForgeTask`と分けた。`flutter.build`はAIを呼ばない
+ので`ForgeTask`になりようがない。全`ForgeTask`がmappingされていること
+をテストが強制する。
+
+### Local Firstの矛盾を Quality Gate で解消（§7）
+
+「Qualified Local → Local」と「Local優先は同点時だけ」は矛盾していた。
+**Best Score Wins をやめた**——同点のときだけ効く優先は実質Local First
+ではない。`LocalPromotionGate`が「製品として通用する水準か」を実測から
+判定し、満たしたものだけを前へ出す。`AIRouter._order()`から実際に呼ぶ。
+
+**いま昇格するProviderは0件**（Localのbenchmark記録が無い）。配線済み・
+データ待ち。
+
+### Semantic Critic の誤検知2件（両方とも再現してから直した）
+
+* 単一であるべきroleを**文書全体**で数えていた。別画面がそれぞれ主KPIを
+  1つ持つ正しい設計が弾かれ、**画面が増えるほど誤検知が増える**形だった
+* finance と state の併用を無条件に誤りにしていた。家計簿は
+  `finance.expense`（お金の向き）と`state.danger`（予算超過）を正当に
+  両方使う。本当の誤りは**同じ値**に両方の意味を持たせること
+
+### Knowledge が本番から呼ばれるようになった（TD69解消）
+
+`knowledge_entries()`は014から存在したが本番から1度も呼ばれていなかった。
+`IntelligenceContextResolver`を作り、**Provider選択の前に**解決して
+`GenerationRecord.knowledge_references`へ`design_role.metric.primary@v1`
+の形で残す。本文は残さない。
+
+`KnowledgeEntry`は最初から`scope`/`app_id`/`status`/`version`/
+`provenance`を持つ。**`app_id`はコードに1箇所も無かった** — ここが最初。
+scope境界は**構造**である（Global検索がPersonalを返す経路が無い）。
+
+Resolverは`AIRouter`へ詰め込まなかった（§8）。Provider rankingもしない。
+
+### 判断F決着
+
+**仮名IDは二層化を採用。** Consentを通ったEventにだけ付ける。ただし
+client-generated install IDだけをPoisoning防止のTruthにしない
+（作り直せる）。**IDを持っただけでSybil対策が済んだとは言わない。**
+
+### 進捗を盛らない訂正（§9）
+
+Architectureの「Base Model = ✅ Provider Registry」は過大評価だった。
+Provider抽象があることと、Local Modelで実際に生成できることは別である。
+**実Local Modelでの生成は0回**として訂正した。
+
+### 配線破壊試験 24round
+
+全roundで、外すと落ち、戻すと通ることを確認した（一覧はreport §9）。
+
+### テスト
+
+backend 1407 passed / forge_ai 521 passed。
+新規: `test_learning_contract.py` 16 / `test_local_promotion.py` 20 /
+`test_knowledge.py` 25。`test_artifact_feedback.py` は 45→67。
+
+### 文書
+
+* `docs/reports/FORGE-017A-LEARNING-CONTRACT-HARDENING-report.md`（新規）
+* `docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md`（§2,§3,§5,§13,§14,§18,§19,§22,§24,§26）
+* `docs/spec/LEARNING-EVENT-V1.md` / `docs/OPEN-DECISIONS.md`（F決着）/
+  `docs/ROADMAP-TO-TARGET.md` / `docs/HANDOFF.md`
+
 ## Task085 — Growing AI Architecture を正式Architectureとして統合（2026-08-24、実装なし）
 
 CEOから FORGE-GROWING-AI-ARCHITECTURE-017 が来た。**§27のArchitecture

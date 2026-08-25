@@ -102,15 +102,38 @@ Local              Cloud fallback
 | Provider抽象と `Deployment(LOCAL\|CLOUD)` | ✅ `backend/app/ai/gateway/provider_registry.py` |
 | Task別Routing / fallback / Circuit Breaker | ✅ `backend/app/ai/gateway/ai_router.py` |
 | Benchmark基準による順位付け（件数・鮮度・dataset同一性・schema成功率のGate） | ✅ `benchmark_evidence.py: ranking_for() / is_usable_for_routing()` |
-| **Benchmark合格Localを同点時に優先する規則** | ⬜ 未実装 |
+| **Local Promotion Gate** | ✅ `local_promotion.py`。`AIRouter._order()`から実際に呼ばれる |
 | Capability対応判定 | 🟨 `TaskProfile`はあるがLocal能力判定は無い |
 
-> **注意（Reviewの発見）**: `AIRouter._order()` は過去に「Local優先」を
-> **実装した上で退けた**記録を持つ——「Benchmarkが無いのにLocalを優先
-> するのは、測っていない品質を賭けてQuotaを節約しているだけ」。
-> したがって Local First は、**`ranking_for()`が順位を返せたときの
-> 同点処理としてのみ**入れる。順位が無いときは従来どおり宣言順にする。
-> この制約を外すと、過去に一度退けた失敗へ戻る。
+### Best Score Wins をやめた（FORGE-017A §7）
+
+当初この文書は「Local優先は`ranking_for()`が同点のときだけ」と書いて
+いた。**これは誤りだった**——同点のときだけ効く優先は実質Local First
+ではない。Cloudが1点でも高ければ毎回Cloudが選ばれ、Localは永久に
+使われない。
+
+かといって「Localだから先」に戻すと、`AIRouter._order()`が実装した上で
+退けた失敗（「測っていない品質を賭けてQuotaを節約する」）へ戻る。
+
+**Quality Gate にした。**
+
+```
+❌ Best Score Wins
+     Local 0.91 vs Cloud 0.93 → 毎回Cloud
+
+✅ Local Meets Product Bar → Local First
+     Localが製品として通用する水準を満たすなら、Cloudが上でもLocal
+```
+
+`LocalPromotionGate`が実測から判定する。**全条件を満たさなければ通さ
+ない**（capability / benchmark実測 / 品質水準 / schema成功率 /
+latency / 件数 / 鮮度 / dataset同一性）。1つでも欠けたら通さないのは、
+「だいたい満たしている」で通すと何が理由で通ったのか分からなくなる
+からである。
+
+> **いま昇格するProviderは0件である。** Localのbenchmark記録が1件も
+> 無い（実測）。この配線は**今は何も変えない**——データが入れば効き
+> 始める。配線済み・データ待ちの状態にしてある。
 
 ---
 
@@ -135,20 +158,48 @@ Taskごとに最適な組合せを **Intelligence Resolver** が解決する。
 
 ### Intelligence Resolver
 
-⬜ 未実装。
+✅ `IntelligenceContextResolver`（`backend/app/ai/gateway/intelligence_context.py`）。
 
-**`AIRouter`を拡張して実装する。並列の routing 実装を作らない**
-（Review §6）。Forgeは「基盤はあるのに本番では別経路が使われる」を
-繰り返しているので、routingの入口は1つに保つ。
+**`AIRouter`へ詰め込まなかった**（FORGE-017A §8）。「parallel routerを
+作らない」は維持しつつ、責務は分ける。
+
+```
+IntelligenceContextResolver   ← 何を知っているかを決める
+        ↓ resolved context
+AIRouter                      ← どのProviderへ投げるかを決める
+        ↓
+Provider
+```
+
+理由は2つ。
+
+1. **`AIRouter`が神クラスになる。** すでにRouting・Circuit Breaker・
+   Quota・Latency予算・Experience記録・Local昇格を持っている
+   （Maintainability First）
+2. **順番が逆になる。** 知識はProvider選択の**前**に決まっていなければ
+   ならない。CloudとLocalで渡す知識が変わると「同じ問いに同じ知識で
+   答えた」という比較ができず、Benchmarkの前提が崩れる
+
+Resolverは**Provider rankingをしない**（`rank`/`order`/`bind`等が
+生えていないことをテストで固定した）。
+
+🟨 いま解決するのは Design Language の知識のみ。Memory / Policy /
+Adapter / Tool は未実装。
 
 ### 実装状態
 
 | 層 | 状態 |
 |---|---|
-| Base Model | ✅ Provider Registry 経由 |
-| Forge Global Intelligence | 🟨 語彙は存在する（`design_language.knowledge_entries()` 33 role）が**本番から参照されていない（TD69）**。RAG無し |
-| App Intelligence | ⬜ **`app_id`がコードに1箇所も存在しない**（grep実測 0件） |
-| Personal Intelligence | ⬜ 未実装 |
+| Provider / Model 抽象 | ✅ `provider_registry.py` |
+| **Local Base Model 統合** | 🟨 Registryに`Deployment.LOCAL`の定義はあるが、統合は未完 |
+| **実Local Modelでの生成** | ⬜ **0回。未検証** |
+| Forge Global Intelligence | ✅ `knowledge.py` + `intelligence_context.py`。**本番から呼ばれ、Evidenceへ`design_role.metric.primary@v1`の形で残る**（TD69解消） |
+| App Intelligence | 🟨 `KnowledgeEntry.app_id` と scope 境界は実装済み。**App固有の知識は0件**、`app_id`を解決する経路も無い |
+| Personal Intelligence | 🟨 scopeとして分離済み（Personalは他scopeの検索に現れない）。**Memory / Personal RAG は未実装** |
+
+> **「Base Model = ✅」と書いていたのは過大評価だった**（FORGE-017A §9）。
+> Provider抽象があることと、Local Modelで実際に生成できることは別で
+> ある。**実Local Modelでの生成は0回**であり、進捗を盛らない。
 
 ---
 
@@ -193,7 +244,25 @@ BenchmarkRun     … 1回の測定の事実                ✅ benchmark_evidenc
 
 Learning Event はこれらから**変換して作る**。変換層は1つだけにする。
 
-### フィールド（⬜ 未実装。契約のみ定義）
+### 語彙は実装済み、Event本体は未実装
+
+| | 状態 |
+|---|---|
+| `LearningEventType`（構想どおりの広さ・`is_emitted_today`付き） | ✅ `learning_contract.py` |
+| `LearningTaskId`（namespaced・自由文禁止・全ForgeTaskをmapping） | ✅ 同上 |
+| `IntelligenceScope` / `DataResidency` / `ContributionTarget` | ✅ 同上 |
+| **`LearningEvent`本体を組み立てて送る経路** | ⬜ commit E |
+
+> **Event種類をEvidence Storeの型に固定しない**（FORGE-017A §5）。
+> `build` / `compile` / `test` / `runtime` / `crash` / `tool_result` は
+> **まだemitしないが、構想から消さない**。「未実装」と「作らないことに
+> した」は違う。テストが「構想にあった種類が消えていないこと」を見張る。
+>
+> **`task_type`を`ForgeTask`だけに固定しない**（§6）。`ForgeTask`はAI
+> Routingの語彙で4値しかない。`flutter.build`はAIを呼ばないので
+> `ForgeTask`になりようがないが、Learning Eventとしては事実である。
+
+### フィールド（⬜ `LearningEvent`本体は未実装。契約のみ）
 
 ```
 schema_version
@@ -250,7 +319,33 @@ created_at
 
 **「名前を消したから匿名」とは扱わない。**
 
-### 🔴 既存の約束との衝突（CEO判断が要る）
+### ✅ 決着（FORGE-017A §11、2026-08-24）
+
+**二層化を正式採用した。** OPEN-DECISIONS 判断項目 F はこれで閉じる。
+
+```
+Local Evidence（既存3 Record）    cross-session identityを持たない。いまのまま
+        ↓ Consentを通ったEventだけ
+Cloud Learning Event             pseudonymous contributor identity を持つ
+```
+
+**ただし、client-generated install ID だけを Poisoning 防止の Truth に
+しない。** 端末側で生成したIDは端末側で作り直せるので、それだけを
+「1人あたりの投稿数」の根拠にすると、作り直すだけで制限を外せる。
+
+将来は **server-issued contributor token** または
+**authenticated pseudonymous subject** を使う。rotation / revocation /
+deletion に対応する。
+
+> **`pseudonymous ID` を持っただけで Sybil 対策が済んだとは言わない**
+> （017A §18-10）。IDは「数えられるようにする」だけで、
+> 「作り直せない」ことは保証しない。
+
+⬜ いずれも未実装（commit E）。ここにあるのは決定と、決定の理由である。
+
+---
+
+### 判断の経緯（既存の約束との衝突）
 
 既存コードには明文がある（`learning_foundation.py`、
 `ExperienceRecord.ref` のdocstring）:
@@ -442,6 +537,26 @@ Learning Events
 
 ---
 
+### `unguessable != authorized`（FORGE-017A §13）
+
+`ArtifactHandle.handle` は推測できないが、**Bearer Token である**。
+持っている人が評価を書ける。
+
+現時点はLocal APIなので大規模なAuthは要らない。しかし
+**「opaque IDだから認可済み」とは書かない**。Cloud / 複数利用者へ
+広げる際は、次と必ず結びつける。
+
+```
+artifact ownership   その生成物は誰のものか
+app boundary         どのAppの文脈か
+subject boundary     誰が評価しているのか
+```
+
+⬜ 未実装（現時点で必要ない）。**契約として先に書いておく**のは、
+後から「今までopaqueで足りていた」を根拠に省略されないためである。
+
+---
+
 ## 14. Poisoning対策
 
 ⬜ 未実装。**単純多数決にしない。**
@@ -458,9 +573,13 @@ holdout evaluation
 
 **1ユーザーが大量Eventを送って Global Intelligence を偏らせられないこと。**
 
-> `per-user contribution limits` は §6 の識別子の判断に依存する。
-> 辿れる識別子が無ければ、この対策は原理的に効かない。**§6とセットで
-> 決める必要がある。**
+> `per-user contribution limits` は §6 の識別子に依存する。§6は
+> **二層化で決着した**（Consentを通ったEventにだけ仮名IDを付ける）。
+>
+> ただし **client-generated install ID だけを Truth にしない**
+> ——端末側で作り直せるので、作り直すだけで制限を外せる。
+> server-issued contributor token / authenticated pseudonymous subject
+> が要る。**IDを持っただけでSybil対策が済んだとは言わない。**
 
 ### 既にある姿勢（✅）
 
@@ -533,6 +652,7 @@ hash / signature / release_channel / rollback_target
 
 * App-specific knowledge を Global へ無条件混入しない
 * **`app_id` を強い境界にする**
+* **`app_id` を Client の自己申告で信用しない**（FORGE-017A §12）
 * App の RAG / Prompt / Policy / Adapter / Eval を分離可能にする
 * **Generic に有用と判定された知識のみ** Global Dataset Candidate へ昇格可能
 
@@ -573,6 +693,9 @@ Learning Event Candidate
 | ACCEPTED / CORRECTED を受ける口（`POST /api/v1/ai/feedback`） | ✅ 016A commit B |
 | `DesignDecisionSource.USER_CORRECTION`（AIの成功例と混ぜない） | ✅ 016A commit B |
 | 型として raw utterance を持てないこと | ✅ テストで固定 |
+| **評価の時系列**（`ArtifactFeedbackEvent`、追記専用） | ✅ 017A §2 |
+| **由来不明/Test Doubleを教師にしない** | ✅ 017A §1 |
+| Handle / EvidenceId / VersionToken の分離 | ✅ 017A §3・§4 |
 | Semantic Patch（局所適用） | ⬜ commit F |
 | `/update` から `RevisionRecord` を書く配線 | ⬜ commit F |
 | Learning Event への変換 | ⬜ commit E |
@@ -613,9 +736,9 @@ Forge AI Runtime
   ↓
 Task Router          ← ✅ 既存 AIRouter
   ↓
-Knowledge            ← 🟨 語彙はあるが本番未接続（TD69）
+Knowledge            ← ✅ 本番から呼ばれ、Evidenceへ版付きで残る
   ↓
-Intelligence Resolver ← ⬜ AIRouterを拡張して実装
+Intelligence Resolver ← ✅ IntelligenceContextResolver（別クラス）
   ↓
 Provider Interface   ← ✅ 既存 ProviderDefinition / Adapter
 ```
@@ -639,6 +762,30 @@ Contract を使う。ただし
 
 Learning Cloud 側で schema / consent / provenance / quality / trust を
 **必ず検証する**。
+
+### `app_id` は検証対象である（FORGE-017A §12）
+
+Event payload の中の `app_id` を**そのまま信用しない**。信用すると、
+External App が
+
+```
+app_id = "forge"
+```
+
+と名乗って Global Dataset を汚せる。将来は
+**registered app identity / SDK credential / server-side mapping**
+から解決する。
+
+### Trust Tier（設計候補）
+
+```
+forge_core          Forge自身
+forge_generated     Forgeが作ったApp
+registered_external 登録済みの外部App
+untrusted           それ以外
+```
+
+Tierによって、Global Dataset へ寄与できるかどうかを変える。
 
 ---
 
@@ -666,21 +813,29 @@ Supabase 接続そのものは ✅ 存在する（`app/repositories/supabase_*.p
 既存の 016 / Design Revision 作業を**破棄しない**。順序:
 
 ```
-A. MeasureSemantics消失修正            ✅ commit 50b2c3d
-B. Feedback / Revision Foundation      ✅ commit fe2664c
-C. 残R1 Hardening                      ⬜
-D. R2 Forge Knowledge / RAG            ⬜
-E. Growing AI Learning Event Foundation ⬜
-F. Semantic Design Revision            ⬜
+A.  MeasureSemantics消失修正             ✅ 50b2c3d
+B.  Feedback / Revision Foundation       ✅ fe2664c
+A1. Revision training provenance         ✅ b61b36d（017A §1）
+A2. Feedback Event + ID分離              ✅ d163e6f（017A §2-§4）
+A3. Learning Contract + Local Gate       ✅ 2db1fcd（017A §5-§7, §10）
+C.  残R1 Hardening                       ✅ a514a37（017A §14）
+D.  R2 Forge Knowledge / RAG             ✅ e40c861（017A §8, §15）
+E.  Growing AI Learning Event Foundation ⬜
+F.  Semantic Design Revision             ⬜
 ```
 
 **E の型・境界は B〜D を実装するときから意識する。後から全面書き換えに
 ならないこと。**
 
-具体的に、C・Dの時点で決めておくべきもの（Review §7）:
+Review §7 が「C・Dの時点で決めておくべき」とした2件は、**Dで実際に
+入れた**。
 
-1. **`app_id` / `scope` を D の `KnowledgeEntry` 型に含める**
-2. **Consentを見る場所だけ D で決める**（実装は E）
+1. ✅ **`app_id` / `scope` を `KnowledgeEntry` 型に含めた。**
+   `IntelligenceScope` / `DataResidency` / `app_id` を持ち、
+   scope境界は**構造として**分かれている（Global検索がPersonalを
+   返す経路が無い）
+2. 🟨 **Consentを見る場所**は`DataResidency`として型に置いた。
+   Consent module 自体は E
 
 ---
 
@@ -715,11 +870,34 @@ Adapter OTA配信 / Personal LoRA / Global Learning SDK公開
 | 16 | 既存Forge Architectureを重複実装していないか | Review §6 で線引きを明文化した。AIRouter / BenchmarkEvidenceStore / Provider Registry は**拡張**する |
 | 17 | 実装都合で最終構想を縮小していないか | 縮小していない。未実装は⬜として残し、「無い」と書いた |
 
+### FORGE-017A の自己監査（§18の14項目）
+
+| # | 問い | 答え |
+|---|---|---|
+| 1 | RevisionのUNKNOWN/TestDoubleを教師にしていないか | ✅ §1で塞いだ。生成側と同じ4条件 |
+| 2 | Feedbackの時間順を捨てていないか | ✅ §2で追記専用にした |
+| 3 | Client handleをDataset IDへ流用していないか | ✅ §3で分離。Eventにハンドルが現れないことをテストで固定 |
+| 4 | ephemeral IDをCloud lineageへ使っていないか | ✅ `uid`（記録に貼り付く永続ID）を使う |
+| 5 | Local Firstが実際にLocal Firstか | ✅ Quality Gateにした。ただし**昇格0件**（実測が無い） |
+| 6 | 未測定Localを楽観的に優先していないか | ✅ 未測定・Test Doubleは通さない |
+| 7 | AIRouterを神クラス化していないか | ✅ Resolverを別クラスにした |
+| 8 | PersonalとCloud eligibilityを混ぜていないか | ✅ 2軸に分けた |
+| 9 | app_idをClient自己申告で信用しているか | ⬜ **まだ解決経路が無い**。契約として§22に書いた |
+| 10 | pseudonymous IDだけでSybil対策完了と言っていないか | ✅ 言っていない（§14に明記） |
+| 11 | ForgeTaskで外部Learning Taskを表現していないか | ✅ `LearningTaskId`を分けた |
+| 12 | 元の構想からEvent種類を削っていないか | ✅ 構想どおりの広さ。テストが見張る |
+| 13 | Local AI実モデル0回を「Base Model実装済み」と呼んでいないか | ✅ §3で訂正した |
+| 14 | Generated App QualityとLearning Loopを両方進めているか | ✅ Cで品質（Critic誤検知2件）、A/Dで学習側 |
+
 ### 監査で正直に書くこと
 
-* **§4 の答えが「設計上は」である**のは弱い。`app_id` が1箇所も無い
-  状態で「分離されている」とは言えない。**Dで型に入れる**ことを
-  §24 に具体的な約束として書いた
-* **§14 が commit B で前進したが、まだ閉じていない。** 口はあるが
-  押すボタンが無い。「実装した」と「使われている」を混同しない
-  （PRODUCT-DIRECTION §7）
+* **§5 の Local First は「実際にLocal Firstか」に✅を付けたが、
+  昇格するProviderは0件である。** 規則は正しくなったが、動いている
+  ものは何も無い。「配線済み・データ待ち」であって「効いている」では
+  ない
+* **§9 が未解決である。** `app_id`をClientから受ける経路がまだ無いので
+  「信用していない」とも言えない（受けていないだけ）。SDKを公開する
+  前に必ず要る
+* **Flutter側の👍ボタンが無い。** Backendの口は揃ったが、
+  `user_acceptance`が実データで埋まるわけではない。「実装した」と
+  「使われている」を混同しない（PRODUCT-DIRECTION §7）

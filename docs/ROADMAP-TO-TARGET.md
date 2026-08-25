@@ -19,14 +19,16 @@
 > |---|---|---|
 > | A | MeasureSemantics消失修正 | ✅ `50b2c3d` |
 > | B | Feedback / Revision Foundation | ✅ `fe2664c` |
-> | C | 残R1 Hardening | ⬜ |
-> | D | R2 Forge Knowledge / RAG | ⬜ |
+> | A1 | Revision training provenance | ✅ `b61b36d`（017A §1） |
+> | A2 | Feedback Event + ID分離 | ✅ `d163e6f`（017A §2-§4） |
+> | A3 | Learning Contract + Local Promotion Gate | ✅ `2db1fcd`（017A §5-§7,§10） |
+> | C | 残R1 Hardening | ✅ `a514a37`（017A §14） |
+> | D | R2 Forge Knowledge / RAG | ✅ `e40c861`（017A §8,§15） |
 > | E | Growing AI Learning Event Foundation | ⬜ |
 > | F | Semantic Design Revision | ⬜ |
 >
-> **DでKnowledgeを作るときは、`scope`（global/app/personal）と
-> `app_id`を型に含める。** 後から遡って付けると全面書き換えになる。
-> `app_id`は現在コードに1箇所も存在しない（grep実測0件）。
+> **Dで`scope`と`app_id`は型に入った**（`KnowledgeEntry`）。
+> `app_id`は017 Review時点でコードに0件だったので、これが最初の1箇所。
 
 ---
 
