@@ -242,6 +242,7 @@ class RevisionUnitOfWork:
 
         outbox = default_projection_outbox()
         assert self._staged_record is not None
+        self._record_episode()
         try:
             # 訂正が先、変更が後。**起きた順に投影する。**
             if self._committed_event is not None:
@@ -256,6 +257,78 @@ class RevisionUnitOfWork:
             outbox.enqueue(self._staged_record, error=error)
             if self._committed_event is not None:
                 outbox.enqueue(self._committed_event, error=error)
+
+    def _record_episode(self) -> None:
+        """この変更を **GenerationEpisode** として残す（FORGE-020 §18・§39）。
+
+        ---
+
+        ## なぜ本番の経路へ置くのか
+
+        Forge は「作ったが本番から呼ばれない」を6回繰り返している
+        （TD59 / 007 §10 / 010 Phase B / TD64 / TD69 / 016A）。共通するのは
+        **呼び出し側が忘れずに呼ぶ設計**だったことである。
+
+        Episode を「Agent が回ったときだけ記録する」形にすると、Agent が
+        動かない今は**1件も生まれない**——`evaluate_for_export()` が
+        テストからしか呼ばれていないのと同じ状態になる。
+
+        変更は**本番が必ず通る**ので、ここへ置く。
+
+        ## 記録するものと、しないもの
+
+        * 直した対象の Evidence uid ・ 実際に変えた Provider → 残す
+        * 利用者の発話・変更要求文・Document 本文 → **残さない**（006 §22）
+
+        ## `training_use` は `UNKNOWN`
+
+        本番の変更は「収集してよい」だけであって、「学習に使ってよい」
+        ではない（§40）。同意の記録が無い以上 `UNKNOWN` にする
+        ——Dataset Gate はこれを落とす。**楽観側へ倒さない。**
+        """
+        from app.ai.gateway.learning_events import (  # noqa: PLC0415
+            Deployment,
+            LearningDataProvenance,
+            TrainingUse,
+        )
+        from app.ai.learning.episode import (  # noqa: PLC0415
+            EpisodeOutcome,
+            EpisodeStep,
+            GenerationEpisode,
+            StepKind,
+            VerificationOutcome,
+            default_episode_store,
+        )
+
+        record = self._staged_record
+        if record is None:  # pragma: no cover — commit 済みなら必ず在る
+            return
+        try:
+            episode = GenerationEpisode(
+                task_id="forge.revision",
+                provider=record.provider_id,
+                deployment=(
+                    Deployment.LOCAL if record.provider_id == "forge_deterministic"
+                    else Deployment.UNKNOWN
+                ),
+                revision_evidence_uids=(record.uid,),
+                validator_outcome=(
+                    VerificationOutcome.PASSED if record.validator_passed
+                    else VerificationOutcome.FAILED
+                ),
+                # build / test / runtime / visual は**この経路では測っていない**。
+                # 既定の `UNKNOWN` のままにする（`PASSED` へ倒さない）。
+                final_outcome=EpisodeOutcome.SUCCEEDED,
+                provenance=LearningDataProvenance.USER_CORRECTION,
+                training_use=TrainingUse.UNKNOWN,
+            )
+            episode.record_step(EpisodeStep(
+                kind=StepKind.REPAIR, name=record.patch_mode.value,
+                succeeded=True, references=(record.uid,),
+            ))
+            default_episode_store().start(episode)
+        except Exception:  # noqa: BLE001, S110 — 記録の失敗で確定を壊さない
+            pass
 
     # -- discard ----------------------------------------------------------
 
