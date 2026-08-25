@@ -395,12 +395,20 @@ class UpdateRequest(BaseModel):
     forge_document: dict[str, Any] = Field(..., description="更新対象の既存Forge Document(現在の状態そのまま)")
     change_request: str = Field(..., min_length=1, max_length=2000, description="ユーザーの変更要求(自然言語)")
     provider: Literal["mock", "gemini"] | None = None
+    artifact_id: str | None = Field(None, min_length=1)
+    seen_version_token: str | None = Field(None, min_length=1)
+    idempotency_key: str | None = Field(None, max_length=200)
 
 
 class UpdateResultDTO(BaseModel):
     forge_document: dict[str, Any]
     validation: ValidationResultDTO
     attempts: int
+    artifact: ArtifactRefDTO | None = None
+    revision_mode: Literal["local_semantic_patch", "full_regen_fallback"] = "full_regen_fallback"
+    semantic_operation: str | None = None
+    semantic_target: dict[str, str] | None = None
+    critic_passed: bool = False
 
 
 class UpdateSuccessResponse(BaseModel):

@@ -58,6 +58,7 @@ __all__ = [
     "DesignRevision",
     "RevisionEvidenceStore",
     "RevisionOperationKind",
+    "RevisionPatchMode",
     "RevisionRecord",
     "default_revision_store",
 ]
@@ -82,6 +83,11 @@ class RevisionOperationKind(str, Enum):
 
     UNKNOWN = "unknown"
     """**既定値。** 記録し損ねたものを楽観側へ倒さない。"""
+
+
+class RevisionPatchMode(str, Enum):
+    LOCAL_SEMANTIC_PATCH = "local_semantic_patch"
+    FULL_REGEN_FALLBACK = "full_regen_fallback"
 
 
 @dataclass(frozen=True)
@@ -146,6 +152,12 @@ class RevisionRecord:
 
     design_revisions: tuple[DesignRevision, ...] = ()
     """何をどう直したか。**生の発話は含まない。**"""
+
+    patch_mode: RevisionPatchMode = RevisionPatchMode.FULL_REGEN_FALLBACK
+    semantic_operation_ids: tuple[str, ...] = ()
+    fallback_reason: str | None = None
+    critic_passed: bool = False
+    visual_evidence_reference: str | None = None
 
     forge_language_version: str = ""
     recorded_at: float = 0.0
@@ -222,6 +234,11 @@ class RevisionRecord:
             "runtime_outcome": self.runtime_outcome.value,
             "user_acceptance": self.user_acceptance.value,
             "design_revisions": [r.to_dict() for r in self.design_revisions],
+            "patch_mode": self.patch_mode.value,
+            "semantic_operation_ids": list(self.semantic_operation_ids),
+            "fallback_reason": self.fallback_reason,
+            "critic_passed": self.critic_passed,
+            "visual_evidence_reference": self.visual_evidence_reference,
             "forge_language_version": self.forge_language_version,
             "recorded_at": self.recorded_at,
         }

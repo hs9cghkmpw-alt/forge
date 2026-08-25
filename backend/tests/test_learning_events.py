@@ -67,6 +67,28 @@ def _generation(
 
 
 class LearningBoundaryContractTests(unittest.TestCase):
+    def test_evaluation_context_snapshot_reproduces_policy_inputs_without_content(self) -> None:
+        service = LearningEventService(identity_provider=_TrustedIdentity())
+        event = service.observe(_generation())
+        consent = ConsentSnapshot.create({ConsentCategory.USAGE_STATISTICS: True})
+        context = ProjectionContext(
+            intelligence_scope=IntelligenceScope.GLOBAL,
+            data_residency=DataResidency.CLOUD_ELIGIBLE,
+            contribution_target=ContributionTarget.GLOBAL,
+            app_identity=AppIdentity("forge", AppTrustTier.FORGE_CORE),
+            training_use=TrainingUse.FORBIDDEN,
+            provider_terms_allow_training=False,
+        )
+        service.evaluate_for_export(event, consent=consent, context=context)
+        snapshot = service.evaluations[-1].context_snapshot
+        self.assertEqual(snapshot.training_use, TrainingUse.FORBIDDEN)
+        self.assertEqual(snapshot.app_trust_tier, AppTrustTier.FORGE_CORE)
+        self.assertTrue(snapshot.export_policy_version)
+        self.assertTrue(snapshot.training_policy_version)
+        forbidden = {"utterance", "message", "prompt", "raw_output", "conversation",
+                     "secret", "token", "artifact_handle", "version_token"}
+        self.assertTrue(forbidden.isdisjoint(snapshot.__dataclass_fields__))
+
     def test_event_has_no_raw_content_or_capability_handles(self) -> None:
         names = {item.name for item in dataclasses.fields(LearningEvent)}
         forbidden = {

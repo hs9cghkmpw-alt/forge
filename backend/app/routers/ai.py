@@ -47,9 +47,13 @@ from app.ai.runtime.confirmation_store import (
     default_confirmation_store,
 )
 from app.ai.gateway.ai_router import NoProviderAvailableError, default_router
-from app.ai.gateway.artifact_feedback import default_artifact_registry, default_feedback_service
-from app.ai.gateway.generation_evidence import default_generation_store
+from app.ai.gateway.artifact_feedback import EvidenceKind, default_artifact_registry, default_feedback_service
+from app.ai.gateway.generation_evidence import DesignDecisionSource, GenerationSource, RuntimeOutcome, default_generation_store
 from app.ai.gateway.learning_foundation import AcceptanceSignal
+from app.ai.gateway.revision_evidence import (
+    DesignRevision, RevisionOperationKind, RevisionPatchMode, RevisionRecord,
+    default_revision_store,
+)
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.runtime.conversation_engine import ConversationEngine
 from app.ai.runtime.conversation_metrics import record_conversation_event
@@ -61,6 +65,10 @@ from app.ai.runtime.conversation_types import (
     ConversationTurn,
 )
 from app.ai.runtime.forge_operation import ForgeOperationEngine
+from app.ai.runtime.semantic_revision import (
+    AppliedSemanticRevision, RevisionMode, TargetResolution,
+    TargetResolutionStatus, apply_semantic_intent,
+)
 from app.ai.runtime.injection_scan import scan_for_injection
 from app.ai.runtime.pipeline_errors import (
     ConfirmationSessionError,
@@ -704,6 +712,81 @@ def update(request: UpdateRequest):
     # **AIRouterを通す**。以前は`ProviderRouter.resolve()`を直接呼んで
     # おり、`/update`だけQuota切れのfallbackもCircuit Breakerも
     # 効いていなかった(Routerを作った後も繋いでいなかった箇所)。
+    semantic = apply_semantic_intent(request.forge_document, request.change_request)
+    if isinstance(semantic, AppliedSemanticRevision):
+        registry = default_artifact_registry()
+        capability = registry.resolve(request.artifact_id or "")
+        if capability is None:
+            raise UpdateOperationError("semantic revision requires a current artifact capability", stage="target_resolution")
+        if request.seen_version_token != capability.version_token:
+            raise UpdateOperationError("stale artifact version", stage="target_resolution")
+        revisions = default_revision_store()
+        previous_revision_ref = None
+        if capability.evidence_id.kind is EvidenceKind.REVISION:
+            previous = revisions.get(capability.evidence_id.ref)
+            if previous is None:
+                raise UpdateOperationError("revision evidence is unavailable", stage="target_resolution")
+            base_generation_ref, previous_revision_ref = previous.base_generation_ref, previous.ref
+        else:
+            base_generation_ref = capability.evidence_id.ref
+            if default_generation_store().get(base_generation_ref) is None:
+                raise UpdateOperationError("generation evidence is unavailable", stage="target_resolution")
+        target = semantic.operation.target
+        before_role = ""
+        stack = list(request.forge_document.get("screens", ()))
+        while stack:
+            node = stack.pop()
+            if isinstance(node, dict):
+                if node.get("id") == target.widget_id:
+                    before_role = str(node.get("style_role") or "")
+                stack.extend(node.values())
+            elif isinstance(node, list):
+                stack.extend(node)
+        stored = revisions.record(RevisionRecord(
+            base_generation_ref=base_generation_ref,
+            previous_revision_ref=previous_revision_ref,
+            sequence=1 + sum(r.base_generation_ref == base_generation_ref for r in revisions.all_records()),
+            operation_kind=RevisionOperationKind.DESIGN,
+            source=GenerationSource.COMPOSITION,
+            validator_passed=True, runtime_outcome=RuntimeOutcome.UNKNOWN,
+            design_revisions=(DesignRevision(
+                screen_id=target.screen_id, target_id=target.widget_id,
+                axis="primary_metric", before=before_role, after="metric.primary",
+                source=DesignDecisionSource.USER_CORRECTION,
+            ),),
+            patch_mode=RevisionPatchMode.LOCAL_SEMANTIC_PATCH,
+            semantic_operation_ids=(semantic.operation.kind.value,),
+            critic_passed=True,
+            visual_evidence_reference="docs/visual-evidence/FORGE-019/manifest.md",
+            forge_language_version=str(semantic.document.get("version") or ""),
+        ))
+        correction = default_feedback_service().record(
+            signal=AcceptanceSignal.CORRECTED, artifact_id=request.artifact_id,
+            seen_version_token=request.seen_version_token,
+            idempotency_key=request.idempotency_key or "",
+        )
+        if not correction.recorded:
+            raise UpdateOperationError("correction evidence could not be recorded", stage="revision_evidence")
+        advanced = registry.advance_to_revision(
+            handle=capability.handle, revision_ref=stored.ref, revision_uid=stored.uid,
+        )
+        return UpdateSuccessResponse(result=UpdateResultDTO(
+            forge_document=semantic.document,
+            validation=ValidationResultDTO(
+                valid=True, errors=[],
+                warnings=[ValidationIssueDTO(**w.to_dict()) for w in semantic.validation.warnings],
+            ), attempts=1, artifact=ArtifactRefDTO(**advanced.to_client_dict()),
+            revision_mode=RevisionMode.LOCAL_SEMANTIC_PATCH.value,
+            semantic_operation=semantic.operation.kind.value,
+            semantic_target={"screen_id": target.screen_id, "widget_id": target.widget_id,
+                             "semantic_identity": target.semantic_identity},
+            critic_passed=True,
+        ))
+    if isinstance(semantic, TargetResolution) and semantic.status in {
+        TargetResolutionStatus.AMBIGUOUS, TargetResolutionStatus.NEEDS_CLARIFICATION,
+    }:
+        raise UpdateOperationError(semantic.reason, stage="target_resolution")
+
     provider = default_router().bind(ForgeTask.FORGE_LANGUAGE_UPDATE, provider=request.provider)
     try:
         result = ForgeOperationEngine(provider).apply_update(

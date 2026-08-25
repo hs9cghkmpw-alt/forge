@@ -434,6 +434,22 @@ class ArtifactRegistry:
     def resolve(self, handle: str) -> ArtifactHandle | None:
         return self._by_handle.get(handle)
 
+    def advance_to_revision(
+        self, *, handle: str, revision_ref: int, revision_uid: str
+    ) -> ArtifactHandle:
+        """Advance one capability and invalidate the version the user saw."""
+        current = self._by_handle.get(handle)
+        if current is None:
+            raise KeyError("unknown artifact capability")
+        advanced = ArtifactHandle(
+            handle=current.handle,
+            evidence_id=ArtifactEvidenceId(EvidenceKind.REVISION, revision_uid, revision_ref),
+            version_token=new_version_token(), session_id=current.session_id,
+            created_at=float(self._now()),
+        )
+        self._by_handle[handle] = advanced
+        return advanced
+
     def latest_for_session(self, session_id: str) -> ArtifactHandle | None:
         handle = self._latest_by_session.get(session_id)
         return self._by_handle.get(handle) if handle else None

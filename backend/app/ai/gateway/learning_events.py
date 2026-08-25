@@ -24,6 +24,8 @@ from app.ai.gateway.learning_foundation import AcceptanceSignal
 SCHEMA_VERSION = "1"
 PRIVACY_POLICY_VERSION = "1"
 SANITIZER_VERSION = "1"
+EXPORT_POLICY_VERSION = "1"
+TRAINING_POLICY_VERSION = "1"
 
 
 class TrainingUse(str, Enum):
@@ -304,6 +306,38 @@ class LearningEventEvaluationRecord:
     training_eligible: bool
     training_reasons: tuple[str, ...]
     created_at: float
+    context_snapshot: "EvaluationContextSnapshot"
+
+
+@dataclass(frozen=True)
+class EvaluationContextSnapshot:
+    """Privacy-safe facts needed to reproduce an evaluation decision."""
+
+    intelligence_scope: IntelligenceScope
+    data_residency: DataResidency
+    contribution_target: ContributionTarget
+    app_trust_tier: AppTrustTier
+    app_id: str | None
+    training_use: TrainingUse
+    provider_terms_allow_training: bool | None
+    consent_policy_version: str
+    privacy_policy_version: str
+    sanitizer_version: str
+    export_policy_version: str
+    training_policy_version: str
+
+    @classmethod
+    def capture(cls, context: ProjectionContext, consent: ConsentSnapshot) -> "EvaluationContextSnapshot":
+        identity = context.app_identity
+        return cls(
+            context.intelligence_scope, context.data_residency,
+            context.contribution_target,
+            identity.trust_tier if identity else AppTrustTier.UNTRUSTED,
+            identity.app_id if identity else None,
+            context.training_use, context.provider_terms_allow_training,
+            consent.policy_version, PRIVACY_POLICY_VERSION, SANITIZER_VERSION,
+            EXPORT_POLICY_VERSION, TRAINING_POLICY_VERSION,
+        )
 
 
 @dataclass(frozen=True)
@@ -604,6 +638,7 @@ class LearningEventService:
         self.evaluations.append(LearningEventEvaluationRecord(
             event.event_id, consent.snapshot_id, decision.eligible,
             decision.reasons, not training_reasons, training_reasons, now,
+            EvaluationContextSnapshot.capture(context, effective_consent),
         ))
         if decision.eligible and contributor_id:
             self.outbox.append(CloudLearningEnvelope(
