@@ -91,7 +91,7 @@
 | 対象 | 件数 | 状態 |
 |---|---|---|
 | `forge_ai/tests` | **521** | 全green |
-| `backend/tests` | **1,706**(skip 16) | 全green。skip のうち3件はLive API Test、既定SKIP |
+| `backend/tests` | **1,708**(skip 16) | 全green。skip のうち3件はLive API Test、既定SKIP |
 | `frontend`(Flutter) | **514** | 全green |
 | `flutter analyze --fatal-infos --fatal-warnings` | 0件 | No issues found |
 | `flutter build web --debug` | — | 成功 |

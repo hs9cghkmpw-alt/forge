@@ -499,6 +499,10 @@ class RevisionService:
                 idempotency_key=idempotency_key, full_regen=full_regen,
             )
         # **lock の外で投影する。** 他の要求を待たせながら外へ出て行かない。
+        #
+        # 「commit したのに投影の口へ渡らない」を防ぐのは `_record()` の
+        # 責務である（そこが UoW を持っている）。ここに同じ判断をもう1つ
+        # 置かない——二重の守りは、mutation で有無を確かめられなくする。
         uow.project()
         _ = identity
         return outcome
@@ -790,13 +794,29 @@ class RevisionService:
             uow.discard()
             raise
 
-        outcome = RevisionOutcome(
-            document=revised, validation=validation, record=committed.record,
-            handle=committed.handle,
-            mode=mode, critic_passed=critic_passed, attempts=attempts,
-            operation_id=operation_id, target=target, fallback_reason=fallback_reason,
-            revision_provider=revision_provider,
-        )
+        # --- 4. 確定後 ------------------------------------------------
+        #
+        # **ここから先で落ちても、投影の口へは必ず渡す。**
+        #
+        # `commit()` を通ったあとに何かが落ちると、事実は残っているのに
+        # Outbox へ1件も入らない——`pending` ですらないので `drain()` でも
+        # 拾えず、Learning Event は永久に出ない。
+        #
+        # §3.2（投影段が落ちる）は `pending` として残るので retry できる。
+        # こちらは**投影を試してもいない**ので、性質はより悪い。
+        try:
+            outcome = RevisionOutcome(
+                document=revised, validation=validation, record=committed.record,
+                handle=committed.handle,
+                mode=mode, critic_passed=critic_passed, attempts=attempts,
+                operation_id=operation_id, target=target,
+                fallback_reason=fallback_reason,
+                revision_provider=revision_provider,
+            )
+        except BaseException:
+            # `project()` 自身は例外を外へ出さない（失敗すれば pending）。
+            uow.project()
+            raise
         _ = stored
         return outcome, uow
 

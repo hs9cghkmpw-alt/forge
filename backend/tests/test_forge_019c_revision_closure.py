@@ -44,6 +44,7 @@ from app.ai.gateway.artifact_feedback import (  # noqa: E402
 )
 from app.ai.gateway.generation_evidence import default_generation_store  # noqa: E402
 from app.ai.gateway.learning_events import default_learning_event_service  # noqa: E402
+from app.ai.gateway.learning_outbox import default_projection_outbox  # noqa: E402
 from app.ai.gateway.revision_evidence import default_revision_store  # noqa: E402
 from app.ai.runtime.revision_service import (  # noqa: E402
     default_replay_log,
@@ -119,6 +120,9 @@ class _RevisionCase(unittest.TestCase):
             default_generation_store(), default_revision_store(),
             default_artifact_registry(), default_feedback_log(),
             default_learning_event_service(), default_replay_log(),
+            # **投影の記録もプロセス内グローバルである。** ここで消さないと
+            # 前のテストが残した entry が次のテストへ漏れる（実際に漏れた）。
+            default_projection_outbox(),
         ):
             store.reset()
         self.client = TestClient(app)
@@ -284,8 +288,6 @@ class TestProjectionFailureDoesNotFailTheRevision(_RevisionCase):
 
     def test_the_projection_is_pending_not_lost(self) -> None:
         """**落ちた投影は「無かったこと」にしない。** 保留として残す。"""
-        from app.ai.gateway.learning_outbox import default_projection_outbox
-
         artifact = self.provision()
         with self._inject_projection_failure():
             self.update(artifact)
@@ -295,8 +297,6 @@ class TestProjectionFailureDoesNotFailTheRevision(_RevisionCase):
         self.assertTrue(all(entry.attempts >= 1 for entry in pending))
 
     def test_a_retry_projects_exactly_once(self) -> None:
-        from app.ai.gateway.learning_outbox import default_projection_outbox
-
         artifact = self.provision()
         with self._inject_projection_failure():
             self.update(artifact)
@@ -319,14 +319,73 @@ class TestProjectionFailureDoesNotFailTheRevision(_RevisionCase):
 
     def test_the_outbox_never_holds_a_client_handle(self) -> None:
         """Outbox は**capability を持たない**（§6）。"""
-        from app.ai.gateway.learning_outbox import default_projection_outbox
-
         artifact = self.provision()
         self.update(artifact)
         for entry in default_projection_outbox().all_entries():
             rendered = repr(entry.to_dict())
             self.assertNotIn(artifact.artifact_id, rendered)
             self.assertNotIn(artifact.version_token, rendered)
+
+
+class TestCommittedWorkAlwaysReachesTheOutbox(_RevisionCase):
+    """**確定したものは必ず投影の口へ渡す。**
+
+    ---
+
+    ## 狭いが、B と同じ形の穴
+
+    `commit()` を通ったあと `project()` へ着くまでの間で何かが落ちると、
+    事実は残っているのに **Outbox へ1件も入らない**。`pending` ですら
+    ないので `drain()` でも拾えず、Learning Event は永久に出ない。
+
+    B（投影段が落ちる）は `pending` として残るので retry できる。
+    こちらは**投影を試してもいない**状態なので、性質はより悪い。
+
+    確定と投影の食い違いという意味では同じ穴なので、同じ強さで塞ぐ。
+    """
+
+    def test_a_failure_after_commit_still_enqueues_the_projection(self) -> None:
+        from unittest.mock import patch
+
+        from app.ai.runtime import revision_service as module
+
+        artifact = self.provision()
+
+        def _explode(**kwargs):  # noqa: ANN003, ANN202, ARG001
+            msg = "something between commit and project"
+            raise RuntimeError(msg)
+
+        with patch.object(module, "RevisionOutcome", _explode),                 self.assertRaises(RuntimeError):
+            self.update(artifact)
+
+        # 事実は確定している（commit は通った）。
+        self.assertEqual(len(default_revision_store().all_records()), 1)
+        self.assertEqual(default_feedback_log().size(), 1)
+        # **だから投影の口にも渡っていなければならない。**
+        self.assertTrue(
+            default_projection_outbox().all_entries(),
+            "確定したのに Outbox へ1件も入っていない（投影を試してもいない）",
+        )
+
+    def test_a_failure_before_commit_enqueues_nothing(self) -> None:
+        """**逆に、確定していないものは渡さない。**"""
+        from unittest.mock import patch
+
+        from app.ai.gateway.artifact_feedback import ArtifactCasConflict
+
+        artifact = self.provision()
+
+        def _conflict(self_registry, **kwargs):  # noqa: ANN001, ARG001
+            raise ArtifactCasConflict
+
+        with patch(
+            "app.ai.gateway.artifact_feedback.ArtifactRegistry.advance_to_revision",
+            _conflict,
+        ):
+            response = self.update(artifact)
+
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(default_projection_outbox().all_entries(), ())
 
 
 # ---------------------------------------------------------------------------

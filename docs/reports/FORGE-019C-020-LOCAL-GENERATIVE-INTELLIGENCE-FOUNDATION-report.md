@@ -250,7 +250,7 @@ Episode を本番へ配線したのは、「Agent が動いたときだけ記録
 
 | | LOCAL（今回の実測） |
 |---|---|
-| backend | **1,706 passed / 16 skipped** |
+| backend | **1,708 passed / 16 skipped** |
 | forge_ai | **521 passed** |
 | Flutter test | **514 passed** |
 | `flutter analyze --fatal-infos --fatal-warnings` | **No issues found** |
@@ -286,11 +286,11 @@ backend は LOCAL `1,706 / 16` に対し CI `1,705 / 17`。
 
 ### guard の内訳（混ぜない）
 
-今回追加したテストは **186 件**。内訳:
+今回追加したテストは **188 件**。内訳:
 
 | file | 件数 |
 |---|---|
-| `test_forge_019c_revision_closure.py` | 23 |
+| `test_forge_019c_revision_closure.py` | 25 |
 | `test_forge_019c_outbox_and_cas.py` | 24 |
 | `test_forge_019c_operation_support.py` | 14 |
 | `test_forge_020_agent_security.py` | 55 |
@@ -301,9 +301,9 @@ backend は LOCAL `1,706 / 16` に対し CI `1,705 / 17`。
 
 | 種類 | 数 | 何を見ているか |
 |---|---|---|
-| behavior guards | **178** | 実際に動かして結果を見る |
+| behavior guards | **180** | 実際に動かして結果を見る |
 | static protocol checks | **8** | enum の網羅・policy の key の形・本番から参照されていないこと・docstring |
-| **real source mutation rounds** | **22** | ソースを壊して落ちることを確認 |
+| **real source mutation rounds** | **23** | ソースを壊して落ちることを確認 |
 
 static protocol checks の内訳: 未分類 enum の検出 / 型の無い操作が
 `RESERVED` であること / policy の key の形 / Novel の配点に Widget数が
@@ -312,7 +312,7 @@ static protocol checks の内訳: 未分類 enum の検出 / 型の無い操作�
 
 ### mutation（§35）
 
-22 round すべてで、ソースを壊すと落ち、戻すと通ることを確認した。
+23 round すべてで、ソースを壊すと落ち、戻すと通ることを確認した。
 
 | id | 壊したもの | 結果 |
 |---|---|---|
@@ -338,6 +338,21 @@ static protocol checks の内訳: 未分類 enum の検出 / 型の無い操作�
 | M20 | 1回の成功で Capability を昇格 | KILLED |
 | M21 | 本番の Episode 記録を外す | KILLED |
 | M22 | ジャンル専用 template を Knowledge にする | KILLED |
+| M23 | **commit 後に落ちても投影の口へ渡す**守りを外す | KILLED |
+
+#### M23 は、この報告を書きながら見つけた穴である
+
+`commit()` を通ったあと `project()` へ着くまでの間で落ちると、事実は
+残っているのに **Outbox へ1件も入らない**——`pending` ですらないので
+`drain()` でも拾えず、Learning Event は永久に出ない。
+
+§3.2（投影段が落ちる）は `pending` として残るので retry できる。
+こちらは**投影を試してもいない**ので性質はより悪い。同じ形の穴なので
+同じ強さで塞いだ。
+
+守りを置く場所は**1箇所だけ**にした（UoW を持っている `_record()`）。
+最初は `_guarded()` にも置いたが、それだと M6 と同じで
+**mutation でどちらを壊しても落ちない**。
 
 #### 3 round は最初 SURVIVED だった（そのまま報告しない）
 

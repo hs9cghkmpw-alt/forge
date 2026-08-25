@@ -75,11 +75,11 @@ Ollama / llama.cpp / torch 未インストール、GPU 無し、かつ
 
 ### Tests（LOCAL）
 
-backend 1,706 passed / 16 skipped、forge_ai 521 passed、
+backend 1,708 passed / 16 skipped、forge_ai 521 passed、
 Flutter test 514 passed、`flutter analyze` No issues、
 `flutter build web --debug` 成功、backend smoke 成功。
-behavior guards 178 / static protocol checks 8 /
-**real source mutation rounds 22（全 KILLED）**。
+behavior guards 180 / static protocol checks 8 /
+**real source mutation rounds 23（全 KILLED）**。
 
 ## 2026-08-25 — FORGE-019B Revision Transaction / Retry / Provider Evidence
 

@@ -115,7 +115,7 @@ Flutter Host / 会話
 
 | | LOCAL（今回の実測） |
 |---|---|
-| backend | **1,706 passed / 16 skipped** |
+| backend | **1,708 passed / 16 skipped** |
 | forge_ai | **521 passed** |
 | Flutter test | **514 passed** |
 | `flutter analyze --fatal-infos --fatal-warnings` | **No issues found** |
@@ -140,11 +140,14 @@ Flutter Host / 会話
 
 | guard の種類 | 数 |
 |---|---|
-| behavior guards | **178** |
+| behavior guards | **180** |
 | static protocol checks | **8** |
-| **real source mutation rounds** | **22** |
+| **real source mutation rounds** | **23** |
 
-22 round すべて KILLED。**うち3 round は最初 SURVIVED だった。**
+23 round すべて KILLED。**うち3 round は最初 SURVIVED だった。**
+
+M23 は報告を書きながら見つけた穴である——「commit したのに投影の口へ
+1件も渡らない」。`pending` ですら無いので retry でも拾えない。
 
 - M10 は**本物の置物**だった（表と実装のずれを1本も検査していなかった）
 - M6 は**冗長な守り**を壊していた（判断を1箇所へまとめてから再実行）
