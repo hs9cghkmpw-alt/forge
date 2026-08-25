@@ -1,59 +1,149 @@
 # Forge Handoff
 
 - Branch: `claude/forge-master-handoff-k46jns`
-- Start HEAD: `07bb8af6395d64a096c7298c226fafa61f6da0a6`
-- Final implementation/docs HEAD reviewed by CI: `5646a2e224edd04e688f690d75ca0c9f5715802a`
+- Start HEAD: `479c0faaf5e3deacd4f2b29ae029dc0f9578f57a`
+- Implementation Agent: Claude Code（前任は Codex）
 - Current phase: R1 Generated App Quality / Growing AI
-- Current task: FORGE-019 Semantic Design Revision + Visual Dev Loop v1 — implementation complete, CI review pending
+- Current task: **FORGE-019A Revision Integrity Hardening — 実装完了、CI確認待ち**
+- Real Local Model runs: **0**（019Aでは起動しない。正しい状態）
 
-## Implemented
+---
 
-- Added a closed typed semantic-operation layer and Forge-owned `TargetResolver`.
-- Production `/update` resolves 「残高をもっと目立たせて」 to `select_primary_metric`, performs a deep-copy local patch, and runs Forge Validator plus Semantic Design Critic.
-- Added optimistic concurrency with frontend-held artifact capability and rotating version token. Old tokens fail closed.
-- `/update` records CORRECTED feedback, a structured `RevisionRecord`, and a local `REVISION` Learning Event. Artifact handles never enter Learning Events.
-- Added privacy-safe `EvaluationContextSnapshot` with consent/privacy/sanitizer/export/training policy lineage.
-- Flutter preserves artifact identity and Forge Host exposes 「これでOK」「直したい」. Correction is recorded only after request submission.
-- Added one-command dev startup, deterministic visual capture, Golden Finance Before/After images, and the permanent AGENTS visual-review rule.
+## 何をしたか
+
+独立レビューが挙げた5つのBlocking項目は、**すべて実コードで再現できた**。
+塞いだ上で、Visual Evidence の二重 Source of Truth と Flutter の冪等キー
+の向きも直した。
+
+| § | 穴 | 直した形 |
+|---|---|---|
+| 1 | handle と token が正しければ**別のDocument**でも通った | `document_binding`（プロセス内鍵のHMAC）。無ければ通さない |
+| 2 | `/converse` の UPDATE だけ旧経路で、記録が1件も残らなかった | `RevisionService` を1つ作り両方の入口を通した |
+| 3 | 本番の RevisionRecord へ**偽のVisual Evidence**が固定で入っていた | 本番は `None`。実際に撮ったときだけ明示的に付ける |
+| 4 | 「直してと言われた」だけで教師データ候補になった | Feedback列をjoinして判定。記録は書き換えない |
+| 5 | 全体再生成fallbackが lineage を1件も残さなかった | 同じ Service を通す。局所patchのふりはしない |
+| 6 | mutation に source-string check が混ざっていた | behavior guard へ書き換え、3種類を別々に数える |
+| 7 | Visual Evidence の After が手書きで、実装とずれても気付けなかった | 本番の `RevisionService` から生成する |
+| 8 | Flutter の冪等キーが**再送のたびに変わって**いた | 同じ操作は同じキー。成功したら捨てる |
+
+### レビュー指摘外で見つけたもの
+
+- **何も変えない変更が記録されていた。** 生成直後の家計簿は残高が既に
+  主KPIなので「残高を目立たせて」は変えるものが無い。それを成功として
+  記録すると、直していないのに「直して受け入れられた」という嘘の教師
+  信号を作れてしまう。`no_change` で断るようにした
+- **019 の Before fixture は本番の Validator に通らない文書だった**
+  （`negative_when` に `sign_field` が無い）。Dart 側は `fromJson` が
+  通ることしか見ていなかった。**019のスクリーンショットは不正な文書を
+  描いたもの**である
+
+---
 
 ## Production wiring
 
-`Flutter Host → artifact/version → POST /update → TargetResolver → SelectPrimaryMetric → local patch → Validator → Semantic Design Critic → RevisionEvidenceStore.record → REVISION LearningEvent → CORRECTED FeedbackEvent → rotated artifact token → Flutter render`.
+```
+Flutter Host / 会話
+  → artifact capability（handle）
+  → version token（世代）
+  → document binding（中身の身元）      ← 019A §1
+  → TargetResolver / 全体再生成fallback
+  → Forge Validator
+  → Semantic Design Critic
+  → RevisionRecord（lineage）
+  → CORRECTED FeedbackEvent
+  → REVISION LearningEvent
+  → 新しい artifact version
+  → Flutter render
+```
 
-Full-regeneration remains an explicit fallback only for unsupported semantic intents. Ambiguous and missing targets fail closed instead of guessing.
+`/update` と `/converse` の UPDATE は**同じ `RevisionService`** を通る。
+`ForgeOperationEngine` の呼び出しが router 内に1箇所だけであることを
+テストで固定した。
 
-## Tests and evidence
+---
 
-- Backend: 1,448 passed, 17 skipped (`FORGE_DEFAULT_PROVIDER=mock`).
-- forge_ai: 521 passed.
-- Flutter: 510 passed.
-- `flutter analyze`: PASS, no issues.
-- `flutter build web`: PASS.
-- Golden Finance screenshots: 390×844, inspected by Codex; no overlap, clipping, overflow, or broken alignment. Balance becomes the largest metric while unrelated content stays unchanged.
-- Mutation guards: 15/15 passed. A real temporary resolver miswiring produced the expected FAIL, was restored, then 20 focused tests passed.
+## Tests / Evidence
 
-## Intentional break / mutation
+| | 結果 |
+|---|---|
+| backend | **1,496 passed / 16 skipped** |
+| forge_ai | **521 passed** |
+| ruff（変更ファイル） | All checks passed |
+| flutter test / analyze / build web | **UNVERIFIED**（この環境にSDKが無い） |
+| CI 4 job | push 後に確認する |
 
-The resolver mapping was intentionally changed from `残高 → balance` to `残高 → income`. The primary-target test failed (`metric.secondary != metric.primary`). The source was restored and all focused tests passed. Fifteen named guards cover resolver bypass, full rebuild, wrong target, stale token, Revision/Learning wiring, consent, privacy, evaluation lineage, visual capture, before/after difference, unrelated subtree, Validator, Critic, and AGENTS protocol.
+| guard の種類 | 数 |
+|---|---|
+| behavior guards | **56** |
+| static protocol checks | **6** |
+| real source mutation rounds | **10** |
 
-## CI
+10 round すべてで、ソースを壊すと落ち、戻すと通ることを確認した
+（一覧は report §10）。
 
-GitHub Actions run `32811724667` for `5646a2e` completed successfully: backend smoke, backend + forge_ai Python 3.11, backend + forge_ai Python 3.12, and Flutter were all green. Run: https://github.com/hs9cghkmpw-alt/forge/actions/runs/32811724667
+---
 
-## Unverified / Technical Debt
+## Visual
 
-- Browser capture renders the real production Flutter renderer but does not yet drive live `/update` and capture its response in the same browser automation session.
-- Runtime outcome remains `UNKNOWN`; screenshots prove the curated visual scenario rendered, but there is no authenticated runtime callback binding that fact to the RevisionRecord.
-- Artifact registry/evidence/outbox are still process memory. Auth, subject binding, RLS, server-issued contributor identity, durable outbox, Supabase Learning tables, and cloud network export remain unimplemented.
-- Full-regeneration fallback does not yet create the richer FORGE-019 RevisionRecord fields.
-- Actual open-weight Local Model runs remain 0.
+- `docs/visual-evidence/FORGE-019A/` — Before/After/provenance の JSON は
+  **本番の `RevisionService` が出したもの**。commit されている After が
+  いまの出力と一致するかを `test_visual_fixture_provenance.py` が見る
+  ので、実装が変わって絵が古くなれば **CI が落ちる**
+- `revision-preview.html` — 本番の `after.json` と実コードの role 実装値・
+  テーマ定数から起こした作図
+
+### Visual Review は UNVERIFIED
+
+**この環境に Flutter SDK が無く、実描画を見ていない。** AGENTS.md の
+「実描画を見ていなければ `UNVERIFIED`」「PNGを生成しただけを Visual
+Review と呼ばない」に照らし、**作図を作っただけの今回も Visual Review
+とは呼べない**。
+
+実描画できる環境でやること: `python scripts/export_revision_visual_fixture.py`
+→ `scripts/start_dev.ps1` → `scripts/capture_forge_019_visual.ps1` →
+画像を開いて overlap / overflow / clipping / alignment / spacing /
+hierarchy / mobile usability / primary metric visibility を確認。
+
+---
+
+## UNVERIFIED
+
+- Flutter 一式（test / analyze / build web / 実描画・撮影）
+- 実 Cloud Provider での往復（実APIを呼んでいない）
+- ブラウザ自動操作で `/update → render → feedback` を1セッションで回すこと
+- Runtime outcome は `UNKNOWN` のまま（描画できた事実を RevisionRecord へ
+  結びつける認証付きコールバックが無い）
+
+---
+
+## Technical Debt
+
+- `ArtifactRegistry` / Evidence / outbox は**プロセス内メモリ**。再起動で
+  capability が失効し、Revision の連鎖が切れる
+- `document_binding` の鍵はプロセス内。複数プロセス構成では共有されない
+- Auth / subject binding / RLS / server-issued contributor identity /
+  durable outbox / Supabase Learning tables 未実装
+  （`unguessable != authorized` のまま）
+- **`evaluate_for_export()` を本番から呼ぶ経路が無い。** DatasetCandidate
+  は現状テストからしか生まれない
+- mock の全体再生成出力がスイート順序に依存する（原因未特定）
+- 019 の PNG が不正な Before から撮られている。差し替えが要る
+
+---
 
 ## Next task
 
-FORGE-020 — Real Local Model Runtime + Benchmark / Local Promotion v1, unless independent review finds a blocking FORGE-019 hardening issue.
+**FORGE-020 — Real Local Model Runtime + Benchmark + Local Promotion
+Gate v1。** 019A が独立レビューで GO になってから着手する。
+
+Local Promotion Gate 自体は 017A で配線済み（`AIRouter._order()` から
+呼ばれる）だが、**昇格する Provider は現在0件**である——実測が1件も
+無いため。020 でそこへ実データを入れる。
 
 ## Next three moves
 
-1. Independent review of the pushed HEAD, diff, production E2E, screenshots, tests, and CI.
-2. Harden the visual runner into a browser-driven `/update → render → feedback` scenario and add runtime-result acknowledgement.
-3. Start FORGE-020 only after FORGE-019 receives GO.
+1. push した HEAD / diff / tests / CI を独立レビューで確認する
+2. Flutter のある環境で `flutter analyze` / `test` / `build web` と
+   実描画・撮影を行い、`docs/visual-evidence/FORGE-019A/manifest.md` の
+   UNVERIFIED を更新する
+3. GO が出たら FORGE-020 へ進む

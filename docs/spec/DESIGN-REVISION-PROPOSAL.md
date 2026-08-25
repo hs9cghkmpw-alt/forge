@@ -5,6 +5,51 @@
 
 ---
 
+## FORGE-019A hardened v1.1 (2026-08-25)
+
+019 の v1 は「変更を意味的に扱う」ところまでで、**その記録が本物である
+保証**が足りていなかった。019A で次を加えた。
+
+### 変更が通るための3つの照合
+
+```
+artifact capability（handle）  誰が直そうとしているか
+version token（世代）          いつの版を見ているか
+document binding（中身の身元）  それは本当にその生成物か   ← 019A
+```
+
+`document_binding` はプロセス内鍵の HMAC-SHA256 である。
+`document_fingerprint()`（salt無しsha256）を使わないのは、内容が同じ
+なら誰が作っても同じ値になり、低entropyな内容は総当たりで言い当てられる
+ため（017A §4 と同じ理由）。**Client にも Learning Event にも出さない。**
+
+**束縛が無ければ通さない。** 生成時と Revision 後の両方でその時点の
+文書へ束縛し直すので、連鎖は切れない。
+
+### 入口は1つ（`RevisionService`）
+
+`/update` と `/converse` の UPDATE は同じ Service を通る。019 では
+`/converse` だけが旧 `ForgeOperationEngine` へ流れており、**会話（本線）
+だけが Evidence を1件も残していなかった**。
+
+全体再生成 fallback も同じ Service を通る。`patch_mode` と
+`fallback_reason` で区別し、**Critic を通していないものを PASS と
+報告しない**。
+
+### 何も変えない変更は断る
+
+生成直後の家計簿は残高が既に主KPIなので「残高を目立たせて」は変える
+ものが無い。それを成功として記録すると、**直していないのに「直して
+受け入れられた」**という嘘の教師信号を作れてしまう。`no_change` で断る。
+
+### Visual Evidence は本番の出力から作る
+
+Before だけを手書きし、After は本番の `RevisionService` が返した文書を
+使う。`scripts/export_revision_visual_fixture.py` が生成し、
+`backend/tests/test_visual_fixture_provenance.py` が実装とのずれを見る。
+
+---
+
 ## FORGE-019 implemented v1 (2026-08-25)
 
 Production supports `SelectPrimaryMetric` through `TargetResolver → local semantic patch → Validator → Semantic Design Critic`. The resolver uses semantic widget identity and never accepts an LLM-authored JSON path. Ambiguous/missing targets fail closed; unsupported intent is explicitly `FULL_REGEN_FALLBACK`. `/update` checks artifact/version, records RevisionEvidence, emits a local REVISION LearningEvent, and rotates the token. Runtime acknowledgement and additional operations remain future work.

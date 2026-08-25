@@ -1,5 +1,46 @@
 # CHANGELOG
 
+## 2026-08-25 — FORGE-019A Revision Integrity Hardening
+
+独立レビューが挙げた5つのBlocking項目は**すべて実コードで再現できた**。
+
+- **§1 Document binding.** `artifact_id` と `version_token` が正しければ
+  **別のDocument**でも通っていた。handle を持っている人が任意のJSONを
+  「Forgeが生成したものを直した」ことにできた（Revision lineage 汚染）。
+  プロセス内鍵の HMAC で束縛し、無ければ通さない（fail closed）。
+  束縛は Client にも Learning Event にも出さない。
+- **§2 単一の RevisionService.** `/converse` の UPDATE だけが旧
+  `ForgeOperationEngine` へ直接流れ、記録が1件も残らなかった。会話が
+  Forgeの本線なので、**実機で最もよく使われる直し方だけがEvidenceを
+  持っていなかった**。両方の入口を1つの Service へ通した。
+- **§3 偽の Visual Evidence.** 本番の RevisionRecord へ FORGE-019 の
+  manifest パスが固定で入っていた。本番は `None` にし、実際に撮った
+  ときだけ明示的に付ける。
+- **§4 Revision acceptance の join.** 「直してと言われた」だけで教師
+  データ候補になっていた。区別せずに入れると「利用者が不満を言った
+  回数」を「うまく直せた回数」として学習し、しかも**下手な直し方ほど
+  多く残る**。Feedback列をjoinして判定する。記録は書き換えず、後から
+  否定されたら DatasetCandidate を REVOKED にする。
+- **§5 fallback の lineage.** 全体再生成が Evidence を1件も残していな
+  かった。同じ Service を通し、局所patchのふりもしない。
+- **§6 guard の数え方.** source-string check を behavior guard へ書き
+  換えた。behavior 56 / static 6 / real source mutation 10。
+- **§7 Visual Evidence.** After の手書きをやめ、本番の `RevisionService`
+  から生成する。commit された絵と実装がずれれば CI が落ちる。
+- **§8 Flutter の冪等キー.** 再送のたびに別のキーになっていた（意味が
+  正反対）。同じ操作は同じキー、成功したら捨てる。
+
+レビュー指摘外で見つけたもの:
+
+- **何も変えない変更が記録されていた。** 直していないのに「直して
+  受け入れられた」という嘘の教師信号を作れてしまうので、`no_change`
+  で断るようにした。
+- **019 の Before fixture は本番の Validator に通らない文書だった。**
+  つまり019のスクリーンショットは不正な文書を描いたもの。
+
+backend 1,496 passed / forge_ai 521 passed。
+Flutter 一式と実描画は **UNVERIFIED**（この環境に SDK が無い）。
+
 ## 2026-08-25 — FORGE-019
 
 - Added typed semantic target resolution and local primary-metric patching to production `/update`.

@@ -145,6 +145,54 @@ Consentを出していない利用者のローカル記録は**性質が変わ�
 
 ---
 
+## 2.9 REVISION の Dataset 適格性は**joinで決める**（FORGE-019A §4）
+
+`/update` は Revision 記録時に**元の生成物へ** CORRECTED を書く。それは
+「元は外していた」という事実であって、**直した結果が良かったことは1つも
+言っていない**。
+
+```
+Generation → CORRECTED → Revision → ACCEPTED      ✅ 正例
+Generation → CORRECTED → Revision → （無言）       ❌ 分からない
+Generation → CORRECTED → Revision → CORRECTED     ❌ 直しても外した
+```
+
+区別せずに正例へ入れると、**「利用者が不満を言った回数」を「うまく
+直せた回数」として学習する**。しかも直せなかったケースほど `/update`
+が多く呼ばれるので、**下手な直し方ほど教師データに多く残る**という
+逆向きの偏りが生まれる。
+
+`resolve_revision_acceptance(evidence_uid)` が Feedback 列の**最後の
+信号**を見る。判定は評価時に毎回引き直すので、あとで承認が届けば
+適格になる。
+
+### 記録は書き換えない
+
+後から否定されたときに取り下げるのは `DatasetCandidate`
+（**Forge の判断**）であって、Learning Event（**事実**）ではない。
+判断は後から変わってよいが、事実は変わらない。この2つを分けておかないと、
+「あとで否定された」を表すために記録を書き換えることになる。
+
+追加される拒否理由:
+
+| reason | 意味 |
+|---|---|
+| `revision_not_accepted` | まだ何も言われていない。沈黙は承認ではない |
+| `revision_re_corrected` | 直したものをさらに直された |
+
+---
+
+## 2.10 `artifact_ref` は **`ArtifactEvidenceId`**（FORGE-019A §1 再確認）
+
+`ArtifactHandle.handle` を載せてはいけない理由に、019A で1つ足りて
+いなかったものが加わった。**handle は Document を束縛しない**ので、
+handle だけでは「どの文書についての記録か」を言えない。系譜は
+`ArtifactEvidenceId`（記録に貼り付く `uid`）で辿る。
+
+`document_binding` も**外へ出さない**。内部の照合専用である。
+
+---
+
 ## 3. 既定値の向き
 
 **分からないものを楽観側へ倒さない**（`CLAUDE.md` §3）。

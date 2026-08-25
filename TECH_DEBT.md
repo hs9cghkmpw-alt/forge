@@ -1,10 +1,34 @@
 # TECH_DEBT.md
 
+## FORGE-019A follow-ups (2026-08-25)
+
+- `ArtifactRegistry` / Evidence / outbox は**プロセス内メモリ**のまま。
+  再起動で capability が失効し、Revision の連鎖が切れる。
+  今困っていない理由: 単一プロセスの開発運用だから。
+  将来困る条件: 複数プロセス／再起動を挟む実運用。
+- `document_binding` の鍵はプロセス起動ごとの乱数。
+  今困っていない理由: 単一プロセスなので照合できる。
+  将来困る条件: 複数プロセス構成にした瞬間、全 Revision が
+  `document_binding` で弾かれる（fail closed なので静かには壊れない）。
+- **`evaluate_for_export()` を本番から呼ぶ経路が無い。** DatasetCandidate
+  は現状テストからしか生まれない。§4 の判定は正しくなったが、本番では
+  まだ1件も評価されていない。
+- mock の全体再生成出力が**スイート順序に依存する**（単体では 4/4 で
+  200、フルスイート内では 422 になることがある）。原因未特定。
+  019A の fallback テストは AI の答えを Test Double にして依存を外した。
+- 019 の Visual Evidence PNG は、**本番 Validator に通らない Before**
+  から撮られている（`negative_when` に `sign_field` が無い）。
+  実描画できる環境で差し替えが要る。
+- Flutter 一式（analyze / test / build web / 実描画）が
+  **この作業環境では実行できない**（SDK 不在）。CI と CEO 環境に依存する。
+
 ## FORGE-019 follow-ups (2026-08-25)
 
 - Browser capture does not yet drive live `/update` and capture its response in one transaction.
 - Revision runtime outcome remains UNKNOWN until a trusted preview acknowledgement exists.
-- Full-regeneration fallback does not yet record all richer semantic revision fields.
+- ~~Full-regeneration fallback does not yet record all richer semantic revision fields.~~
+  → **019A で解消**。fallback も同じ `RevisionService` を通り、
+  `patch_mode` / `fallback_reason` 付きで lineage を残す。
 - Artifact/evidence/outbox remain in-memory; Auth/RLS/server identity/Supabase export are unimplemented.
 - Actual Local Model semantic revision runs remain 0.
 

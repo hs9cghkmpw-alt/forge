@@ -712,6 +712,61 @@ Learning Event Candidate
 
 ---
 
+## 19A. Revision Integrity（FORGE-019A、2026-08-25）
+
+Design Revision を「最初の高品質 Learning Event source」として扱う以上、
+**その記録が本物であること**が前提になる。019A で3つの前提を固めた。
+
+### 1. 変更は「その生成物への変更」でなければならない
+
+```
+artifact capability（handle）  誰が直そうとしているか
+version token（世代）          いつの版を見ているか
+document binding（中身の身元）  それは本当にその生成物か   ← 019A
+```
+
+束縛はプロセス内鍵の HMAC。**Client にも Learning Event にも出さない。**
+無ければ通さない（fail closed）。
+
+これが無いと、handle を持っている人が任意のJSONを「Forgeが生成した
+ものを直した」ことにできる——**Global Dataset を汚す最短経路**である
+（§12 の `app_id` を信用しない、と同じ性質の穴）。
+
+### 2. 変更の入口は1つ
+
+`/update` と `/converse` の UPDATE は同じ `RevisionService` を通る。
+019 では会話（本線）だけが旧経路を通り、Evidence を1件も残していな
+かった。**二重 Architecture にしない**（§21 と同じ規律）。
+
+全体再生成 fallback も同じ経路を通る。局所patchのふりはしない。
+
+### 3. 「不満を言われた」は「うまく直せた」ではない
+
+```
+Generation → CORRECTED → Revision → ACCEPTED      ✅ 正例
+Generation → CORRECTED → Revision → （無言）       ❌
+Generation → CORRECTED → Revision → CORRECTED     ❌
+```
+
+区別せずに正例へ入れると、**下手な直し方ほど教師データに多く残る**
+（直せないほど `/update` が呼ばれるため）。Feedback 列を join して
+判定し、**記録は書き換えない**——取り下げるのは `DatasetCandidate`
+（Forgeの判断）であって Event（事実）ではない。
+
+### 実装状態
+
+| | |
+|---|---|
+| Document binding | ✅ `artifact_feedback.py` |
+| 単一 `RevisionService` | ✅ `app/ai/runtime/revision_service.py` |
+| fallback の lineage | ✅ |
+| Revision acceptance の join | ✅ `learning_events.py` |
+| Visual Evidence を本番出力から生成 | ✅ `scripts/export_revision_visual_fixture.py` |
+| **`evaluate_for_export()` の本番呼び出し** | ⬜ **無い。** DatasetCandidate は現状テストからしか生まれない |
+| 永続化 / Auth / subject binding | ⬜ プロセス内メモリのまま |
+
+---
+
 ## 20. Language Training Dataset は別契約
 
 将来 Local AI へ「もっと浮かせて」→ `surface.elevated` という
