@@ -42,14 +42,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
+import time
 from dataclasses import dataclass, replace
 from enum import Enum
 
 from app.ai.gateway.artifact_feedback import (
+    ArtifactCasConflict,
     ArtifactHandle,
     EvidenceKind,
     default_artifact_registry,
-    default_feedback_service,
 )
 from app.ai.gateway.generation_evidence import (
     DesignDecisionSource,
@@ -64,6 +66,14 @@ from app.ai.gateway.revision_evidence import (
     RevisionPatchMode,
     RevisionRecord,
     default_revision_store,
+)
+from app.ai.runtime.operation_support import (
+    UnsupportedOperation,
+    require_production_supported,
+)
+from app.ai.runtime.revision_unit_of_work import (
+    FeedbackCommitFailed,
+    RevisionUnitOfWork,
 )
 from app.ai.runtime.semantic_revision import (
     AppliedSemanticRevision,
@@ -83,6 +93,7 @@ FORGE_DETERMINISTIC = "forge_deterministic"
 
 __all__ = [
     "FORGE_DETERMINISTIC",
+    "ReplayVerdict",
     "RevisionOutcome",
     "RevisionRejected",
     "RevisionRejectionStage",
@@ -130,6 +141,22 @@ class RevisionRejectionStage(str, Enum):
     それは Client の誤りである。**replay もせず、処理もしない**
     ——どちらへ倒しても嘘になる（replayすれば別の要求を無視したこと
     になり、処理すれば冪等性の約束が消える）。
+    """
+
+    CONCURRENT_REVISION = "concurrent_revision"
+    """**同じ生成物へ、同時に別の変更が入った**（FORGE-019C §7）。
+
+    先に確定した方が勝つ。負けた方は「利用者が見ていた版はもう無い」
+    ——`STALE_VERSION` と同じ意味だが、**利用者の操作が古かったのでは
+    なく、たったいま追い越された**という違いがある。Client は取り直して
+    やり直せばよいので、区別できる方が親切である。
+    """
+
+    UNSUPPORTED_OPERATION = "unsupported_operation"
+    """**本番で使ってよい意味的操作ではない**（FORGE-019C §9）。
+
+    `SemanticOperationKind` に名前があることと、本番の経路が最後まで
+    通ることは別である。分類されていない操作をここで止める。
     """
 
     REVISION_EVIDENCE = "revision_evidence"
@@ -199,8 +226,24 @@ class _RequestIdentity:
     idempotency_key: str
 
 
+class ReplayVerdict(str, Enum):
+    """再送判定の結果（FORGE-019C §8）。"""
+
+    PROCEED = "proceed"
+    """自分が本処理をする。**予約を取った。**"""
+
+    REPLAY = "replay"
+    """既に成功している。以前の結果をそのまま返す。"""
+
+    CONFLICT = "conflict"
+    """同じキーが**別の要求**で使われている。fail closed。"""
+
+    BUSY = "busy"
+    """同じ要求が処理中で、待っても終わらなかった。"""
+
+
 class RevisionReplayLog:
-    """成功した変更の結果を、再送に備えて覚えておく（FORGE-019B §2）。
+    """成功した変更の結果を、再送に備えて覚えておく（019B §2 / 019C §8）。
 
     ---
 
@@ -217,27 +260,119 @@ class RevisionReplayLog:
     となる。利用者から見ると「直したのに直っていない」うえ、もう一度
     押しても永久に通らない。**通信が切れただけで詰む。**
 
+    ## 019C で足したもの: 予約（in-flight）
+
+    019B の `find` → `conflicting_key` → `remember` は
+    **check-then-act** だった。同じ要求が同時に2本来ると、
+
+        A: find → 無い
+        B: find → 無い          ← A はまだ remember していない
+        A: 本処理               B: 本処理     ← 両方が独立に走る
+
+    となり、冪等キーを付けた意味が消える。**同じ論理要求を同時に2本
+    本処理させない**ために、`begin()` で予約を取る形にした。
+
+    2本目は1本目の完了を待ち、終わったら同じ結果を replay する。
+    1本目が失敗したら予約は解け、2本目が本処理をする
+    ——**失敗を成功として replay しない。**
+
     プロセス内メモリのみ（TD41）。再起動で消えるので、そのときは
     `stale_version` に戻る——**安全側に壊れる**（二重適用はしない）。
     """
 
     _MAX = 500
 
+    #: 同じ要求の完了を待つ上限。これを超えたら `BUSY` を返す
+    #: ——**待ち続けて request が詰まる方が悪い**。
+    _WAIT_SECONDS = 10.0
+
     def __init__(self) -> None:
         self._by_identity: dict[_RequestIdentity, RevisionOutcome] = {}
         self._keys: dict[str, _RequestIdentity] = {}
+        self._in_flight: set[_RequestIdentity] = set()
+        self._cond = threading.Condition()
 
-    def find(self, identity: _RequestIdentity) -> RevisionOutcome | None:
-        return self._by_identity.get(identity)
+    # -- 予約 -------------------------------------------------------------
 
-    def conflicting_key(self, identity: _RequestIdentity) -> bool:
+    def begin(
+        self, identity: "_RequestIdentity"
+    ) -> tuple[ReplayVerdict, "RevisionOutcome | None"]:
+        """本処理へ入ってよいかを決める。**check-then-act にしない。**"""
+        deadline = time.monotonic() + self._WAIT_SECONDS
+        with self._cond:
+            while True:
+                previous = self._by_identity.get(identity)
+                if previous is not None:
+                    return (ReplayVerdict.REPLAY, previous)
+                if self._conflicting_key_locked(identity):
+                    return (ReplayVerdict.CONFLICT, None)
+                if identity not in self._in_flight:
+                    self._in_flight.add(identity)
+                    return (ReplayVerdict.PROCEED, None)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return (ReplayVerdict.BUSY, None)
+                self._cond.wait(timeout=remaining)
+
+    def complete(self, identity: "_RequestIdentity", outcome: RevisionOutcome) -> None:
+        """予約を成功で閉じる。**待っている再送を起こす。**"""
+        with self._cond:
+            self._remember_locked(identity, outcome)
+            self._in_flight.discard(identity)
+            self._cond.notify_all()
+
+    def abandon(self, identity: "_RequestIdentity") -> None:
+        """予約を失敗で閉じる。**結果は覚えない**——失敗を replay しない。"""
+        with self._cond:
+            self._in_flight.discard(identity)
+            self._cond.notify_all()
+
+    # -- 参照 -------------------------------------------------------------
+
+    def find(self, identity: "_RequestIdentity") -> RevisionOutcome | None:
+        with self._cond:
+            return self._by_identity.get(identity)
+
+    def conflicting_key(self, identity: "_RequestIdentity") -> bool:
         """同じキーが、**違う要求**で既に使われているか。"""
+        with self._cond:
+            return self._conflicting_key_locked(identity)
+
+    def remember(self, identity: "_RequestIdentity", outcome: RevisionOutcome) -> None:
+        with self._cond:
+            self._remember_locked(identity, outcome)
+
+    def in_flight(self) -> int:
+        with self._cond:
+            return len(self._in_flight)
+
+    def reset(self) -> None:
+        with self._cond:
+            self._by_identity.clear()
+            self._keys.clear()
+            self._in_flight.clear()
+            self._cond.notify_all()
+
+    def size(self) -> int:
+        with self._cond:
+            return len(self._by_identity)
+
+    # -- 内部（lock を握った状態で呼ぶ） -----------------------------------
+
+    def _conflicting_key_locked(self, identity: "_RequestIdentity") -> bool:
         if not identity.idempotency_key:
             return False
         known = self._keys.get(identity.idempotency_key)
-        return known is not None and known != identity
+        if known is not None and known != identity:
+            return True
+        return any(
+            other.idempotency_key == identity.idempotency_key and other != identity
+            for other in self._in_flight
+        )
 
-    def remember(self, identity: _RequestIdentity, outcome: RevisionOutcome) -> None:
+    def _remember_locked(
+        self, identity: "_RequestIdentity", outcome: RevisionOutcome
+    ) -> None:
         self._by_identity[identity] = outcome
         if identity.idempotency_key:
             self._keys[identity.idempotency_key] = identity
@@ -245,13 +380,6 @@ class RevisionReplayLog:
             oldest = next(iter(self._by_identity))
             self._by_identity.pop(oldest, None)
             self._keys.pop(oldest.idempotency_key, None)
-
-    def reset(self) -> None:
-        self._by_identity.clear()
-        self._keys.clear()
-
-    def size(self) -> int:
-        return len(self._by_identity)
 
 
 _DEFAULT_REPLAY_LOG = RevisionReplayLog()
@@ -281,32 +409,105 @@ class RevisionService:
         `(document, validation, attempts)` を返す）。`None`なら
         fallbackを許さない——**呼び出し側が明示的に許可した場合だけ**
         全体書き直しへ進む。
+
+        ---
+
+        ## 019C: 予約 → 直列化 → UoW
+
+        ```
+        begin()            同じ論理要求を2本走らせない（§8）
+          → lock_for()     同じ生成物への変更を直列化する（§7）
+            → 検査 → 意味的操作 → UoW（prepare/stage/commit）
+          ← 解放
+        → complete()       待っている再送を起こす
+        → project()        Learning へ投影（失敗しても成功は取り消さない）
+        ```
+
+        `project()` が **lock の外** に在るのが要点である。投影は
+        ネットワークの向こうへ出て行きうる処理なので、他の要求を
+        待たせながら行わない（§4）。
         """
-        # --- 再送の判定を、検査より先に行う（FORGE-019B §2） ---------
-        #
-        # 応答が届かなかった Client は「古い版・古い文書」で再送してくる。
-        # 先に通常検査へ通すと必ず `stale_version` で落ちるので、
-        # **その要求が既に成功しているか**を先に見る。
-        #
-        # ただし冪等キーだけで返さない。要求の身元がすべて一致したときだけ
-        # replay する（`_RequestIdentity`）。
         identity = self._identity(
             artifact_id=artifact_id, seen_version_token=seen_version_token,
             document=document, change_request=change_request,
             idempotency_key=idempotency_key,
         )
-        replay_log = default_replay_log()
-        if identity is not None:
-            previous = replay_log.find(identity)
-            if previous is not None:
-                return replace(previous, replayed=True)
-            if replay_log.conflicting_key(identity):
-                # **同じキーで違う要求。** replay も処理もしない。
-                raise RevisionRejected(
-                    RevisionRejectionStage.IDEMPOTENCY_CONFLICT,
-                    "this idempotency key belongs to a different revision request",
-                )
+        if identity is None:
+            # 冪等キーが無い＝再送とみなさない。予約もしない。
+            return self._guarded(
+                artifact_id=artifact_id, seen_version_token=seen_version_token,
+                document=document, change_request=change_request,
+                idempotency_key=idempotency_key, full_regen=full_regen,
+                identity=None,
+            )
 
+        replay_log = default_replay_log()
+        verdict, previous = replay_log.begin(identity)
+        if verdict is ReplayVerdict.REPLAY:
+            assert previous is not None
+            return replace(previous, replayed=True)
+        if verdict is ReplayVerdict.CONFLICT:
+            # **同じキーで違う要求。** replay も処理もしない。
+            raise RevisionRejected(
+                RevisionRejectionStage.IDEMPOTENCY_CONFLICT,
+                "this idempotency key belongs to a different revision request",
+            )
+        if verdict is ReplayVerdict.BUSY:
+            raise RevisionRejected(
+                RevisionRejectionStage.CONCURRENT_REVISION,
+                "the same revision request is still being processed",
+            )
+
+        try:
+            outcome = self._guarded(
+                artifact_id=artifact_id, seen_version_token=seen_version_token,
+                document=document, change_request=change_request,
+                idempotency_key=idempotency_key, full_regen=full_regen,
+                identity=identity,
+            )
+        except BaseException:
+            # **失敗を覚えない。** 覚えると再送へ失敗が replay される。
+            replay_log.abandon(identity)
+            raise
+        replay_log.complete(identity, outcome)
+        return outcome
+
+    # -- 直列化された本体 --------------------------------------------------
+
+    def _guarded(
+        self, *, artifact_id: str | None, seen_version_token: str | None,
+        document: dict, change_request: str, idempotency_key: str,
+        full_regen: object | None, identity: "_RequestIdentity | None",
+    ) -> RevisionOutcome:
+        """**同じ生成物への変更を直列化してから**本体を実行する（§7）。
+
+        lock を取るのは検査の**前**である。検査してから lock を取ると、
+        検査と更新の間が開いたままになり、CAS で弾かれる要求が増える
+        だけで何も守れない。
+        """
+        registry = default_artifact_registry()
+        if not artifact_id:
+            # capability が無ければどのみち断る。lock を取る対象も無い。
+            raise RevisionRejected(
+                RevisionRejectionStage.ARTIFACT_CAPABILITY,
+                "semantic revision requires a current artifact capability",
+            )
+        with registry.lock_for(artifact_id):
+            outcome, uow = self._apply(
+                artifact_id=artifact_id, seen_version_token=seen_version_token,
+                document=document, change_request=change_request,
+                idempotency_key=idempotency_key, full_regen=full_regen,
+            )
+        # **lock の外で投影する。** 他の要求を待たせながら外へ出て行かない。
+        uow.project()
+        _ = identity
+        return outcome
+
+    def _apply(
+        self, *, artifact_id: str, seen_version_token: str | None,
+        document: dict, change_request: str, idempotency_key: str,
+        full_regen: object | None,
+    ) -> tuple[RevisionOutcome, RevisionUnitOfWork]:
         capability = self._capability(artifact_id, seen_version_token, document)
         base_generation_ref, previous_revision_ref = self._lineage(capability)
 
@@ -328,6 +529,13 @@ class RevisionService:
                     RevisionRejectionStage.NO_CHANGE,
                     "すでに要求どおりの状態になっています",
                 )
+            try:
+                # **本番で数えてよい操作かを、記録の前に確かめる**（§9）。
+                require_production_supported(semantic.operation.kind)
+            except UnsupportedOperation as exc:
+                raise RevisionRejected(
+                    RevisionRejectionStage.UNSUPPORTED_OPERATION, str(exc),
+                ) from exc
             return self._record(
                 capability=capability, document=document, revised=semantic.document,
                 validation=semantic.validation, base_generation_ref=base_generation_ref,
@@ -337,7 +545,7 @@ class RevisionService:
                 operation_id=semantic.operation.kind.value,
                 target=semantic.operation.target,
                 critic_passed=True, idempotency_key=idempotency_key,
-                identity=identity, revision_provider=FORGE_DETERMINISTIC,
+                revision_provider=FORGE_DETERMINISTIC,
             )
 
         # --- 全体再生成fallback（§5） ---------------------------------
@@ -369,7 +577,6 @@ class RevisionService:
             # **Criticを通していないものをPASSと書かない。**
             critic_passed=False, idempotency_key=idempotency_key,
             fallback_reason=reason, attempts=attempts,
-            identity=identity,
             # 空なら「記録し損ねた」——`FORGE_DETERMINISTIC`（AIを呼んで
             # いない）とは**別物**なので、そちらへ倒さない。
             revision_provider=provider_used or "unknown",
@@ -483,55 +690,44 @@ class RevisionService:
         target: SemanticTarget | None,
         critic_passed: bool,
         idempotency_key: str,
-        identity: "_RequestIdentity | None" = None,
         revision_provider: str = FORGE_DETERMINISTIC,
         fallback_reason: str | None = None,
         attempts: int = 1,
-    ) -> RevisionOutcome:
+    ) -> tuple[RevisionOutcome, RevisionUnitOfWork]:
         """1回の変更を、**まとめて成立させるか、何も残さないか**にする
-        （FORGE-019B §1）。
+        （FORGE-019B §1 → FORGE-019C §4 で真の atomicity へ）。
 
         ---
 
-        ## 以前の順序が壊れていた
+        ## 019B の順序では閉じきらなかった
 
-            RevisionRecord.record()   ← ここで Learning Event も出ていた
-            → Feedback.record()        ← ここで失敗しうる
-            → artifact advance
+            admit
+            → RevisionRecord を stage
+            → Feedback.record()       ← 追記専用。書いたら戻せない
+            → advance_to_revision()   ← ここが落ちると…
 
-        Feedback が失敗すると API は 422 を返すのに、**RevisionRecord と
-        REVISION Learning Event は残った**。残った記録は対応する CORRECTED
-        を持たない孤児であり、019A §4 の join からは永久に `NO_FEEDBACK`
-        に見える——**評価されないまま Evidence を汚し続ける**。
+        落ちると `RevisionRecord` は巻き戻せるが、**CORRECTED の Feedback と
+        その Learning Event は残る**。019B はそれを仕様として書いていた。
 
-        ## prepare → validate → commit
+        しかし**追記していなければ巻き戻す必要も無い。**
 
-        1. **validate**: 書く前に「評価を書けるか」を確かめる（`admit()`）
-        2. **stage**: RevisionRecord を置く。ただし
-           `observe=False` なので **Learning Event はまだ出さない**
-        3. **commit**: 評価 → 版の前進 → 確定した Learning Event
+        ## 019C の順序
 
-        3 の途中で落ちたら、置いた record を `discard()` して巻き戻す。
-        Learning Event はまだ出ていないので、**外から見て何も起きていない**。
+            prepare   1バイトも書かずに、書けるかどうかを全部調べる
+            stage     RevisionRecord を置く（Learning はまだ出ない）
+            commit    1. CAS で版を前進  ← 落ちうるのはここだけ
+                      2. staged Feedback を追記 ← 追記は最後
+            project   Learning Outbox へ（失敗しても成功は取り消さない）
 
-        ## DB化するときの移行境界
-
-        いまは単一プロセス・in-memory なので、`admit()` と `record()` の
-        間に割り込みが無いことを前提にできる。DB化したら:
-
-        * 1〜3 を**1つの DB transaction** に入れる
-        * Learning Event の送信は **durable outbox** へ入れ、commit 後に
-          別プロセスが流す（transaction 内でネットワークI/Oをしない）
-
-        `publish()` を独立させてあるのは、その差し替え点にするためである。
+        **落ちうる段を追記より前に集めた**のが要点である。
+        `project()` は呼び出し側が lock の外で呼ぶ。
         """
-        feedback = default_feedback_service()
+        uow = RevisionUnitOfWork()
 
-        # --- 1. validate（まだ1バイトも書かない） ---------------------
-        refusal = feedback.admit(
+        # --- 1. prepare（まだ1バイトも書かない） ----------------------
+        refusal = uow.prepare(
+            capability=capability,
             signal=AcceptanceSignal.CORRECTED,
-            artifact_id=capability.handle,
-            seen_version_token=capability.version_token,
             idempotency_key=idempotency_key,
         )
         if refusal is not None:
@@ -541,7 +737,8 @@ class RevisionService:
             )
 
         revisions = default_revision_store()
-        stored = revisions.record(RevisionRecord(
+        # --- 2. stage（Learning Event はまだ出さない） ----------------
+        stored = uow.stage(RevisionRecord(
             base_generation_ref=base_generation_ref,
             previous_revision_ref=previous_revision_ref,
             sequence=revisions.next_sequence(base_generation_ref),
@@ -571,47 +768,37 @@ class RevisionService:
             visual_evidence_reference=None,
             provider_id=revision_provider,
             forge_language_version=str(revised.get("version") or ""),
-        # --- 2. stage（Learning Event はまだ出さない） ----------------
-        ), observe=False)
+        ))
 
         # --- 3. commit ------------------------------------------------
         try:
-            correction = default_feedback_service().record(
-                signal=AcceptanceSignal.CORRECTED,
-                artifact_id=capability.handle,
-                seen_version_token=capability.version_token,
-                idempotency_key=idempotency_key,
-            )
-            if not correction.recorded:
-                # `admit()` を通ったのに落ちた＝想定外。**成功にしない。**
-                raise RevisionRejected(
-                    RevisionRejectionStage.REVISION_EVIDENCE,
-                    "correction evidence could not be recorded",
-                )
-            # **変更後のDocumentへ束縛し直す**（019A §1）。渡し忘れると
-            # 次のRevisionが通らなくなるので、ここが唯一の進め方である。
-            advanced = default_artifact_registry().advance_to_revision(
-                handle=capability.handle, revision_ref=stored.ref,
-                revision_uid=stored.uid, document=revised,
-            )
+            committed = uow.commit(revised_document=revised)
+        except ArtifactCasConflict as exc:
+            uow.discard()
+            raise RevisionRejected(
+                RevisionRejectionStage.CONCURRENT_REVISION,
+                "another revision advanced this artifact first",
+            ) from exc
+        except FeedbackCommitFailed as exc:
+            # 版は `commit()` の中で戻してある。**何も残らない。**
+            uow.discard()
+            raise RevisionRejected(
+                RevisionRejectionStage.REVISION_EVIDENCE,
+                "correction evidence could not be recorded",
+            ) from exc
         except Exception:
-            # 置いただけの record を取り消す。Learning Event はまだ
-            # 出ていないので、外から見て**何も起きていない**。
-            revisions.discard(stored.ref)
+            uow.discard()
             raise
 
-        # 確定したので Learning Event を出す。
-        revisions.publish(stored)
-
         outcome = RevisionOutcome(
-            document=revised, validation=validation, record=stored, handle=advanced,
+            document=revised, validation=validation, record=committed.record,
+            handle=committed.handle,
             mode=mode, critic_passed=critic_passed, attempts=attempts,
             operation_id=operation_id, target=target, fallback_reason=fallback_reason,
             revision_provider=revision_provider,
         )
-        if identity is not None:
-            default_replay_log().remember(identity, outcome)
-        return outcome
+        _ = stored
+        return outcome, uow
 
 
 _DEFAULT_SERVICE = RevisionService()

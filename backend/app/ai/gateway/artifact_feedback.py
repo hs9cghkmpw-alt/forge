@@ -97,7 +97,10 @@ import hashlib
 import hmac
 import json
 import secrets
+import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from uuid import uuid4
@@ -107,6 +110,7 @@ from app.ai.gateway.learning_foundation import AcceptanceSignal
 from app.ai.gateway.revision_evidence import RevisionEvidenceStore, default_revision_store
 
 __all__ = [
+    "ArtifactCasConflict",
     "ArtifactEvidenceId",
     "ArtifactFeedbackEvent",
     "ArtifactFeedbackService",
@@ -117,6 +121,7 @@ __all__ = [
     "FeedbackRejected",
     "FeedbackResult",
     "FeedbackSource",
+    "StagedFeedbackEvent",
     "default_artifact_registry",
     "default_feedback_log",
     "default_feedback_service",
@@ -381,6 +386,42 @@ class FeedbackResult:
         }
 
 
+@dataclass(frozen=True)
+class StagedFeedbackEvent:
+    """**まだ書いていない**評価（FORGE-019C §5）。
+
+    ---
+
+    ## なぜ「まだ書いていない」形が要るのか
+
+    019B は Revision の途中で `record()` を呼び、失敗したら
+    `RevisionRecord` の方を巻き戻していた。しかし **`FeedbackEventLog`
+    は追記専用なので巻き戻せない**——だから
+    「advance が落ちると CORRECTED だけ残る」が仕様として残った。
+
+    追記できないなら、**追記する前に版を進めればよい。**
+
+        prepare（書かない）
+          → 版の CAS 前進（ここだけが競合で落ちうる）
+          → commit（ここで初めて追記する）
+
+    こうすると、落ちる可能性のある段が追記より前に来るので、
+    **巻き戻す必要が無い**。追記専用の契約を1文字も緩めずに atomic に
+    できる。
+
+    ## これ自体は事実ではない
+
+    `StagedFeedbackEvent` は「こう書くつもりだ」という**意図**である。
+    捨てても何も失われない（`discard_staged_event()` が何もしないのは
+    そのため）。事実になるのは `commit_event()` を通ったときだけ。
+    """
+
+    evidence_id: ArtifactEvidenceId
+    signal: AcceptanceSignal
+    source: FeedbackSource
+    idempotency_key: str
+
+
 class FeedbackEventLog:
     """`ArtifactFeedbackEvent`の**追記専用**の保持。
 
@@ -402,6 +443,55 @@ class FeedbackEventLog:
         self._by_idempotency: dict[tuple[str, str], ArtifactFeedbackEvent] = {}
         self._now = now
 
+    def prepare_event(
+        self,
+        *,
+        evidence_id: ArtifactEvidenceId,
+        signal: AcceptanceSignal,
+        source: FeedbackSource = FeedbackSource.UNKNOWN,
+        idempotency_key: str = "",
+    ) -> StagedFeedbackEvent:
+        """**1バイトも書かずに**「こう書くつもりだ」を作る（019C §5）。"""
+        return StagedFeedbackEvent(
+            evidence_id=evidence_id, signal=signal, source=source,
+            idempotency_key=idempotency_key,
+        )
+
+    def commit_event(self, staged: StagedFeedbackEvent) -> ArtifactFeedbackEvent:
+        """staged を**事実にする**。ここで初めて追記される。
+
+        **投影はしない。** Learning への投影は確定後に Outbox が行う
+        （019C §6）——追記の途中でネットワークI/Oの都合を持ち込まない。
+        """
+        event = ArtifactFeedbackEvent(
+            event_id=uuid4().hex,
+            artifact_evidence_ref=staged.evidence_id,
+            signal=staged.signal,
+            sequence=self.next_sequence(staged.evidence_id),
+            source=staged.source,
+            recorded_at=float(self._now()),
+            idempotency_key=staged.idempotency_key,
+        )
+        self._events.append(event)
+        if staged.idempotency_key:
+            self._by_idempotency[
+                self._scope(staged.evidence_id, staged.idempotency_key)
+            ] = event
+        while len(self._events) > self._MAX_EVENTS:
+            dropped = self._events.pop(0)
+            self._by_idempotency.pop(
+                self._scope(dropped.artifact_evidence_ref, dropped.idempotency_key), None,
+            )
+        return event
+
+    def discard_staged_event(self, staged: StagedFeedbackEvent) -> None:
+        """staged を捨てる。**何も書いていないので、何も起きない。**
+
+        呼ぶ側が「巻き戻した」と書けるようにするためだけに在る。
+        追記専用の log を削る口をここに作らない。
+        """
+        _ = staged
+
     def append(
         self,
         *,
@@ -410,25 +500,18 @@ class FeedbackEventLog:
         source: FeedbackSource = FeedbackSource.UNKNOWN,
         idempotency_key: str = "",
     ) -> ArtifactFeedbackEvent:
-        event = ArtifactFeedbackEvent(
-            event_id=uuid4().hex,
-            artifact_evidence_ref=evidence_id,
-            signal=signal,
-            sequence=self.next_sequence(evidence_id),
-            source=source,
-            recorded_at=float(self._now()),
+        """単独の `/feedback` 用。**prepare → commit → 投影**をまとめる。
+
+        Revision は自分で段を分けるのでこれを使わない（019C §5）。
+        """
+        event = self.commit_event(self.prepare_event(
+            evidence_id=evidence_id, signal=signal, source=source,
             idempotency_key=idempotency_key,
+        ))
+        from app.ai.gateway.learning_outbox import (  # noqa: PLC0415
+            default_projection_outbox,
         )
-        self._events.append(event)
-        if idempotency_key:
-            self._by_idempotency[self._scope(evidence_id, idempotency_key)] = event
-        while len(self._events) > self._MAX_EVENTS:
-            dropped = self._events.pop(0)
-            self._by_idempotency.pop(
-                self._scope(dropped.artifact_evidence_ref, dropped.idempotency_key), None,
-            )
-        from app.ai.gateway.learning_events import observe_evidence  # noqa: PLC0415
-        observe_evidence(event)
+        default_projection_outbox().submit(event)
         return event
 
     @staticmethod
@@ -469,6 +552,31 @@ class FeedbackEventLog:
         return len(self._events)
 
 
+class ArtifactCasConflict(Exception):
+    """**期待していた版と、いまの版が違う**（FORGE-019C §7.3）。
+
+    ---
+
+    ## blind overwrite をやめた
+
+    019B の `advance_to_revision()` は、現在値を見ずに新しい
+    `ArtifactHandle` を書き込んでいた。単一プロセスなら直前に解決した
+    ハンドルがそのまま有効だ、という前提だった。
+
+    その前提は成り立たない。FastAPI の `def`（async でない）endpoint は
+    **thread pool で並行に走る**ので、同じ版から始まった2つの Revision が
+    どちらも「自分が正しい」と思ったまま書き込める。あとから書いた方が
+    勝ち、先の変更は**痕跡なく消える**（Lost Update）。
+
+    ## 期待値を省略できないようにした
+
+    `expected` を渡さない呼び出しも conflict にする。「省略したら
+    無条件で上書き」を残すと、**その口が新しい blind overwrite になる**
+    ——`CLAUDE.md` §3 の「忘れずに呼ばれる保証が無いものは忘れられる」
+    と同じ形である。
+    """
+
+
 class ArtifactRegistry:
     """`handle` → 生成物。プロセス内メモリのみ（TD41）。
 
@@ -483,6 +591,39 @@ class ArtifactRegistry:
         self._by_handle: dict[str, ArtifactHandle] = {}
         self._latest_by_session: dict[str, str] = {}
         self._now = now
+        # **生成物ごとの直列化**（019C §7）。
+        #
+        # global lock にすると、無関係な利用者の変更まで1本に並ぶ。
+        # 逆に lock を作りっぱなしにすると map が無限に増える。
+        # 使用中だけ保持し、最後の1人が抜けたら捨てる。
+        self._locks: dict[str, tuple[threading.RLock, list[int]]] = {}
+        self._locks_guard = threading.Lock()
+
+    @contextmanager
+    def lock_for(self, handle: str) -> "Iterator[None]":
+        """その生成物だけを直列化する（019C §7）。
+
+        * global lock で全 Artifact を無駄に直列化しない
+        * lock map を無限に増やさない（使用中だけ持つ）
+        * 例外でも必ず解放する（`finally`）
+        * **入れ子にしない**——同時に持つ lock は常に1つなので deadlock しない
+        """
+        with self._locks_guard:
+            entry = self._locks.get(handle)
+            if entry is None:
+                entry = (threading.RLock(), [0])
+                self._locks[handle] = entry
+            lock, waiters = entry
+            waiters[0] += 1
+        lock.acquire()
+        try:
+            yield
+        finally:
+            lock.release()
+            with self._locks_guard:
+                waiters[0] -= 1
+                if waiters[0] <= 0:
+                    self._locks.pop(handle, None)
 
     def register(
         self,
@@ -534,16 +675,41 @@ class ArtifactRegistry:
     def advance_to_revision(
         self, *, handle: str, revision_ref: int, revision_uid: str,
         document: dict | None = None,
+        expected: ArtifactHandle | None = None,
     ) -> ArtifactHandle:
-        """Advance one capability and invalidate the version the user saw.
+        """**Compare-and-swap** で版を進める（FORGE-019A §1 / 019C §7.3）。
+
+        `expected` は「自分が検査したときの版」である。いまの版がそれと
+        違えば `ArtifactCasConflict`——**誰かが先に進めた**ので、
+        この変更はもう成り立たない。
+
+        照合するのは3つとも:
+
+        * `version_token` — 世代
+        * `evidence_id.uid` — 系譜の位置
+        * `document_binding` — その版の中身の身元
+
+        1つでも欠けた比較にしない。`version_token` だけ見ると、同じ
+        token のまま別の系譜へ差し替えられた場合を見逃す。
 
         `document`（変更後のもの）を渡すと、次のRevisionはその文書に
-        束縛される（FORGE-019A §1）。渡さないと束縛が空になり、
-        **次のRevisionは通らない**——連鎖を切らないために必ず渡すこと。
+        束縛される。渡さないと束縛が空になり、**次のRevisionは通らない**
+        ——連鎖を切らないために必ず渡すこと。
         """
         current = self._by_handle.get(handle)
         if current is None:
             raise KeyError("unknown artifact capability")
+        if expected is None:
+            # **期待値を渡さない呼び出しを許さない**（fail closed）。
+            raise ArtifactCasConflict(
+                "advancing an artifact requires the version it was checked against"
+            )
+        if (
+            expected.version_token != current.version_token
+            or expected.evidence_id.uid != current.evidence_id.uid
+            or expected.document_binding != current.document_binding
+        ):
+            raise ArtifactCasConflict("artifact advanced concurrently")
         advanced = ArtifactHandle(
             handle=current.handle,
             evidence_id=ArtifactEvidenceId(EvidenceKind.REVISION, revision_uid, revision_ref),
@@ -555,6 +721,18 @@ class ArtifactRegistry:
         self._by_handle[handle] = advanced
         return advanced
 
+    def restore(self, previous: ArtifactHandle) -> None:
+        """**Transactionの巻き戻し専用**（FORGE-019C §4）。
+
+        ⚠️ これは「版を戻してよい」という意味ではない。CAS で進めた直後に
+        後段が落ちた場合、**その版はまだ誰にも見えていない**——
+        `lock_for()` を握ったままなので、他の要求は入れない。その狭い窓の
+        中だけで使う。
+
+        確定した版を戻す用途に使ってはならない。
+        """
+        self._by_handle[previous.handle] = previous
+
     def latest_for_session(self, session_id: str) -> ArtifactHandle | None:
         handle = self._latest_by_session.get(session_id)
         return self._by_handle.get(handle) if handle else None
@@ -562,9 +740,16 @@ class ArtifactRegistry:
     def reset(self) -> None:
         self._by_handle.clear()
         self._latest_by_session.clear()
+        with self._locks_guard:
+            self._locks.clear()
 
     def size(self) -> int:
         return len(self._by_handle)
+
+    def lock_table_size(self) -> int:
+        """保持している lock の数。**無限増殖していないこと**を見るため。"""
+        with self._locks_guard:
+            return len(self._locks)
 
 
 class ArtifactFeedbackService:
@@ -639,47 +824,77 @@ class ArtifactFeedbackService:
 
         return FeedbackResult(True, signal, summary_updated=summary_updated, event=event)
 
-    def admit(
-        self,
-        *,
-        signal: AcceptanceSignal,
-        artifact_id: str | None = None,
-        session_id: str | None = None,
-        seen_version_token: str | None = None,
-        idempotency_key: str = "",
+    def _admit_handle(
+        self, *, signal: AcceptanceSignal, handle: ArtifactHandle, idempotency_key: str,
     ) -> FeedbackRejected | None:
-        """**書かずに、書けるかどうかだけ調べる**（FORGE-019B §1）。
+        """解決済みハンドルに対する検査（FORGE-019C §5）。
 
-        Revision は「変更の記録」と「訂正の評価」と「版の前進」を
-        まとめて成立させる必要がある。途中で落ちると、対応する評価を
-        持たない孤児の RevisionRecord が残る。
+        ---
 
-        そこで `RevisionService` は**書き始める前に**ここで
-        「この評価は通るか」を確かめる。通らないなら1バイトも書かない。
+        ## `admit()` を消した
 
-        `None` なら通る見込み。理由が返ればその時点で断る。
+        019B は「書かずに、書けるかどうかだけ調べる」`admit()` を持って
+        いた。019C で `prepare()`（調べたうえで、そのまま commit できる
+        staged を返す）に置き換えたので、**`admit()` を呼ぶ経路は1つも
+        無くなった**。
 
-        > **単一プロセス前提である。** ここと実際の `record()` の間に
-        > 別の書き込みが割り込む余地は、いまの構成には無い。DB化する
-        > ときは、この2つを1つのDB transactionへ入れる
-        > （`docs/spec/DESIGN-REVISION-PROPOSAL.md` の移行境界を参照）。
+        残しておけば「調べるだけの口」と「調べて組み立てる口」が並び、
+        片方だけ条件が緩む余地ができる（011 §5 で踏んだ形）。
+        `CLAUDE.md` §3 の「本番から呼ばれないものを作らない」に従って
+        消した。
         """
         if signal is AcceptanceSignal.UNKNOWN:
             return FeedbackRejected.UNUSABLE_SIGNAL
-        handle = self._resolve(artifact_id=artifact_id, session_id=session_id)
-        if handle is None:
-            return FeedbackRejected.UNKNOWN_ARTIFACT
-        if seen_version_token and seen_version_token != handle.version_token:
-            return FeedbackRejected.STALE_ARTIFACT
         if self._events.find_by_idempotency_key(
             idempotency_key, evidence_id=handle.evidence_id,
         ) is not None:
             return FeedbackRejected.DUPLICATE_REQUEST
-        store = self._store_for(handle.evidence_id.kind)
-        existing = store.get(handle.evidence_id.ref)
-        if existing is None:
+        if self._store_for(handle.evidence_id.kind).get(handle.evidence_id.ref) is None:
             return FeedbackRejected.UNKNOWN_ARTIFACT
         return None
+
+    def prepare(
+        self,
+        *,
+        signal: AcceptanceSignal,
+        handle: ArtifactHandle,
+        source: FeedbackSource = FeedbackSource.USER_EXPLICIT,
+        idempotency_key: str = "",
+    ) -> "StagedFeedbackEvent | FeedbackRejected":
+        """**書かずに**、書ける形まで組み立てる（FORGE-019C §5）。
+
+        `admit()` は「書けるか」だけを答えた。`prepare()` は同じ検査を
+        したうえで、**そのまま commit できる staged** を返す。
+
+        検査と組み立てを1回にしてあるのは、`RevisionUnitOfWork` が
+        「調べたものと書くもの」を取り違えられないようにするためである。
+        """
+        refusal = self._admit_handle(
+            signal=signal, handle=handle, idempotency_key=idempotency_key,
+        )
+        if refusal is not None:
+            return refusal
+        return self._events.prepare_event(
+            evidence_id=handle.evidence_id, signal=signal, source=source,
+            idempotency_key=idempotency_key,
+        )
+
+    def commit_prepared(
+        self, staged: StagedFeedbackEvent
+    ) -> FeedbackResult:
+        """staged を事実にする。**投影はしない**（Outbox が行う）。"""
+        event = self._events.commit_event(staged)
+        store = self._store_for(staged.evidence_id.kind)
+        summary_updated = bool(
+            store.note_user_acceptance([staged.evidence_id.ref], staged.signal)
+        )
+        return FeedbackResult(
+            True, staged.signal, summary_updated=summary_updated, event=event,
+        )
+
+    def discard_prepared(self, staged: StagedFeedbackEvent) -> None:
+        """staged を捨てる。**追記していないので何も残らない。**"""
+        self._events.discard_staged_event(staged)
 
     def history(self, evidence_id: ArtifactEvidenceId) -> tuple[ArtifactFeedbackEvent, ...]:
         """その生成物への評価の**時系列**。"""

@@ -247,6 +247,15 @@ class TestCommitFailureRollsBack(_RevisionCase):
         return self.counts(), handle.version_token
 
     def test_a_failure_while_recording_the_correction_leaves_nothing(self) -> None:
+        """**FORGE-019C で注入先が変わった。**
+
+        019B は `ArtifactFeedbackService.record` を差し替えていたが、
+        019C の本番経路は `prepare()` → `commit_prepared()` を通る。
+        `record()` を差し替えても**本番はもうそこを通らない**ので、
+        このテストは置物になっていた（実際 019C の実装後に PASS した）。
+
+        いま落とすのは、本番が実際に通る `commit_prepared()` である。
+        """
         from unittest.mock import patch
 
         from app.ai.gateway.artifact_feedback import FeedbackRejected, FeedbackResult
@@ -254,14 +263,15 @@ class TestCommitFailureRollsBack(_RevisionCase):
         artifact = self.provision()
         before, token_before = self._counts_and_token(artifact)
 
-        def _rejects(self_service, **kwargs):  # noqa: ANN001, ARG001
+        def _rejects(self_service, staged):  # noqa: ANN001, ARG001
             return FeedbackResult(
                 False, AcceptanceSignal.CORRECTED,
                 rejected=FeedbackRejected.UNKNOWN_ARTIFACT,
             )
 
         with patch(
-            "app.ai.gateway.artifact_feedback.ArtifactFeedbackService.record", _rejects,
+            "app.ai.gateway.artifact_feedback.ArtifactFeedbackService.commit_prepared",
+            _rejects,
         ):
             response = self.update(artifact)
 
@@ -295,15 +305,28 @@ class TestCommitFailureRollsBack(_RevisionCase):
             len(default_revision_store().all_records()), revisions_before,
             "例外で落ちたのに RevisionRecord が残っている",
         )
+        # **FORGE-019C で仕様が変わった。**
+        #
+        # 019B はここを `learning_before + 1`（CORRECTED だけ残る）と
+        # 書いていた。追記専用の Feedback log は巻き戻せない、という
+        # 理由だった。
+        #
+        # しかし**追記していなければ巻き戻す必要も無い**。019C で
+        # 「CAS で版を進めてから追記する」順序にしたので、advance が
+        # 落ちた時点で追記はまだ起きていない。したがって
+        # **partial Evidence は1件も残らない**。
         self.assertEqual(
-            len(default_learning_event_service().local_events), learning_before + 1,
-            "REVISION の Learning Event が出ている、または CORRECTED が出ていない。"
-            "期待は「CORRECTED だけが出て、REVISION は出ない」",
+            len(default_learning_event_service().local_events), learning_before,
+            "論理的に失敗した Revision の Evidence が残っている（019C §3.1）",
         )
         self.assertNotIn(
             LearningEventType.REVISION,
             [e.event_type for e in default_learning_event_service().local_events],
             "巻き戻したのに REVISION の Learning Event が出ている（孤児）",
+        )
+        self.assertEqual(
+            default_feedback_log().size(), 0,
+            "巻き戻したのに CORRECTED の Feedback が残っている（019C §3.1）",
         )
 
     def test_the_staged_record_never_becomes_visible(self) -> None:
@@ -314,14 +337,15 @@ class TestCommitFailureRollsBack(_RevisionCase):
 
         artifact = self.provision()
 
-        def _rejects(self_service, **kwargs):  # noqa: ANN001, ARG001
+        def _rejects(self_service, staged):  # noqa: ANN001, ARG001
             return FeedbackResult(
                 False, AcceptanceSignal.CORRECTED,
                 rejected=FeedbackRejected.UNKNOWN_ARTIFACT,
             )
 
         with patch(
-            "app.ai.gateway.artifact_feedback.ArtifactFeedbackService.record", _rejects,
+            "app.ai.gateway.artifact_feedback.ArtifactFeedbackService.commit_prepared",
+            _rejects,
         ):
             self.update(artifact)
 
@@ -342,7 +366,7 @@ class TestCommitFailureRollsBack(_RevisionCase):
         before = self.counts()
 
         with patch(
-            "app.ai.gateway.artifact_feedback.ArtifactFeedbackService.admit",
+            "app.ai.gateway.artifact_feedback.ArtifactFeedbackService.prepare",
             lambda self_service, **kwargs: FeedbackRejected.DUPLICATE_REQUEST,
         ):
             response = self.update(artifact)

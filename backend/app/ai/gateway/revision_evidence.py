@@ -294,14 +294,24 @@ class RevisionEvidenceStore:
         return stored
 
     def publish(self, record: RevisionRecord) -> None:
-        """この変更を Learning Event として出す（FORGE-019B §1）。
+        """この変更を Learning Event として出す（019B §1 / 019C §6）。
 
         **Transaction が確定してから呼ぶ。** 確定前に出すと、あとで
         巻き戻したときに Learning 側だけ孤児が残る。
-        """
-        from app.ai.gateway.learning_events import observe_evidence  # noqa: PLC0415
 
-        observe_evidence(record)
+        019C で投影先を Outbox にした。以前は `observe_evidence()` を
+        直接呼んでおり、失敗すると**二度と投影されなかった**（例外は
+        飲まれ、retry の手掛かりも残らない）。Outbox なら
+        `pending` として残り、`drain()` でやり直せる。
+
+        ここも例外を外へ出さない——**確定した Revision を投影の都合で
+        失敗にしない**（019C §3.2）。
+        """
+        from app.ai.gateway.learning_outbox import (  # noqa: PLC0415
+            default_projection_outbox,
+        )
+
+        default_projection_outbox().submit(record)
 
     def discard(self, ref: int) -> None:
         """**Transactionの巻き戻し専用**（FORGE-019B §1）。
