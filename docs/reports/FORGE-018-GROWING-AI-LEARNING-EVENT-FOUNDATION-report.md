@@ -4,7 +4,9 @@
 
 start HEAD `7f31aa46785d6db7fbcc4bbf7097b9bd889c927e`
 
-final HEAD: このreportを含むcommit（Git log先頭）
+implementation HEAD: `6abc3a802227fc2f0bba220cf3fcc6c907847cc5`
+
+final HEAD: このCI実測追補を含むcommit（Git log先頭）
 
 ## 再現した欠落 / 原因
 
@@ -83,7 +85,11 @@ Test Double identityではEnvelope/Outbox 1件を実証したがnetwork送信で
 - Flutter test: 508 passed
 - flutter analyze: No issues found
 - flutter build web: 成功（CupertinoIcons font warningあり、build自体は成功）
-- CI: push後確認
+- CI run `32800818759`: **success**（implementation HEAD `6abc3a8`）
+  - frontend (Flutter): success
+  - backend + forge_ai (Python 3.12): success
+  - backend smoke (起動 + CORS): success
+  - backend + forge_ai (Python 3.11): success
 
 13 mutation: Projector配線、Consent default、UNKNOWN/FORBIDDEN、TEST_DOUBLE、
 Feedback時系列、raw field、LOCAL_ONLY、Sanitizer、Knowledge refs、artifact handle、

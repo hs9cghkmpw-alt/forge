@@ -6,11 +6,13 @@
 
 **start HEAD:** `7f31aa46785d6db7fbcc4bbf7097b9bd889c927e`
 
-**final HEAD:** この文書を含むFORGE-018 commit（Git logの先頭を正とする）
+**implementation HEAD:** `6abc3a802227fc2f0bba220cf3fcc6c907847cc5`
+
+**final HEAD:** このCI実測追補を含むcommit（Git logの先頭を正とする）
 
 **current phase:** Growing AI / Learning Event Foundation
 
-**current task:** FORGE-018 commit E — 実装・ローカル検証完了、push/CI確認中
+**current task:** FORGE-018 commit E — 実装・push・CI確認完了
 
 **next task:** FORGE-019 Semantic Design Revision
 
@@ -83,7 +85,11 @@ Backend API contractを固定した。FORGE-019でDomain層とhost previewを接
 - Flutter test: **508 passed**
 - flutter analyze: **No issues found**
 - flutter build web: **成功**（font warningあり、既知の非致命warning）
-- CI: push前、未実行
+- CI run `32800818759`: **success**（implementation HEAD `6abc3a8`）
+  - frontend (Flutter): success
+  - backend + forge_ai (Python 3.12): success
+  - backend smoke (起動 + CORS): success
+  - backend + forge_ai (Python 3.11): success
 
 ## Intentional break / mutation
 
