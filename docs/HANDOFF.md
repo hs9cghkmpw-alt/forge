@@ -72,11 +72,34 @@ LearningEvent 0 / 版 0 / replay 0**。
   Novel Benchmark / Dataset Builder / Knowledge 昇格 Gate /
   Adapter / Self-Extension
 
-### 方向の文書を新設した
+### 方向の文書を2つ新設した
 
-`docs/GENERATIVE-SOFTWARE-DIRECTION.md`
-——「有限Widget Builderにしない」を、実装の都合で崩さないための下限。
+| | 何を守るか |
+|---|---|
+| `docs/GENERATIVE-SOFTWARE-DIRECTION.md` | **何を作る機械なのか。** 有限Widget Builderにしない |
+| `docs/LEARNABLE-LOCAL-AI-VISION.md` | **作る側のAIが何になるべきか**（CEO指示を文書化） |
+
+どちらも実装の都合で目標を縮小しないための下限である。
 `PRODUCT-DIRECTION.md` は**変更していない**。
+
+### Local AI の到達段階（Vision §39 の Level 0–10）
+
+> **現在 Level 0（Local Model が動く）に到達していない。**
+
+`Real Local Model runs = 0`。Level 1 以降は Level 0 を前提とするので、
+**どれも到達していない。**
+
+契約と検査は Level 2〜6 のぶんまで先に作ってあるが、
+**それは「到達した」ではない。** Level 0 が解けた時点で接続できる状態に
+してある、という意味である。
+
+次に埋めるべき穴（優先順）:
+
+1. **Level 0** — 実 Local Model（下の「CEOへの依頼」）
+2. **Capability Registry** — Self-Extension の前提。現在無い
+3. **能力単位の Dataset** — 完成物単位しか作れていない
+4. **学習イベントの網羅** — 列挙のうち実際に出しているのは一部
+5. **Gym / Novel Benchmark を実際に走らせる** — どちらも run 0件
 
 ---
 

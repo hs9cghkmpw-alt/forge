@@ -6,6 +6,7 @@
 > docs/PRODUCT-DIRECTION.md          変更不可。Forge が何のために在るか
 >   ↓
 > docs/GENERATIVE-SOFTWARE-DIRECTION.md   ← この文書。何を作る機械なのか
+> docs/LEARNABLE-LOCAL-AI-VISION.md       作る側のAIが何になるべきか（並列）
 >   ↓
 > docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md   どう育てるか
 >   ↓
@@ -74,6 +75,10 @@ JRPG 専用 template、match3 専用 template のような**ジャンル特化�
 `puzzle_rpg`）を含む skill id を **Knowledge 候補として拒否する**。
 
 ## 3. Local AI の「完成」とは何か
+
+> **詳細は `docs/LEARNABLE-LOCAL-AI-VISION.md` を正とする。**
+> そこに Level 0–10 の到達条件がある。**Level 0（Local Model が動く）は
+> 入口にすぎない。**
 
 **❌ Local Model を1回起動した。**
 

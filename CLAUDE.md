@@ -47,8 +47,15 @@
 | 順位 | 文書 | 内容 |
 |---|---|---|
 | 1 | `docs/PRODUCT-DIRECTION.md` | **変更不可。** 実装都合で縮小・先送りしない |
-| 2 | `docs/ROADMAP-TO-TARGET.md` | 完成図までの段取り（閉ループ版） |
-| 3 | `docs/ROADMAP.md` | 全体方針 |
+| 2 | `docs/GENERATIVE-SOFTWARE-DIRECTION.md` | **何を作る機械なのか。** 有限Widget Builderにしない |
+| 2 | `docs/LEARNABLE-LOCAL-AI-VISION.md` | **作る側のAIが何になるべきか。** Local Model接続で終わらせない |
+| 3 | `docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md` | AI/Learning領域のArchitecture |
+| 4 | `docs/ROADMAP-TO-TARGET.md` | 完成図までの段取り（閉ループ版） |
+| 5 | `docs/ROADMAP.md` | 全体方針 |
+
+順位2の2つは並列である（片方は成果物、片方はそれを作るAI）。
+どちらも**実装の都合で目標を縮小しないための下限**であり、
+「Local Modelを接続した」「Widget/Templateを増やした」を達成と数えない。
 
 `PRODUCT-DIRECTION.md` §8 の**7問の自己監査**に、最終報告の前に必ず
 答えること。問題があれば黙って目標を変えず、問題・代替案・Trade-offを

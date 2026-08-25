@@ -53,6 +53,10 @@
   `adapter.py` / `self_extension.py`
 - **`docs/GENERATIVE-SOFTWARE-DIRECTION.md`** を新設（`PRODUCT-DIRECTION.md`
   は変更していない）
+- **`docs/LEARNABLE-LOCAL-AI-VISION.md`** を新設（CEO指示を文書化）。
+  Level 0–10 の到達条件を持つ。**現在 Level 0 未到達**（Real Local Model
+  runs = 0）。契約は Level 2〜6 のぶんまで在るが「到達した」とは書かない。
+  `CLAUDE.md` の上位文書表と ROADMAP / Growing AI Architecture から参照
 - **`scripts/capture_visual_evidence.py`** を追加（cross-platform）
 
 ### 実バグ

@@ -871,8 +871,12 @@ credential は入らない。投影が終われば payload を捨てる。
 
 ## 19D. Local Generative Intelligence の位置（FORGE-020、2026-08-25）
 
-方向そのものは **`docs/GENERATIVE-SOFTWARE-DIRECTION.md`** が引き受ける
-（`PRODUCT-DIRECTION.md` の下、この Architecture の上）。
+方向そのものは **`docs/GENERATIVE-SOFTWARE-DIRECTION.md`**（何を作る機械か）と
+**`docs/LEARNABLE-LOCAL-AI-VISION.md`**（作る側のAIが何になるべきか）が
+引き受ける（どちらも `PRODUCT-DIRECTION.md` の下、この Architecture の上）。
+
+Level 0–10 の到達条件は Vision 側にある。**現在 Forge Local AI は
+Level 0（Local Model が動く）に到達していない**——`Real Local Model runs = 0`。
 
 この Architecture が引き受けるのは、**Growing AI の資産としてどう扱うか**
 である。

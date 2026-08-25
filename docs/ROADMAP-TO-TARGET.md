@@ -9,6 +9,7 @@
 > docs/PRODUCT-DIRECTION.md                          変更不可
 >   ↓
 > docs/GENERATIVE-SOFTWARE-DIRECTION.md              ← 新設（FORGE-020）
+> docs/LEARNABLE-LOCAL-AI-VISION.md                  ← 新設（CEO指示、2026-08-25）
 >   ↓
 > docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md
 >   ↓
@@ -23,7 +24,7 @@
 > | | 内容 | 状態 |
 > |---|---|---|
 > | 019C | Revision Atomic Closure（atomicity / CAS / 並行 / Outbox / operation honesty） | ✅ 実装・テスト・mutation 済み |
-> | 020A | Real Local Model Runtime | ⬜ **未着手**（環境要因。`docs/HANDOFF.md`） |
+> | 020A | Real Local Model Runtime | ⬜ **未着手**（環境要因。`docs/HANDOFF.md`）。**Vision §39 の Level 0** |
 > | 020B | Tool-Using Local Agent | 🟨 契約 + テスト。**本番配線なし** |
 > | 020C | Generation Episode | ✅ 契約 + **本番配線済み**（Revision 経路） |
 > | 020D | Web / Browser Capability | 🟨 契約 + テスト。**実Web往復は UNVERIFIED** |
@@ -45,6 +46,17 @@
 >
 > 021 Self Extension は「足りない能力を sandbox で作って昇格させる」形
 > であり、**AIが本番の primitive を直接書き換える経路は作らない**。
+>
+> ## Local AI の到達段階（Vision §39）
+>
+> **現在 Level 0 未到達。** `Real Local Model runs = 0`。
+> Level 1 以降は Level 0 を前提とするので、どれも到達していない。
+> 契約と検査は Level 2〜6 のぶんまで先に作ってあるが、
+> **それは「到達した」ではない**（`docs/LEARNABLE-LOCAL-AI-VISION.md` 現況節）。
+>
+> 次に埋めるべき穴（Vision 現況節より）:
+> Level 0 → §22 Capability Registry → §26 能力単位 Dataset →
+> §33 学習イベントの網羅 → §17/§18 を実際に走らせる。
 
 > **2026-08-24 追記 — AI/Learning領域の正式Architectureができた。**
 >
