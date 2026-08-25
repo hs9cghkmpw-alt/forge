@@ -410,6 +410,67 @@ class CloudExportPolicy:
         return tuple(dict.fromkeys(reasons))
 
 
+class RevisionAcceptanceState(str, Enum):
+    """あるRevisionが、その後どう扱われたか（FORGE-019A §4）。
+
+    **Revisionの記録そのものを書き換えて表さない。** Learning Eventは
+    追記専用なので、状態は**Feedback列をjoinして**導く。
+    """
+
+    ACCEPTED = "accepted"
+    """利用者が「これでいい」と言った。**最後の信号がACCEPTED。**"""
+
+    NO_FEEDBACK = "no_feedback"
+    """まだ何も言われていない。**沈黙は承認ではない。**"""
+
+    RE_CORRECTED = "re_corrected"
+    """直したものを、さらに直された。**Revisionは外していた。**"""
+
+
+def resolve_revision_acceptance(evidence_uid: str) -> RevisionAcceptanceState:
+    """そのRevisionへの評価の**時系列を読む**（FORGE-019A §4）。
+
+    ---
+
+    ## なぜ「直してと言われた」を正例にしてはいけないのか
+
+    `/update`はRevisionを記録した時点で、**元の生成物へ**CORRECTEDを
+    書く。「元のものは外していた」という事実である。
+
+    しかしそれは**直した結果が良かったこと**を1つも言っていない。
+
+        Generation → CORRECTED → Revision → ACCEPTED      ✅ 正例
+        Generation → CORRECTED → Revision → （無言）       ❌ 分からない
+        Generation → CORRECTED → Revision → CORRECTED     ❌ 直しても外した
+
+    3つを区別せずに正例へ入れると、**「利用者が不満を言った回数」を
+    「うまく直せた回数」として学習する**ことになる。しかも直せなかった
+    ケースほど`/update`が多く呼ばれるので、**下手な直し方ほど教師データ
+    に多く残る**という逆向きの偏りが生まれる。
+
+    ## 最後の信号を見る
+
+    `ACCEPTED`の後に`CORRECTED`が来たら`RE_CORRECTED`である。
+    「一度はOKと言ったが、使ってみたら直した」は017A §2で残せるように
+    した系列で、**正例ではない**。
+    """
+    from app.ai.gateway.artifact_feedback import (  # noqa: PLC0415 — 循環import回避
+        ArtifactEvidenceId,
+        EvidenceKind,
+        default_feedback_log,
+    )
+
+    events = default_feedback_log().for_evidence(
+        ArtifactEvidenceId(EvidenceKind.REVISION, evidence_uid, 0)
+    )
+    usable = [e for e in events if e.signal is not AcceptanceSignal.UNKNOWN]
+    if not usable:
+        return RevisionAcceptanceState.NO_FEEDBACK
+    if usable[-1].signal is AcceptanceSignal.ACCEPTED:
+        return RevisionAcceptanceState.ACCEPTED
+    return RevisionAcceptanceState.RE_CORRECTED
+
+
 class TrainingEligibilityPolicy:
     """Dataset/training rights, evaluated after collection rights."""
 
@@ -420,6 +481,14 @@ class TrainingEligibilityPolicy:
         reasons: list[str] = []
         if not export_decision.eligible:
             reasons.append("collection_not_permitted")
+        if event.event_type is LearningEventType.REVISION:
+            # **「直してと言われた」だけでは正例にしない**（019A §4）。
+            # 記録を書き換えず、Feedback列をjoinして判断する。
+            state = resolve_revision_acceptance(event.artifact_evidence_id or "")
+            if state is RevisionAcceptanceState.NO_FEEDBACK:
+                reasons.append("revision_not_accepted")
+            elif state is RevisionAcceptanceState.RE_CORRECTED:
+                reasons.append("revision_re_corrected")
         if context.training_use is not TrainingUse.ALLOWED:
             reasons.append("training_use_not_allowed")
         if event.provenance in {
@@ -579,6 +648,7 @@ class LearningEventService:
     ) -> None:
         self._now = now
         self._identity_provider = identity_provider
+
         self.projector = LearningEventProjector()
         self.sanitizer = LearningSanitizer()
         self.retention = RetentionPolicy()
@@ -594,11 +664,69 @@ class LearningEventService:
         self._revoked_consent_ids: set[str] = set()
         self.diagnostics = LearningObservationDiagnostics()
 
+    def set_contributor_identity_provider(
+        self, provider: "ContributorIdentityProvider | None",
+    ) -> None:
+        """寄与者の仮名IDを発行する担当を差し替える（017A §11 / 019A）。
+
+        **端末側で作ったIDをそのままTruthにしない**という決定の受け口で
+        ある。将来は server-issued contributor token / authenticated
+        pseudonymous subject をここへ挿す。
+
+        既定は`None`——**発行できないなら外へ出さない**（fail closed）。
+        """
+        self._identity_provider = provider
+
     def observe(self, evidence: object) -> LearningEvent:
         self.purge_expired()
         event = self.projector.project(evidence)
         self.local_events.append(event)
+        self._revoke_re_corrected_revisions(event)
         return event
+
+    def _revoke_re_corrected_revisions(self, event: LearningEvent) -> None:
+        """後から「やっぱり違う」と言われたRevisionの候補を取り下げる
+        （FORGE-019A §4）。
+
+        ---
+
+        ## 記録は書き換えない
+
+        Learning Eventは追記専用なので、**過去のEventには一切触らない**。
+        取り下げるのは`DatasetCandidate`——「このEventを学習素材の候補に
+        する」という**Forgeの判断**の方であり、事実ではない。
+
+        判断は後から変わってよい。事実は変わらない。この2つを分けて
+        おかないと、「あとで否定された」を表すために記録を書き換える
+        ことになる。
+
+        ## いつ起きるか
+
+            Revision → ACCEPTED（候補に入る）
+                     → その後 CORRECTED（取り下げ）
+
+        「一度はOKと言ったが、使ってみたら直した」である。017A §2で
+        残せるようにした系列が、ここで効く。
+        """
+        if (
+            event.event_type is not LearningEventType.FEEDBACK
+            or event.acceptance is AcceptanceSignal.ACCEPTED
+            or not event.artifact_evidence_id
+        ):
+            return
+        now = float(self._now())
+        self.dataset_candidates[:] = [
+            replace(
+                item, quality_state=QualityState.REVOKED,
+                eligibility_reasons=("revision_re_corrected",), revoked_at=now,
+            )
+            if (
+                item.quality_state is QualityState.CANDIDATE
+                and event.artifact_evidence_id in item.source_artifact_ids
+            )
+            else item
+            for item in self.dataset_candidates
+        ]
 
     def evaluate_for_export(
         self, event: LearningEvent, *, consent: ConsentSnapshot,

@@ -47,13 +47,9 @@ from app.ai.runtime.confirmation_store import (
     default_confirmation_store,
 )
 from app.ai.gateway.ai_router import NoProviderAvailableError, default_router
-from app.ai.gateway.artifact_feedback import EvidenceKind, default_artifact_registry, default_feedback_service
-from app.ai.gateway.generation_evidence import DesignDecisionSource, GenerationSource, RuntimeOutcome, default_generation_store
+from app.ai.gateway.artifact_feedback import default_artifact_registry, default_feedback_service
+from app.ai.gateway.generation_evidence import default_generation_store
 from app.ai.gateway.learning_foundation import AcceptanceSignal
-from app.ai.gateway.revision_evidence import (
-    DesignRevision, RevisionOperationKind, RevisionPatchMode, RevisionRecord,
-    default_revision_store,
-)
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.runtime.conversation_engine import ConversationEngine
 from app.ai.runtime.conversation_metrics import record_conversation_event
@@ -65,10 +61,7 @@ from app.ai.runtime.conversation_types import (
     ConversationTurn,
 )
 from app.ai.runtime.forge_operation import ForgeOperationEngine
-from app.ai.runtime.semantic_revision import (
-    AppliedSemanticRevision, RevisionMode, TargetResolution,
-    TargetResolutionStatus, apply_semantic_intent,
-)
+from app.ai.runtime.revision_service import RevisionRejected, default_revision_service
 from app.ai.runtime.injection_scan import scan_for_injection
 from app.ai.runtime.pipeline_errors import (
     ConfirmationSessionError,
@@ -209,6 +202,11 @@ def _artifact_ref(result, *, session_id: str | None) -> ArtifactRefDTO | None:  
         generation_ref=generation_ref,
         generation_uid=record.uid,
         session_id=session_id,
+        # **返した文書そのものへ束縛する**（FORGE-019A §1）。
+        # ここを渡し忘れると束縛が空になり、Revisionが1件も通らない
+        # ——「忘れたら黙って緩くなる」ではなく「忘れたら止まる」向き
+        # に倒してある。
+        document=result.forge_document,
     )
     return ArtifactRefDTO(
         artifact_id=handle.handle, version_token=handle.version_token
@@ -583,48 +581,29 @@ def converse(request: ConverseRequest):
     if step_result.action == ConversationAction.UPDATE:
         assert request.current_document is not None  # noqa: S101 — has_existing_tool=Trueの場合のみConversationEngineがUPDATEを選ぶ(conversation_engine.py参照)
         change_request = step_result.build_brief or ""
-        # Phase B: UPDATEは会話ステップとは**別のTask**である
-        # (Forge Language JSONの書き換え。要求する能力も失敗の意味も違う)。
-        # 以前は会話ステップ用に束ねたAdapterを再利用しており、Task別の
-        # profile(構造化出力要求・時間予算・試行上限)が効いていなかった。
-        update_provider = default_router().bind(
-            ForgeTask.FORGE_LANGUAGE_UPDATE, provider=request.provider
+        # **FORGE-019A §2: `/update`と同じRevisionServiceを通す。**
+        #
+        # 019では、ここだけが旧`ForgeOperationEngine`へ直接流れていた。
+        # `/update`にはSemantic Revision・Document binding・RevisionRecord・
+        # LearningEventが入ったのに、**会話（Forgeの本線）はそのどれも
+        # 通らなかった**。実機で最もよく使われる直し方だけがEvidenceを
+        # 1件も残さない、という状態である。
+        #
+        # 013で`/generate`と`/update`の両方にRouter迂回があったのと同じ
+        # 形——「片方だけ直して終わりにした」。二重Architectureにしない。
+        outcome = _revise(
+            request, provider_name=request.provider,
+            document=request.current_document, change_request=change_request,
         )
-        try:
-            update_result = ForgeOperationEngine(update_provider).apply_update(
-                request.current_document, change_request
-            )
-        except NoProviderAvailableError as exc:
-            raise ProviderError(
-                _no_provider_message(exc),
-                sub_reason="unavailable", stage="forming_operation",
-            ) from exc
-        provider_name = update_provider.last_provider_used or provider_name
+        # 局所patchはAIを呼ばないので、会話ステップのProvider名をそのまま
+        # 報告する。全体再生成へ落ちた場合は`_full_regen`側がRouterを通す。
         simulated = router.is_simulated(provider_name)
-        _note_update_outcome(update_provider, update_result)
         default_conversation_store.discard(session.session_id)
-        if not update_result.success:
-            raise UpdateOperationError(
-                update_result.error_message or "更新に失敗しました。",
-                validation_errors=(
-                    tuple(e.to_dict() for e in update_result.validation.errors)
-                    if update_result.validation is not None else ()
-                ),
-                stage="forming_operation",
-            )
-        assert update_result.forge_document is not None and update_result.validation is not None  # noqa: S101 — successなら両方Non-None(forge_operation.pyの契約)
         return ConverseUpdateResponse(
-            session_id=session.session_id, need_model=need_model_dto, change_request=change_request,
+            session_id=session.session_id, need_model=need_model_dto,
+            change_request=change_request,
             provider=provider_name, simulated=simulated,
-            result=UpdateResultDTO(
-                forge_document=update_result.forge_document,
-                validation=ValidationResultDTO(
-                    valid=update_result.validation.valid,
-                    errors=[ValidationIssueDTO(**e.to_dict()) for e in update_result.validation.errors],
-                    warnings=[ValidationIssueDTO(**w.to_dict()) for w in update_result.validation.warnings],
-                ),
-                attempts=update_result.attempts,
-            ),
+            result=_update_result_dto(outcome),
         )
 
     assert step_result.action == ConversationAction.BUILD  # noqa: S101 — CONFIRM/ASK/UPDATEは上で処理済み
@@ -699,128 +678,95 @@ def converse(request: ConverseRequest):
 # ---------------------------------------------------------------------------
 
 
+def _full_regen(provider_name: str | None):  # noqa: ANN202
+    """全体再生成fallback（FORGE-019A §5）。
+
+    **RevisionServiceへ渡す形にしてある。** fallbackもRevision lineageを
+    通すが、AIを呼ぶ都合はService側に持たせない——Serviceが`AIRouter`や
+    `ForgeOperationEngine`を知ると、Serviceの責務が広がりすぎる。
+    """
+    def run(document: dict, change_request: str):  # noqa: ANN202
+        bound = default_router().bind(ForgeTask.FORGE_LANGUAGE_UPDATE, provider=provider_name)
+        try:
+            result = ForgeOperationEngine(bound).apply_update(document, change_request)
+        except NoProviderAvailableError as exc:
+            raise ProviderError(
+                _no_provider_message(exc),
+                sub_reason="unavailable", stage="forming_operation",
+            ) from exc
+        _note_update_outcome(bound, result)
+        if not result.success or result.forge_document is None or result.validation is None:
+            raise UpdateOperationError(
+                result.error_message or "更新に失敗しました。",
+                validation_errors=(
+                    tuple(e.to_dict() for e in result.validation.errors)
+                    if result.validation is not None else ()
+                ),
+                stage="forming_operation",
+            )
+        return result.forge_document, result.validation, result.attempts
+
+    return run
+
+
+def _revise(request_like, *, provider_name: str | None, document: dict, change_request: str):  # noqa: ANN001, ANN202
+    """`/update`と`/converse`が**共通で通る**変更経路（FORGE-019A §2）。
+
+    ここを1本にしていなかったので、019では会話（本線）だけが旧経路を
+    通り、Evidenceを1件も残していなかった。
+    """
+    try:
+        return default_revision_service().revise(
+            artifact_id=getattr(request_like, "artifact_id", None),
+            seen_version_token=getattr(request_like, "seen_version_token", None),
+            document=document,
+            change_request=change_request,
+            idempotency_key=getattr(request_like, "idempotency_key", None) or "",
+            full_regen=_full_regen(provider_name),
+        )
+    except RevisionRejected as exc:
+        raise UpdateOperationError(exc.reason, stage=exc.stage.value) from exc
+
+
+def _update_result_dto(outcome) -> UpdateResultDTO:  # noqa: ANN001 — RevisionOutcome
+    return UpdateResultDTO(
+        forge_document=outcome.document,
+        validation=ValidationResultDTO(
+            valid=bool(outcome.validation.valid),
+            errors=[ValidationIssueDTO(**e.to_dict()) for e in outcome.validation.errors],
+            warnings=[ValidationIssueDTO(**w.to_dict()) for w in outcome.validation.warnings],
+        ),
+        attempts=outcome.attempts,
+        artifact=ArtifactRefDTO(**outcome.handle.to_client_dict()),
+        revision_mode=outcome.mode.value,
+        semantic_operation=outcome.operation_id,
+        semantic_target=(
+            {"screen_id": outcome.target.screen_id, "widget_id": outcome.target.widget_id,
+             "semantic_identity": outcome.target.semantic_identity}
+            if outcome.target is not None else None
+        ),
+        critic_passed=outcome.critic_passed,
+    )
+
+
 @router.post("/update", response_model=UpdateSuccessResponse, responses=_GENERATE_ERROR_RESPONSES)
 def update(request: UpdateRequest):
-    """既存の`forge_document`を、`change_request`に従って更新する
-    (`forge_operation.py`参照)。Cognitive Pipelineを一切通らない
-    (Forge Language知識はValidatorだけに委ね、生成しない=既存の
-    `/generate`とは独立した経路)。Repair往復後もValidatorに合格
-    しなければ、`UpdateOperationError`(422相当)として失敗を返す
-    ——不正なJSONを「成功」として返すことは絶対にしない。
+    """既存の`forge_document`を`change_request`に従って更新する。
+
+    **`/converse`のUPDATEと同じ`RevisionService`を通る**
+    （FORGE-019A §2）。019では`/update`だけがSemantic Revisionを通り、
+    会話（本線）は旧`ForgeOperationEngine`へ直接流れていた——実機で
+    最もよく使われる直し方だけがEvidenceを1件も残していなかった。
+
+    局所操作へ落とせない要求は全体再生成へfallbackするが、**そちらも
+    同じRevision lineageを通る**（§5）。局所patchのふりはしない
+    （`revision_mode`で区別できる）。
     """
-    # FORGE-AI-FOUNDATION-010 Phase B(2026-08-13): この経路も
-    # **AIRouterを通す**。以前は`ProviderRouter.resolve()`を直接呼んで
-    # おり、`/update`だけQuota切れのfallbackもCircuit Breakerも
-    # 効いていなかった(Routerを作った後も繋いでいなかった箇所)。
-    semantic = apply_semantic_intent(request.forge_document, request.change_request)
-    if isinstance(semantic, AppliedSemanticRevision):
-        registry = default_artifact_registry()
-        capability = registry.resolve(request.artifact_id or "")
-        if capability is None:
-            raise UpdateOperationError("semantic revision requires a current artifact capability", stage="target_resolution")
-        if request.seen_version_token != capability.version_token:
-            raise UpdateOperationError("stale artifact version", stage="target_resolution")
-        revisions = default_revision_store()
-        previous_revision_ref = None
-        if capability.evidence_id.kind is EvidenceKind.REVISION:
-            previous = revisions.get(capability.evidence_id.ref)
-            if previous is None:
-                raise UpdateOperationError("revision evidence is unavailable", stage="target_resolution")
-            base_generation_ref, previous_revision_ref = previous.base_generation_ref, previous.ref
-        else:
-            base_generation_ref = capability.evidence_id.ref
-            if default_generation_store().get(base_generation_ref) is None:
-                raise UpdateOperationError("generation evidence is unavailable", stage="target_resolution")
-        target = semantic.operation.target
-        before_role = ""
-        stack = list(request.forge_document.get("screens", ()))
-        while stack:
-            node = stack.pop()
-            if isinstance(node, dict):
-                if node.get("id") == target.widget_id:
-                    before_role = str(node.get("style_role") or "")
-                stack.extend(node.values())
-            elif isinstance(node, list):
-                stack.extend(node)
-        stored = revisions.record(RevisionRecord(
-            base_generation_ref=base_generation_ref,
-            previous_revision_ref=previous_revision_ref,
-            sequence=1 + sum(r.base_generation_ref == base_generation_ref for r in revisions.all_records()),
-            operation_kind=RevisionOperationKind.DESIGN,
-            source=GenerationSource.COMPOSITION,
-            validator_passed=True, runtime_outcome=RuntimeOutcome.UNKNOWN,
-            design_revisions=(DesignRevision(
-                screen_id=target.screen_id, target_id=target.widget_id,
-                axis="primary_metric", before=before_role, after="metric.primary",
-                source=DesignDecisionSource.USER_CORRECTION,
-            ),),
-            patch_mode=RevisionPatchMode.LOCAL_SEMANTIC_PATCH,
-            semantic_operation_ids=(semantic.operation.kind.value,),
-            critic_passed=True,
-            visual_evidence_reference="docs/visual-evidence/FORGE-019/manifest.md",
-            forge_language_version=str(semantic.document.get("version") or ""),
-        ))
-        correction = default_feedback_service().record(
-            signal=AcceptanceSignal.CORRECTED, artifact_id=request.artifact_id,
-            seen_version_token=request.seen_version_token,
-            idempotency_key=request.idempotency_key or "",
-        )
-        if not correction.recorded:
-            raise UpdateOperationError("correction evidence could not be recorded", stage="revision_evidence")
-        advanced = registry.advance_to_revision(
-            handle=capability.handle, revision_ref=stored.ref, revision_uid=stored.uid,
-        )
-        return UpdateSuccessResponse(result=UpdateResultDTO(
-            forge_document=semantic.document,
-            validation=ValidationResultDTO(
-                valid=True, errors=[],
-                warnings=[ValidationIssueDTO(**w.to_dict()) for w in semantic.validation.warnings],
-            ), attempts=1, artifact=ArtifactRefDTO(**advanced.to_client_dict()),
-            revision_mode=RevisionMode.LOCAL_SEMANTIC_PATCH.value,
-            semantic_operation=semantic.operation.kind.value,
-            semantic_target={"screen_id": target.screen_id, "widget_id": target.widget_id,
-                             "semantic_identity": target.semantic_identity},
-            critic_passed=True,
-        ))
-    if isinstance(semantic, TargetResolution) and semantic.status in {
-        TargetResolutionStatus.AMBIGUOUS, TargetResolutionStatus.NEEDS_CLARIFICATION,
-    }:
-        raise UpdateOperationError(semantic.reason, stage="target_resolution")
-
-    provider = default_router().bind(ForgeTask.FORGE_LANGUAGE_UPDATE, provider=request.provider)
-    try:
-        result = ForgeOperationEngine(provider).apply_update(
-            request.forge_document, request.change_request
-        )
-    except NoProviderAvailableError as exc:
-        raise ProviderError(
-            _no_provider_message(exc),
-            sub_reason="unavailable", stage="forming_operation",
-        ) from exc
-
-    _note_update_outcome(provider, result)
-
-    if not result.success:
-        raise UpdateOperationError(
-            result.error_message or "更新に失敗しました。",
-            validation_errors=(
-                tuple(e.to_dict() for e in result.validation.errors) if result.validation is not None else ()
-            ),
-            stage="forming_operation",
-        )
-
-    assert result.forge_document is not None and result.validation is not None  # noqa: S101 — successならforge_operation.pyの契約上必ず両方Non-None
-    return UpdateSuccessResponse(
-        result=UpdateResultDTO(
-            forge_document=result.forge_document,
-            validation=ValidationResultDTO(
-                valid=result.validation.valid,
-                errors=[ValidationIssueDTO(**e.to_dict()) for e in result.validation.errors],
-                warnings=[ValidationIssueDTO(**w.to_dict()) for w in result.validation.warnings],
-            ),
-            attempts=result.attempts,
-        )
+    outcome = _revise(
+        request, provider_name=request.provider,
+        document=request.forge_document, change_request=request.change_request,
     )
+    return UpdateSuccessResponse(result=_update_result_dto(outcome))
 
 
 # ---------------------------------------------------------------------------

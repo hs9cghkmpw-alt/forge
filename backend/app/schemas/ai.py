@@ -277,6 +277,19 @@ class ConverseRequest(BaseModel):
             "'update'(既存ツールへの変更要求)を選びうる(TD40)。"
         ),
     )
+    artifact_id: str | None = Field(
+        default=None, min_length=1,
+        description=(
+            "FORGE-019A §2: 会話からの変更も`/update`と同じRevisionServiceを"
+            "通る。`current_document`を渡すなら、それを受け取ったときの"
+            "artifact capabilityも一緒に渡す。無いと変更は受け付けられない"
+        ),
+    )
+    seen_version_token: str | None = Field(
+        default=None, min_length=1,
+        description="利用者が見ていた版。古ければstale_versionとして拒否する",
+    )
+    idempotency_key: str | None = Field(default=None, max_length=200)
 
 
 class UnknownItemDTO(BaseModel):

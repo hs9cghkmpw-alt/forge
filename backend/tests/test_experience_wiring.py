@@ -53,6 +53,8 @@ try:
 
     from app.main import app
 
+    from tests.revision_fixtures import provision_artifact
+
     _FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover — 環境依存
     _FASTAPI_AVAILABLE = False
@@ -143,14 +145,14 @@ class TestProductionRequestsLeaveEvidence(unittest.TestCase):
     def test_an_update_is_recorded(self) -> None:
         """`/update`はCognitive Pipelineを通らない**独立経路**である。
         通らない経路は、放っておくと記録されない。"""
+        artifact = provision_artifact(self.client)
         before = len(self.store.all_records())
         response = self.client.post(
             "/api/v1/ai/update",
-            json={
-                "forge_document": _MINIMAL_DOCUMENT,
-                "change_request": "タイトルを大きくして",
-                "provider": "mock",
-            },
+            # FORGE-019A: 局所的な意味操作へ落とせない要求を選び、
+            # 全体再生成fallback(AIを呼ぶ側)を踏ませる。局所patchはAIを
+            # 呼ばないので、そちらではExperienceは増えない——それが正しい。
+            json=artifact.update_payload("在庫管理の機能も足したい", provider="mock"),
         )
         self.assertIn(response.status_code, (200, 422), response.text)
         after = self.store.all_records()

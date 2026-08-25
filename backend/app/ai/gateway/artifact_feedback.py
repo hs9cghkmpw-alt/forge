@@ -94,6 +94,7 @@ first-wins、事実は全部残る。
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import secrets
 import time
@@ -119,6 +120,7 @@ __all__ = [
     "default_artifact_registry",
     "default_feedback_log",
     "default_feedback_service",
+    "document_binding",
     "document_fingerprint",
     "new_version_token",
 ]
@@ -144,6 +146,49 @@ def document_fingerprint(document: dict) -> str:
     """
     canonical = json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
+
+
+#: **Documentの身元を照合するための、プロセス内だけの鍵**（FORGE-019A §1）。
+#:
+#: `document_fingerprint()`（salt無しsha256）を使わない理由:
+#:
+#: * 内容が同じなら誰が作っても同じ値になる → 利用者を跨いだ突き合わせに使える
+#: * 低entropyな内容は総当たりで言い当てられる
+#:
+#: HMACなら、鍵を知らない側は値から内容を復元も照合もできない。鍵はプロセス
+#: 起動ごとに変わる——**保存もしないし、外へも出さない**。
+_DOCUMENT_BINDING_KEY = secrets.token_bytes(32)
+
+
+def document_binding(document: dict) -> str:
+    """そのDocumentの**身元**（FORGE-019A §1）。**内部専用。**
+
+    ⚠️ **Clientへ返さない。Learning Eventへ載せない。**
+
+    ---
+
+    ## 何を防ぐためのものか
+
+    017Aで`artifact_id`（capability）と`version_token`（世代）を分けた。
+    しかし**Documentそのものは照合していなかった**ので、
+
+    ```
+    正しい artifact_id + 正しい version_token + 別のDocument
+    ```
+
+    が通ってしまった。Revisionは「その生成物をこう直した」という記録
+    なので、**直した対象が別物なら記録は嘘になる**——Revision lineageを
+    汚染できる。
+
+    Handleを持っている人が、自分で作った任意のJSONを「Forgeが生成した
+    ものを直した」ことにできる、という形である。
+
+    ## 正準化してから取る
+
+    キーの順序が違うだけで別物と判定されると、往復しただけで拒否される。
+    """
+    canonical = json.dumps(document, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hmac.new(_DOCUMENT_BINDING_KEY, canonical.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def new_version_token() -> str:
@@ -202,12 +247,34 @@ class ArtifactHandle:
     version_token: str
     """世代照合用。**内容と無関係なランダム値**（017A §4）。"""
 
+    document_binding: str = ""
+    """この版の**Documentの身元**（FORGE-019A §1）。**内部専用。**
+
+    `version_token`は「さっきと同じ版か」しか言わない。Clientが
+    正しいhandleと正しいtokenを持ったまま**別のDocument**を送ると、
+    017Aの検査は全部通る。Revisionは「その生成物をこう直した」という
+    記録なので、直した対象が別物なら記録は嘘になる。
+
+    空文字は「束縛していない」——古い経路との互換のために許すが、
+    Revisionは**束縛が無ければ通さない**（`RevisionService`）。
+    """
+
     session_id: str | None = None
     created_at: float = 0.0
 
     def to_client_dict(self) -> dict[str, str]:
-        """Clientへ返す形。**系譜のIDは含まない。**"""
+        """Clientへ返す形。**系譜のIDも、Documentの身元も含まない。**"""
         return {"artifact_id": self.handle, "version_token": self.version_token}
+
+    def binds(self, document: dict) -> bool:
+        """このcapabilityが、その`document`のものか（FORGE-019A §1）。
+
+        **束縛が無ければ`False`。** 「記録し忘れ」を「照合済み」へ
+        倒さない（`CLAUDE.md` §3）。
+        """
+        if not self.document_binding:
+            return False
+        return hmac.compare_digest(self.document_binding, document_binding(document))
 
 
 class FeedbackSource(str, Enum):
@@ -401,12 +468,17 @@ class ArtifactRegistry:
         session_id: str | None = None,
         revision_ref: int | None = None,
         revision_uid: str = "",
+        document: dict | None = None,
     ) -> ArtifactHandle:
-        """評価を受け付けられるようにする。
+        """評価とRevisionを受け付けられるようにする。
 
-        **Documentを受け取らない**（017A §4）。世代tokenは内容から
-        作らないので、そもそもDocumentを見る必要が無い。見ないなら
-        受け取らない——受け取れば、いつか誰かが内容から何かを作る。
+        `document`は**身元の照合にだけ**使う（FORGE-019A §1）。
+        HMACを取ったら捨てるので、内容はここに残らない。
+
+        017Aでは「見ないなら受け取らない」として`document`を外したが、
+        **見る必要が出た**——Revisionは「その生成物を直した」という記録
+        なので、直した対象が同じものかを確かめないと記録が嘘になりうる。
+        受け取るからには、**内容を保持せず・外へ出さない**形にする。
         """
         if revision_ref is not None:
             evidence_id = ArtifactEvidenceId(EvidenceKind.REVISION, revision_uid, revision_ref)
@@ -418,6 +490,7 @@ class ArtifactRegistry:
             handle=secrets.token_urlsafe(16),
             evidence_id=evidence_id,
             version_token=new_version_token(),
+            document_binding=document_binding(document) if document is not None else "",
             session_id=session_id,
             created_at=float(self._now()),
         )
@@ -435,16 +508,24 @@ class ArtifactRegistry:
         return self._by_handle.get(handle)
 
     def advance_to_revision(
-        self, *, handle: str, revision_ref: int, revision_uid: str
+        self, *, handle: str, revision_ref: int, revision_uid: str,
+        document: dict | None = None,
     ) -> ArtifactHandle:
-        """Advance one capability and invalidate the version the user saw."""
+        """Advance one capability and invalidate the version the user saw.
+
+        `document`（変更後のもの）を渡すと、次のRevisionはその文書に
+        束縛される（FORGE-019A §1）。渡さないと束縛が空になり、
+        **次のRevisionは通らない**——連鎖を切らないために必ず渡すこと。
+        """
         current = self._by_handle.get(handle)
         if current is None:
             raise KeyError("unknown artifact capability")
         advanced = ArtifactHandle(
             handle=current.handle,
             evidence_id=ArtifactEvidenceId(EvidenceKind.REVISION, revision_uid, revision_ref),
-            version_token=new_version_token(), session_id=current.session_id,
+            version_token=new_version_token(),
+            document_binding=document_binding(document) if document is not None else "",
+            session_id=current.session_id,
             created_at=float(self._now()),
         )
         self._by_handle[handle] = advanced

@@ -291,6 +291,35 @@ class RevisionEvidenceStore:
         """
         return tuple(r for r in self.all_records() if r.is_positive_example)
 
+    def attach_visual_evidence(self, ref: int, reference: str) -> RevisionRecord | None:
+        """**実際にそのRevisionをrender/captureしたときだけ**呼ぶ
+        （FORGE-019A §3）。
+
+        ---
+
+        ## なぜ本番で既定値にしないのか
+
+        019は`/update`のRevisionRecordへ
+
+            visual_evidence_reference="docs/visual-evidence/FORGE-019/manifest.md"
+
+        を**固定で**入れていた。つまり実利用者がどんな変更をしても、
+        Golden Financeのスクリーンショットが「その証拠」として紐付いた。
+
+        Visual Evidenceは「**この変更を実際に描画して目で確かめた**」
+        という主張である。撮っていないものに撮った証拠を付けるのは、
+        検証の偽装にほかならない。Datasetの品質判断がこれを読むように
+        なったら、嘘が学習素材の選別に効く。
+
+        **通常のProductionでは`None`のままが正しい。**
+        """
+        existing = self._records.get(ref)
+        if existing is None:
+            return None
+        updated = replace(existing, visual_evidence_reference=reference)
+        self._records[ref] = updated
+        return updated
+
     def next_sequence(self, generation_ref: int) -> int:
         """その生成物への何回目の変更になるか。"""
         return len(self.for_generation(generation_ref)) + 1

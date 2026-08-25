@@ -56,6 +56,8 @@ try:
     from app.ai.gateway.tasks import ForgeTask
     from app.main import app
 
+    from tests.revision_fixtures import provision_artifact
+
     _FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover - 依存が無い環境
     _FASTAPI_AVAILABLE = False
@@ -201,18 +203,52 @@ class TestNoAICallBypassesTheRouter(unittest.TestCase):
     }
 
     def test_update_goes_through_the_router_with_its_own_task(self) -> None:
-        """`/update`はRouterを通り、かつ**会話とは別のTask**で通る。
+        """`/update`の**全体再生成fallback**はRouterを通り、かつ会話とは
+        別のTaskで通る。
 
-        mockは`response_schema={}`に対して`{}`を返すため、更新結果は
-        Validator不合格(422)になる——それでよい。ここで見ているのは
-        「AI呼び出しがRouterを通ったか」であって、更新の成否ではない。
+        ---
+
+        ## FORGE-019Aで前提が変わった
+
+        以前はハンドル無しで`/update`を叩けたが、いまは**本物のartifact
+        capabilityとDocument bindingが揃わないと通らない**（§1・§5）。
+        「適当なJSONで更新を試す」経路そのものを塞いだためである。
+
+        なので本番と同じ順序——`/generate`で1件作ってから直す——で測る。
+        局所的な意味操作へ落とせない要求を選び、fallbackを踏ませている。
+
+        `mock`は`response_schema={}`に`{}`を返すので結果は422になる。
+        ここで見ているのは**AI呼び出しがRouterを通ったか**であって、
+        更新の成否ではない。
         """
+        artifact = provision_artifact(self.client)
+        self.router.calls.clear()  # 生成時のAI呼び出しを数えない(FORGE-019A: 更新の前に必ず生成が要る)
         response = self.client.post(
             "/api/v1/ai/update",
-            json={"forge_document": self._VALID_DOC, "change_request": "予算も管理したい"},
+            json=artifact.update_payload("在庫管理の機能も足したい"),
         )
         self.assertIn(response.status_code, (200, 422), response.text)
         self.assertIn(ForgeTask.FORGE_LANGUAGE_UPDATE, self.router.tasks)
+
+    def test_a_local_semantic_patch_does_not_call_the_ai_at_all(self) -> None:
+        """**局所patchはAIを1回も呼ばない**（FORGE-019A）。
+
+        呼んでいたら、Forgeが決定的に決められることをAIへ丸投げしている
+        ——Quotaも待ち時間も無駄になり、結果が毎回ぶれる。
+        """
+        artifact = provision_artifact(self.client)
+        self.router.calls.clear()  # 生成時のAI呼び出しを数えない(FORGE-019A: 更新の前に必ず生成が要る)
+        response = self.client.post(
+            "/api/v1/ai/update", json=artifact.update_payload("収入をもっと目立たせて"),
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(
+            response.json()["result"]["revision_mode"], "local_semantic_patch",
+        )
+        self.assertEqual(
+            self.router.tasks, [],
+            "局所patchなのにAIを呼んでいる（決定的に決められることを丸投げしている）",
+        )
 
     # -- 迂回そのものの検出 -------------------------------------------------
 
@@ -246,12 +282,16 @@ class TestRouterTasksAreDistinguished(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def test_update_does_not_reuse_the_conversation_task(self) -> None:
+        """全体再生成fallbackは、会話とは別のTaskで測られること。
+
+        FORGE-019A: capability無しでは通らなくなったので、本番と同じ
+        順序で作ってから直す。
+        """
+        artifact = provision_artifact(self.client)
+        self.router.calls.clear()  # 生成時のAI呼び出しを数えない(FORGE-019A: 更新の前に必ず生成が要る)
         self.client.post(
             "/api/v1/ai/update",
-            json={
-                "forge_document": TestNoAICallBypassesTheRouter._VALID_DOC,
-                "change_request": "予算も管理したい",
-            },
+            json=artifact.update_payload("在庫管理の機能も足したい"),
         )
         self.assertEqual(self.router.tasks, [ForgeTask.FORGE_LANGUAGE_UPDATE] * len(self.router.tasks))
         self.assertTrue(self.router.tasks, "AI呼び出しが1回も記録されていない")

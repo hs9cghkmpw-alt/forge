@@ -464,14 +464,48 @@ class TestVersionTokenIsNotAContentHash(unittest.TestCase):
         利用者の生成物を突き合わせられない。"""
         self.assertNotEqual(new_version_token(), new_version_token())
 
-    def test_the_registry_does_not_take_a_document(self) -> None:
-        """**見ないなら受け取らない。** 受け取れば、いつか誰かが内容から
-        何かを作る。"""
-        import inspect
+    def test_the_registry_never_derives_the_token_from_the_document(self) -> None:
+        """**世代tokenは内容から作らない**（017A §4）。
 
-        params = set(inspect.signature(ArtifactRegistry.register).parameters)
-        self.assertNotIn("document", params)
-        self.assertNotIn("fingerprint", params)
+        ---
+
+        ## この制約は FORGE-019A で形を変えた
+
+        017Aでは「見ないなら受け取らない」として`register()`から
+        `document`引数そのものを外していた。**019Aで見る必要が出た**
+        ——Revisionは「その生成物を直した」という記録なので、直した対象が
+        同じものかを確かめないと記録が嘘になる（§1 Document binding）。
+
+        そこで制約を**引数の有無から、値の性質へ**移した。
+
+        * `document`は受け取ってよい
+        * ただし**`version_token`はそこから作られない**（内容と無関係）
+        * 束縛は`document_binding`（プロセス内鍵のHMAC）へ入り、
+          Clientにも Learning Event にも出ない
+
+        引数を禁じるのは手段であって目的ではなかった。目的は
+        「内容由来の値を外へ出さない」ことである。
+        """
+        registry = ArtifactRegistry()
+        document = {"version": "1.12", "app": {"title": "同じ内容"}}
+        first = registry.register(generation_ref=1, generation_uid="u1", document=document)
+        second = registry.register(generation_ref=2, generation_uid="u2", document=document)
+
+        self.assertNotEqual(
+            first.version_token, second.version_token,
+            "同じ内容から同じtokenが出ている（内容由来になっている）",
+        )
+        self.assertNotIn(document_fingerprint(document), first.version_token)
+
+    def test_the_document_binding_never_reaches_the_client(self) -> None:
+        """**束縛はClientへ出さない**（FORGE-019A §1）。"""
+        registry = ArtifactRegistry()
+        document = {"version": "1.12", "app": {"title": "x"}}
+        handle = registry.register(generation_ref=1, generation_uid="u1", document=document)
+
+        self.assertTrue(handle.document_binding)
+        self.assertNotIn(handle.document_binding, repr(handle.to_client_dict()))
+        self.assertEqual(set(handle.to_client_dict()), {"artifact_id", "version_token"})
 
     def test_two_registrations_get_different_tokens(self) -> None:
         registry = ArtifactRegistry()

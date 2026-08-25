@@ -87,7 +87,7 @@ class TestSemanticRevisionProductionWiring(unittest.TestCase):
         default_learning_event_service().reset()
         self.client = TestClient(app)
 
-    def _artifact(self):
+    def _artifact(self, document: dict | None = None):
         generation = default_generation_store().record(GenerationRecord(
             source=GenerationSource.CURATED, domain="household_budget",
             validator_passed=True, forge_language_version="1.12",
@@ -95,6 +95,9 @@ class TestSemanticRevisionProductionWiring(unittest.TestCase):
         return default_artifact_registry().register(
             generation_ref=generation.ref, generation_uid=generation.uid,
             session_id="forge-019",
+            # FORGE-019A §1: capabilityは**その文書へ束縛される**。
+            # 渡さないとRevisionは通らない(fail closed)。
+            document=document if document is not None else finance_document(),
         )
 
     def test_update_records_revision_learning_event_and_advances_capability(self) -> None:
