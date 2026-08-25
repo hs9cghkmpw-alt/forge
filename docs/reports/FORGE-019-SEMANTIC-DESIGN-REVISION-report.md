@@ -2,7 +2,7 @@
 
 ## Baseline and reproduced gaps
 
-- Branch `claude/forge-master-handoff-k46jns`; start HEAD `07bb8af6395d64a096c7298c226fafa61f6da0a6`; final HEAD is the pushed documentation commit.
+- Branch `claude/forge-master-handoff-k46jns`; start HEAD `07bb8af6395d64a096c7298c226fafa61f6da0a6`; implementation/docs HEAD reviewed by CI `5646a2e224edd04e688f690d75ca0c9f5715802a`.
 - Existing `/update` sent the complete document and raw request to a provider for full rewrite. It had no typed target resolution, artifact/version check, Critic, RevisionRecord, or REVISION Learning Event production write.
 - Flutter discarded artifact capability and had no explicit accepted/correction controls. Evaluation decisions lacked complete policy context. No repeatable screenshot capture or visual completion rule existed.
 
@@ -43,7 +43,7 @@ No raw correction utterance is stored in LearningEvent/RevisionRecord. ArtifactH
 
 ## CI, risk, and unverified work
 
-CI is UNVERIFIED until push and completion of Python 3.11/3.12, backend smoke, and Flutter jobs.
+GitHub Actions run `32811724667` completed successfully for `5646a2e`: Python 3.11, Python 3.12, backend smoke, and Flutter all passed. https://github.com/hs9cghkmpw-alt/forge/actions/runs/32811724667
 
 - Browser capture and HTTP update are production-backed but not yet one browser automation transaction.
 - There is no authenticated preview callback, so RevisionRecord runtime outcome remains UNKNOWN.
