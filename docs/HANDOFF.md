@@ -76,8 +76,8 @@ commit の途中で落ちたら、RevisionRecord も REVISION Learning Event も
 | backend | **1,520 passed / 16 skipped**（今回の実測） |
 | forge_ai | **521 passed** |
 | ruff（変更ファイル） | All checks passed |
-| flutter analyze / test / build web | push 後の CI で確認 |
-| CI 4 job | push 後に確認 |
+| CI 4 job（run `32877978227` / `c8e5a06`） | **すべて success** |
+| flutter analyze / test / build web | **success（CI）** |
 
 > **数字は今回の実測を使っている。** 019A の報告は `1496/16` だったが、
 > CI の実ログは `1495/17` だった（`FORGE_DEFAULT_PROVIDER=mock` の有無で

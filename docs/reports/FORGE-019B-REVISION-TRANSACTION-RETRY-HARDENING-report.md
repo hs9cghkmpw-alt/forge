@@ -249,7 +249,8 @@ Flutter Host / 会話
 | backend | **1,520 passed / 16 skipped** |
 | forge_ai | **521 passed** |
 | ruff（変更ファイル） | All checks passed |
-| flutter analyze / test / build web | push 後の CI で確認 |
+| flutter analyze / test / build web | **success（CI）** |
+| CI 4 job（run `32877978227` / `c8e5a06`） | **すべて success** |
 
 新規: `backend/tests/test_forge_019b_revision_transaction.py`（24件）
 
@@ -257,7 +258,9 @@ Flutter Host / 会話
 > `1496 passed / 16 skipped` だったが、CI の実ログは
 > `1495 passed / 17 skipped` だった（`FORGE_DEFAULT_PROVIDER=mock` の
 > 有無で skip 条件が1件変わる）。**古い数字をコピーしていない。**
-> CI 実測は push 後に追記する。
+>
+> CI（run `32877978227` / `c8e5a06`）は 4 job すべて success。
+> backend / forge_ai のテストは Python 3.11・3.12 の両方で通っている。
 
 ### guard の分類（3種類を混ぜずに数える）
 
