@@ -148,25 +148,32 @@ class TestToolBrokerCannotBeBypassed(unittest.TestCase):
         self.assertIs(result.outcome, ToolOutcome.FAILED)
 
     def test_secrets_are_redacted_from_tool_output(self) -> None:
+        """**形は本物に似せ、値は明らかに偽物にする。**
+
+        redaction の正規表現を試すには秘密らしい**形**が要る。しかし
+        本物らしい値を repository へ置くと、走査に引っかかるし読む人が
+        判断に迷う（`CLAUDE.md` §4）。`EXAMPLE-NOT-A-REAL` を埋め込んで
+        形は保ったまま、値としては一目で偽物と分かるようにしてある。
+        """
         broker = ToolBroker()
         broker.register(ToolSpec(
             "read_file", "r", required=("path",),
-            run=lambda path: "OPENAI_API_KEY=sk-abcd1234efgh5678\nrest of file",
+            run=lambda path: "OPENAI_API_KEY=sk-EXAMPLE-NOT-A-REAL-KEY\nrest of file",
         ))
         content = broker.invoke(ToolCall("read_file", {"path": "x"})).content
-        self.assertNotIn("sk-abcd1234efgh5678", content)
+        self.assertNotIn("sk-EXAMPLE-NOT-A-REAL-KEY", content)
         self.assertIn("rest of file", content, "全文を捨てている（伏せるのは一致部分だけ）")
 
     def test_secrets_are_redacted_from_tool_errors(self) -> None:
         broker = ToolBroker()
 
         def _boom(path: str) -> str:
-            msg = "failed with token=ghp_abcdefghijklmnop"
+            msg = "failed with token=ghp_EXAMPLENOTAREALTOKEN"
             raise RuntimeError(msg)
 
         broker.register(ToolSpec("read_file", "r", required=("path",), run=_boom))
         self.assertNotIn(
-            "ghp_abcdefghijklmnop",
+            "ghp_EXAMPLENOTAREALTOKEN",
             broker.invoke(ToolCall("read_file", {"path": "x"})).error,
         )
 

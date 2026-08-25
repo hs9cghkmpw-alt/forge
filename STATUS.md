@@ -3,7 +3,7 @@
 現在のForgeが「どこまで動くか」を一枚で示す。詳細な履歴は`CHANGELOG.md`、
 未解消の課題は`TECH_DEBT.md`・`KNOWN_ISSUES.md`を参照。
 
-**最終更新**: 2026-08-17(FORGE-R1-CLOSURE-015: R1 Design Language 閉じ込め)
+**最終更新**: 2026-08-25(FORGE-019C/020: Revision Atomic Closure + Local Generative Intelligence Foundation)
 
 > このファイルはFORGE-CONVERSATION-READY-001指示書15章の要請で新設した。
 > それ以前は同等の役割を`KNOWN_ISSUES.md`と各`*-report.md`が分担しており、
@@ -51,10 +51,22 @@
 | └ AIによるrole選択 | **動作** | `design_intent`段。軸ごとの択一をAIへ提示し、**軸ごとに検証**して外れたら既定値+記録。語彙はbackendから**注入**(forge_aiはbackendを知らない)。Curatedでも1回AIを呼ぶ(**TD70**、推奨解を記録済み) |
 | Model fallback(Provider内) | 動作 | 一時的失敗・Model廃止・PER_MODEL枠切れのとき、同じProviderの別Modelへ進む。Provider Identityは増やさない(011 §1) |
 | **Gemini無料枠** | **観測1 Modelで20** | 実測は429本文の`quotaValue=20`・`quotaId=PerProjectPerModel`のみ。合計値と枠の単位(Project/鍵)は**未検証**(TD66)。検証作業だけで上限到達したので実運用には足りない |
-| Local Provider | 実装済/未実測 | OpenAI互換。実モデル未実行(環境制約、TD51) |
+| Local Provider | 実装済/未実測 | OpenAI互換。**実モデル未実行**(環境制約、TD51)。runtimeもmodel取得先も無い(2026-08-25実測) |
 | 2つ目のCloud枠 | **配線は実測/実API未検証** | `FORGE_EXTRA_PROVIDERS`+環境変数3つで載ることを、localhostの偽OpenAI互換サーバで確認(TD67)。**実エンドポイントは未検証**——この環境はegress禁止 |
 | Provider Benchmark | 動作 | Impact分類16ケース。harness実行確認済み |
 | Benchmark → Routing接続 | **配線済/データ待ち** | 実測(REAL)が2 Provider揃えば品質順になる。今は記録が無く宣言順 |
+| Local Promotion Gate | **配線済/昇格0件** | `AIRouter._order()`から呼ばれる。**実測が1件も無いので昇格Providerは0**。「Localだから」では通さない |
+| Revision transaction | **動作** | prepare→stage→commit(CAS→追記)→project。落ちうる段を追記より前に集めた。Rejectedなら**何も残らない**(019C) |
+| └ Artifact CAS / per-artifact lock | **動作** | version_token・evidence uid・document_binding の3値を照合。expected 省略も conflict |
+| └ Replay 予約 | **動作** | 同じ論理要求を同時に2本走らせない。**失敗は覚えない**。プロセス内(TD81) |
+| └ Learning Outbox | **動作/NOT DURABLE** | commit→pending→retry。exactly-once相当。**プロセス内メモリ**(TD80) |
+| └ 意味的操作の語彙 | **1件のみ** | 本番到達可能は`select_primary_metric`だけ。engine_only 1件・reserved 5件(TD83) |
+| Generation Episode | **動作/本番配線済** | Revision 経路から実際に生まれる。`training_use`は`UNKNOWN`なのでDataset Gateは落とす |
+| Local Agent(Tool/Permission/Sandbox/Loop) | **契約のみ** | テストはあるが**本番配線なし**(TD84)。未配線であることをテストで固定 |
+| Web Capability(search/fetch/browser) | **契約のみ** | 実Web往復は**UNVERIFIED**。Web本文は命令として扱わない |
+| Teacher / Gym / Novel Benchmark / Dataset | **契約のみ** | run 0件・比較0件(TD84) |
+| Adapter / Training pipeline / Self-Extension | **未実装** | 契約のみ |
+| **Real Local Model** | **未実行(runs 0)** | Ollama/llama.cpp/torch未インストール、GPU無し、かつ`huggingface.co`/`ollama.com`がnetwork policyで拒否(実測)。**Mockを数えていない** |
 | Local AI 学習基盤 | **記録開始** | R0で`/converse`・`/generate`・`/update`から実際に記録。実Geminiで確認済み。学習・永続化は未着手 |
 | └ 生成物のEvidence | 動作 | 013で`GenerationRecord`を追加。**AIを呼ばないCurated生成も**`source=curated`として残る(TD65解決) |
 | └ Experience記録 | 動作 | 記録地点は`AIRouter.generate()`の1箇所。Validatorの合否・利用者の承認/訂正を後から書き足す |
@@ -74,12 +86,16 @@
 
 ## テスト
 
+**LOCAL の実測**（2026-08-25、FORGE-019C/020）。CI の値と混ぜない。
+
 | 対象 | 件数 | 状態 |
 |---|---|---|
-| `forge_ai/tests` | 521 | 全green |
-| `backend/tests` | 1155 | 全green(skip 16。うち3件はLive API Test、既定SKIP) |
-| `frontend`(Flutter) | 476 | 全green |
-| `flutter analyze` | 0件 | 2026-08-13にwarning/info含めて0へ(以前は77件) |
+| `forge_ai/tests` | **521** | 全green |
+| `backend/tests` | **1,706**(skip 16) | 全green。skip のうち3件はLive API Test、既定SKIP |
+| `frontend`(Flutter) | **514** | 全green |
+| `flutter analyze --fatal-infos --fatal-warnings` | 0件 | No issues found |
+| `flutter build web --debug` | — | 成功 |
+| backend smoke(起動 / health / CORS / generate) | — | 成功 |
 
 > 2026-08-13訂正: このセクションは以前「Flutter 451 / analyze 0エラー」と
 > 書いていた。件数が古かったのに加えて、**「0エラー」は正確ではあっても

@@ -258,7 +258,31 @@ Episode を本番へ配線したのは、「Agent が動いたときだけ記録
 | ruff（変更ファイル） | All checks passed |
 | backend smoke（起動 / health / CORS / generate） | **成功** |
 
-CI の実測値は「最終状態」節に記す。
+**CI の実測**（run `32910317758` / `b89d090`、4 job すべて success）:
+
+| job | 結果 |
+|---|---|
+| `backend + forge_ai (Python 3.11)` | forge_ai **521 passed** / backend **1,705 passed, 17 skipped** |
+| `backend + forge_ai (Python 3.12)` | forge_ai **521 passed** / backend **1,705 passed, 17 skipped** |
+| `frontend (Flutter)` | **514 tests passed** / `flutter analyze` 通過 / `flutter build web --debug` ✓ Built |
+| `backend smoke (起動 + CORS)` | success |
+
+### LOCAL と CI が1件ずれる理由（既知）
+
+backend は LOCAL `1,706 / 16` に対し CI `1,705 / 17`。
+`FORGE_DEFAULT_PROVIDER=mock` の有無で skip 条件が1件変わる
+（019B でも同じずれを記録している）。**古い数字をコピーしない。**
+
+### Flutter SDK の版が LOCAL と CI で違う
+
+| | 版 |
+|---|---|
+| LOCAL（この container） | **3.44.9** stable |
+| CI | **3.47.1** stable |
+
+どちらでも analyze / test / build web は通っている。ただし
+**Visual Evidence は 3.44.9 で撮った**ので、3.47.1 の描画と
+1px 単位で同じとは限らない。
 
 ### guard の内訳（混ぜない）
 
@@ -499,4 +523,21 @@ Real Local Model runs = 0
 
 ## 10. 最終状態
 
-（push 後に `docs/HANDOFF.md` と併せて確認すること）
+| | |
+|---|---|
+| Branch | `claude/forge-master-handoff-k46jns` |
+| Start HEAD | `63ad43403606c9731f76c98248a9b0e9149e94bf` |
+| Final HEAD | **（この commit。`git log -1` で確認）** |
+| commits | `bd74071`（019C 実装）→ `66946dc`（020 基盤）→ `b89d090`（文書・Visual）→ 本 commit |
+| CI | run `32910317758`（`b89d090`）**4 job すべて success**。本 commit の run は push 後に確認 |
+| local == remote | push 後に確認 |
+| working tree | clean |
+
+### Reviewer が最初に見るとよいところ
+
+1. `backend/tests/test_forge_019c_revision_closure.py` — A/B/C の再現と invariant
+2. `backend/app/ai/runtime/revision_unit_of_work.py` — 順序の変更（要点）
+3. `backend/app/ai/gateway/artifact_feedback.py` の `advance_to_revision` / `lock_for`
+4. `backend/tests/test_forge_020_production_wiring.py` — **配線していないことの固定**
+5. `docs/visual-evidence/FORGE-019C/manifest.md` — 実描画の目視結果
+6. `docs/GENERATIVE-SOFTWARE-DIRECTION.md` — 方向の下限

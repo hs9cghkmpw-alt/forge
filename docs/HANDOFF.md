@@ -123,7 +123,20 @@ Flutter Host / 会話
 | backend smoke（起動 / health / CORS / generate） | 成功 |
 | ruff（変更ファイル） | All checks passed |
 
-CI の実測は最新 run を参照（`docs/reports/...-report.md` §10）。
+**CI の実測**（run `32910317758` / `b89d090`、**4 job すべて success**）:
+
+| | CI |
+|---|---|
+| backend Python 3.11 | **1,705 passed / 17 skipped** |
+| backend Python 3.12 | **1,705 passed / 17 skipped** |
+| forge_ai | **521 passed** |
+| Flutter | **514 tests passed** / analyze 通過 / build web ✓ |
+
+> LOCAL は `1,706 / 16`。`FORGE_DEFAULT_PROVIDER=mock` の有無で skip が
+> 1件変わる（019B でも同じずれを記録済み）。**混ぜない。**
+>
+> Flutter SDK は **LOCAL 3.44.9 / CI 3.47.1**。Visual Evidence は
+> 3.44.9 で撮っている。
 
 | guard の種類 | 数 |
 |---|---|
