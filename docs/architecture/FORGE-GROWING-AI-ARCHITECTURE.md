@@ -805,6 +805,120 @@ replay する。キーだけでは返さない（§12 の「app_id を信用し�
 
 ---
 
+## 19C. Revision Atomic Closure（FORGE-019C、2026-08-25）
+
+019B は「advance が落ちると CORRECTED だけ残る」を**仕様として**書いて
+いた。追記専用の log は巻き戻せない、という理由だった。
+
+**しかし追記していなければ巻き戻す必要も無い。**
+
+```
+prepare   1バイトも書かずに、書けるかどうかを全部調べる
+stage     RevisionRecord を置く（Learning はまだ出ない）
+commit    1. CAS で版を前進   ← 落ちうるのはここだけ
+          2. staged Feedback を追記   ← 追記は最後
+project   Learning Outbox へ（失敗しても Revision は成功のまま）
+```
+
+**落ちうる段を追記より前に集めた**のが要点である。
+
+### Learning Projection Outbox
+
+Learning への投影は、事実の確定と**別の寿命**を持つ。
+
+```
+facts commit（確定・巻き戻さない）
+    ↓
+outbox pending
+    ↓
+投影を試す ── 成功 → projected
+           └─ 失敗 → pending のまま（attempts++ / 失敗の分類）
+                        ↓ drain()
+```
+
+`(evidence 型名, uid)` で入口を1つに絞るので、retry で Learning Event が
+二重に出ない（exactly-once 相当）。
+
+保持してよい型は whitelist（`GenerationRecord` / `RevisionRecord` /
+`ArtifactFeedbackEvent`）。raw text / secret / `ArtifactHandle` /
+credential は入らない。投影が終われば payload を捨てる。
+
+> **IN-MEMORY / NOT DURABLE / UNVERIFIED（再起動を跨ぐ retry）。**
+> DB durable outbox の**ふりをしない**。
+
+### 並行性
+
+「単一プロセスなので割り込まない」という前提は**成り立たない**
+——FastAPI の `def` endpoint は thread pool で並行に走る。前提を捨てた。
+
+| | |
+|---|---|
+| per-artifact lock | 生成物ごと。global lock にしない。使用中だけ保持 |
+| compare-and-swap | `version_token` / `evidence uid` / `document_binding` の3値 |
+| fail closed | `expected` を渡さない advance も conflict |
+| replay 予約 | 同じ論理要求を同時に2本本処理させない。**失敗は覚えない** |
+
+### DB化するときの移行境界
+
+| いま | DB化したら |
+|---|---|
+| `registry.lock_for()` | `SELECT ... FOR UPDATE` / optimistic version |
+| CAS（3値の比較） | `UPDATE ... WHERE version = ?` の affected rows |
+| `RevisionUnitOfWork.commit()` | 1つの DB transaction |
+| `LearningProjectionOutbox` | 同じ transaction 内の outbox 行 + 別 worker |
+| `registry.restore()` | 不要（ROLLBACK が行う） |
+| `RevisionReplayLog` | unique key |
+
+## 19D. Local Generative Intelligence の位置（FORGE-020、2026-08-25）
+
+方向そのものは **`docs/GENERATIVE-SOFTWARE-DIRECTION.md`** が引き受ける
+（`PRODUCT-DIRECTION.md` の下、この Architecture の上）。
+
+この Architecture が引き受けるのは、**Growing AI の資産としてどう扱うか**
+である。
+
+```
+GenerationEpisode   一仕事の軌跡。本文ではなく参照だけを持つ
+   ↓
+TeacherComparison   Teacher と Local を同じ Evaluator へ通す
+   ↓
+DatasetCandidate    品質Gateを全部通ったものだけ
+PreferencePair      「何が正しいか分かっている」対だけ
+   ↓
+AdapterMetadata     前後Benchmark / regression / 巻き戻し先が要る
+   ↓
+LocalPromotionGate  既存（017A §7）。並行 promotion system を作らない
+```
+
+### Episode が Learning Event と別に要る理由
+
+`GenerationRecord` / `RevisionRecord` は「**何ができたか**」である。
+Local AI を育てるのに要るのは「**何を知らなかったか / どう調べたか /
+どこで落ちて / どう直したか**」——完成 Document を何千個集めても
+「詰まったとき何をすればよいか」は学べない。
+
+### Privacy 境界は 016A / 018A のまま
+
+* Episode は**生の会話を溜め込まない**（識別子と分類だけ）
+* `collection right ≠ training right`。本番 Episode の `training_use` は
+  `UNKNOWN` なので、**Dataset Gate が落とす**
+* Cloud Provider の内部 chain-of-thought は**取得も保存もしない**。
+  記録するのは外から観測可能な Tool / Action / Evidence だけ
+* Web content は `UntrustedContent` に包まれ、**命令として扱わない**
+
+### 本番配線の現況（盛らない）
+
+| | |
+|---|---|
+| Revision → Outbox → Learning | ✅ 配線済み |
+| Revision → GenerationEpisode | ✅ 配線済み |
+| Benchmark → LocalPromotionGate → routing | ✅ 配線済み・**昇格0件** |
+| Agent / Web / Teacher / Gym / Novel / Dataset / Adapter | ⬜ **契約のみ** |
+
+未配線であることを**テストで固定してある**
+（`test_forge_020_production_wiring.py`）ので、配線したら文書を直すことが
+強制される。
+
 ## 20. Language Training Dataset は別契約
 
 将来 Local AI へ「もっと浮かせて」→ `surface.elevated` という

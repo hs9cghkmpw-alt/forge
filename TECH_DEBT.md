@@ -1,5 +1,71 @@
 # TECH_DEBT.md
 
+## FORGE-019C/020 follow-ups (2026-08-25)
+
+### 019B から**解消した**もの
+
+- ~~`advance_to_revision()` が落ちた場合の atomicity が不完全~~
+  → **解消。** 「CAS で版を進めてから追記する」順序にしたので、
+  落ちうる段が追記より前に来る。partial Evidence は残らない（019C §3.1）
+- ~~`admit()` と `record()` の間に割り込みが無い前提~~
+  → **解消。** per-artifact lock + compare-and-swap。前提を捨てた（019C §7）
+- ~~`publish()` は将来 durable outbox へ置き換える差し替え点~~
+  → **半分解消。** `LearningProjectionOutbox` を入れた。ただし
+  **in-memory であり durable ではない**（下記 TD80）
+
+### 新しく増えたもの
+
+- **TD80: Learning Outbox は in-memory / NOT DURABLE。**
+  投影が落ちれば `pending` として残り retry できるが、**プロセスが
+  落ちれば pending ごと消える**。
+  今困っていない理由: 単一プロセス・開発運用。
+  将来困る条件: 実運用で Learning Event が静かに欠ける。
+  移行先: 同じ DB transaction 内へ outbox 行を INSERT し、別 worker が流す。
+  差し替え点は `LearningProjectionOutbox.submit()` / `.drain()` の2つだけ
+  にしてある。
+- **TD81: `RevisionReplayLog` の予約はプロセス内。**
+  同一論理要求の同時実行はプロセス内でのみ直列化される。複数プロセス
+  構成では両方が本処理へ入りうる。DB の unique key へ移す。
+- **TD82: per-artifact lock はプロセス内。**
+  同上。DB 化したら `SELECT ... FOR UPDATE` / optimistic version へ。
+- **TD83: `SemanticOperationKind` の実装は1つだけ。**
+  `production_supported` は `select_primary_metric` のみ。
+  `set_design_role` は engine_only、残り5件は reserved（型が無い）。
+  **表と実装のずれはテストで固定してある**ので、嘘にはならない。
+  能力そのものが狭いことは残る負債である。
+- **TD84: Agent / Web / Teacher / Gym / Novel Benchmark / Dataset /
+  Adapter / Self-Extension は契約のみで本番配線が無い。**
+  今困っていない理由: 実 Local Model が無い状態で本番経路へ差し込むと、
+  Promotion Gate を迂回して未測定の Local を使うことになる（017A §7 が
+  退けた形）。
+  将来困る条件: 実 Local Model が入ったとき、ここを配線しないと
+  「作ったが本番から呼ばれない」7回目になる。
+  **本番から参照されていないことをテストで固定してある**
+  （`test_forge_020_production_wiring.py`）ので、配線したら文書を直す
+  ことが強制される。
+
+## TD75(b). Web build に同梱フォントが無い（2026-08-25、未修正）
+
+`frontend/pubspec.yaml` は `fonts:` を宣言していない。`ForgeTheme` は
+`fontFamily: 'Helvetica'` である。
+
+Flutter Web(CanvasKit) は **system font を使わない**。既定の Roboto を
+`fonts.gstatic.com` から取るので、そこへ届かない環境では
+
+> **文字が1文字も表示されない**
+
+という壊れ方をする（「遅い」ではない）。019C の Visual Evidence 撮影で
+実際に踏み、背景と枠だけの真っ白な画像になった。
+
+- 起こりうる条件: 社内ネットワーク、オフライン、広告ブロッカー、
+  地域的な遮断
+- 日本語を主に扱うので、フォントが落ちたときの影響が大きい
+- 直し方: 日本語を含むフォントを `pubspec.yaml` の `fonts:` へ同梱し、
+  `ThemeData.fontFamily` をそれに向ける。容量とのTrade-offがあるので
+  subset を検討する
+
+**撮影時はローカルフォントを差し替えて回避したが、製品側は直っていない。**
+
 ## FORGE-019B follow-ups (2026-08-25)
 
 - **`RevisionReplayLog` はプロセス内メモリ。** 再起動すると再送の replay

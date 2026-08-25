@@ -205,8 +205,12 @@ class LearningProjectionOutbox:
                 self._entries[key] = entry
                 self._order.append(key)
                 self._evict_locked()
-            elif entry.status is ProjectionStatus.PROJECTED:
-                return entry
+        # **投影済みかの判定を、ここへ二重に書かない。**
+        #
+        # 以前は `submit()` にも同じ早期returnがあった。二重にすると
+        # どちらか片方を壊しても動いてしまい、**mutation で守りの有無を
+        # 確かめられない**（実際 M6 が生き残った）。判断は `_attempt()`
+        # の1箇所に置く。
         self._attempt(entry)
         return entry
 

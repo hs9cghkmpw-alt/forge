@@ -3,6 +3,49 @@
 2026-08-14 / 起点: CEO提示の完成図（AI-NATIVE APP BUILDER）
 **上位文書**: `docs/PRODUCT-DIRECTION.md`（変更不可）
 
+> **2026-08-25 追記 — Generative Software Direction を新設した。**
+>
+> ```
+> docs/PRODUCT-DIRECTION.md                          変更不可
+>   ↓
+> docs/GENERATIVE-SOFTWARE-DIRECTION.md              ← 新設（FORGE-020）
+>   ↓
+> docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md
+>   ↓
+> このロードマップ
+> ```
+>
+> 「有限のWidget/Templateを組み合わせるBuilderにしない」を、実装の都合で
+> 崩さないための下限の宣言である。矛盾したら上が勝つ。
+>
+> ## 019C / 020 の進捗（2026-08-25、盛らない）
+>
+> | | 内容 | 状態 |
+> |---|---|---|
+> | 019C | Revision Atomic Closure（atomicity / CAS / 並行 / Outbox / operation honesty） | ✅ 実装・テスト・mutation 済み |
+> | 020A | Real Local Model Runtime | ⬜ **未着手**（環境要因。`docs/HANDOFF.md`） |
+> | 020B | Tool-Using Local Agent | 🟨 契約 + テスト。**本番配線なし** |
+> | 020C | Generation Episode | ✅ 契約 + **本番配線済み**（Revision 経路） |
+> | 020D | Web / Browser Capability | 🟨 契約 + テスト。**実Web往復は UNVERIFIED** |
+> | 020E | Novel Generation Benchmark | 🟨 採点契約 + テスト。**run 0件** |
+> | 020F | Teacher Comparison | 🟨 契約 + テスト。**比較 0件** |
+> | 020G | Autonomous Repair Loop | 🟨 契約 + テスト。**本番配線なし** |
+> | 020H | Dataset Builder | 🟨 契約 + テスト |
+> | 020I | Training / Adapter Promotion | ⬜ 契約のみ。**実 training 未実施** |
+> | 021 | Self Extension | ⬜ 契約のみ |
+> | — | Interactive / Game / Novel Software | ⬜ 未着手 |
+>
+> ✅=実装・検証済み / 🟨=契約とテストのみ / ⬜=未実装
+>
+> **`Real Local Model runs = 0`。** Mock を数えていない。
+>
+> 020A が入れば、既存の `LocalModelProvider` → Provider Registry →
+> AIRouter → BenchmarkRun → `LocalPromotionGate` → routing evidence まで
+> **Provider を1つ足すだけ**で通る（並行 architecture を作らない）。
+>
+> 021 Self Extension は「足りない能力を sandbox で作って昇格させる」形
+> であり、**AIが本番の primitive を直接書き換える経路は作らない**。
+
 > **2026-08-24 追記 — AI/Learning領域の正式Architectureができた。**
 >
 > このロードマップが「Knowledge → Retrieval → Experience → Benchmark

@@ -1,5 +1,86 @@
 # CHANGELOG
 
+## 2026-08-25 — FORGE-019C/020 Revision Atomic Closure + Local Generative Intelligence Foundation
+
+独立レビューが 019B へ挙げた A/B/C/D は**すべて実コードで再現できた**。
+再現テストを先に書いて FAIL させてから直した。
+
+### 019C
+
+- **§3.1 advance 失敗で partial Evidence が残る問題を閉じた。** 019B は
+  「CORRECTED だけ残る」を仕様として書いていた（追記専用の log は
+  巻き戻せないという理由）。**しかし追記していなければ巻き戻す必要も無い**
+  ——「CAS で版を進めてから追記する」順序にした。落ちうる段が追記より前に
+  来たので、Rejected な Revision は RevisionRecord 0 / FeedbackEvent 0 /
+  LearningEvent 0 / 版 0 / replay 0 になる。
+- **§3.2 投影の失敗が確定済み Revision を巻き戻す問題を閉じた。**
+  `LearningProjectionOutbox`（in-memory v1）を追加。commit → pending →
+  retry。`(型名, uid)` で入口を絞るので retry で二重投影しない。
+  **IN-MEMORY / NOT DURABLE。**
+- **§4 `RevisionUnitOfWork`** を新設（prepare / stage / commit / project）。
+  `project()` は lock の外で呼ぶ——ネットワークI/Oを logical transaction へ
+  押し込まない。
+- **§5 Feedback staging。** `prepare_event` / `commit_event` /
+  `discard_staged_event`。追記専用の契約は1文字も緩めていない。
+  `ArtifactFeedbackService.admit()` は**削除**（`prepare()` へ置き換えた
+  結果、本番から呼ぶ経路が無くなったため）。
+- **§7 Artifact CAS + per-artifact lock。** `version_token` /
+  `evidence uid` / `document_binding` の3値すべてを照合。
+  **`expected` を渡さない呼び出しも conflict**（fail closed）。
+  lock は生成物ごとで、使用中だけ保持する（無限増殖しない）。
+- **§8 Replay Log の予約。** `find → conflicting_key → remember` は
+  check-then-act だった。`begin()` で予約を取り、同じ論理要求を同時に
+  2本本処理させない。**失敗は覚えない**（失敗を replay しない）。
+- **§9 意味的操作の正直さ。** `SemanticOperationKind` は7件を宣言して
+  いるが、本番で自然言語から到達できるのは **1件だけ**
+  （`select_primary_metric`）。`set_design_role` は engine_only、
+  残り5件は reserved（型が無い）。分類し忘れは例外にする。
+  本番は commit の前に `require_production_supported()` を通る。
+
+### 020（実 Local Model が要らない部分）
+
+- **Agent**: `permission.py`（4段。知らない道具は FORBIDDEN）/
+  `sandbox.py`（実体path正規化・`.env`/`.git`/鍵の拒否・一覧にも出さない）/
+  `tools.py`（ToolCall は道具名と引数だけ。secret を伏せる）/
+  `untrusted.py`（Web本文は包みを解かないと取り出せない）/
+  `web.py`（search / fetch / browser）/ `toolset.py`（組み立ては1箇所。
+  登録済みコマンドのみ）/ `loop.py`（予算付き Repair Loop）
+- **Learning**: `episode.py`（本番配線済み）/ `teacher.py`（Teacher を
+  Truth にしない）/ `gym.py`（training と held-out を分離）/
+  `novel_benchmark.py`（held-out 以外は構築時に拒否。専用template の run は
+  Novel として数えない）/ `dataset_builder.py`（TEST_DOUBLE / UNKNOWN を
+  正例にしない）/ `knowledge_acquisition.py`（ジャンル名を拒否）/
+  `adapter.py` / `self_extension.py`
+- **`docs/GENERATIVE-SOFTWARE-DIRECTION.md`** を新設（`PRODUCT-DIRECTION.md`
+  は変更していない）
+- **`scripts/capture_visual_evidence.py`** を追加（cross-platform）
+
+### 実バグ
+
+- Permission policy の途中へ docstring を書いたら Python の文字列連結で
+  隣の key と繋がり、**`http_post` が表から消えていた**。key の形を検査する
+  テストを追加した。
+
+### Real Local Model runs: 0
+
+Ollama / llama.cpp / torch 未インストール、GPU 無し、かつ
+`huggingface.co` / `ollama.com` が network policy で拒否される（実測）。
+**Mock を Real Local として数えていない。**
+
+### Visual Review: 実施
+
+019A/019B は `UNVERIFIED` だったが、その理由（「Flutter SDK が無い」）は
+**誤りだった**——`/opt/flutter` に Flutter 3.44.9 stable が入っている。
+実描画・撮影・目視まで行った（`docs/visual-evidence/FORGE-019C/`）。
+
+### Tests（LOCAL）
+
+backend 1,706 passed / 16 skipped、forge_ai 521 passed、
+Flutter test 514 passed、`flutter analyze` No issues、
+`flutter build web --debug` 成功、backend smoke 成功。
+behavior guards 178 / static protocol checks 8 /
+**real source mutation rounds 22（全 KILLED）**。
+
 ## 2026-08-25 — FORGE-019B Revision Transaction / Retry / Provider Evidence
 
 独立レビューの4点は**すべて現在のコードで再現できた**。先に再現テストを

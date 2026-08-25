@@ -184,5 +184,99 @@ class TestReachableFromNaturalLanguage(unittest.TestCase):
         )
 
 
+@unittest.skipUnless(_FASTAPI_AVAILABLE, "fastapi/pydanticが無い環境ではスキップする")
+class TestProductionRefusesAnUnsupportedOperation(TestReachableFromNaturalLanguage):
+    """**表と実装がずれたら、記録の前に止まる。**
+
+    ---
+
+    ## これが無いと表は置物になる
+
+    最初は「本番が届いた操作 ⊆ 表」だけを見ていた。しかし本番が届く
+    操作は現在1つしか無いので、**`require_production_supported()` を
+    丸ごと外しても何も落ちなかった**（mutation M10 で判明）。
+
+    つまり「表に無い操作が来たら止める」という主張を、1本も検査して
+    いなかった。
+
+    そこで、`ENGINE_ONLY` の操作（`SetDesignRole` — 型も適用実装も
+    あるが自然言語からは到達しない）を無理やり組み立てて流し込む。
+    本番はこれを**記録する前に**断らなければならない。
+    """
+
+    def _force_engine_only_operation(self):  # noqa: ANN202
+        """`apply_semantic_intent` が `SetDesignRole` を返すようにする。
+
+        将来 `SetDesignRole` を本番で使えるようにするなら、この
+        テストは「別の `ENGINE_ONLY` / `RESERVED` な操作」へ張り替える
+        ——**表を直さずに実装だけ広げる**ことを許さないための検査である。
+        """
+        from unittest.mock import patch
+
+        from app.ai.runtime import revision_service as module
+        from app.ai.runtime.semantic_revision import (
+            AppliedSemanticRevision,
+            SetDesignRole,
+            apply_semantic_intent,
+        )
+
+        def _engine_only(document, intent):  # noqa: ANN001, ANN202
+            applied = apply_semantic_intent(document, intent)
+            if not isinstance(applied, AppliedSemanticRevision):
+                return applied
+            return AppliedSemanticRevision(
+                document=applied.document,
+                operation=SetDesignRole(
+                    target=applied.operation.target, role_id="metric.primary",
+                ),
+                changed_widget_ids=applied.changed_widget_ids,
+                validation=applied.validation,
+                critic=applied.critic,
+            )
+
+        return patch.object(module, "apply_semantic_intent", _engine_only)
+
+    def test_an_engine_only_operation_is_refused(self) -> None:
+        artifact = provision_artifact(self.client)
+        with self._force_engine_only_operation():
+            response = self.client.post(
+                "/api/v1/ai/update",
+                json=artifact.update_payload("収入をもっと目立たせて"),
+            )
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertEqual(
+            response.json()["error"]["reached_stage"], "unsupported_operation",
+        )
+
+    def test_an_unsupported_operation_records_nothing(self) -> None:
+        """**断るのは記録の前。** lineage を汚さない。"""
+        from app.ai.gateway.artifact_feedback import default_feedback_log
+        from app.ai.gateway.revision_evidence import default_revision_store
+
+        artifact = provision_artifact(self.client)
+        with self._force_engine_only_operation():
+            self.client.post(
+                "/api/v1/ai/update",
+                json=artifact.update_payload("収入をもっと目立たせて"),
+            )
+        self.assertEqual(default_revision_store().size(), 0)
+        self.assertEqual(default_feedback_log().size(), 0)
+
+    def test_an_unsupported_operation_does_not_advance_the_version(self) -> None:
+        from app.ai.gateway.artifact_feedback import default_artifact_registry
+
+        artifact = provision_artifact(self.client)
+        before = default_artifact_registry().resolve(artifact.artifact_id).version_token
+        with self._force_engine_only_operation():
+            self.client.post(
+                "/api/v1/ai/update",
+                json=artifact.update_payload("収入をもっと目立たせて"),
+            )
+        self.assertEqual(
+            default_artifact_registry().resolve(artifact.artifact_id).version_token,
+            before,
+        )
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

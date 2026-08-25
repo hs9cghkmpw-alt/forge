@@ -500,6 +500,54 @@ Knowledge有り: use_when / avoid_when / 代替候補まで渡せる
 
 ---
 
+## 11A. FORGE-019C — transaction の最終形（2026-08-25）
+
+019B が残していた「advance が落ちると CORRECTED だけ残る」は、
+**順序を変えて閉じた**。
+
+```
+prepare  → stage → commit( CAS で版を前進 → staged Feedback を追記 ) → project
+                             ↑落ちうるのはここだけ    ↑追記は最後
+```
+
+追記専用の契約は1文字も緩めていない。**落ちうる段を追記より前へ動かした**
+だけである。
+
+Rejected な Revision は
+**RevisionRecord 0 / FeedbackEvent 0 / LearningEvent 0 / 版 0 / replay 0**。
+
+### 並行
+
+* per-artifact lock（生成物ごと。global にしない）
+* CAS は `version_token` / `evidence uid` / `document_binding` の3値
+* `expected` 省略も conflict（fail closed）
+* replay は予約制。同じ論理要求を同時に2本走らせない。失敗は覚えない
+
+### 投影
+
+`LearningProjectionOutbox`（**in-memory v1 / NOT DURABLE**）。
+commit → pending → retry。`(型名, uid)` で exactly-once 相当。
+`project()` は lock の外で呼ぶ——ネットワークI/Oを logical transaction へ
+押し込まない。
+
+### 意味的操作の正直さ
+
+`SemanticOperationKind` は7件を宣言しているが、
+
+| 段 | 件数 |
+|---|---|
+| `PRODUCTION_SUPPORTED` | **1**（`select_primary_metric`） |
+| `ENGINE_ONLY` | 1（`set_design_role`） |
+| `RESERVED` | 5（型が無い） |
+
+**「enum に在る」を「Forge が使える能力」として報告しない。**
+本番は commit の前に `require_production_supported()` を通るので、
+表と実装がずれたら記録の前に止まる。
+
+### DB化するときの移行境界
+
+`docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md` §19C の表を正とする。
+
 ## 12. 参照
 
 | 文書 | 関係 |
