@@ -17,12 +17,22 @@ class GenerationSuccess extends GenerationOutcome {
   final Map<String, dynamic> forgeDocument;
   final GenerationDiagnostics diagnostics;
   final GenerationQualitySummary? quality;
+  final ArtifactIdentity? artifact;
 
   const GenerationSuccess({
     required this.forgeDocument,
     required this.diagnostics,
     this.quality,
+    this.artifact,
   });
+}
+
+/// Ephemeral client capability for feedback/revision. Never dataset lineage.
+class ArtifactIdentity {
+  final String artifactId;
+  final String versionToken;
+
+  const ArtifactIdentity({required this.artifactId, required this.versionToken});
 }
 
 /// Backendが`status: "needs_confirmation"`を返した場合。

@@ -121,6 +121,7 @@ class _GenerationFlowScreenState extends ConsumerState<GenerationFlowScreen> {
         body: SafeArea(
           child: GeneratedAppHostShell(
             forgeDocument: outcome.forgeDocument,
+            artifact: outcome.artifact,
             onBack: () => Navigator.of(context).pop(),
             onScreenStateChanged: appId == null
                 ? null

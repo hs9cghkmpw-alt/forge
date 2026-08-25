@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/forge_theme.dart';
+import '../core/di/network_providers.dart';
+import '../features/app_generation/domain/entities/generation_outcome.dart';
 import '../features/app_generation/presentation/screens/conversation_flow_screen.dart';
 import '../json_ui/renderer/forge_renderer.dart';
 
@@ -57,6 +59,7 @@ class GeneratedAppHostShell extends ConsumerStatefulWidget {
   /// 既定`false`のため、既存の呼び出し元(My Apps・履歴など、保存済み
   /// Toolを開く画面)の見た目は一切変わらない。
   final bool simulated;
+  final ArtifactIdentity? artifact;
 
   const GeneratedAppHostShell({
     super.key,
@@ -67,6 +70,7 @@ class GeneratedAppHostShell extends ConsumerStatefulWidget {
     this.onDocumentUpdated,
     this.provider,
     this.simulated = false,
+    this.artifact,
   });
 
   @override
@@ -75,6 +79,70 @@ class GeneratedAppHostShell extends ConsumerStatefulWidget {
 
 class _GeneratedAppHostShellState extends ConsumerState<GeneratedAppHostShell> {
   late Map<String, dynamic> _document = widget.forgeDocument;
+  late ArtifactIdentity? _artifact = widget.artifact;
+  bool _submittingSignal = false;
+
+  Future<void> _accept() async {
+    final artifact = _artifact;
+    if (artifact == null || _submittingSignal) return;
+    setState(() => _submittingSignal = true);
+    try {
+      await ref.read(dioClientProvider).post<Map<String, dynamic>>('/api/v1/ai/feedback', data: {
+        'signal': 'accepted',
+        'artifact_id': artifact.artifactId,
+        'seen_version_token': artifact.versionToken,
+        'idempotency_key': 'flutter-accepted-${DateTime.now().microsecondsSinceEpoch}',
+      });
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('フィードバックを記録しました')));
+    } finally {
+      if (mounted) setState(() => _submittingSignal = false);
+    }
+  }
+
+  Future<void> _requestRevision() async {
+    final artifact = _artifact;
+    if (artifact == null || _submittingSignal) return;
+    final controller = TextEditingController();
+    final request = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('どこを直しますか？'),
+        content: TextField(controller: controller, autofocus: true,
+          decoration: const InputDecoration(hintText: '例: 残高をもっと目立たせて')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('修正する')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (request == null || request.isEmpty || !mounted) return;
+    setState(() => _submittingSignal = true);
+    try {
+      final response = await ref.read(dioClientProvider).post<Map<String, dynamic>>('/api/v1/ai/update', data: {
+        'forge_document': _document,
+        'change_request': request,
+        'artifact_id': artifact.artifactId,
+        'seen_version_token': artifact.versionToken,
+        'idempotency_key': 'flutter-correction-${DateTime.now().microsecondsSinceEpoch}',
+      });
+      final result = response.data?['result'] as Map<String, dynamic>?;
+      final updated = result?['forge_document'] as Map<String, dynamic>?;
+      final identity = result?['artifact'] as Map<String, dynamic>?;
+      if (updated == null || identity == null) throw StateError('invalid revision response');
+      if (!mounted) return;
+      setState(() {
+        _document = updated;
+        _artifact = ArtifactIdentity(
+          artifactId: identity['artifact_id'] as String,
+          versionToken: identity['version_token'] as String,
+        );
+      });
+      widget.onDocumentUpdated?.call(updated);
+    } finally {
+      if (mounted) setState(() => _submittingSignal = false);
+    }
+  }
 
   Future<void> _openEditConversation() async {
     final updated = await Navigator.of(context).push<Map<String, dynamic>>(
@@ -109,6 +177,33 @@ class _GeneratedAppHostShellState extends ConsumerState<GeneratedAppHostShell> {
             top: MediaQuery.of(context).padding.top + 8,
             right: 8,
             child: _RoundIconButton(icon: Icons.chat_bubble_outline_rounded, onPressed: _openEditConversation),
+          ),
+        if (_artifact != null)
+          Positioned(
+            bottom: 42,
+            left: 16,
+            right: 16,
+            child: SafeArea(
+              top: false,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  FilledButton.icon(
+                    key: const Key('forge_feedback_accepted'),
+                    onPressed: _submittingSignal ? null : _accept,
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('これでOK'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    key: const Key('forge_feedback_revise'),
+                    onPressed: _submittingSignal ? null : _requestRevision,
+                    icon: const Icon(Icons.tune_rounded),
+                    label: const Text('直したい'),
+                  ),
+                ],
+              ),
+            ),
           ),
         Positioned(
           bottom: 10,

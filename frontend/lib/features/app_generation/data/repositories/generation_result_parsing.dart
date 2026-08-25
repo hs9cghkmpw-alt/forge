@@ -22,7 +22,16 @@ GenerationSuccess parseGenerationSuccessResult(Map<String, dynamic> result) {
     forgeDocument: document,
     diagnostics: parseGenerationDiagnostics(result['diagnostics'] as Map<String, dynamic>?),
     quality: parseGenerationQuality(result['quality'] as Map<String, dynamic>?),
+    artifact: parseArtifactIdentity(result['artifact'] as Map<String, dynamic>?),
   );
+}
+
+ArtifactIdentity? parseArtifactIdentity(Map<String, dynamic>? artifact) {
+  if (artifact == null) return null;
+  final id = artifact['artifact_id'] as String?;
+  final token = artifact['version_token'] as String?;
+  if (id == null || id.isEmpty || token == null || token.isEmpty) return null;
+  return ArtifactIdentity(artifactId: id, versionToken: token);
 }
 
 GenerationNeedsConfirmation parseGenerationNeedsConfirmation(Map<String, dynamic> body) {
