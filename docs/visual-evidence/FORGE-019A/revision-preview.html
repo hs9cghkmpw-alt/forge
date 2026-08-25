@@ -1,0 +1,332 @@
+<title>Forge Revision Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    /* Forge の実パレット（frontend/lib/core/theme/forge_theme.dart） */
+    --forge-bg:#F7F4EF; --forge-surface:#FFFFFF;
+    --forge-ink:#1C1C24; --forge-ink-soft:#6B6B70;
+    --forge-accent:#E0A45C; --forge-accent-soft:#F7E9D7;
+    --forge-income:#00796B; --forge-expense:#C2185B;
+
+    /* ページ側 */
+    --page:#EFEAE2; --panel:#FBF9F6; --line:#DCD4C8;
+    --text:#221F1A; --muted:#6B6459;
+    --mark:#7A4B12; --mark-bg:#F2E3CD;
+    --shadow:0 1px 2px rgba(40,30,15,.06), 0 8px 24px rgba(40,30,15,.07);
+    --mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --ja:'Zen Kaku Gothic New', system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --page:#16140F; --panel:#1F1C16; --line:#3A342A;
+      --text:#F0EBE1; --muted:#A9A192;
+      --mark:#E8C48B; --mark-bg:#3A2E19;
+      --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 28px rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"]{
+    --page:#16140F; --panel:#1F1C16; --line:#3A342A;
+    --text:#F0EBE1; --muted:#A9A192;
+    --mark:#E8C48B; --mark-bg:#3A2E19;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 28px rgba(0,0,0,.45);
+  }
+
+  body{
+    background:var(--page); color:var(--text); font-family:var(--ja);
+    line-height:1.65; margin:0; padding:clamp(20px,4vw,52px) clamp(16px,4vw,40px) 72px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px; margin:0 auto; display:flex; flex-direction:column; gap:34px;}
+
+  header.top{display:flex; flex-direction:column; gap:10px;}
+  .eyebrow{
+    font-family:var(--mono); font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--muted);
+  }
+  h1{
+    margin:0; font-size:clamp(25px,3.6vw,36px); font-weight:900; letter-spacing:-.01em;
+    text-wrap:balance; line-height:1.25;
+  }
+  .lede{margin:0; max-width:62ch; color:var(--muted); font-size:15px;}
+
+  .notice{
+    display:flex; gap:11px; align-items:flex-start;
+    background:var(--mark-bg); color:var(--mark);
+    border-radius:10px; padding:13px 15px; font-size:13.5px; line-height:1.6;
+  }
+  .notice b{font-weight:700;}
+  .notice .ico{flex:none; font-family:var(--mono); font-weight:500;}
+
+  .stage{
+    display:grid; gap:26px;
+    grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));
+    align-items:start;
+  }
+
+  figure.phone{margin:0; display:flex; flex-direction:column; gap:12px;}
+  .phone-label{display:flex; align-items:baseline; gap:10px;}
+  .phone-label .tag{
+    font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+    padding:3px 8px; border-radius:5px; border:1px solid var(--line); color:var(--muted);
+  }
+  .phone-label .tag.after{border-color:var(--forge-accent); color:var(--mark); background:var(--mark-bg);}
+  .phone-label .what{font-size:13.5px; color:var(--muted);}
+
+  .device{
+    background:var(--forge-bg); border-radius:26px; border:1px solid var(--line);
+    box-shadow:var(--shadow); overflow:hidden;
+    /* 実際の撮影ビューポート 390×844 と同じ比率 */
+    aspect-ratio:390/844; max-width:390px; width:100%;
+    display:flex; flex-direction:column;
+  }
+  .status{
+    flex:none; height:30px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 16px; font-size:11px; color:var(--forge-ink-soft); font-family:var(--mono);
+  }
+  .appbar{
+    flex:none; padding:6px 18px 12px; font-size:17px; font-weight:700; color:var(--forge-ink);
+  }
+  .screen{
+    flex:1; overflow:hidden; padding:4px 18px 18px; display:flex; flex-direction:column; gap:14px;
+    color:var(--forge-ink);
+  }
+
+  /* ---- style_role の実装値（json_ui/renderer/design_language.dart） ---- */
+  .r-headline{font-size:16px; font-weight:700; color:var(--forge-ink); margin:2px 0 0;}
+  .metric{display:flex; flex-direction:column; gap:2px;}
+  .metric .lbl{font-size:12px; color:var(--forge-ink-soft);}
+  .metric .val{font-variant-numeric:tabular-nums; letter-spacing:-.015em;}
+  /* metric.primary : displaySmall(36) + w700 + onSurface */
+  .r-metric-primary .val{font-size:36px; font-weight:700; color:var(--forge-ink); line-height:1.15;}
+  /* metric.secondary : titleMedium(16) + w600 + onSurfaceVariant */
+  .r-metric-secondary .val{font-size:16px; font-weight:600; color:var(--forge-ink-soft);}
+  /* finance.income / finance.expense : 色だけ（bodyの既定サイズ） */
+  .r-finance-income .val{font-size:16px; font-weight:600; color:var(--forge-income);}
+  .r-finance-expense .val{font-size:16px; font-weight:600; color:var(--forge-expense);}
+  .row{font-size:13.5px; color:var(--forge-ink-soft); font-variant-numeric:tabular-nums;}
+
+  .changed{
+    position:relative; border-radius:8px;
+    box-shadow:0 0 0 2px var(--forge-accent); padding:6px 8px; margin:-6px -8px;
+  }
+  .changed::after{
+    content:attr(data-note); position:absolute; top:-9px; right:6px;
+    font-family:var(--mono); font-size:9.5px; letter-spacing:.06em;
+    background:var(--forge-accent); color:#2A1B06; padding:1px 6px; border-radius:4px;
+  }
+
+  section.panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:clamp(18px,2.6vw,26px); display:flex; flex-direction:column; gap:14px;
+  }
+  section.panel h2{margin:0; font-size:17px; font-weight:800; letter-spacing:-.005em;}
+  section.panel p{margin:0; font-size:14.5px; color:var(--muted); max-width:70ch;}
+
+  .scroll{overflow-x:auto;}
+  table{border-collapse:collapse; width:100%; min-width:520px; font-size:13.5px;}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{
+    font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--muted); font-weight:500; white-space:nowrap;
+  }
+  td.id{font-family:var(--mono); font-size:12.5px; white-space:nowrap;}
+  .role{font-family:var(--mono); font-size:12px; padding:1.5px 6px; border-radius:4px; white-space:nowrap;}
+  .role.was{background:transparent; border:1px solid var(--line); color:var(--muted);}
+  .role.now{background:var(--mark-bg); color:var(--mark); font-weight:500;}
+  .same{color:var(--muted); font-family:var(--mono); font-size:12px;}
+
+  dl.facts{
+    margin:0; display:grid; gap:2px 20px;
+    grid-template-columns:minmax(140px,auto) 1fr; font-size:13.5px;
+  }
+  dl.facts dt{font-family:var(--mono); font-size:11.5px; color:var(--muted); padding-top:3px;}
+  dl.facts dd{margin:0; font-family:var(--mono); font-size:12.5px; word-break:break-all;}
+  .ok{color:var(--forge-income); font-weight:500;}
+
+  ul.plain{margin:0; padding-left:1.1em; font-size:14px; color:var(--muted);}
+  ul.plain li{margin:5px 0;}
+  ul.plain b{color:var(--text); font-weight:700;}
+
+  footer{font-size:12.5px; color:var(--muted); font-family:var(--mono); line-height:1.8;}
+</style>
+
+<div class="wrap">
+
+  <header class="top">
+    <div class="eyebrow">FORGE-019A · Semantic Design Revision</div>
+    <h1>「残高をもっと目立たせて」と言うと、こう変わる</h1>
+    <p class="lede">
+      いま Forge が作るアプリの見た目と、利用者のひとことで起きる変更です。
+      左が変更前、右が変更後。<b>右の画面は本番のコードが実際に返した文書</b>から描いています。
+    </p>
+  </header>
+
+  <div class="notice">
+    <span class="ico">!</span>
+    <span>
+      これは <b>Flutterのスクリーンショットではありません</b>。この作業環境には Flutter SDK が無いため、
+      実機描画は行えていません（<b>UNVERIFIED</b>）。ここに出ている文書・role・色・文字サイズは、
+      すべて本番のコードと実際の生成物から取った値ですが、<b>実際のピクセルを見たわけではない</b>という
+      区別は残します。実描画はCIとCEO環境での確認が要ります。
+    </span>
+  </div>
+
+  <div class="stage">
+
+    <figure class="phone">
+      <figcaption class="phone-label">
+        <span class="tag">Before</span>
+        <span class="what">残高は控えめ。収入が一番大きい</span>
+      </figcaption>
+      <div class="device">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="appbar">今月の家計</div>
+        <div class="screen">
+          <p class="r-headline">今月のサマリー</p>
+
+          <div class="metric r-metric-primary changed" data-note="metric.primary">
+            <span class="lbl">収入</span>
+            <span class="val">320,000円</span>
+          </div>
+
+          <div class="metric r-metric-secondary changed" data-note="metric.secondary">
+            <span class="lbl">残高</span>
+            <span class="val">193,000円</span>
+          </div>
+
+          <div class="metric r-finance-expense">
+            <span class="lbl">支出</span>
+            <span class="val">127,000円</span>
+          </div>
+
+          <p class="r-headline">最近の取引</p>
+          <div class="row">家賃　−85,000円</div>
+          <div class="row">食費　−42,000円</div>
+        </div>
+      </div>
+    </figure>
+
+    <figure class="phone">
+      <figcaption class="phone-label">
+        <span class="tag after">After</span>
+        <span class="what">残高が主役。収入は「お金の色」へ</span>
+      </figcaption>
+      <div class="device">
+        <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+        <div class="appbar">今月の家計</div>
+        <div class="screen">
+          <p class="r-headline">今月のサマリー</p>
+
+          <div class="metric r-finance-income changed" data-note="finance.income">
+            <span class="lbl">収入</span>
+            <span class="val">320,000円</span>
+          </div>
+
+          <div class="metric r-metric-primary changed" data-note="metric.primary">
+            <span class="lbl">残高</span>
+            <span class="val">193,000円</span>
+          </div>
+
+          <div class="metric r-finance-expense">
+            <span class="lbl">支出</span>
+            <span class="val">127,000円</span>
+          </div>
+
+          <p class="r-headline">最近の取引</p>
+          <div class="row">家賃　−85,000円</div>
+          <div class="row">食費　−42,000円</div>
+        </div>
+      </div>
+    </figure>
+
+  </div>
+
+  <section class="panel">
+    <h2>変わったのは2箇所だけ</h2>
+    <p>
+      Forge は文書全体を作り直しません。<b>意味の役割（style_role）だけ</b>を、対象を特定して書き換えます。
+      触っていない場所は1バイトも変わらないので、「直したら別のところが壊れた」が構造的に起きません。
+    </p>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>widget</th><th>意味</th><th>変更前</th><th>変更後</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="id">balance</td><td>残高</td>
+            <td><span class="role was">metric.secondary</span></td>
+            <td><span class="role now">metric.primary</span></td>
+          </tr>
+          <tr>
+            <td class="id">income</td><td>収入</td>
+            <td><span class="role was">metric.primary</span></td>
+            <td><span class="role now">finance.income</span></td>
+          </tr>
+          <tr>
+            <td class="id">expense</td><td>支出</td>
+            <td colspan="2" class="same">finance.expense（変更なし）</td>
+          </tr>
+          <tr>
+            <td class="id">summary_header</td><td>見出し</td>
+            <td colspan="2" class="same">text.headline（変更なし）</td>
+          </tr>
+          <tr>
+            <td class="id">list_header / transaction_1 / transaction_2</td><td>一覧</td>
+            <td colspan="2" class="same">変更なし</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      収入が <b>metric.primary</b> のままだと「一番大事な数値」が2つになり、階層が消えます。
+      かといって <b>state.danger</b>（危険）へ落とすのも誤りです——支出も収入もエラーではないので、
+      Forge は<b>お金の向き</b>を表す別の語彙（finance.*）を持っています。
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2>この絵の出どころ</h2>
+    <p>
+      019では Before と After の両方を手で書いていたため、Backend が実際に作る After と絵の After が
+      別物でした。実装を直しても絵が変わらないので、その絵は変更の証拠になりません。019A で
+      <b>After を本番の RevisionService から生成する</b>ようにしました。
+    </p>
+    <dl class="facts">
+      <dt>intent</dt><dd>残高をもっと目立たせて</dd>
+      <dt>revision_mode</dt><dd>local_semantic_patch</dd>
+      <dt>semantic_operation</dt><dd>select_primary_metric</dd>
+      <dt>semantic_target</dt><dd>screen <b>home</b> / widget <b>balance</b> / identity <b>balance</b></dd>
+      <dt>validator</dt><dd class="ok">passed</dd>
+      <dt>semantic critic</dt><dd class="ok">passed（blocking なし）</dd>
+      <dt>生成元</dt><dd>scripts/export_revision_visual_fixture.py</dd>
+      <dt>出力</dt><dd>docs/visual-evidence/FORGE-019A/{before,after,provenance}.json</dd>
+      <dt>viewport</dt><dd>390 × 844</dd>
+    </dl>
+    <p>
+      commit されている After が、いまの本番の出力と一致するかは
+      <b>backend/tests/test_visual_fixture_provenance.py</b> が見ます。実装が変わって絵が古くなれば
+      CI が落ちます。
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2>いまの見た目についての所見</h2>
+    <ul class="plain">
+      <li><b>階層は成立している。</b> 主KPI（36px/w700）→ 収入・支出（16px/w600 + 意味色）→ 一覧（13.5px）と3段に割れており、残高が最初に目に入る。</li>
+      <li><b>数字は tabular figures。</b> 桁が変わっても位置が揺れない（193,000 → 99,000 で行が動かない）。</li>
+      <li><b>支出が赤系（#C2185B）だが、エラー色（error）とは別トークン。</b> 家計簿を開くたびに「失敗」に見えないようにしてある。</li>
+      <li><b>まだ弱いところ:</b> 収入と支出が同じ字サイズで並ぶので、2つの関係（収入 − 支出 = 残高）が見た目からは読めない。ここは今回の対象外。</li>
+    </ul>
+  </section>
+
+  <footer>
+    FORGE-019A Revision Integrity Hardening · branch claude/forge-master-handoff-k46jns<br>
+    色・文字サイズの出典: frontend/lib/core/theme/forge_theme.dart, frontend/lib/json_ui/renderer/design_language.dart<br>
+    実機描画は未実施（Flutter SDK 不在）— UNVERIFIED
+  </footer>
+
+</div>

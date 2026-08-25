@@ -1,0 +1,133 @@
+{
+  "app": {
+    "title": "わたしの家計"
+  },
+  "initial_screen_id": "home",
+  "record_schemas": {
+    "transaction": {
+      "fields": [
+        {
+          "label": "項目",
+          "name": "name",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "label": "分類",
+          "name": "category",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "label": "金額",
+          "name": "amount",
+          "required": true,
+          "type": "number"
+        }
+      ]
+    }
+  },
+  "screens": [
+    {
+      "body": {
+        "children": [
+          {
+            "id": "summary_header",
+            "style_role": "text.headline",
+            "title": "今月のサマリー",
+            "type": "section_header"
+          },
+          {
+            "aggregate": "sum",
+            "filter_field": "category",
+            "filter_value": "収入",
+            "id": "income",
+            "label": "収入",
+            "state_ref": "records",
+            "style_role": "finance.income",
+            "type": "metric_view",
+            "unit": "円",
+            "value_field": "amount"
+          },
+          {
+            "aggregate": "sum",
+            "id": "balance",
+            "label": "残高",
+            "negative_when": "支出",
+            "sign_field": "category",
+            "state_ref": "records",
+            "style_role": "metric.primary",
+            "type": "metric_view",
+            "unit": "円",
+            "value_field": "amount"
+          },
+          {
+            "aggregate": "sum",
+            "filter_field": "category",
+            "filter_value": "支出",
+            "id": "expense",
+            "label": "支出",
+            "state_ref": "records",
+            "style_role": "finance.expense",
+            "type": "metric_view",
+            "unit": "円",
+            "value_field": "amount"
+          },
+          {
+            "id": "list_header",
+            "style_role": "text.headline",
+            "title": "最近の取引",
+            "type": "section_header"
+          },
+          {
+            "id": "transaction_1",
+            "type": "text",
+            "value": "家賃　−85,000円"
+          },
+          {
+            "id": "transaction_2",
+            "type": "text",
+            "value": "食費　−42,000円"
+          }
+        ],
+        "id": "root",
+        "type": "column"
+      },
+      "id": "home",
+      "state": {
+        "records": {
+          "schema_ref": "transaction",
+          "type": "record_list",
+          "value": [
+            {
+              "fields": {
+                "amount": 320000,
+                "category": "収入",
+                "name": "給与"
+              },
+              "id": "salary"
+            },
+            {
+              "fields": {
+                "amount": 85000,
+                "category": "支出",
+                "name": "家賃"
+              },
+              "id": "rent"
+            },
+            {
+              "fields": {
+                "amount": 42000,
+                "category": "支出",
+                "name": "食費"
+              },
+              "id": "food"
+            }
+          ]
+        }
+      },
+      "title": "今月の家計"
+    }
+  ],
+  "version": "1.12"
+}

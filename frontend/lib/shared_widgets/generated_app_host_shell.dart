@@ -82,17 +82,48 @@ class _GeneratedAppHostShellState extends ConsumerState<GeneratedAppHostShell> {
   late ArtifactIdentity? _artifact = widget.artifact;
   bool _submittingSignal = false;
 
+  /// 送信中の「これでOK」に割り当てた冪等キー（FORGE-019A §8）。
+  ///
+  /// **同じ操作の再送では同じキーを使い、成功したら捨てる。**
+  ///
+  /// 019は`DateTime.now().microsecondsSinceEpoch`を毎回作っていたので、
+  /// **再送のたびに別のキー**になっていた。冪等キーの目的は「同じ操作が
+  /// 二度届いたことをサーバが見分けられるようにする」ことなので、
+  /// 毎回変えるのは意味が正反対である。通信が不安定なだけで、評価が
+  /// 何件も積まれる。
+  ///
+  /// 成功したら`null`へ戻す。あとで利用者がもう一度評価したときは、
+  /// **それは別の操作**なので新しいキーになる（017A §2で、時系列は
+  /// 事実として残るようにしてある）。
+  String? _pendingAcceptKey;
+
+  /// 送信中の修正要求に割り当てた冪等キーと、その要求文。
+  ///
+  /// 要求文が変われば**別の操作**なのでキーも変える。
+  String? _pendingRevisionKey;
+  String? _pendingRevisionRequest;
+
+  int _actionSequence = 0;
+
+  String _newIdempotencyKey(String prefix) {
+    _actionSequence += 1;
+    return '$prefix-${DateTime.now().microsecondsSinceEpoch}-$_actionSequence';
+  }
+
   Future<void> _accept() async {
     final artifact = _artifact;
     if (artifact == null || _submittingSignal) return;
+    // 失敗して押し直した場合は**同じキー**を使う。成功後にだけ捨てる。
+    final idempotencyKey = _pendingAcceptKey ??= _newIdempotencyKey('flutter-accepted');
     setState(() => _submittingSignal = true);
     try {
       await ref.read(dioClientProvider).post<Map<String, dynamic>>('/api/v1/ai/feedback', data: {
         'signal': 'accepted',
         'artifact_id': artifact.artifactId,
         'seen_version_token': artifact.versionToken,
-        'idempotency_key': 'flutter-accepted-${DateTime.now().microsecondsSinceEpoch}',
+        'idempotency_key': idempotencyKey,
       });
+      _pendingAcceptKey = null;
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('フィードバックを記録しました')));
     } finally {
       if (mounted) setState(() => _submittingSignal = false);
@@ -117,6 +148,12 @@ class _GeneratedAppHostShellState extends ConsumerState<GeneratedAppHostShell> {
     );
     controller.dispose();
     if (request == null || request.isEmpty || !mounted) return;
+    // 同じ要求文の再送は同じ操作。文が違えば別の操作である（§8）。
+    if (_pendingRevisionKey == null || _pendingRevisionRequest != request) {
+      _pendingRevisionKey = _newIdempotencyKey('flutter-correction');
+      _pendingRevisionRequest = request;
+    }
+    final idempotencyKey = _pendingRevisionKey!;
     setState(() => _submittingSignal = true);
     try {
       final response = await ref.read(dioClientProvider).post<Map<String, dynamic>>('/api/v1/ai/update', data: {
@@ -124,15 +161,23 @@ class _GeneratedAppHostShellState extends ConsumerState<GeneratedAppHostShell> {
         'change_request': request,
         'artifact_id': artifact.artifactId,
         'seen_version_token': artifact.versionToken,
-        'idempotency_key': 'flutter-correction-${DateTime.now().microsecondsSinceEpoch}',
+        'idempotency_key': idempotencyKey,
       });
       final result = response.data?['result'] as Map<String, dynamic>?;
       final updated = result?['forge_document'] as Map<String, dynamic>?;
       final identity = result?['artifact'] as Map<String, dynamic>?;
       if (updated == null || identity == null) throw StateError('invalid revision response');
+      // 成功したので、この操作のキーは役目を終えた。次の修正は別の操作。
+      _pendingRevisionKey = null;
+      _pendingRevisionRequest = null;
       if (!mounted) return;
       setState(() {
         _document = updated;
+        // **新しい版のcapabilityへ差し替える。**
+        //
+        // ここを忘れると、利用者が続けて直そうとしたときに古い
+        // version_tokenを送ることになり、必ず`stale_artifact`で弾かれる
+        // ——「一度直したら二度目が通らない」という形で壊れる。
         _artifact = ArtifactIdentity(
           artifactId: identity['artifact_id'] as String,
           versionToken: identity['version_token'] as String,

@@ -1,0 +1,15 @@
+{
+  "critic_passed": true,
+  "forge_language_version": "1.12",
+  "intent": "残高をもっと目立たせて",
+  "patch_mode": "local_semantic_patch",
+  "revision_mode": "local_semantic_patch",
+  "semantic_operation": "select_primary_metric",
+  "semantic_target": {
+    "screen_id": "home",
+    "semantic_identity": "balance",
+    "widget_id": "balance"
+  },
+  "task": "FORGE-019A",
+  "validator_passed": true
+}
