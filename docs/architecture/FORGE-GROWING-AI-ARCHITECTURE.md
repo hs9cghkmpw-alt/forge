@@ -767,6 +767,44 @@ Generation → CORRECTED → Revision → CORRECTED     ❌
 
 ---
 
+## 19B. Revision Transaction / Retry（FORGE-019B、2026-08-25）
+
+Design Revision を Learning Event source として扱う以上、
+**部分的に成立した変更を Evidence に残さない**ことが前提になる。
+
+### まとめて成立するか、何も残らないか
+
+`prepare → validate → stage → commit → publish`。Learning Event は
+**確定してから**出す。先に出すと、巻き戻したときに Learning 側だけ孤児が
+残る——孤児は 019A §4 の join から永久に `NO_FEEDBACK` に見えるので、
+**評価されないまま Dataset の母数を汚し続ける**。
+
+### 再送を安全に replay する
+
+応答が届かなかった Client の再送を `stale_version` で拒否し続けると、
+**通信が切れただけで利用者が詰む**。要求の身元が全一致したときだけ
+replay する。キーだけでは返さない（§12 の「app_id を信用しない」と同じ
+性質——識別子を1つ信じると検査全体が迂回される）。
+
+### 実際に直した Provider を失わない
+
+局所 patch は Forge の決定的な操作であり、LLM を1回も呼ばない。それを
+会話の Provider 名で記録すると、**呼んでもいない Provider の手柄**が
+その成績へ混ざる——§15 Evaluation と 017A §7 Local Promotion Gate が
+読む数字が直接汚れる。
+
+### 実装状態
+
+| | |
+|---|---|
+| transaction boundary（stage / rollback / publish） | ✅ `revision_service.py` |
+| revision-level idempotency（replay / conflict） | ✅ `RevisionReplayLog` |
+| feedback idempotency の scope | ✅ `(evidence uid, key)` |
+| provider attribution | ✅ `RevisionRecord.provider_id` → Learning Event |
+| **永続化（DB transaction + durable outbox）** | ⬜ プロセス内メモリのまま |
+
+---
+
 ## 20. Language Training Dataset は別契約
 
 将来 Local AI へ「もっと浮かせて」→ `surface.elevated` という

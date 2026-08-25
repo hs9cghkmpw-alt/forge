@@ -1,5 +1,47 @@
 # CHANGELOG
 
+## 2026-08-25 — FORGE-019B Revision Transaction / Retry / Provider Evidence
+
+独立レビューの4点は**すべて現在のコードで再現できた**。先に再現テストを
+書いて FAIL させてから直した。
+
+- **§1 Revision を atomic にした。** Feedback が失敗すると API は 422 を
+  返すのに RevisionRecord と REVISION Learning Event は残っていた。孤児の
+  記録は 019A §4 の join から永久に `NO_FEEDBACK` に見える——評価されない
+  まま Evidence を汚し続ける。prepare → validate → stage → commit →
+  publish にし、落ちたら巻き戻す。Learning Event は**確定してから**出す。
+- **§2 Revision そのものを冪等にした。** 応答が届かなかった Client の
+  再送が `stale_version` で**永久に通らなかった**（通信が切れただけで
+  詰む）。要求の身元（生成物・版・文書・要求文のハッシュ・キー）が全一致
+  したときだけ replay する。キーだけでは返さない——別要求へ以前の結果を
+  返すのは、019A §1 で塞いだ穴を冪等性の側から開け直すことになる。
+  同じキーで内容が違えば `idempotency_conflict` で断る（fail closed）。
+- **§3 Feedback の冪等キーを生成物ごとに分けた。** global dict だった
+  ので、Client が連番キーを使うと**無関係な生成物への評価が黙って消えた**。
+- **§4 Provider の帰属を実態に合わせた。** LLM を1回も呼ばない局所patchが
+  会話の Provider 名を名乗っていた。`forge_deterministic` と、実際に生成
+  した Provider を分けて返す。呼んでもいない Provider の手柄が混ざると、
+  Local Promotion Gate（017A §7）が読む数字が汚れる。
+
+### 直したことで、テストが置物になった
+
+§2 の replay により §1 の再現手順が `idempotency_conflict` で先に止まる
+ようになり、**transaction の中まで届かなくなった**。mutation B1 で
+FAILED=0 となって判明し、失敗注入テストへ作り直した。
+
+`CLAUDE.md` §3 の「ガードが実際に効くか確かめる」は、**後から効かなく
+なる**ことがある、という実例である。
+
+### その他
+
+- `AGENTS.md` へ **Agent Execution Policy** と
+  **GitHub Handoff / No Manual Copy-Paste** を恒久ルールとして追加
+- Evidence の数字を今回の実測へ合わせた（古い数字をコピーしない）
+
+backend 1,520 passed / 16 skipped、forge_ai 521 passed。
+behavior guards 80 / static protocol checks 6 / mutation rounds 9。
+実描画は **UNVERIFIED**（Flutter SDK 不在）。Real Local Model runs = 0。
+
 ## 2026-08-25 — FORGE-019A Revision Integrity Hardening
 
 独立レビューが挙げた5つのBlocking項目は**すべて実コードで再現できた**。

@@ -1,85 +1,97 @@
 # Forge Handoff
 
 - Branch: `claude/forge-master-handoff-k46jns`
-- Start HEAD: `479c0faaf5e3deacd4f2b29ae029dc0f9578f57a`
-- Implementation Agent: Claude Code（前任は Codex）
+- Start HEAD: `1fa1a2b81e3ded965f3cfd42593a966f3cc4a676`
+- Implementation Agent: Claude Code
 - Current phase: R1 Generated App Quality / Growing AI
-- Current task: **FORGE-019A Revision Integrity Hardening — 実装完了、CI確認待ち**
+- Current task: **FORGE-019B Revision Transaction / Retry / Provider Evidence Hardening**
+- 直前: FORGE-019A（`1fa1a2b` まで、CI 4 job green）
 - Real Local Model runs: **0**（019Aでは起動しない。正しい状態）
 
 ---
 
-## 何をしたか
+## 何をしたか（019B）
 
-独立レビューが挙げた5つのBlocking項目は、**すべて実コードで再現できた**。
-塞いだ上で、Visual Evidence の二重 Source of Truth と Flutter の冪等キー
-の向きも直した。
+独立レビューの4点は**すべて現在のコードで再現できた**。先に再現テストを
+書いて FAIL させてから直した。
 
 | § | 穴 | 直した形 |
 |---|---|---|
-| 1 | handle と token が正しければ**別のDocument**でも通った | `document_binding`（プロセス内鍵のHMAC）。無ければ通さない |
-| 2 | `/converse` の UPDATE だけ旧経路で、記録が1件も残らなかった | `RevisionService` を1つ作り両方の入口を通した |
-| 3 | 本番の RevisionRecord へ**偽のVisual Evidence**が固定で入っていた | 本番は `None`。実際に撮ったときだけ明示的に付ける |
-| 4 | 「直してと言われた」だけで教師データ候補になった | Feedback列をjoinして判定。記録は書き換えない |
-| 5 | 全体再生成fallbackが lineage を1件も残さなかった | 同じ Service を通す。局所patchのふりはしない |
-| 6 | mutation に source-string check が混ざっていた | behavior guard へ書き換え、3種類を別々に数える |
-| 7 | Visual Evidence の After が手書きで、実装とずれても気付けなかった | 本番の `RevisionService` から生成する |
-| 8 | Flutter の冪等キーが**再送のたびに変わって**いた | 同じ操作は同じキー。成功したら捨てる |
+| 1 | Feedback が失敗しても RevisionRecord と Learning Event が残った（孤児） | prepare → validate → stage → commit → publish。落ちたら巻き戻す |
+| 2 | 応答が届かなかった再送が `stale_version` で**永久に通らなかった** | 要求の身元が全一致したときだけ replay。キーだけでは返さない |
+| 3 | 別の生成物で同じ冪等キーを使うと**評価が黙って消えた** | `(evidence uid, key)` で判定 |
+| 4 | LLMを呼んでいない局所patchが会話のProvider名を名乗った | `forge_deterministic` / 実際に生成したProviderを分けて返す |
 
-### レビュー指摘外で見つけたもの
+### 直したことで、テストが置物になった
 
-- **何も変えない変更が記録されていた。** 生成直後の家計簿は残高が既に
-  主KPIなので「残高を目立たせて」は変えるものが無い。それを成功として
-  記録すると、直していないのに「直して受け入れられた」という嘘の教師
-  信号を作れてしまう。`no_change` で断るようにした
-- **019 の Before fixture は本番の Validator に通らない文書だった**
-  （`negative_when` に `sign_field` が無い）。Dart 側は `fromJson` が
-  通ることしか見ていなかった。**019のスクリーンショットは不正な文書を
-  描いたもの**である
+§2 の replay を入れた結果、§1 の再現手順（同じキーで2回目）は
+`idempotency_conflict` で先に止まるようになり、**transaction の中まで
+届かなくなった**。mutation B1 で FAILED=0 となって判明した。
 
----
+失敗注入テスト（`TestCommitFailureRollsBack`）へ作り直した。
+
+> `CLAUDE.md` §3 の「ガードが実際に効くか確かめる」は、**後から
+> 効かなくなる**ことがある、という実例である。
+
+### 019A で入れたもの（前タスク、参考）
+
+document binding / 単一 RevisionService / 偽 Visual Evidence の除去 /
+Revision acceptance の join / fallback の lineage。
 
 ## Production wiring
 
 ```
 Flutter Host / 会話
   → artifact capability（handle）
-  → version token（世代）
-  → document binding（中身の身元）      ← 019A §1
+  → version token
+  → document binding                        019A §1
+  → replay 判定 / idempotency conflict        019B §2
   → TargetResolver / 全体再生成fallback
-  → Forge Validator
-  → Semantic Design Critic
-  → RevisionRecord（lineage）
-  → CORRECTED FeedbackEvent
+  → Validator + Semantic Design Critic
+  → [ validate → stage → commit → publish ]   019B §1
+  → RevisionRecord（provider_id 付き）         019B §4
+  → CORRECTED FeedbackEvent（scope付き key）   019B §3
   → REVISION LearningEvent
   → 新しい artifact version
   → Flutter render
 ```
 
 `/update` と `/converse` の UPDATE は**同じ `RevisionService`** を通る。
-`ForgeOperationEngine` の呼び出しが router 内に1箇所だけであることを
-テストで固定した。
 
----
+### transaction が保証すること／しないこと
+
+commit の途中で落ちたら、RevisionRecord も REVISION Learning Event も
+残らず、版も進まない。
+
+**ただし** `Feedback.record()` の成功後に `advance_to_revision()` が
+落ちた場合、CORRECTED の Feedback Event は残る（追記専用のため巻き戻せ
+ない）。単一プロセスでは直前に解決したハンドルを使うので実質失敗しない
+が、**「絶対に無い」とは書かない**。DB 化のときにここを transaction へ
+入れる（移行境界は 019B report §3）。
 
 ## Tests / Evidence
 
 | | 結果 |
 |---|---|
-| backend | **1,496 passed / 16 skipped** |
+| backend | **1,520 passed / 16 skipped**（今回の実測） |
 | forge_ai | **521 passed** |
 | ruff（変更ファイル） | All checks passed |
-| flutter analyze / test / build web | **CI で success**（run `32815471451`） |
-| CI 4 job | **すべて success**（`d31f48c`） |
+| flutter analyze / test / build web | push 後の CI で確認 |
+| CI 4 job | push 後に確認 |
+
+> **数字は今回の実測を使っている。** 019A の報告は `1496/16` だったが、
+> CI の実ログは `1495/17` だった（`FORGE_DEFAULT_PROVIDER=mock` の有無で
+> skip 条件が1件変わる）。古い数字をコピーしない。
 
 | guard の種類 | 数 |
 |---|---|
-| behavior guards | **56** |
+| behavior guards | **80** |
 | static protocol checks | **6** |
-| real source mutation rounds | **10** |
+| real source mutation rounds | **9**（019B分） |
 
-10 round すべてで、ソースを壊すと落ち、戻すと通ることを確認した
-（一覧は report §10）。
+9 round すべてで、ソースを壊すと落ち、戻すと通ることを確認した
+（一覧は 019B report §7）。うち B1・B2 は**最初 FAILED=0 だった**ので
+テストを作り直してから再実行している。
 
 ---
 
@@ -114,33 +126,34 @@ hierarchy / mobile usability / primary metric visibility を確認。
 ## UNVERIFIED
 
 - **実描画を人が見ること**（この環境に Flutter SDK が無い）。
-  `analyze` / `test` / `build web` 自体は CI で通っている
+  019B はバックエンドの変更で見た目は変えていないが、規定どおり
+  実描画を見ていない以上 `UNVERIFIED` とする。
+  **したがって 019B を完全 GO とは主張しない**
 - 実 Cloud Provider での往復（実APIを呼んでいない）
-- ブラウザ自動操作で `/update → render → feedback` を1セッションで回すこと
-- Runtime outcome は `UNKNOWN` のまま（描画できた事実を RevisionRecord へ
-  結びつける認証付きコールバックが無い）
-
----
+- 複数プロセス / 再起動を跨いだ replay（プロセス内メモリのため、
+  仕様として `stale_version` へ戻る＝安全側）
+- `advance_to_revision()` が落ちた場合の完全な atomicity
 
 ## Technical Debt
 
-- `ArtifactRegistry` / Evidence / outbox は**プロセス内メモリ**。再起動で
-  capability が失効し、Revision の連鎖が切れる
+- `ArtifactRegistry` / Evidence / outbox / **`RevisionReplayLog`** は
+  プロセス内メモリ。再起動で capability も replay 記録も消える
 - `document_binding` の鍵はプロセス内。複数プロセス構成では共有されない
 - Auth / subject binding / RLS / server-issued contributor identity /
   durable outbox / Supabase Learning tables 未実装
-  （`unguessable != authorized` のまま）
 - **`evaluate_for_export()` を本番から呼ぶ経路が無い。** DatasetCandidate
   は現状テストからしか生まれない
 - mock の全体再生成出力がスイート順序に依存する（原因未特定）
-- 019 の PNG が不正な Before から撮られている。差し替えが要る
-
----
+- 019 の Visual Evidence PNG が不正な Before から撮られている
 
 ## Next task
 
 **FORGE-020 — Real Local Model Runtime + Benchmark + Local Promotion
-Gate v1。** 019A が独立レビューで GO になってから着手する。
+Gate v1。** 019B が独立レビューで GO になってから着手する。
+
+019B で `revision_provider` を正しくしたことは 020 の前提でもある
+——Local Promotion Gate は Provider 別の実測を読むので、**呼んでもいない
+Provider の手柄が混ざっていると昇格判断が壊れる**。
 
 Local Promotion Gate 自体は 017A で配線済み（`AIRouter._order()` から
 呼ばれる）だが、**昇格する Provider は現在0件**である——実測が1件も

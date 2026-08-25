@@ -5,6 +5,64 @@
 
 ---
 
+## FORGE-019B hardened v1.2 (2026-08-25)
+
+### 変更は「まとめて成立するか、何も残らないか」
+
+```
+prepare   capability / token / document binding / semantic 解決
+validate  feedback.admit()            書く前に断れるものは断る
+stage     revisions.record(observe=False)   Learning Event はまだ出さない
+commit    Feedback → advance → publish()
+rollback  例外時に discard(staged.ref)
+```
+
+**Learning Event は確定してから出す。** 先に出すと、巻き戻したときに
+Learning 側だけ孤児が残る。`publish()` を独立させたのは、そのためであり、
+同時に**DB 化したときの差し替え点**（durable outbox）でもある。
+
+`discard()` は transaction の巻き戻し専用である。確定した記録を消す用途に
+使ってはならない——`RevisionRecord` は「何が起きたか」の事実である。
+
+#### 保証していないこと
+
+`Feedback.record()` 成功後に `advance_to_revision()` が落ちた場合、
+CORRECTED は残る（追記専用のため巻き戻せない）。単一プロセスでは実質
+失敗しないが、**「絶対に無い」とは書かない**。
+
+### 再送は replay する。ただしキーだけでは返さない
+
+```
+_RequestIdentity(artifact_id, version_token, document_binding,
+                 change_request_fingerprint, idempotency_key)
+```
+
+身元が**全一致**したときだけ、以前の結果をそのまま返す。
+
+キーだけを鍵にすると、Client が同じキーを別の要求へ使い回した瞬間に
+**別の要求へ以前の結果が返る**——019A §1 の `document_binding` で塞いだ
+穴を、冪等性の側から開け直すことになる。
+
+同じキーで身元が違えば `idempotency_conflict` で断る（fail closed）。
+replay も処理もしない——どちらへ倒しても嘘になる。
+
+要求文は**そのまま持たない**（利用者の発話であるため、006 §22）。
+ハッシュだけを持つ。
+
+### 実際に直したのが誰かを失わない
+
+| 経路 | `revision_provider` |
+|---|---|
+| 局所 semantic patch | `forge_deterministic`（AIを1回も呼んでいない） |
+| 全体再生成 fallback | 実際に生成した Provider（Routerのfallback先を含む） |
+| 記録し損ね | `unknown`（`forge_deterministic` とは別物） |
+
+API は `provider`（会話）と `revision_provider`（実際に直した側）を
+**分けて**返す。混ぜると、呼んでもいない Provider の手柄がその成績へ
+入り、Local Promotion Gate（017A §7）が読む数字が汚れる。
+
+---
+
 ## FORGE-019A hardened v1.1 (2026-08-25)
 
 019 の v1 は「変更を意味的に扱う」ところまでで、**その記録が本物である

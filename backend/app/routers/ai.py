@@ -704,7 +704,13 @@ def _full_regen(provider_name: str | None):  # noqa: ANN202
                 ),
                 stage="forming_operation",
             )
-        return result.forge_document, result.validation, result.attempts
+        # **実際に生成したProviderを返す**（FORGE-019B §4）。Routerが
+        # fallbackした先かもしれないので、要求時の名前ではなく
+        # `last_provider_used` を見る。
+        return (
+            result.forge_document, result.validation, result.attempts,
+            bound.last_provider_used or "",
+        )
 
     return run
 
@@ -746,6 +752,8 @@ def _update_result_dto(outcome) -> UpdateResultDTO:  # noqa: ANN001 — Revision
             if outcome.target is not None else None
         ),
         critic_passed=outcome.critic_passed,
+        revision_provider=outcome.revision_provider,
+        replayed=outcome.replayed,
     )
 
 

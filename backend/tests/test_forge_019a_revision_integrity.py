@@ -58,6 +58,7 @@ from app.ai.gateway.revision_evidence import (  # noqa: E402
     RevisionPatchMode,
     default_revision_store,
 )
+from app.ai.runtime.revision_service import default_replay_log  # noqa: E402
 
 try:
     from fastapi.testclient import TestClient
@@ -91,6 +92,9 @@ class _RevisionCase(unittest.TestCase):
             default_generation_store(), default_revision_store(),
             default_artifact_registry(), default_feedback_log(),
             default_learning_event_service(),
+            # 再送のreplay記録もプロセス内グローバルなので、ここで消さないと
+            # 前のテストの成功結果が次のテストへ漏れる（FORGE-019B §2）。
+            default_replay_log(),
         ):
             store.reset()
         self.client = TestClient(app)

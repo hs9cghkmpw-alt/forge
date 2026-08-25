@@ -40,6 +40,81 @@ HANDOFFとReportにはbranch、start/final HEAD、実装内容、Production wiri
 tests、mutation、CI、未検証、Technical Debt、次Taskを残す。秘密値やraw
 利用者データは文書・fixture・logへ残さない。
 
+## Agent Execution Policy
+
+Implementation Agent が、いちいち確認を取らずに実行してよいことと、
+必ず確認を取ることと、やってはいけないことを分ける。
+
+**確認の回数を減らすためのルールではない。** 取り返しがつくかどうかで
+分けている——戻せる操作で人を待たせず、戻せない操作を勝手にやらない。
+
+### 自動実行してよい
+
+- read / edit / file create
+- `git status` / `git log` / `git diff` / `git fetch`
+- tests
+- lint / analyze
+- build
+- localhost preview
+- visual capture
+
+### 確認が必須
+
+- commit
+- push
+- package / SDK / system install
+- OS設定の変更
+- credential / auth の変更
+- 大量の削除・移動
+- 外部へのデータ送信
+- 既存作業へ影響する branch 操作
+
+### 禁止
+
+- `git reset --hard`
+- `git clean -fd` / `-fdx`
+- 出所の分からない未commit作業の削除
+- secrets の commit
+- 許可の無い破壊的操作
+
+未commit差分は別Agentまたは利用者の作業かもしれない。**監査せずに
+消さない**（「作業開始」節と同じ）。
+
+---
+
+## GitHub Handoff / No Manual Copy-Paste
+
+**Implementation Agent の長文結果を、利用者が Reviewer へ手で転送する
+運用を禁止する。**
+
+人が中継すると、転送漏れ・古い版の貼り付け・要約による欠落が起きる。
+そして**GitHubに無いものは、Reviewer から見て存在しない**（この文書の
+冒頭のとおり）。
+
+Task 終了時、次までが Agent の仕事である。
+
+```
+docs/HANDOFF.md
+→ docs/reports/<TASK>-report.md
+→ CHANGELOG.md
+→ 必要な Spec / TECH_DEBT / Architecture
+→ tests / mutation / visual / CI の evidence
+→ commit
+→ push
+→ local と remote の HEAD 一致を確認
+```
+
+**Reviewer は GitHub を直接読む。**
+
+利用者が言うことは、原則として
+
+> 「終わった、レビューして」
+
+だけでよい。それ以上を人に運ばせているなら、Agent の仕事が終わって
+いない。
+
+---
+
 ## Independent Review
 
 ChatGPT ReviewerはImplementation Agentの報告をそのまま承認せず、GitHub上の

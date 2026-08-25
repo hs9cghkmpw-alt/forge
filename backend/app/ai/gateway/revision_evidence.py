@@ -159,6 +159,17 @@ class RevisionRecord:
     critic_passed: bool = False
     visual_evidence_reference: str | None = None
 
+    provider_id: str = ""
+    """**実際にこの文書を変えたのは誰か**（FORGE-019B §4）。
+
+    局所patchは Forge の決定的な操作なので `forge_deterministic` が入る
+    ——LLMを1回も呼んでいない。ここに会話のProvider名を入れると、
+    **呼んでもいないProviderの手柄**がその成績へ混ざる。
+
+    空は「記録し損ねた」。`forge_deterministic`（AIを呼んでいない）とは
+    別物なので、そちらへ倒さない。
+    """
+
     forge_language_version: str = ""
     recorded_at: float = 0.0
     ref: int = 0
@@ -239,6 +250,7 @@ class RevisionRecord:
             "fallback_reason": self.fallback_reason,
             "critic_passed": self.critic_passed,
             "visual_evidence_reference": self.visual_evidence_reference,
+            "provider_id": self.provider_id,
             "forge_language_version": self.forge_language_version,
             "recorded_at": self.recorded_at,
         }
@@ -258,7 +270,16 @@ class RevisionEvidenceStore:
         self._next_ref = 1
         self._now = now
 
-    def record(self, record: RevisionRecord) -> RevisionRecord:
+    def record(self, record: RevisionRecord, *, observe: bool = True) -> RevisionRecord:
+        """1件記録する。
+
+        `observe=False` は**Transactionの途中**（FORGE-019B §1）。
+        まだ確定していない変更で Learning Event を出さないための逃げ道で
+        あり、確定したら呼び出し側が `publish()` を呼ぶ。
+
+        既定が `True` なのは、**普通に呼んだら普通に記録される**方が
+        安全だからである。「出し忘れ」より「出しすぎ」の方が気付ける。
+        """
         stored = replace(
             record, ref=self._next_ref, uid=record.uid or uuid4().hex,
             recorded_at=record.recorded_at or float(self._now()),
@@ -268,9 +289,31 @@ class RevisionEvidenceStore:
         if len(self._records) > self._MAX_RECORDS:
             for ref in sorted(self._records)[: len(self._records) - self._MAX_RECORDS]:
                 del self._records[ref]
-        from app.ai.gateway.learning_events import observe_evidence  # noqa: PLC0415
-        observe_evidence(stored)
+        if observe:
+            self.publish(stored)
         return stored
+
+    def publish(self, record: RevisionRecord) -> None:
+        """この変更を Learning Event として出す（FORGE-019B §1）。
+
+        **Transaction が確定してから呼ぶ。** 確定前に出すと、あとで
+        巻き戻したときに Learning 側だけ孤児が残る。
+        """
+        from app.ai.gateway.learning_events import observe_evidence  # noqa: PLC0415
+
+        observe_evidence(record)
+
+    def discard(self, ref: int) -> None:
+        """**Transactionの巻き戻し専用**（FORGE-019B §1）。
+
+        ⚠️ これは「記録を消してよい」という意味ではない。
+        `observe=False` で仮に置いた、**まだ Learning Event を出していない**
+        record を取り消すためだけにある。
+
+        確定した記録を消す用途に使ってはならない——`RevisionRecord` は
+        「何が起きたか」の事実であり、後から無かったことにできない。
+        """
+        self._records.pop(ref, None)
 
     def get(self, ref: int) -> RevisionRecord | None:
         return self._records.get(ref)

@@ -422,6 +422,19 @@ class UpdateResultDTO(BaseModel):
     semantic_operation: str | None = None
     semantic_target: dict[str, str] | None = None
     critic_passed: bool = False
+    revision_provider: str = Field(
+        default="forge_deterministic",
+        description=(
+            "**実際にこの文書を変えたのは誰か**(FORGE-019B §4)。"
+            "局所patchはLLMを1回も呼ばないので`forge_deterministic`。"
+            "全体再生成へ落ちた場合は実際に生成したProvider名。"
+            "会話のProvider(`provider`)とは別物であり、混ぜない"
+        ),
+    )
+    replayed: bool = Field(
+        default=False,
+        description="再送に対して以前の結果をそのまま返したか(FORGE-019B §2)",
+    )
 
 
 class UpdateSuccessResponse(BaseModel):

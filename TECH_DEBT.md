@@ -1,5 +1,21 @@
 # TECH_DEBT.md
 
+## FORGE-019B follow-ups (2026-08-25)
+
+- **`RevisionReplayLog` はプロセス内メモリ。** 再起動すると再送の replay
+  記録が消え、`stale_version` に戻る。
+  今困っていない理由: 安全側に壊れる（二重適用はしない）。
+  将来困る条件: 再起動を挟む実運用で、利用者が「直したのに通らない」に
+  遭遇する。DB の unique key へ移す。
+- **`advance_to_revision()` が落ちた場合の atomicity が不完全。**
+  Feedback Event は追記専用なので巻き戻せない。単一プロセスでは実質
+  失敗しないが保証はしていない。DB 化のときに transaction へ入れる。
+- **`admit()` と `record()` の間に割り込みが無い前提**は、単一プロセス
+  だから成り立っている。DB 化したら両者を1つの transaction へ。
+- `publish()`（Learning Event 送出）は、DB 化のとき **durable outbox**
+  へ置き換える差し替え点として独立させてある。transaction 内で
+  ネットワーク I/O をしない。
+
 ## FORGE-019A follow-ups (2026-08-25)
 
 - `ArtifactRegistry` / Evidence / outbox は**プロセス内メモリ**のまま。

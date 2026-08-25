@@ -391,7 +391,15 @@ class FeedbackEventLog:
 
     def __init__(self, *, now: object = time.time) -> None:
         self._events: list[ArtifactFeedbackEvent] = []
-        self._by_idempotency: dict[str, ArtifactFeedbackEvent] = {}
+        # **キーだけでなく、どの生成物への評価かも込みで見る**（019B §3）。
+        #
+        # 以前は raw key だけの global dict だったので、Client が単純な
+        # 連番キーを使うと**無関係な生成物への評価が「重複」として捨て
+        # られた**。評価が黙って消えるのは、記録の穴として最も悪い部類
+        # である（利用者は言ったつもりで、Forgeは聞いていない）。
+        #
+        # 将来 subject / app の境界を足すときは、このtupleを伸ばす。
+        self._by_idempotency: dict[tuple[str, str], ArtifactFeedbackEvent] = {}
         self._now = now
 
     def append(
@@ -413,16 +421,32 @@ class FeedbackEventLog:
         )
         self._events.append(event)
         if idempotency_key:
-            self._by_idempotency[idempotency_key] = event
+            self._by_idempotency[self._scope(evidence_id, idempotency_key)] = event
         while len(self._events) > self._MAX_EVENTS:
             dropped = self._events.pop(0)
-            self._by_idempotency.pop(dropped.idempotency_key, None)
+            self._by_idempotency.pop(
+                self._scope(dropped.artifact_evidence_ref, dropped.idempotency_key), None,
+            )
         from app.ai.gateway.learning_events import observe_evidence  # noqa: PLC0415
         observe_evidence(event)
         return event
 
-    def find_by_idempotency_key(self, key: str) -> ArtifactFeedbackEvent | None:
-        return self._by_idempotency.get(key) if key else None
+    @staticmethod
+    def _scope(evidence_id: ArtifactEvidenceId, key: str) -> tuple[str, str]:
+        """冪等キーが効く範囲（019B §3）。**生成物ごとに独立。**"""
+        return (evidence_id.uid, key)
+
+    def find_by_idempotency_key(
+        self, key: str, *, evidence_id: ArtifactEvidenceId | None = None,
+    ) -> ArtifactFeedbackEvent | None:
+        """同じ生成物への、同じキーの評価を探す。
+
+        `evidence_id`を省略した場合は**どの生成物とも一致しない**
+        ——範囲が分からないものを「重複」へ倒さない（`CLAUDE.md` §3）。
+        """
+        if not key or evidence_id is None:
+            return None
+        return self._by_idempotency.get(self._scope(evidence_id, key))
 
     def for_evidence(self, evidence_id: ArtifactEvidenceId) -> tuple[ArtifactFeedbackEvent, ...]:
         """ある生成物への評価を、**届いた順**に返す。"""
@@ -588,7 +612,9 @@ class ArtifactFeedbackService:
         if seen_version_token and seen_version_token != handle.version_token:
             return FeedbackResult(False, signal, rejected=FeedbackRejected.STALE_ARTIFACT)
 
-        duplicate = self._events.find_by_idempotency_key(idempotency_key)
+        duplicate = self._events.find_by_idempotency_key(
+            idempotency_key, evidence_id=handle.evidence_id,
+        )
         if duplicate is not None:
             # **同じ送信の繰り返し。** 「もう評価済み」とは違う。
             return FeedbackResult(
@@ -612,6 +638,48 @@ class ArtifactFeedbackService:
         summary_updated = bool(store.note_user_acceptance([handle.evidence_id.ref], signal))
 
         return FeedbackResult(True, signal, summary_updated=summary_updated, event=event)
+
+    def admit(
+        self,
+        *,
+        signal: AcceptanceSignal,
+        artifact_id: str | None = None,
+        session_id: str | None = None,
+        seen_version_token: str | None = None,
+        idempotency_key: str = "",
+    ) -> FeedbackRejected | None:
+        """**書かずに、書けるかどうかだけ調べる**（FORGE-019B §1）。
+
+        Revision は「変更の記録」と「訂正の評価」と「版の前進」を
+        まとめて成立させる必要がある。途中で落ちると、対応する評価を
+        持たない孤児の RevisionRecord が残る。
+
+        そこで `RevisionService` は**書き始める前に**ここで
+        「この評価は通るか」を確かめる。通らないなら1バイトも書かない。
+
+        `None` なら通る見込み。理由が返ればその時点で断る。
+
+        > **単一プロセス前提である。** ここと実際の `record()` の間に
+        > 別の書き込みが割り込む余地は、いまの構成には無い。DB化する
+        > ときは、この2つを1つのDB transactionへ入れる
+        > （`docs/spec/DESIGN-REVISION-PROPOSAL.md` の移行境界を参照）。
+        """
+        if signal is AcceptanceSignal.UNKNOWN:
+            return FeedbackRejected.UNUSABLE_SIGNAL
+        handle = self._resolve(artifact_id=artifact_id, session_id=session_id)
+        if handle is None:
+            return FeedbackRejected.UNKNOWN_ARTIFACT
+        if seen_version_token and seen_version_token != handle.version_token:
+            return FeedbackRejected.STALE_ARTIFACT
+        if self._events.find_by_idempotency_key(
+            idempotency_key, evidence_id=handle.evidence_id,
+        ) is not None:
+            return FeedbackRejected.DUPLICATE_REQUEST
+        store = self._store_for(handle.evidence_id.kind)
+        existing = store.get(handle.evidence_id.ref)
+        if existing is None:
+            return FeedbackRejected.UNKNOWN_ARTIFACT
+        return None
 
     def history(self, evidence_id: ArtifactEvidenceId) -> tuple[ArtifactFeedbackEvent, ...]:
         """その生成物への評価の**時系列**。"""

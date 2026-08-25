@@ -61,9 +61,11 @@ def _production():
     from app.main import app
     from tests.revision_fixtures import provision_artifact
 
+    from app.ai.runtime.revision_service import default_replay_log
+
     for store in (default_generation_store(), default_revision_store(),
                   default_artifact_registry(), default_feedback_log(),
-                  default_learning_event_service()):
+                  default_learning_event_service(), default_replay_log()):
         store.reset()
 
     class _Env:

@@ -596,6 +596,8 @@ class LearningEventProjector:
             runtime, created_at = evidence.runtime_outcome.value, evidence.recorded_at
             forge_language = evidence.forge_language_version or None
             artifact_id, source = evidence.uid or None, evidence.source.value
+            # **実際に文書を変えたProviderを失わない**（FORGE-019B §4）。
+            provider = evidence.provider_id or None
             if any(
                 item.source.value == "user_correction"
                 for item in evidence.design_revisions
