@@ -4,9 +4,10 @@
 
 - branch: `claude/forge-master-handoff-k46jns`
 - start HEAD: `166487a02c2a9601f0adb8dacff0603ba4abd478`
-- final HEAD: この文書を含むFORGE-018A commit（Git log先頭）
+- implementation HEAD: `3c5a5f53e95000154625681e4c48bc9ae3494f1a`
+- final HEAD: このCI実測追補を含むcommit（Git log先頭）
 - current phase: Growing AI / Learning Boundary Hardening
-- current task: FORGE-018A — 実装・ローカル検証完了、push/CI確認前
+- current task: FORGE-018A — 実装・push・CI確認完了
 - next task: FORGE-019 Semantic Design Revision
 
 ## 継続中のCEO依頼
@@ -80,7 +81,11 @@ root `AGENTS.md`を新設。GitHub/MarkdownをSource of Truthとし、開始監�
 - Flutter test: **508 passed**
 - Flutter analyze: **No issues found**
 - Flutter build web: **success**
-- CI: push後確認（Python 3.11 / 3.12 / backend smoke / Flutter）
+- CI run `32806619017`: **success**（implementation HEAD `3c5a5f5`）
+  - backend + forge_ai (Python 3.11): success
+  - backend + forge_ai (Python 3.12): success
+  - backend smoke (起動 + CORS): success
+  - frontend (Flutter): success
 
 ## Intentional break / mutation
 

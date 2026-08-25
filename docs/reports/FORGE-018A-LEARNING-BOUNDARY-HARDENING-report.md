@@ -3,7 +3,8 @@
 2026-08-25 / branch `claude/forge-master-handoff-k46jns`
 
 - start HEAD: `166487a02c2a9601f0adb8dacff0603ba4abd478`
-- final HEAD: このReportを含むcommit（Git log先頭）
+- implementation HEAD: `3c5a5f53e95000154625681e4c48bc9ae3494f1a`
+- final HEAD: このCI実測追補を含むcommit（Git log先頭）
 - next task: FORGE-019 Semantic Design Revision
 
 ## 再現した問題 / 原因
@@ -112,7 +113,11 @@ AI_CALL/GENERATION/FEEDBACK production wiring testも残る。
 - Flutter test: 508 passed（Golden/E2E含む）
 - Flutter analyze: No issues found
 - Flutter build web: success（Wasm dry-run advisoryのみ）
-- CI: push後確認（Python 3.11 / 3.12 / backend smoke / Flutter）
+- CI run `32806619017`: **success**（implementation HEAD `3c5a5f5`）
+  - backend + forge_ai (Python 3.11): success
+  - backend + forge_ai (Python 3.12): success
+  - backend smoke (起動 + CORS): success
+  - frontend (Flutter): success
 
 ## Intentional break
 
