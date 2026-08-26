@@ -4,7 +4,7 @@
   "screens": [
     {
       "id": "generated_screen",
-      "title": "釣った場所を地図に残して魚の種類",
+      "title": "釣果記録",
       "state": {
         "records": {
           "type": "record_list",
@@ -390,7 +390,7 @@
     }
   ],
   "app": {
-    "title": "釣った場所を地図に残して魚の種類"
+    "title": "釣果記録"
   },
   "record_schemas": {
     "fish_record": {

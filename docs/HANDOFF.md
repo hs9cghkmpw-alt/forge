@@ -4,7 +4,7 @@
 - Start HEAD: `63ad43403606c9731f76c98248a9b0e9149e94bf`
 - Implementation Agent: **Claude Code**
 - Current phase: R1 Generated App Quality / Growing AI
-- Current task: **Generated UI Quality Gate v2**（第2回まで実施。
+- Current task: **Generated UI Quality Gate v2**（第3回まで実施。
   Golden Gate は **FAIL**）。前段の FORGE-019C/020 は完了
 - **Real Local Model runs: 0**（Level 0 は別実機で測る。下記「環境判断」）
 
@@ -332,7 +332,7 @@ TD82 lock がプロセス内 / TD83 意味的操作の実装が1件 / TD84 020 �
 
 ---
 
-## Generated UI Quality Gate v2 — 第1回・第2回を実施した（2026-08-26）
+## Generated UI Quality Gate v2 — 第1回〜第3回を実施した（2026-08-26）
 
 `docs/visual-evidence/QUALITY-GATE-V2/manifest.md`
 
@@ -426,12 +426,61 @@ Planner が概念を1つも取り出せないとき `data_needed: ["item"]` を
 **8アプリが3種類の画面にしかならない**ところは変わっていない。
 Renderer をいくら磨いても、出てくる画面が2種類しかない限り通らない。
 
+### 第3回: 名付けを生成の一部にした（修正1を完了）
+
+`Intent.goal`（＝文）を**そのままアプリ名にしていた**のをやめた。
+`forge_ai/core/naming.py` を新設し、compile の**2経路とも**通した。
+
+候補を上から `is_name_like()` へ通し、最初に通ったものを名前にする。
+
+| | 出所 | 例 |
+|---|---|---|
+| 1 | AI が名付けたもの | — |
+| 2 | 取り出せた概念のラベル | 家計簿記録 / 釣果記録 |
+| 3 | Domain の日本語名 | やること / 買い物 |
+| 4 | **どれも通らない** | **新しいアプリ**（分からなかったと認める） |
+
+**願望文から名詞句を削る処理は1つも足していない。削らずに落とす。**
+「残高を見たい」→「残高を見」のような半端に壊れた名前を作らないため。
+
+実測（AppBar に出た文字列）:
+
+    毎日の収入と支出を記録して残高を見たい      → 家計簿記録
+    今日やる作業を登録して、終わったものを…     → やること
+    釣った場所を地図に残して魚の種類を記録したい  → 釣果記録
+    買い物リストを作りたい                → 買い物リスト（変わらず）
+    部署ごとの売上を月別に…                → 新しいアプリ
+    植物を育てながら音を組み合わせるゲーム…     → 新しいアプリ
+    英単語を出題して、正解率の推移を見たい      → 新しいアプリ
+
+配線破壊試験 6件すべてで対応テストが落ちた（置物なし）。
+`backend/tests/test_generated_app_naming.py` が**本番の HTTP** を叩き、
+撮影対象と同じ8 Need で名前を見る。
+
+### 直した結果、見えたもの（両方報告する）
+
+**(a) 名前が自信を持って間違えるようになった（TD89、新規）。**
+
+| 要求 | 実際に作られたもの |
+|---|---|
+| 子どもが朝の支度をひとつずつチェックできるようにしたい | 「こどもの成長」＋体重測定・身長測定 |
+| 旅行の写真を日付ごとに残してメモを付けたい | 「旅行」＋充電器・着替え・歯ブラシ |
+
+名付けの失敗ではなく **Domain 判定の失敗**である。第2回までは要求文が
+タイトルに出ていたので、画面が要求とずれていても**タイトルだけは正しく
+見えていた**。それが誤判定を隠していた。
+**隠れている不具合より、見えている不具合の方がよい。**
+
+**(b) analytics / game / study が全 viewport でバイト単位一致した。**
+悪化ではない。元から同じだったものが、飾り（要求文のタイトル）が取れて
+見えるようになっただけである。
+
 ### 残っている2件
 
-| | 内容 | なぜ残したか |
+| | 内容 | なぜ残っているか |
 |---|---|---|
-| **1** | **アプリ名を生の要求文にしている** | 日本語の願望文から名詞句を取り出すのは形態素解析なしでは壊れやすい。「残高を見たい」→「残高を見」になる。**半端に壊れた名前は元の文より悪い**ので、推測で直さなかった（`CLAUDE.md` §3）。正しい直し方は **命名を生成の一部にする**（名前を付けるのは理解の結果であり AI の仕事）。fallback として Domain→名前の対応表 |
-| **5** | **checklist へ落ちる範囲が広すぎる** | **これが本体。** `LEARNABLE-LOCAL-AI-VISION.md` §22 Capability Registry 作り直しと同じ根 |
+| **5** | **checklist へ落ちる範囲が広すぎる**（TD87） | **これが本体。** `LEARNABLE-LOCAL-AI-VISION.md` §22 Capability Registry 作り直しと同じ根 |
+| **6** | **Domain 判定が外れる**（TD89） | 判定が「子ども」「旅行」等の substring 一致である（`lexicon.py`）。**何についての道具かではなく、どの語が出たかで決めている。** TD87 と同じ根 |
 
 ## いまの状態（2026-08-26）
 
@@ -447,14 +496,15 @@ Renderer をいくら磨いても、出てくる画面が2種類しかない限�
 | Vision / Generative Software Direction 文書 | ✅ 記録済み |
 | **020A Level 0 の準備** | ✅ 経路・計測契約・実機用 runner |
 | **Real Local Model 実測** | ⬜ **別実機待ち**（CEO決定） |
-| **Generated UI Quality Gate v2** | ⚠️ **第1回・第2回まで実施。Golden Gate は FAIL のまま**（4軸を直して再描画で確認、残り2件） |
+| **Generated UI Quality Gate v2** | ⚠️ **第1回〜第3回まで実施。Golden Gate は FAIL のまま**（5軸を直して再描画で確認。残りは TD87 / TD89 で、どちらも生成側の話） |
 
 ### 次の Agent がすぐ着手できるもの（実モデル不要）
 
-1. **Quality Gate v2 の残り2件**（上表）。
-   **1（命名）を先にやる。** 生成の一部として AI に名前を付けさせる。
-   `docs/spec/GENERATED-UI-QUALITY-GATE-V2.md` §8 の E→F→G
-   （直す→撮り直す→判定を記録する）は第2回で1周した。次は2周目
+1. **TD87 / TD89 — どちらも「何を作るか」の話であり、同じ根**。
+   Renderer 側で直せるものは第2回・第3回でやり切った。
+   `docs/spec/GENERATED-UI-QUALITY-GATE-V2.md` §8 の E→F→G は
+   **2周した**（第2回・第3回）。次の周は Capability 分解に手を入れないと
+   絵が変わらない
 2. **§22 Capability Registry の作り直し**
    — Registry は在るが Widget と 1:1 の人手維持。生成的 primitive
    （Scene / Entity / State Machine / Grid / Drag / Game Loop）が無い
@@ -476,8 +526,10 @@ python scripts/verify_local_model_level0.py
 
 ## Next task
 
-**Quality Gate v2 第3回 — 命名を生成の一部にする（修正1）。**
-実モデルを待たずに着手できる。その次が修正5（Capability Registry）。
+**§22 Capability Registry の作り直し（修正5 = TD87）。**
+実モデルを待たずに着手できる。Renderer 側でできることは尽きた——
+**出てくる画面が3種類しかない**限り Golden Gate は通らない。
+あわせて TD89（Domain 判定が substring 一致）も同じ作業で扱う。
 
 並行して **FORGE-020A — Real Local Model Runtime**（別実機待ち）。
 Level 0 が通れば
@@ -498,6 +550,6 @@ LocalModelProvider（既存・OpenAI互換）
 
 ## Next three moves
 
-1. Quality Gate v2 修正1（命名）→ 再描画 → 第3回の判定を記録する
-2. 別実機で Level 0 を走らせ、`Real Local Model runs` を 0 から動かす
-3. 修正5（Capability Registry 作り直し / Vision §22）に着手する
+1. Capability Registry を作り直す（TD87 / Vision §22）→ 再描画 → 第4回
+2. Domain 判定を substring 一致から外す（TD89）
+3. 別実機で Level 0 を走らせ、`Real Local Model runs` を 0 から動かす

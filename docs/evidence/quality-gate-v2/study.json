@@ -4,7 +4,7 @@
   "screens": [
     {
       "id": "generated_screen",
-      "title": "英単語を出題して、正解率の推移を見たい",
+      "title": "新しいアプリ",
       "state": {
         "items": {
           "type": "checklist",
@@ -52,7 +52,7 @@
     }
   ],
   "app": {
-    "title": "英単語を出題して、正解率の推移を見たい"
+    "title": "新しいアプリ"
   },
   "design_tokens": {
     "color_scheme": {

@@ -4,7 +4,7 @@
   "screens": [
     {
       "id": "generated_screen",
-      "title": "今日やる作業を登録して、終わったものを消していきたい",
+      "title": "やること",
       "state": {
         "items": {
           "type": "checklist",
@@ -68,7 +68,7 @@
     }
   ],
   "app": {
-    "title": "今日やる作業を登録して、終わったものを消していきたい"
+    "title": "やること"
   },
   "design_tokens": {
     "color_scheme": {

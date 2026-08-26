@@ -4,7 +4,7 @@
   "screens": [
     {
       "id": "generated_screen",
-      "title": "毎日の収入と支出を記録して残高を見たい",
+      "title": "家計簿記録",
       "state": {
         "records": {
           "type": "record_list",
@@ -410,7 +410,7 @@
     }
   ],
   "app": {
-    "title": "毎日の収入と支出を記録して残高を見たい"
+    "title": "家計簿記録"
   },
   "record_schemas": {
     "transaction": {

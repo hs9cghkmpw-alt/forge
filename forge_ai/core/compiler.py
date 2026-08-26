@@ -34,6 +34,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from forge_ai.core.naming import decide_app_name, domain_label_for
 from forge_ai.core.planner import ApplicationPlan
 from forge_ai.prompt.prompt_builder import PromptBuilder
 from forge_ai.provider.provider_interface import AIProvider
@@ -411,9 +412,24 @@ class Compiler:
             }
         )
         response = self._provider.complete(prompt)
-        # `clamp_title()`でForge Languageの1〜80文字制約へ必ず収める
-        # (会話由来の長いbuild_briefでタイトルが上限超過する実バグの修正)。
-        title = clamp_title(str(response.structured.get("title") or plan.title or ""))
+        # **名付けを1か所に集める**（Quality Gate v2 修正1、2026-08-26）。
+        #
+        # 以前はここで `plan.title`——すなわち `Intent.goal`——を
+        # そのままアプリ名にしていた。実描画すると AppBar に
+        # 「毎日の収入と支出を記録して残高を見たい」と出る。
+        # **目的（文）を名前（名詞句）として使っていた。**
+        #
+        # `decide_app_name()` は候補を全部 `is_name_like()` へ通す。
+        # 要求文は落ちる。落ちたら Domain の日本語名へ、それも無ければ
+        # 「分からなかった」と認める（`naming.py` 参照）。
+        app_name = decide_app_name(
+            ai_title=str(response.structured.get("title") or ""),
+            entity_label=str(plan.title or ""),
+            domain_label=domain_label_for(domain_category),
+        )
+        # 長さ上限（1〜80文字）は最後に必ず通す。`decide_app_name()` は
+        # 14文字以内しか返さないが、上限の責務をここから外さない。
+        title = clamp_title(app_name.text)
 
         primary_screen = plan.screens[0] if plan.screens else None
         elements = list(primary_screen.key_elements) if primary_screen else list(plan.data_entities)

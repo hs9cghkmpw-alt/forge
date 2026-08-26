@@ -182,7 +182,20 @@ class TestRunCognitivePipelineClarificationAnswers(unittest.TestCase):
     def test_title_excludes_noise_original_input_when_answers_present(self) -> None:
         """最終調整P3の回帰テスト核心(End-to-End): ノイズ的な元入力
         ("x")が、確認フロー経由で生成されたアプリのタイトルに残らない
-        ことを確認する。"""
+        ことを確認する。
+
+        2026-08-26(Quality Gate v2 修正1)で期待値を更新した。以前は
+        `assertIn("買い物リスト", title)`——つまり**回答文がそのまま
+        タイトルへ入ること**を期待していた。実際に出ていたのは
+        「日常の 買い物リストです」であり、これは名前ではなく発話である。
+
+        `decide_app_name()` 導入後は「買い物」(Domainの日本語名)になる。
+        **このテストの本来の意図(ノイズ "x" がタイトルへ残らない)は
+        変えていない。** 変えたのは「回答文を写す」という手段への依存で
+        ある。回答の意味(買い物)がタイトルへ届いていることは引き続き
+        確認する。
+        """
+        from forge_ai.core.naming import is_name_like
         from forge_ai.core.orchestration.outcomes import CognitivePipelineSuccess
         from forge_ai.core.pipeline import run_cognitive_pipeline
 
@@ -192,7 +205,10 @@ class TestRunCognitivePipelineClarificationAnswers(unittest.TestCase):
         self.assertIsInstance(outcome, CognitivePipelineSuccess)
         title = outcome.ir.to_json_dict()["app"]["title"]
         self.assertNotIn("x", title)
-        self.assertIn("買い物リスト", title)
+        self.assertIn("買い物", title)
+        # **名前の形をしていること。** 「買い物リストです」のような
+        # 発話がタイトルへ入るのを防ぐのがこの修正の目的である。
+        self.assertTrue(is_name_like(title), title)
 
     def test_concept_matching_still_uses_full_combined_text_not_just_title_seed(self) -> None:
         """タイトル導出だけがノイズを除外し、Domain/概念抽出は引き続き

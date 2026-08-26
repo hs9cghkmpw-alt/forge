@@ -4,7 +4,7 @@
   "screens": [
     {
       "id": "generated_screen",
-      "title": "部署ごとの売上を月別に集計してグラフで比べたい",
+      "title": "新しいアプリ",
       "state": {
         "items": {
           "type": "checklist",
@@ -52,7 +52,7 @@
     }
   ],
   "app": {
-    "title": "部署ごとの売上を月別に集計してグラフで比べたい"
+    "title": "新しいアプリ"
   },
   "design_tokens": {
     "color_scheme": {

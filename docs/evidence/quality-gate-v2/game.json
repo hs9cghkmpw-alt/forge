@@ -4,7 +4,7 @@
   "screens": [
     {
       "id": "generated_screen",
-      "title": "植物を育てながら音を組み合わせるゲーム",
+      "title": "新しいアプリ",
       "state": {
         "items": {
           "type": "checklist",
@@ -52,7 +52,7 @@
     }
   ],
   "app": {
-    "title": "植物を育てながら音を組み合わせるゲーム"
+    "title": "新しいアプリ"
   },
   "design_tokens": {
     "color_scheme": {

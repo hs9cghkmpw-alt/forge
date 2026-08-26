@@ -16,7 +16,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
     'screens': <dynamic>[
       <String, dynamic>{
         'id': 'generated_screen',
-        'title': '部署ごとの売上を月別に集計してグラフで比べたい',
+        'title': '新しいアプリ',
         'state': <String, dynamic>{
           'items': <String, dynamic>{
             'type': 'checklist',
@@ -64,7 +64,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
       },
     ],
     'app': <String, dynamic>{
-      'title': '部署ごとの売上を月別に集計してグラフで比べたい',
+      'title': '新しいアプリ',
     },
     'design_tokens': <String, dynamic>{
       'color_scheme': <String, dynamic>{
@@ -93,7 +93,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
     'screens': <dynamic>[
       <String, dynamic>{
         'id': 'generated_screen',
-        'title': '毎日の収入と支出を記録して残高を見たい',
+        'title': '家計簿記録',
         'state': <String, dynamic>{
           'records': <String, dynamic>{
             'type': 'record_list',
@@ -499,7 +499,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
       },
     ],
     'app': <String, dynamic>{
-      'title': '毎日の収入と支出を記録して残高を見たい',
+      'title': '家計簿記録',
     },
     'record_schemas': <String, dynamic>{
       'transaction': <String, dynamic>{
@@ -574,7 +574,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
     'screens': <dynamic>[
       <String, dynamic>{
         'id': 'generated_screen',
-        'title': '植物を育てながら音を組み合わせるゲーム',
+        'title': '新しいアプリ',
         'state': <String, dynamic>{
           'items': <String, dynamic>{
             'type': 'checklist',
@@ -622,7 +622,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
       },
     ],
     'app': <String, dynamic>{
-      'title': '植物を育てながら音を組み合わせるゲーム',
+      'title': '新しいアプリ',
     },
     'design_tokens': <String, dynamic>{
       'color_scheme': <String, dynamic>{
@@ -651,7 +651,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
     'screens': <dynamic>[
       <String, dynamic>{
         'id': 'generated_screen',
-        'title': '子どもが朝の支度をひとつずつチェックできるようにしたい',
+        'title': 'こどもの成長',
         'state': <String, dynamic>{
           'items': <String, dynamic>{
             'type': 'checklist',
@@ -710,7 +710,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
       },
     ],
     'app': <String, dynamic>{
-      'title': '子どもが朝の支度をひとつずつチェックできるようにしたい',
+      'title': 'こどもの成長',
     },
     'design_tokens': <String, dynamic>{
       'color_scheme': <String, dynamic>{
@@ -739,7 +739,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
     'screens': <dynamic>[
       <String, dynamic>{
         'id': 'generated_screen',
-        'title': '釣った場所を地図に残して魚の種類',
+        'title': '釣果記録',
         'state': <String, dynamic>{
           'records': <String, dynamic>{
             'type': 'record_list',
@@ -1125,7 +1125,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
       },
     ],
     'app': <String, dynamic>{
-      'title': '釣った場所を地図に残して魚の種類',
+      'title': '釣果記録',
     },
     'record_schemas': <String, dynamic>{
       'fish_record': <String, dynamic>{
@@ -1190,7 +1190,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
     'screens': <dynamic>[
       <String, dynamic>{
         'id': 'generated_screen',
-        'title': '旅行の写真を日付ごとに残してメモを付けたい',
+        'title': '旅行',
         'state': <String, dynamic>{
           'items': <String, dynamic>{
             'type': 'checklist',
@@ -1254,7 +1254,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
       },
     ],
     'app': <String, dynamic>{
-      'title': '旅行の写真を日付ごとに残してメモを付けたい',
+      'title': '旅行',
     },
     'design_tokens': <String, dynamic>{
       'color_scheme': <String, dynamic>{
@@ -1283,7 +1283,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
     'screens': <dynamic>[
       <String, dynamic>{
         'id': 'generated_screen',
-        'title': '英単語を出題して、正解率の推移を見たい',
+        'title': '新しいアプリ',
         'state': <String, dynamic>{
           'items': <String, dynamic>{
             'type': 'checklist',
@@ -1331,7 +1331,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
       },
     ],
     'app': <String, dynamic>{
-      'title': '英単語を出題して、正解率の推移を見たい',
+      'title': '新しいアプリ',
     },
     'design_tokens': <String, dynamic>{
       'color_scheme': <String, dynamic>{
@@ -1360,7 +1360,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
     'screens': <dynamic>[
       <String, dynamic>{
         'id': 'generated_screen',
-        'title': '今日やる作業を登録して、終わったものを消していきたい',
+        'title': 'やること',
         'state': <String, dynamic>{
           'items': <String, dynamic>{
             'type': 'checklist',
@@ -1424,7 +1424,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
       },
     ],
     'app': <String, dynamic>{
-      'title': '今日やる作業を登録して、終わったものを消していきたい',
+      'title': 'やること',
     },
     'design_tokens': <String, dynamic>{
       'color_scheme': <String, dynamic>{

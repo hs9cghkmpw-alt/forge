@@ -146,6 +146,7 @@ from forge_ai.core.compiler import (
     clamp_title,
     design_tokens_for_style,
 )
+from forge_ai.core.naming import decide_app_name, domain_label_for
 from forge_ai.core.ir.ir_types import (
     Entity,
     Field,
@@ -287,10 +288,22 @@ class ForgeLanguageCompiler:
             (v for v in ir.views if v.kind == ViewKind.FORM and v.entity == entity.name and v.mode == "edit"), None
         )
 
-        # `clamp_title()`でForge Languageの1〜80文字制約へ必ず収める
-        # (`compiler.py`参照。会話由来の長いbuild_briefで、app.title・
-        # screen.titleが上限超過してValidatorに落ちる実バグの修正)。
-        safe_title = clamp_title(title)
+        # **名付けを1か所に集める**（Quality Gate v2 修正1、2026-08-26）。
+        #
+        # 以前は `title`（＝`ApplicationPlan.title`＝`Intent.goal`）を
+        # そのままアプリ名にしていた。実描画すると AppBar に
+        # 「毎日の収入と支出を記録して残高を見たい」と出る。
+        # **目的（文）を名前（名詞句）として使っていた。**
+        #
+        # この経路には `entity.label`（「家計簿記録」等、Forge が実際に
+        # 理解したものの名前）があるので、要求文より遥かに良い名前が取れる。
+        app_name = decide_app_name(
+            ai_title=title,
+            entity_label=entity.label,
+            domain_label=domain_label_for(domain_category),
+        )
+        # 長さ上限（1〜80文字）は最後に必ず通す(`compiler.py`参照)。
+        safe_title = clamp_title(app_name.text)
 
         # 2026-08-12(CEO「常にニーズに合わせた最適解を出せるように
         # して」)対応: 以前はニーズが何であれ`_compile_single_screen()`

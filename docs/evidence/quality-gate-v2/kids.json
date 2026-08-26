@@ -4,7 +4,7 @@
   "screens": [
     {
       "id": "generated_screen",
-      "title": "子どもが朝の支度をひとつずつチェックできるようにしたい",
+      "title": "こどもの成長",
       "state": {
         "items": {
           "type": "checklist",
@@ -63,7 +63,7 @@
     }
   ],
   "app": {
-    "title": "子どもが朝の支度をひとつずつチェックできるようにしたい"
+    "title": "こどもの成長"
   },
   "design_tokens": {
     "color_scheme": {

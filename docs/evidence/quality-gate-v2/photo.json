@@ -4,7 +4,7 @@
   "screens": [
     {
       "id": "generated_screen",
-      "title": "旅行の写真を日付ごとに残してメモを付けたい",
+      "title": "旅行",
       "state": {
         "items": {
           "type": "checklist",
@@ -68,7 +68,7 @@
     }
   ],
   "app": {
-    "title": "旅行の写真を日付ごとに残してメモを付けたい"
+    "title": "旅行"
   },
   "design_tokens": {
     "color_scheme": {
