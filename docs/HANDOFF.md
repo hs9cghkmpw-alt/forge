@@ -24,11 +24,21 @@ created 15:03:53Z → updated 15:03:58Z   （5秒）
 ```
 
 1つ前の commit（`89fbc72`）はほぼ同じコードで **success**。
-GitHub Actions 側の事象である。`rerun_workflow_run` を要求し
-`run_started_at=20:31:00Z` になったが、**その後も jobs は0件のまま**。
+GitHub Actions 側の事象である。再実行を要求したが jobs 0件のままだった。
 
-> **最新 HEAD を CI PASS とは書いていない。** green evidence 未取得。
-> Actions の利用枠・runner 割当を確認してほしい。
+**次の push（`47c95e5`）では runner が付き、そして本当に落ちた**
+（run 33015298405）。原因は**私が書いたテスト**である——
+「秘密の長さを出さない」検査を数字の部分文字列探索で書いたため、
+長さ 27 が runner のホスト名 `runnervm76f27` に一致した。
+誤検知の余地が無い形（長さの違う2つの秘密で `env:` 行が一致すること）へ
+直して push した（`f6a3f95`）。
+
+> **2つの failure は別物である。** `32983961000` は runner 未割当
+> （infrastructure、jobs 0件 / steps 0）、`33015298405` はコードの誤り
+> （4 jobs すべて runner 割当・steps 実行）。混ぜない。
+>
+> **runner が割り当たらない件は残っている。** Actions の利用枠・
+> runner 割当を確認してほしい。
 
 ### 2. 前セッションから残っている件
 
