@@ -33,12 +33,45 @@ jobs       : 4件すべて status=queued / steps 0 / runner 未割当
 テスト内容ではなく **runner が1台も割り当たらないまま run が打ち切られた**
 ——GitHub Actions 側の事象である。
 
-`rerun_workflow_run` で再実行を要求した（`run_attempt` が更新され
-`run_started_at=20:31:00Z`）。ただし **本 report を書いている時点でも
-jobs は 0 件のまま**であり、**green evidence はまだ取れていない。**
+`rerun_workflow_run` で再実行を要求したが、その run も jobs 0 件のまま
+だった。
 
-> **最新 HEAD を CI PASS とは書かない。** green になるまで、この行は
-> 「未取得」のままにする。
+### 次の push（`47c95e5`）では runner が付いた——そして**本当に落ちた**
+
+`run 33015298405` は 4 jobs すべて runner が割り当たり、steps も実行された。
+
+| job | 結果 |
+|---|---|
+| backend smoke（起動 + CORS） | success |
+| frontend (Flutter) | success |
+| backend + forge_ai (3.11) | **failure** |
+| backend + forge_ai (3.12) | **failure** |
+
+**原因は私が書いたテストだった。** ローカルでは通り、CI で落ちた。
+
+```
+AssertionError: '27' unexpectedly found in
+  '... host: runnervm76f27 (Linux-...)'
+```
+
+`test_forge_doctor.py` の「秘密の**長さ**を出さない」検査を
+`assertNotIn(str(len(_FAKE_SECRET)), output)` と書いていた。
+秘密の長さ 27 が、**runner のホスト名 `runnervm76f27` に含まれていた**。
+
+任意の出力から数字の部分文字列を探すのは誤検知の温床である
+（ホスト名・バージョン・容量・カーネル番号）。
+
+直し方: **長さの違う2つの秘密で `env:` 行が1バイトも変わらないこと**を
+見る。値にも長さにも依存していなければ必ず一致し、誤検知の余地が無い。
+出力全体ではなく `env:` 行だけを比べる——2回の間にネットワークの可否が
+変わると全体比較は落ちるからである（CI では起こりうる）。
+
+配線破壊試験で確認: `forge_doctor` に「(N文字)」を出させると、
+この検査は落ちる。
+
+> **2つの failure は別物である。**
+> `32983961000` は runner 未割当（infrastructure）。
+> `33015298405` は**私のテストの誤り**（コード）。混ぜて書かない。
 
 ---
 

@@ -56,11 +56,54 @@ class TestForgeDoctorNeverLeaksSecrets(unittest.TestCase):
         self.assertNotIn(_FAKE_SECRET, output)
         # **先頭数文字も出さない。**
         self.assertNotIn(_FAKE_SECRET[:6], output)
-        # **長さも出さない。**
-        self.assertNotIn(str(len(_FAKE_SECRET)), output.split("python")[0])
         # 「設定されている」ことだけは言ってよい。
         self.assertIn("GEMINI_API_KEY", output)
         self.assertIn("設定あり", output)
+
+    def test_the_output_does_not_depend_on_the_secret_at_all(self) -> None:
+        """**長さも漏らさない**ことを、取り違えようの無い形で確かめる。
+
+        ---
+
+        最初この検査を `assertNotIn(str(len(_FAKE_SECRET)), output)` と
+        書いた。ローカルでは通り、**CI で落ちた**——秘密の長さ 27 が、
+        runner のホスト名 `runnervm76f27` に含まれていた。
+
+        任意の出力から数字の部分文字列を探すのは誤検知の温床である
+        （ホスト名・バージョン・容量・カーネル番号）。
+
+        **長さの違う2つの秘密で出力が1バイトも変わらないこと**を見る。
+        値にも長さにも依存していなければ、出力は必ず一致する。
+        誤検知の余地が無い。
+        """
+        short = "a" * 8
+        long = "b" * 64
+
+        def env_lines(value: str) -> list[str]:
+            """`env:` の行だけ取る。
+
+            出力全体を比べると、**2回の間にネットワークの可否が変われば
+            落ちる**（CI では起こりうる）。秘密の扱いを見たいのだから、
+            秘密に関係する行だけを見る。
+            """
+            import sys
+
+            os.environ["GEMINI_API_KEY"] = value
+            argv = sys.argv
+            try:
+                sys.argv = ["forge_doctor.py"]
+                buffer = io.StringIO()
+                with contextlib.redirect_stdout(buffer):
+                    self.doctor.main()
+                rendered = buffer.getvalue()
+            finally:
+                sys.argv = argv
+                os.environ.pop("GEMINI_API_KEY", None)
+            return [line for line in rendered.splitlines() if "env:" in line]
+
+        first, second = env_lines(short), env_lines(long)
+        self.assertTrue(first, "env の行が1つも出ていない")
+        self.assertEqual(first, second)
 
     def test_the_json_form_also_hides_the_value(self) -> None:
         import json

@@ -530,3 +530,80 @@ class TestLevel0ProbeIsActuallyNonCurated(unittest.TestCase):
 
     def test_the_script_does_not_default_to_the_trap(self) -> None:
         self.assertNotEqual(self.script.LEVEL0_PROBE, self.script.CURATED_TRAP_PROBE)
+
+
+class TestTheProbeNeverTurnsAModelIdIntoADigest(unittest.TestCase):
+    """**script 側でも名前を digest 扱いしない**（020A1 D）。
+
+    配線破壊試験 M17 で分かったこと: 「名前は digest ではない」という規則は
+    `RealLocalModelRun` 側でしか固定されていなかった。script の
+    `_probe_runtime()` に `entry.get("id")` を戻しても**どのテストも
+    落ちなかった**——Evidence 型は渡されたものを信じるしかないので、
+    嘘は入口で入る。
+
+    入口を直接見る。
+    """
+
+    def setUp(self) -> None:
+        import importlib.util
+        import pathlib
+        import sys
+
+        root = pathlib.Path(__file__).resolve().parents[2]
+        spec = importlib.util.spec_from_file_location(
+            "_level0_probe_script", root / "scripts" / "verify_local_model_level0.py",
+        )
+        assert spec and spec.loader
+        self.script = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = self.script
+        spec.loader.exec_module(self.script)
+
+    def _probe_with(self, models_payload: dict) -> dict:
+        """`/api/tags` は 404、`/v1/models` が `models_payload` を返す Runtime。"""
+        import httpx
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/api/tags"):
+                return httpx.Response(404)
+            if request.url.path.endswith("/models"):
+                return httpx.Response(200, json=models_payload)
+            return httpx.Response(404)
+
+        transport = httpx.MockTransport(handler)
+        real_client = httpx.Client
+
+        def patched(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+            kwargs["transport"] = transport
+            return real_client(*args, **kwargs)
+
+        httpx.Client = patched  # type: ignore[misc]
+        try:
+            return self.script._probe_runtime(
+                "http://127.0.0.1:8080/v1", "some-model", timeout=1.0,
+            )
+        finally:
+            httpx.Client = real_client  # type: ignore[misc]
+
+    def test_an_id_without_a_digest_leaves_the_digest_empty(self) -> None:
+        """llama-server 等は digest を返さない。**空のままにする。**"""
+        probe = self._probe_with({"data": [{"id": "some-model"}]})
+        self.assertTrue(probe["reachable"])
+        self.assertEqual(probe["model_id"], "some-model")
+        self.assertEqual(probe["digest"], "", "名前を digest 扱いしている")
+
+    def test_a_real_digest_is_kept(self) -> None:
+        probe = self._probe_with(
+            {"data": [{"id": "some-model", "digest": "sha256:deadbeef"}]},
+        )
+        self.assertEqual(probe["digest"], "sha256:deadbeef")
+        self.assertEqual(probe["model_id"], "some-model")
+
+    def test_a_run_built_from_such_a_probe_is_unverified(self) -> None:
+        """**入口と判定を繋いで確かめる。**"""
+        probe = self._probe_with({"data": [{"id": "some-model"}]})
+        run = TestRealLocalModelRunCounting._passing_run(  # type: ignore[arg-type]
+            self, model_id=str(probe["model_id"]), model_digest=str(probe["digest"]),
+        )
+        self.assertIs(run.weight_identity, WeightIdentity.UNVERIFIED)
+        self.assertTrue(run.counts_as_real_local, run.why_not_counted())
+        self.assertFalse(run.ready_for_baseline)
