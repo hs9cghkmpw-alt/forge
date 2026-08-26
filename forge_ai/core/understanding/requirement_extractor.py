@@ -26,6 +26,18 @@ _PRIVACY_SENSITIVE_CONCEPT_NAMES = ("patient", "symptom", "medication")
 # Requirementへ変換する)。
 _SHARING_ACTIONS = ("share",)
 
+#: **複数人での利用を含意する actor**（GENERATED-UI-QG-V2-R4、2026-08-26）。
+#:
+#: 「家族」「チーム」は、それ自体が複数人である。「子ども」「生徒」は
+#: **1人の利用者**であり、共有・権限管理を要求しない。
+#:
+#: この区別が無かったため、actor が1つでも取れると常に「共有・複数利用者
+#: に対するアクセス権限を管理できること」が**必須要件**になっていた。
+_MULTI_USER_ACTORS = (
+    "家族", "family", "友人", "同僚", "colleague", "チーム", "team",
+    "参加者", "participant", "回答者", "respondent",
+)
+
 
 class RequirementExtractor:
     """`RequirementExtractorProtocol`を満たす。"""
@@ -215,13 +227,28 @@ class RequirementExtractor:
             )
 
         # Permission/Collaboration(Meaning由来のActor・共有Action)。
+        #
+        # **Actor が居ることと、複数人で共有することは別である**
+        # （GENERATED-UI-QG-V2-R4、2026-08-26）。
+        #
+        # Semantic Role Extraction が `子ども` を actor として拾うように
+        # なった結果、「子どもが朝の支度をチェックできるように」が
+        # **共有・権限管理を必須要件**にし、Design Critic が永久に
+        # 満たせず確認要求へ抜けた（実測、再現済み）。
+        #
+        # 「子どもが使う」は1人で使う道具である。共有を要求しているのは
+        # **共有の action**（共有する・送る）か、**複数人を指す actor**
+        # （家族・チーム・同僚）だけである。
         has_sharing_action = any(a in _SHARING_ACTIONS for a in meaning.actions)
-        if meaning.actors or has_sharing_action:
+        collaborative_actors = tuple(
+            a for a in meaning.actors if a in _MULTI_USER_ACTORS
+        )
+        if collaborative_actors or has_sharing_action:
             requirements.append(
                 Requirement(
                     requirement_id=next_id(),
                     category="permission",
-                    description=f"共有・複数利用者({', '.join(meaning.actors) or '不特定の他者'})"
+                    description=f"共有・複数利用者({', '.join(collaborative_actors) or '不特定の他者'})"
                     "に対するアクセス権限を管理できること。",
                     mandatory=True,
                     rationale="Meaning.actors/actions(共有)に基づく(Meaning Model)",

@@ -1,48 +1,223 @@
 {
-  "version": "1.5",
+  "version": "1.12",
   "initial_screen_id": "generated_screen",
   "screens": [
     {
       "id": "generated_screen",
-      "title": "新しいアプリ",
+      "title": "植物",
       "state": {
-        "items": {
-          "type": "checklist",
-          "value": []
+        "records": {
+          "type": "record_list",
+          "value": [],
+          "schema_ref": "plant"
         },
-        "new_item_text": {
+        "field_plant": {
+          "type": "string",
+          "value": ""
+        },
+        "field_sound": {
+          "type": "string",
+          "value": ""
+        },
+        "selected": {
+          "type": "selected_record",
+          "value": null
+        },
+        "edit_field_plant": {
+          "type": "string",
+          "value": ""
+        },
+        "edit_field_sound": {
           "type": "string",
           "value": ""
         }
       },
       "body": {
-        "type": "column",
-        "id": "root_column",
+        "type": "tab_view",
+        "id": "root_tabs",
+        "tab_titles": [
+          "植物を追加",
+          "植物一覧",
+          "植物を編集"
+        ],
+        "style_role": "density.normal",
         "children": [
           {
-            "type": "checklist",
-            "id": "list_view",
-            "state_ref": "items",
-            "empty_state_text": "まだ何もありません"
-          },
-          {
-            "type": "row",
-            "id": "add_row",
+            "type": "column",
+            "id": "create_tab",
             "children": [
               {
-                "type": "text_field",
-                "id": "add_field",
-                "state_ref": "new_item_text",
-                "placeholder": "追加する"
+                "type": "section_header",
+                "id": "create_section_header",
+                "style_role": "text.headline",
+                "title": "植物を追加",
+                "subtitle": "必要な情報を入力してください"
+              },
+              {
+                "type": "form",
+                "id": "record_form",
+                "style_role": "button.primary",
+                "submit_label": "保存",
+                "submit_action": {
+                  "type": "composite",
+                  "actions": [
+                    {
+                      "type": "add_record",
+                      "target_state_ref": "records",
+                      "field_bindings": {
+                        "plant": "field_plant",
+                        "sound": "field_sound"
+                      }
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "field_plant"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "field_sound"
+                    }
+                  ]
+                },
+                "children": [
+                  {
+                    "type": "text_field",
+                    "id": "field_plant_input",
+                    "state_ref": "field_plant",
+                    "placeholder": "植物",
+                    "validation": {
+                      "rules": [
+                        {
+                          "type": "required",
+                          "message": "植物を入力してください"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "type": "text_field",
+                    "id": "field_sound_input",
+                    "state_ref": "field_sound",
+                    "placeholder": "音"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "column",
+            "id": "list_tab",
+            "children": [
+              {
+                "type": "record_list_view",
+                "id": "records_list_view",
+                "state_ref": "records",
+                "layout": "card",
+                "display_fields": [
+                  "plant",
+                  "sound"
+                ],
+                "empty_state_text": "まだ植物がありません",
+                "selectable": true,
+                "selected_state_ref": "selected",
+                "select_field_bindings": {
+                  "plant": "edit_field_plant",
+                  "sound": "edit_field_sound"
+                },
+                "style_role": "surface.card"
+              }
+            ]
+          },
+          {
+            "type": "column",
+            "id": "edit_tab",
+            "children": [
+              {
+                "type": "section_header",
+                "id": "edit_section_header",
+                "style_role": "text.headline",
+                "title": "植物を編集",
+                "subtitle": "一覧からカードを選ぶと入力欄が埋まります"
+              },
+              {
+                "type": "form",
+                "id": "record_edit_form",
+                "submit_label": "更新",
+                "submit_action": {
+                  "type": "composite",
+                  "actions": [
+                    {
+                      "type": "update_record",
+                      "target_state_ref": "records",
+                      "record_id_ref": "selected",
+                      "field_bindings": {
+                        "plant": "edit_field_plant",
+                        "sound": "edit_field_sound"
+                      }
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_plant"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_sound"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "selected"
+                    }
+                  ]
+                },
+                "children": [
+                  {
+                    "type": "text_field",
+                    "id": "edit_field_plant_edit_input",
+                    "state_ref": "edit_field_plant",
+                    "placeholder": "植物",
+                    "validation": {
+                      "rules": [
+                        {
+                          "type": "required",
+                          "message": "植物を入力してください"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "type": "text_field",
+                    "id": "edit_field_sound_edit_input",
+                    "state_ref": "edit_field_sound",
+                    "placeholder": "音"
+                  }
+                ]
               },
               {
                 "type": "button",
-                "id": "add_button",
-                "label": "追加",
+                "id": "record_delete_button",
+                "style_role": "button.secondary",
+                "label": "削除",
                 "action": {
-                  "type": "add_item",
-                  "target_state_ref": "items",
-                  "source_state_ref": "new_item_text"
+                  "type": "composite",
+                  "actions": [
+                    {
+                      "type": "delete_record",
+                      "target_state_ref": "records",
+                      "record_id_ref": "selected"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_plant"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_sound"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "selected"
+                    }
+                  ]
                 }
               }
             ]
@@ -52,7 +227,25 @@
     }
   ],
   "app": {
-    "title": "新しいアプリ"
+    "title": "植物"
+  },
+  "record_schemas": {
+    "plant": {
+      "fields": [
+        {
+          "name": "plant",
+          "type": "string",
+          "label": "植物",
+          "required": true
+        },
+        {
+          "name": "sound",
+          "type": "string",
+          "label": "音",
+          "required": false
+        }
+      ]
+    }
   },
   "design_tokens": {
     "color_scheme": {

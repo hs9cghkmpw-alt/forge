@@ -123,25 +123,41 @@ class TestNamesComeFromWhatForgeActuallyUnderstood(unittest.TestCase):
                 title = _generate(self.client, need)["app"]["title"]
                 self.assertEqual(title, name)
 
-    def test_unknown_domains_admit_it_instead_of_echoing_the_request(self) -> None:
-        """**分からなかったものは分からないと言う。**
+    def test_unknown_domains_are_named_from_the_capability_plan(self) -> None:
+        """**Capability Plan が取れたら、そこから名付ける**（R4で更新）。
 
-        データ分析・ゲーム・学習は、現在の Forge が Domain として
-        理解できていない（`generic` へ落ちる）。そこで要求文を名前に
-        すると「理解している」ように見えてしまう。
+        第3回の時点では、データ分析・ゲーム・学習は Domain として理解
+        できず（`generic`）、名前は `新しいアプリ` だった。それは
+        「分からなかった」の正しい表明であり、TD87 の症状でもあった。
 
-        これが `新しいアプリ` になるのは**この修正の失敗ではなく、
-        TD87（8アプリが3種類の画面にしかならない）の症状**である。
-        名前が本物になるのは、Capability Registry を作り直したときである。
+        R4 で Semantic Role Extraction → Capability Plan が入り、
+        **役から主題が取れるようになった**ので、`新しいアプリ` へ
+        落ちる必要が無くなった。
+
+            植物を育てながら音を…      → 植物   （managed_object）
+            英単語を出題して…          → 単語   （managed_object）
+            部署ごとの売上を…          → 記録   （主題が取れない場合の一般名）
+
+        **これは「分かったふり」ではない。** 名前は役から来ており、
+        取れなければ今も `新しいアプリ` になる（下のテスト）。
         """
-        for need in (
-            "部署ごとの売上を月別に集計してグラフで比べたい",
-            "植物を育てながら音を組み合わせるゲームを作りたい",
-            "英単語を出題して、正解率の推移を見たい",
-        ):
+        expected = {
+            "植物を育てながら音を組み合わせるゲームを作りたい": "植物",
+            "英単語を出題して、正解率の推移を見たい": "単語",
+        }
+        for need, name in expected.items():
             with self.subTest(need=need):
-                title = _generate(self.client, need)["app"]["title"]
-                self.assertEqual(title, GENERIC_APP_NAME)
+                self.assertEqual(_generate(self.client, need)["app"]["title"], name)
+
+    def test_a_need_with_no_recognisable_role_still_admits_it(self) -> None:
+        """**役が1つも取れなければ、今でも「分からなかった」と言う。**
+
+        `GENERIC_APP_NAME` への経路が死んでいないことを確かめる。
+        上のテストだけだと、`新しいアプリ` が二度と出ない状態になっても
+        気付けない。
+        """
+        title = _generate(self.client, "ぷるぷるした何かをよしなにしたい")["app"]["title"]
+        self.assertEqual(title, GENERIC_APP_NAME)
 
 
 if __name__ == "__main__":

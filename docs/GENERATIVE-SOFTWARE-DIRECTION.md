@@ -239,3 +239,36 @@ missing capability → Capability Spec → generated implementation
 | Adapter / Training pipeline | ⬜ 契約のみ。**実 training 未実施** |
 | Self-Extension | ⬜ 契約のみ |
 | **Real Local Model runs** | **0**（環境要因。`docs/HANDOFF.md` 参照） |
+
+---
+
+## 実装状況の追記（FORGE-020A1 / QG-V2-R4、2026-08-26）
+
+「有限 Widget Builder にしない」という下限に対して、実際に何が変わったか。
+
+### 変わったこと
+
+`Need → keyword → Domain → Template → checklist` という**圧縮**をやめた。
+1つの単語がアプリ全体を決める形だったので、語彙表の行数が
+「作れるアプリの種類」の上限になっていた。
+
+今は語が **1つの役**を埋めるだけで、構造は役の**組み合わせ**から決まる。
+組み合わせの数は表の行数では決まらない。
+
+**専用 Template は1つも作っていない。** 8つの Need を通すために
+`kids_template` を作れば通るが、9つ目でまた同じ問題が起きる。
+`PlanShape` は5値のままで、Shape 名に need 由来の語が入らないことを
+テストが固定している。
+
+### 変わっていないこと（正直に）
+
+**作れないものを作れるようにはなっていない。** ゲームループも音の合成も
+無いままである。変わったのは、**無いと分かるようになった**ことだけである
+（`CapabilityPlan.unsupported`）。
+
+そして**その「無い」が利用者へ届いていない**（TD90）。
+「植物を育てながら音を組み合わせるゲーム」は、今も
+**植物と音を記録する CRUD** として黙って出てくる。
+
+Direction が禁じている「作れないものを、作れる形に見せる」は、
+**半分しか直っていない。**

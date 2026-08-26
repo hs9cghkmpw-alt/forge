@@ -1,48 +1,260 @@
 {
-  "version": "1.5",
+  "version": "1.12",
   "initial_screen_id": "generated_screen",
   "screens": [
     {
       "id": "generated_screen",
-      "title": "新しいアプリ",
+      "title": "単語",
       "state": {
-        "items": {
-          "type": "checklist",
-          "value": []
+        "records": {
+          "type": "record_list",
+          "value": [],
+          "schema_ref": "word"
         },
-        "new_item_text": {
+        "field_word": {
+          "type": "string",
+          "value": ""
+        },
+        "field_accuracy": {
+          "type": "string",
+          "value": ""
+        },
+        "selected": {
+          "type": "selected_record",
+          "value": null
+        },
+        "edit_field_word": {
+          "type": "string",
+          "value": ""
+        },
+        "edit_field_accuracy": {
           "type": "string",
           "value": ""
         }
       },
       "body": {
-        "type": "column",
-        "id": "root_column",
+        "type": "tab_view",
+        "id": "root_tabs",
+        "tab_titles": [
+          "単語を追加",
+          "単語一覧",
+          "単語を編集"
+        ],
+        "style_role": "density.normal",
         "children": [
           {
-            "type": "checklist",
-            "id": "list_view",
-            "state_ref": "items",
-            "empty_state_text": "まだ何もありません"
-          },
-          {
-            "type": "row",
-            "id": "add_row",
+            "type": "column",
+            "id": "create_tab",
             "children": [
               {
-                "type": "text_field",
-                "id": "add_field",
-                "state_ref": "new_item_text",
-                "placeholder": "追加する"
+                "type": "section_header",
+                "id": "create_section_header",
+                "style_role": "text.headline",
+                "title": "単語を追加",
+                "subtitle": "必要な情報を入力してください"
+              },
+              {
+                "type": "form",
+                "id": "record_form",
+                "style_role": "button.primary",
+                "submit_label": "保存",
+                "submit_action": {
+                  "type": "composite",
+                  "actions": [
+                    {
+                      "type": "add_record",
+                      "target_state_ref": "records",
+                      "field_bindings": {
+                        "word": "field_word",
+                        "accuracy": "field_accuracy"
+                      }
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "field_word"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "field_accuracy"
+                    }
+                  ]
+                },
+                "children": [
+                  {
+                    "type": "text_field",
+                    "id": "field_word_input",
+                    "state_ref": "field_word",
+                    "placeholder": "単語",
+                    "validation": {
+                      "rules": [
+                        {
+                          "type": "required",
+                          "message": "単語を入力してください"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "type": "text_field",
+                    "id": "field_accuracy_input",
+                    "state_ref": "field_accuracy",
+                    "placeholder": "正解率",
+                    "validation": {
+                      "rules": [
+                        {
+                          "type": "pattern",
+                          "message": "正解率は数字で入力してください",
+                          "value": "^-?[0-9]+(\\.[0-9]+)?$"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "column",
+            "id": "list_tab",
+            "children": [
+              {
+                "type": "metric_view",
+                "id": "records_hero_metric",
+                "style_role": "metric.primary",
+                "state_ref": "records",
+                "value_field": "accuracy",
+                "aggregate": "average",
+                "label": "正解率の平均",
+                "empty_text": "まだ記録がありません"
+              },
+              {
+                "type": "record_list_view",
+                "id": "records_list_view",
+                "state_ref": "records",
+                "layout": "card",
+                "display_fields": [
+                  "word",
+                  "accuracy"
+                ],
+                "empty_state_text": "まだ単語がありません",
+                "selectable": true,
+                "selected_state_ref": "selected",
+                "select_field_bindings": {
+                  "word": "edit_field_word",
+                  "accuracy": "edit_field_accuracy"
+                },
+                "style_role": "surface.card"
+              },
+              {
+                "type": "bar_chart",
+                "id": "records_bar_chart",
+                "style_role": "card.summary",
+                "state_ref": "records",
+                "value_field": "accuracy",
+                "label_field": "word",
+                "title": "単語の正解率"
+              }
+            ]
+          },
+          {
+            "type": "column",
+            "id": "edit_tab",
+            "children": [
+              {
+                "type": "section_header",
+                "id": "edit_section_header",
+                "style_role": "text.headline",
+                "title": "単語を編集",
+                "subtitle": "一覧からカードを選ぶと入力欄が埋まります"
+              },
+              {
+                "type": "form",
+                "id": "record_edit_form",
+                "submit_label": "更新",
+                "submit_action": {
+                  "type": "composite",
+                  "actions": [
+                    {
+                      "type": "update_record",
+                      "target_state_ref": "records",
+                      "record_id_ref": "selected",
+                      "field_bindings": {
+                        "word": "edit_field_word",
+                        "accuracy": "edit_field_accuracy"
+                      }
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_word"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_accuracy"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "selected"
+                    }
+                  ]
+                },
+                "children": [
+                  {
+                    "type": "text_field",
+                    "id": "edit_field_word_edit_input",
+                    "state_ref": "edit_field_word",
+                    "placeholder": "単語",
+                    "validation": {
+                      "rules": [
+                        {
+                          "type": "required",
+                          "message": "単語を入力してください"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "type": "text_field",
+                    "id": "edit_field_accuracy_edit_input",
+                    "state_ref": "edit_field_accuracy",
+                    "placeholder": "正解率",
+                    "validation": {
+                      "rules": [
+                        {
+                          "type": "pattern",
+                          "message": "正解率は数字で入力してください",
+                          "value": "^-?[0-9]+(\\.[0-9]+)?$"
+                        }
+                      ]
+                    }
+                  }
+                ]
               },
               {
                 "type": "button",
-                "id": "add_button",
-                "label": "追加",
+                "id": "record_delete_button",
+                "style_role": "button.secondary",
+                "label": "削除",
                 "action": {
-                  "type": "add_item",
-                  "target_state_ref": "items",
-                  "source_state_ref": "new_item_text"
+                  "type": "composite",
+                  "actions": [
+                    {
+                      "type": "delete_record",
+                      "target_state_ref": "records",
+                      "record_id_ref": "selected"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_word"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_accuracy"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "selected"
+                    }
+                  ]
                 }
               }
             ]
@@ -52,19 +264,37 @@
     }
   ],
   "app": {
-    "title": "新しいアプリ"
+    "title": "単語"
+  },
+  "record_schemas": {
+    "word": {
+      "fields": [
+        {
+          "name": "word",
+          "type": "string",
+          "label": "単語",
+          "required": true
+        },
+        {
+          "name": "accuracy",
+          "type": "number",
+          "label": "正解率",
+          "required": false
+        }
+      ]
+    }
   },
   "design_tokens": {
     "color_scheme": {
-      "primary": "#5B7C99",
-      "secondary": "#8FA8BD",
-      "success": "#6B9080",
-      "error": "#C1666B"
+      "primary": "#6366F1",
+      "secondary": "#EC4899",
+      "success": "#10B981",
+      "error": "#EF4444"
     },
     "corner_radius": {
-      "small": 8,
-      "medium": 12,
-      "large": 16
+      "small": 12,
+      "medium": 18,
+      "large": 28
     },
     "spacing_scale": {
       "xs": 4,

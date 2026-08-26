@@ -84,6 +84,21 @@ class CognitiveMeaningExtractor:
 
         actors: list[str] = []
         actor_evidence: list[str] = []
+        # **Intent が既に知っている actor を捨てない**
+        # （GENERATED-UI-QG-V2-R4、2026-08-26）。
+        #
+        # Semantic Role Extraction が `子ども` を ACTOR として
+        # `Intent.actors` へ移すようになった。ここでその事実を無視すると、
+        # `meaning.actors` は空のままになり、実測でもそうなっていた
+        # （`meaning_extraction=actors=()`）。
+        #
+        # `_ACTOR_PATTERNS`（家族・チーム等）は**この表だけが actor を
+        # 知っている**という前提の表であり、その前提はもう成り立たない。
+        # 表を増やして二重管理にせず、既にある事実を先に採る。
+        for value in intent.actors:
+            if value and value not in actors:
+                actors.append(value)
+                actor_evidence.append(value)
         for keyword, value in _ACTOR_PATTERNS:
             if keyword in text and value not in actors:
                 actors.append(value)

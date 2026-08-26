@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from forge_ai.core.critic.semantic_design_critic import evaluate_semantic_design
 from forge_ai.core.domain_model import DomainRegistry
 from forge_ai.core.ir.domain_resolution import SolutionSource, resolve_domain_source
+from forge_ai.core.ir.capability_ir import entity_spec_from_plan
 from forge_ai.core.ir.forge_language_compiler import ForgeLanguageCompiler
 from forge_ai.core.ir.ir_generator import SUPPORTED_DOMAIN_CATEGORIES, IRGenerator
 from forge_ai.core.orchestration.cognitive_context import CognitiveContext
@@ -30,6 +31,12 @@ from forge_ai.core.orchestration.cognitive_dependencies import CognitiveDependen
 from forge_ai.core.orchestration.cognitive_types import CriticIssue, CriticReport, OverallConfidence
 from forge_ai.core.orchestration.confidence import compute_legacy_escalation_reasons, compute_overall_confidence, compute_shadow_judgment
 from forge_ai.core.orchestration.errors import AmbiguityError, ConfirmationRequired, CriticFailure, PlanningError
+from forge_ai.core.semantics.capability_plan import plan_capabilities
+from forge_ai.core.semantics.roles import (
+    SemanticRole,
+    concepts_blocked_by_role,
+    extract_semantic_roles,
+)
 from forge_ai.core.orchestration.outcomes import (
     CognitivePipelineFailed,
     CognitivePipelineNeedsConfirmation,
@@ -104,6 +111,49 @@ class CognitiveOrchestrator:
                 f"required_concepts={intent.required_concepts}, required_actions={intent.required_actions}",
                 confidence=intent.confidence,
             ))
+
+            # 3.5 Semantic Role Extraction（GENERATED-UI-QG-V2-R4、2026-08-26）
+            #
+            # **「誰が使うか」に「何を作るか」を決めさせない。**
+            #
+            # 実測（Quality Gate v2 第3回）: 「子どもが朝の支度を…」で
+            # `子ども` → 概念 `child` → `child_growth` が primary domain に
+            # なり、**体重測定・身長測定**が並んだ。「旅行の写真を…」も
+            # 同様に `travel` → 持ち物リストになった（TD89）。
+            #
+            # 語を消すのではなく、**役を見て、Domain 選択への影響だけを
+            # 止める**。`子ども` は ACTOR として Plan には残る。
+            role_extraction = extract_semantic_roles(context.raw_input)
+            blocked_concepts = concepts_blocked_by_role(context.raw_input)
+            if blocked_concepts:
+                # **概念を消すのではなく、役へ移す。**
+                #
+                # `required_concepts` に残したままだと、Requirement
+                # Extractor が「child のデータを保持できること」を必須
+                # 要件にし、Design Critic が永久に満たせなくなる
+                # （実際に踏んだ——確認要求へ抜けた）。
+                #
+                # `子ども` は**使う人**であって、記録する項目ではない。
+                # `Intent.actors` がその置き場所である。
+                context = context.with_intent(dataclasses.replace(
+                    context.intent,
+                    required_concepts=tuple(
+                        c for c in context.intent.required_concepts
+                        if c not in blocked_concepts
+                    ),
+                    actors=tuple(dict.fromkeys((
+                        *context.intent.actors,
+                        *role_extraction.of(SemanticRole.ACTOR),
+                    ))),
+                ))
+                context = context.with_decision(_trace(
+                    "semantic_role_gate",
+                    f"blocked_concepts={sorted(blocked_concepts)}",
+                    f"actor={list(role_extraction.of(SemanticRole.ACTOR))} "
+                    f"context={list(role_extraction.of(SemanticRole.CONTEXT))} "
+                    "——「誰が使うか / どういう場面か」を"
+                    "「何を記録するか」から外した",
+                ))
 
             # 4. Domain Classification
             classification = deps.domain_classifier.classify(context.intent, self._domain_registry)
@@ -334,11 +384,37 @@ class CognitiveOrchestrator:
                 "domain_resolution", resolution.source.value, resolution.reason,
             ))
 
+            # --- Capability Plan（GENERATED-UI-QG-V2-R4、2026-08-26）------
+            #
+            # **役から「何を作るか」を決める。** Domain 名は使わない。
+            #
+            # 以前ここに到達した Need のうち、Curated でも AI 合成でも
+            # なかったものは**全部 checklist へ落ちていた**（TD87）。
+            # 「作れないものを、作れる形に見せる」処理だった。
+            capability_plan = plan_capabilities(context.raw_input)
+            context = context.with_decision(_trace(
+                "capability_plan",
+                f"shape={capability_plan.shape.value}",
+                f"entity={capability_plan.entity_name or '(無し)'} "
+                f"fields={[f.name for f in capability_plan.fields]} "
+                f"views={list(capability_plan.views)} "
+                f"unsupported={list(capability_plan.unsupported)} "
+                f"partial={list(capability_plan.partial)}",
+            ))
+
             ir = None
             entity_source = "curated"
             if resolution.source is SolutionSource.CURATED:
                 ir = IRGenerator().generate(context.plan, domain_category=domain_category_value)
                 assert ir is not None  # CURATEDを選ぶのはSUPPORTED_DOMAIN_CATEGORIESに含まれる場合だけ
+            elif (planned_spec := entity_spec_from_plan(capability_plan)) is not None:
+                # **役から組めるなら、AI を待たずに組む。**
+                #
+                # 通る入口は `build_from_spec()` ——Curated Domain と
+                # AI 合成が既に通っている、まったく同じ入口である。
+                # ここから先は3者を区別しない。**専用 Template は無い。**
+                ir = IRGenerator().build_from_spec(planned_spec)
+                entity_source = f"capability_plan({capability_plan.shape.value})"
             elif deps.entity_synthesizer is not None:
                 synthesized_spec = deps.entity_synthesizer.synthesize(
                     context.plan,
@@ -356,9 +432,12 @@ class CognitiveOrchestrator:
             if ir is not None:
                 context = context.with_decision(_trace(
                     "entity_source",
-                    f"{entity_source}({domain_category_value})",
+                    entity_source if entity_source.startswith("capability_plan")
+                    else f"{entity_source}({domain_category_value})",
                     "Curated Domain Libraryの手書き定義を使用"
                     if entity_source == "curated"
+                    else "役から決まった Capability Plan を使用（Domain名を使わない）"
+                    if entity_source.startswith("capability_plan")
                     else "AIが合成したデータ構造を使用(決定的な検証・サニタイズ済み)",
                 ))
                 # --- Design Intent（FORGE-R1、2026-08-17）------------------
@@ -405,6 +484,9 @@ class CognitiveOrchestrator:
                 forge_document = deps.compiler.compile(
                     context.plan, domain_category=domain_category_value,
                     template=context.template_selection.template,
+                    # **役から取れた主題を名付けへ渡す**（R4）。
+                    # checklist 経路でも「支度」「やること」と名乗れる。
+                    entity_label=capability_plan.entity_label,
                 )
 
             # --- Semantic Design Critic（FORGE-R1-CLOSURE-015 §3）--------

@@ -4,9 +4,36 @@
 - Start HEAD: `63ad43403606c9731f76c98248a9b0e9149e94bf`
 - Implementation Agent: **Claude Code**
 - Current phase: R1 Generated App Quality / Growing AI
-- Current task: **Generated UI Quality Gate v2**（第3回まで実施。
-  Golden Gate は **FAIL**）。前段の FORGE-019C/020 は完了
+- Current task: **FORGE-020A1 / QG-V2-R4**（Evidence Integrity +
+  Generative Capability Planning）。**TD87・TD89 は解消**、
+  Golden Gate は **FAIL**（理由が変わった）
 - **Real Local Model runs: 0**（Level 0 は別実機で測る。下記「環境判断」）
+
+---
+
+## CEOへの依頼
+
+### 1. CI が runner を掴めていない（**要確認**）
+
+`run 32983961000`（HEAD `87991ef`）は **conclusion=failure** だが、
+**コードは1行も実行されていない**。
+
+```
+created 15:03:53Z → updated 15:03:58Z   （5秒）
+4 jobs すべて status=queued / steps 0 / runner 未割当
+```
+
+1つ前の commit（`89fbc72`）はほぼ同じコードで **success**。
+GitHub Actions 側の事象である。`rerun_workflow_run` を要求し
+`run_started_at=20:31:00Z` になったが、**その後も jobs は0件のまま**。
+
+> **最新 HEAD を CI PASS とは書いていない。** green evidence 未取得。
+> Actions の利用枠・runner 割当を確認してほしい。
+
+### 2. 前セッションから残っている件
+
+以前貼られた OpenAI API key（`sk-proj-...`）は**どこにも保存していない**が、
+**まだ失効させていないなら失効させてほしい。**
 
 ---
 
@@ -59,11 +86,6 @@ Vision の Level 0 を UNVERIFIED から動かす。
 
 > **この container では Level 0 を UNVERIFIED のまま維持する**（CEO指示）。
 > 実際、ここで走らせると `FAILED` になる。それが正しい状態である。
-
-### 前セッションから残っている件
-
-以前貼られた OpenAI API key（`sk-proj-...`）は**どこにも保存していない**が、
-**まだ失効させていないなら失効させてほしい。**
 
 ## 何をしたか
 
@@ -332,6 +354,94 @@ TD82 lock がプロセス内 / TD83 意味的操作の実装が1件 / TD84 020 �
 
 ---
 
+## FORGE-020A1 / QG-V2-R4 — 生成経路そのものを変えた（2026-08-26）
+
+`docs/reports/FORGE-020A1-QG-V2-R4-report.md`（全文）
+`docs/visual-evidence/QUALITY-GATE-V2/round-4/manifest.md`（絵の判定）
+
+### TD87 も TD89 も解消した
+
+以前の本番経路は**1つの単語がアプリ全体を決めて**いた。
+
+```
+Need → keyword → Domain → Template/Compiler → checklist
+```
+
+入れ替えた経路:
+
+```
+Need → Semantic Role Extraction → Capability Decomposition
+     → Capability Plan → IR Generation → Forge Language → Validator
+```
+
+**キーワード表は無くしていない。変えたのは表の権限である。**
+語は **1つの役**を埋めるだけで、構造は役の**組み合わせ**から決まる。
+
+規則は1つ:
+
+> **ACTOR と CONTEXT は、作るものの構造を決めてはならない。**
+
+「子ども」は actor、「旅行」は context。だから体重・身長も持ち物リストも
+出なくなった（**実描画で確認**）。
+
+### Round 4 の実測
+
+**32枚に重複が1枚も無い。** 第3回では analytics / game / study が
+全 viewport で**バイト単位一致**していた。
+
+| Need | Shape | 名前 | 記録するもの |
+|---|---|---|---|
+| 子どもが朝の支度を… | checklist | 支度 | （記録しない） |
+| 今日やる作業を… | checklist | やること | （記録しない） |
+| 旅行の写真を… | record_log | 写真記録 | 写真 / 日付 / メモ |
+| 釣った場所を… | record_log | 魚 | 魚 / 場所 / 種類 |
+| 植物を育てながら… | record_log | 植物 | 植物 / 音 |
+| 毎日の収入と支出を… | +total | 家計簿記録 | （Curated 維持） |
+| 部署ごとの売上を… | +group_compare | 売上記録 | 部署 / 金額 |
+| 英単語を出題して… | +trend | 単語 | 単語 / 正解率 |
+
+**専用 Template は1つも作っていない**（`kids_template` 等）。
+`PlanShape` は5値で、Shape 名に need 由来の語が入らないことをテストが固定。
+
+### それでも Golden Gate は FAIL（理由が変わった）
+
+1. **ゲームがゲームではない**（TD90、最大）。Plan は `simulate.loop` と
+   `media.compose` を MISSING と**正しく名指ししている**のに、
+   **その事実が利用者に一切届かない**。Forge は知っているのに黙っている
+2. record_log 系の入口が似ている（3タブ CRUD + フォーム、TD91）
+3. 集計・推移は**文書に実在する**が一覧タブなので静止画に写らない（TD92）。
+   **「撮れていない」と「無い」は違う**
+
+### Level 0 の計測契約を直した（020A1 A〜D）
+
+- **A** 既定 probe が Curated へ落ちていた（AI を1回も呼ばずに 200 が返る）。
+  合成が要る probe に変え、実行の前後で確認。Curated なら
+  `INVALID_PROBE`——**Local Model の FAIL ではなく測定の不成立**
+- **B** Task を `FORGE_LANGUAGE_UPDATE` と手で書いていた。本番は
+  `COGNITIVE_STAGE`。`ExperienceRecord` から**観測**するようにした
+- **C** Level 0 = 経路が通ること。BenchmarkRun / PromotionGate は
+  **Level 0.5** へ分けた。1件成功で PROMOTED にしない
+- **D** `/v1/models` の `id` を digest 扱いしていた。**名前は重みの識別子
+  ではない**。`WeightIdentity` を分け、digest は Level 0.5 の条件へ
+
+### Machine-Independent Policy
+
+`docs/MACHINE-INDEPENDENT-POLICY.md` / `scripts/forge_doctor.py`。
+
+**常設の実行PCを仮定しない。** 共有状態は GitHub だけ。
+作業開始時に `python scripts/forge_doctor.py` で、そのPCで何が測れるかを
+**読むだけで**調べる（インストールも設定変更もしない）。
+
+このPCの実測: テスト◯ / 実描画◯ / GitHub◯ / **model取得✗ Level 0✗**。
+
+### 配線破壊試験 14件 — 置物を1件見つけた
+
+M11（ACTOR/CONTEXT から Entity を作る）が**最初生き残った**。
+`_subject_of()` を守っていたのは**表の中身**であってコードではなかった。
+コード側でも除外し、表と役 lexicon の重なりが空であることを静的検査。
+
+---
+
 ## Generated UI Quality Gate v2 — 第1回〜第3回を実施した（2026-08-26）
 
 `docs/visual-evidence/QUALITY-GATE-V2/manifest.md`
@@ -496,7 +606,10 @@ Renderer をいくら磨いても、出てくる画面が2種類しかない限�
 | Vision / Generative Software Direction 文書 | ✅ 記録済み |
 | **020A Level 0 の準備** | ✅ 経路・計測契約・実機用 runner |
 | **Real Local Model 実測** | ⬜ **別実機待ち**（CEO決定） |
-| **Generated UI Quality Gate v2** | ⚠️ **第1回〜第3回まで実施。Golden Gate は FAIL のまま**（5軸を直して再描画で確認。残りは TD87 / TD89 で、どちらも生成側の話） |
+| **Generated UI Quality Gate v2** | ⚠️ **第1回〜第4回まで実施。TD87・TD89 は解消。Golden Gate は FAIL**（残りは TD90〜TD92） |
+| **Need→構造の経路（R4）** | ✅ Semantic Role → Capability Plan → IR。専用Templateは0件 |
+| **Level 0 の計測契約（020A1）** | ✅ probe / task / scope / digest の4件を修正 |
+| **Machine-Independent Policy** | ✅ 文書 + `forge_doctor.py` |
 
 ### 次の Agent がすぐ着手できるもの（実モデル不要）
 
@@ -526,10 +639,15 @@ python scripts/verify_local_model_level0.py
 
 ## Next task
 
-**§22 Capability Registry の作り直し（修正5 = TD87）。**
-実モデルを待たずに着手できる。Renderer 側でできることは尽きた——
-**出てくる画面が3種類しかない**限り Golden Gate は通らない。
-あわせて TD89（Domain 判定が substring 一致）も同じ作業で扱う。
+**TD90 — 作れないと分かっているのに、利用者へ言わない。**
+
+Round 4 の Golden Gate が FAIL である最大の理由。
+`CapabilityPlan.unsupported` は既に `simulate.loop` / `media.compose` を
+名指ししている。**Plan まで来ているものを、会話か画面に載せるだけ**である。
+新しく作るものは少ない。
+
+その次に TD91（record_log 系の入口が似ている）と
+TD92（撮影ハーネスが第1タブしか写せない）。
 
 並行して **FORGE-020A — Real Local Model Runtime**（別実機待ち）。
 Level 0 が通れば
@@ -550,6 +668,7 @@ LocalModelProvider（既存・OpenAI互換）
 
 ## Next three moves
 
-1. Capability Registry を作り直す（TD87 / Vision §22）→ 再描画 → 第4回
-2. Domain 判定を substring 一致から外す（TD89）
-3. 別実機で Level 0 を走らせ、`Real Local Model runs` を 0 から動かす
+1. **CI を green にする**（runner 未割当。§CEOへの依頼 1）
+2. TD90（作れないものを利用者へ言う）→ 再描画 → Round 5
+3. 別実機で `forge_doctor.py` → Level 0 を走らせ、`Real Local Model runs`
+   を 0 から動かす

@@ -1,5 +1,143 @@
 # CHANGELOG
 
+## 2026-08-26 — FORGE-020A1 / QG-V2-R4: Evidence Integrity + Generative Capability Planning
+
+### CI（最優先1）
+
+HEAD 87991ef の run 32983961000 は failure だが、**コードは1行も実行されて
+いない**——created から5秒で終わり、4 jobs すべて queued / steps 0 / runner
+未割当。1つ前の commit は success。GitHub Actions 側の事象である。
+再実行を要求したが、本 commit 時点でも jobs 0件のまま。
+**green evidence は未取得。最新 HEAD を CI PASS とは書かない。**
+
+### Level 0 script の Evidence Integrity（最優先2、A/B/C/D）
+
+**A. probe が Curated へ落ちていた。** 既定の「毎日の支出を記録して合計を
+見たい」は `domain_resolution=curated` になる（実測）。Curated 経路は AI を
+1回も呼ばずに文書を作るので、Runtime が動いていなくても 200 が返る。
+**あの probe では何も測れない。**
+→ 合成が要る probe に変え、実行の**前と後**で `domain_resolution` を確認。
+Curated なら `Level0Outcome.INVALID_PROBE`（FAIL ではなく測定の不成立）。
+終了コードも分けた（PASS=0 / FAILED=1 / INVALID_PROBE=2）。
+旧 probe は `CURATED_TRAP_PROBE` として理由ごと残す。
+
+**B. Task を手で書いていた。** `FORGE_LANGUAGE_UPDATE` と書いていたが、
+`/generate` が通すのは `COGNITIVE_STAGE`。別の Task の成績として集計され、
+存在しない実績が生まれる。→ `ExperienceRecord.task` から**観測**し、
+主張と観測が一致しなければ数えない。
+
+**C. Level 0 と Level 0.5 を分けた。** Level 0 = 経路が通ること
+（Runtime → Provider → Registry → AIRouter → production /generate →
+Validator → GenerationRecord(source=local_ai)）。BenchmarkRun /
+LocalPromotionGate は Level 0 の説明から外した。Level 0.5 =
+Baseline Benchmark で、**1件成功で PROMOTED にしない**。
+
+**D. `model_id` と `model_digest` を分けた。** `/v1/models` の `id` は
+ただの名前であって重みの識別子ではない。取れなければ空のままにし、
+`WeightIdentity.UNVERIFIED` とする。
+**ここで1つ緩めた**（digest を「数える条件」から外した）。1つの欄に
+「重みの同一性」と「fixture 除け」を兼務させていたので、digest を返さない
+本物が永久に到達できず、digest を返す偽サーバは通っていた。
+fixture 除けは他の3欄の仕事。digest は Level 0.5 が要求する。
+
+### TD87 / TD89 — 生成経路そのものを変えた
+
+**先に再現テストを書いて7件 FAIL させてから着手した。**
+
+以前:  `Need → keyword → Domain → Template/Compiler → checklist`
+今:    `Need → Semantic Role Extraction → Capability Decomposition
+        → Capability Plan → IR Generation → Forge Language → Validator`
+
+**キーワード表は無くしていない。変えたのは表の権限である。**
+以前は語 → Domain で、Domain がアプリ全体を決めていた。今は語 →
+**1つの役**で、構造は役の**組み合わせ**から決まる。
+
+役8つ: actor / subject / managed_object / recorded_data / activity /
+context / desired_view / effect
+
+規則は1つ: **ACTOR と CONTEXT は、作るものの構造を決めてはならない。**
+
+`CAPABILITY_REGISTRY` は語彙であって生成結果ではない。
+IMPLEMENTED / PARTIAL / MISSING の3値を持ち、Plan は `unsupported` と
+`partial` を名指しで持つ。**無いものを checklist で代用して黙らない。**
+
+**専用 Template は1つも作っていない**（`kids_template` 等）。
+`PlanShape` は5値で、Shape 名に need 由来の語が入らないことをテストが固定。
+
+実測（修正後）:
+
+    子どもが朝の支度を…  → checklist / 支度        （体重・身長は消えた）
+    旅行の写真を…        → record_log / 写真記録    写真・日付・メモ
+    部署ごとの売上を…    → +group_compare / 売上記録 部署・金額
+    英単語を出題して…    → +trend / 単語            単語・正解率
+    植物を育てながら…    → record_log / 植物        植物・音
+
+### 実描画を見て、途中で3つ直した
+
+- 「日付ごと」の `group_by` で CONTEXT が Field へ昇格し、写真1枚ごとに
+  **「旅行」欄**が出ていた → 比較を明示的に求められたときだけ昇格
+- 写真アプリもデータ分析アプリも名前が**「記録」**だった → 記録している
+  値そのものから名乗る（写真記録 / 売上記録）
+- 「英単語を出題して正解率の推移を見たい」に**単語欄が無かった** →
+  `MANAGED_OBJECT` は数えられる対象であり1件ずつの名前が要る（一般規則）
+
+### 既存 Golden が2件落ちて、設計が1つ良くなった
+
+「旅行の計画を立てたい」「スーパーで買う物を管理したい」が generic に
+なった。**記録対象も行いも見せ方も1つも語られていない文では、その語こそが
+主題**である。`structural_values()` が空なら何も block しない、を足した。
+
+### 副作用を1つ直した
+
+actor を `Intent.actors` へ移した結果、「actor が居れば共有・権限管理が
+必須」規則が発火し、子どもの Need が確認要求へ抜けた。
+**Actor が居ることと複数人で共有することは別。**「子どもが使う」は1人で
+使う道具である。`_MULTI_USER_ACTORS`（家族・チーム等）を分けた。
+
+### 配線破壊試験 14件 — M11 が生き残り、置物を1件見つけた
+
+`_subject_of()` は構造役だけを回っていたが、**それを守っていたのは表の
+中身**であってコードではなかった。表に1行足せば Entity が「旅行」になる。
+→ コード側でも除外し、表と役 lexicon の重なりが空であることを静的検査。
+再試験で落ちるようになった。
+
+### Quality Gate v2 Round 4
+
+`docs/visual-evidence/QUALITY-GATE-V2/round-4/`（**`after/` を上書きしない**）。
+
+**32枚に重複が1枚も無い。** 第3回では analytics / game / study が全
+viewport でバイト単位一致していた。TD87 / TD89 はどちらも解消した。
+
+**それでも Golden Gate は FAIL。理由が変わった。**
+
+1. **ゲームがゲームではない。** 植物と音を記録する CRUD になっている。
+   Plan は `simulate.loop` / `media.compose` を MISSING と正しく名指しして
+   いるのに、**その事実が利用者に一切見えない**
+2. record_log 系の第1画面が似ている（3タブ CRUD + フォーム）
+3. 集計・推移は**文書に実在する**が、一覧タブなので静止画に写らない。
+   「撮れていない」と「無い」は違う
+
+### Machine-Independent Policy
+
+`docs/MACHINE-INDEPENDENT-POLICY.md`。常設の実行PCを仮定しない /
+共有状態は GitHub だけ / マシン固有の path を固定しない / 秘密は名前だけ /
+実行できない項目は UNVERIFIED（FAILED とも INVALID_PROBE とも別）。
+
+`scripts/forge_doctor.py` — そのPCで何が検証できるかを**読むだけで**調べる。
+インストールも設定変更もしない。テストが「秘密が1文字も漏れないこと」
+「環境を変えないこと」「source に install 系が無いこと」を固定する。
+
+### 検証
+
+```
+backend  : 1768 passed, 16 skipped  (+24)
+forge_ai :  567 passed              (+30)
+flutter  : analyze No issues found / 514 passed
+CI       : 未取得（runner 未割当）
+```
+
+**Real Local Model runs は 0 のまま。** 勝手に増やしていない。
+
 ## 2026-08-26 — Quality Gate v2 第3回: 名付けを生成の一部にした（Golden Gate は依然 FAIL）
 
 `Intent.goal`（＝文）を**そのままアプリ名にしていた**のをやめた。

@@ -60,6 +60,7 @@ from app.ai.gateway.local_model_evidence import (  # noqa: E402
     LocalRuntimeBackend,
     RealLocalModelRun,
     RealLocalModelRunLog,
+    WeightIdentity,
 )
 from app.ai.gateway.provider_registry import (  # noqa: E402
     ImplementationStatus,
@@ -241,9 +242,16 @@ class TestRealLocalModelRunCounting(unittest.TestCase):
         defaults = {
             "provider": "local",
             "model": "qwen2.5:1.5b-instruct",
-            "task": ForgeTask.FORGE_LANGUAGE_UPDATE,
+            # **本番の `/generate` が実際に通す Task**（020A1）。
+            # `prompt_pipeline.py` が `bind(ForgeTask.COGNITIVE_STAGE)` を
+            # 呼ぶ。以前ここは FORGE_LANGUAGE_UPDATE を書いており、
+            # **別の Task の成績として集計される**状態だった。
+            "task": ForgeTask.COGNITIVE_STAGE,
+            "observed_tasks": (ForgeTask.COGNITIVE_STAGE,),
+            "domain_resolution": "generated",
             "runtime_backend": LocalRuntimeBackend.OLLAMA,
             "runtime_version": "0.5.0",
+            "model_id": "qwen2.5:1.5b-instruct",
             "model_digest": "sha256:abc123",
             "quantization": "Q4_K_M",
             "deployment": Deployment.LOCAL,
@@ -276,9 +284,83 @@ class TestRealLocalModelRunCounting(unittest.TestCase):
         run = self._passing_run(runtime_backend=LocalRuntimeBackend.UNKNOWN)
         self.assertFalse(run.counts_as_real_local)
 
-    def test_a_run_without_weights_identity_is_not_counted(self) -> None:
-        """**どの重みで動いたか言えない実行**を実測にしない。"""
+    def test_a_run_without_a_weight_digest_still_passes_level0(self) -> None:
+        """**重みの digest は Level 0 の条件ではない**（020A1で変更）。
+
+        以前はここで `model_digest=""` を「数えない」としていた。
+        1つの欄に「重みの同一性」と「fixture 除け」を兼務させていたので、
+        digest を返さない本物の Runtime（llama-server 等）が永久に
+        Level 0 へ到達できなかった。
+
+        Level 0 が証明するのは**経路**である。重みの同一性は
+        `weight_identity` が別に持ち、**Level 0.5 が要求する**。
+        """
         run = self._passing_run(model_digest="")
+        self.assertTrue(run.counts_as_real_local, run.why_not_counted())
+        self.assertIs(run.weight_identity, WeightIdentity.UNVERIFIED)
+        # **Baseline へは進ませない。** 緩めた分をここで受け止める。
+        self.assertFalse(run.ready_for_baseline)
+
+    def test_a_run_with_a_digest_is_ready_for_baseline(self) -> None:
+        run = self._passing_run()
+        self.assertIs(run.weight_identity, WeightIdentity.VERIFIED_DIGEST)
+        self.assertTrue(run.ready_for_baseline)
+
+    def test_a_model_id_is_not_a_weight_digest(self) -> None:
+        """**名前を digest 扱いしない**（020A1）。
+
+        OpenAI 互換 `/v1/models` の `id` はただの名前である。同じ名前で
+        中身の違う重みを配ることは誰にでもできる。
+        """
+        run = self._passing_run(model_id="qwen2.5:1.5b-instruct", model_digest="")
+        self.assertIs(run.weight_identity, WeightIdentity.UNVERIFIED)
+
+    def test_a_run_without_a_model_id_is_not_counted(self) -> None:
+        run = self._passing_run(model_id="")
+        self.assertFalse(run.counts_as_real_local)
+
+
+class TestProbeIntegrity(unittest.TestCase):
+    """**測定が成立しているか**（020A1）。"""
+
+    def _passing_run(self, **overrides) -> RealLocalModelRun:  # noqa: ANN003
+        return TestRealLocalModelRunCounting._passing_run(self, **overrides)  # type: ignore[arg-type]
+
+    def test_a_curated_probe_is_invalid_not_failed(self) -> None:
+        """**Local Model の失敗ではない。仕事が回っていない。**
+
+        既定 probe「毎日の支出を記録して合計を見たい」は
+        `household_budget` の Curated へ解決される（実測）。
+        Curated 経路は AI を1回も呼ばずに文書を作る。
+        """
+        run = self._passing_run(domain_resolution="curated")
+        self.assertFalse(run.counts_as_real_local)
+        self.assertTrue(run.probe_was_curated)
+        self.assertIs(run.level0_outcome, Level0Outcome.INVALID_PROBE)
+
+    def test_a_generated_probe_is_valid(self) -> None:
+        run = self._passing_run(domain_resolution="generated")
+        self.assertFalse(run.probe_was_curated)
+        self.assertIs(run.level0_outcome, Level0Outcome.PASSED)
+
+    def test_a_claimed_task_that_never_ran_is_not_counted(self) -> None:
+        """**手で書いた Task を信じない**（020A1）。
+
+        script は以前 `FORGE_LANGUAGE_UPDATE` を定数で書いていたが、
+        `/generate` が通すのは `COGNITIVE_STAGE` である。
+        """
+        run = self._passing_run(
+            task=ForgeTask.FORGE_LANGUAGE_UPDATE,
+            observed_tasks=(ForgeTask.COGNITIVE_STAGE,),
+        )
+        self.assertFalse(run.counts_as_real_local)
+        self.assertTrue(
+            any("実際に通った Task" in r for r in run.why_not_counted()),
+            run.why_not_counted(),
+        )
+
+    def test_an_unobserved_task_is_not_counted(self) -> None:
+        run = self._passing_run(observed_tasks=())
         self.assertFalse(run.counts_as_real_local)
 
     def test_a_run_outside_the_production_path_is_not_counted(self) -> None:
@@ -325,8 +407,12 @@ class TestRealLocalModelRunCounting(unittest.TestCase):
         self.assertFalse(run.counts_as_real_local)
 
     def test_every_refusal_is_explained(self) -> None:
-        """**「数えない」だけ返さない。**"""
-        run = self._passing_run(provider="mock", model_digest="", latency_ms=0.0)
+        """**「数えない」だけ返さない。**
+
+        020A1 で `model_digest=""` は拒否理由から外した（重みの同一性は
+        Level 0.5 の条件）。代わりに `model_id=""` を使う。
+        """
+        run = self._passing_run(provider="mock", model_id="", latency_ms=0.0)
         self.assertGreaterEqual(len(run.why_not_counted()), 3)
 
     def test_the_diagnostic_form_shows_why_it_was_not_counted(self) -> None:
@@ -392,3 +478,55 @@ class TestThisContainerHasNotReachedLevel0(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+class TestLevel0ProbeIsActuallyNonCurated(unittest.TestCase):
+    """**probe が Curated へ落ちないことを本番で確かめる**（020A1）。
+
+    `scripts/verify_local_model_level0.py` の定数を、
+    **実際に `/generate` へ通して**検証する。定数を目で見ても、
+    Curated へ落ちるかどうかは分からない——実際に落ちていた。
+
+    このテストが落ちるのは、probe が Curated 側へ寄ったときである。
+    そのとき Level 0 の計測は無言で無効になるので、**気付ける形にする。**
+    """
+
+    def setUp(self) -> None:
+        import importlib.util
+        import pathlib
+
+        root = pathlib.Path(__file__).resolve().parents[2]
+        spec = importlib.util.spec_from_file_location(
+            "_level0_script", root / "scripts" / "verify_local_model_level0.py",
+        )
+        assert spec and spec.loader
+        self.script = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.script)
+        self.client = TestClient(app)
+
+    def _resolution(self, need: str) -> str:
+        response = self.client.post(
+            "/api/v1/ai/generate",
+            json={"input": {"natural_language": need,
+                            "generation_options": {"provider": "mock"}}},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        diagnostics = (response.json().get("result") or {}).get("diagnostics") or {}
+        for entry in diagnostics.get("decision_trace") or ():
+            if entry.get("stage") == "domain_resolution":
+                return str(entry.get("decision") or "").strip().lower()
+        return ""
+
+    def test_the_level0_probe_requires_synthesis(self) -> None:
+        self.assertEqual(self._resolution(self.script.LEVEL0_PROBE), "generated")
+
+    def test_the_old_default_probe_really_was_curated(self) -> None:
+        """**その罠が実在したことを固定する。**
+
+        消すと「なぜ probe を変えたのか」が分からなくなり、
+        「短くて分かりやすいから」と元へ戻される。
+        """
+        self.assertEqual(self._resolution(self.script.CURATED_TRAP_PROBE), "curated")
+
+    def test_the_script_does_not_default_to_the_trap(self) -> None:
+        self.assertNotEqual(self.script.LEVEL0_PROBE, self.script.CURATED_TRAP_PROBE)

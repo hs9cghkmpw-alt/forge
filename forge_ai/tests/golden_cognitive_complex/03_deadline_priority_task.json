@@ -15,6 +15,7 @@
     "final_template_selection",
     "design_critic",
     "domain_resolution",
+    "capability_plan",
     "entity_source",
     "design_intent",
     "semantic_design"

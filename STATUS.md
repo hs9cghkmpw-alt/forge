@@ -3,7 +3,7 @@
 現在のForgeが「どこまで動くか」を一枚で示す。詳細な履歴は`CHANGELOG.md`、
 未解消の課題は`TECH_DEBT.md`・`KNOWN_ISSUES.md`を参照。
 
-**最終更新**: 2026-08-26(Generated UI Quality Gate v2 第1回〜第3回。Golden Gate は **FAIL**)
+**最終更新**: 2026-08-26(FORGE-020A1 / QG-V2-R4。TD87・TD89 は解消、Golden Gate は **FAIL**)
 
 > このファイルはFORGE-CONVERSATION-READY-001指示書15章の要請で新設した。
 > それ以前は同等の役割を`KNOWN_ISSUES.md`と各`*-report.md`が分担しており、
@@ -44,11 +44,14 @@
 | └ roleの視覚差 | **動作** | button(filled/outlined)・metric.primaryの実描画・density 3段・surface 2種・意味色のLight/Dark。Flutter 508 passed（CI） |
 | └ Semantic Design Critic | **動作** | 主KPI乱立・被覆不足・持ち上げすぎ・finance/state混同を評価。壊れていればrelease_readyにしない |
 | └ Visual Structure Evidence | **動作** | 主KPI数・被覆率・階層深さ等の決定的な事実。「美しさ」は測っていない |
-| **生成UIの見た目(Quality Gate v2)** | **FAIL** | 8アプリ×4 viewport×**3回**を実描画・目視。崩れではなく**8アプリが3種類の画面にしかならない**ので落ちた(TD87)。`docs/reports/GENERATED-UI-QUALITY-GATE-V2-report.md` |
+| **生成UIの見た目(Quality Gate v2)** | **FAIL** | 8アプリ×4 viewport×**4回**を実描画・目視。**Round 4 で32枚に重複0**(TD87解消)。落ちた理由は「作れないと分かっているのに利用者へ言わない」(TD90)。`docs/reports/FORGE-020A1-QG-V2-R4-report.md` |
+| **Need→構造の経路** | **動作** | `Semantic Role Extraction → Capability Decomposition → Capability Plan → IR`。**Domain名が構造を決めない**。専用Templateは0件 |
+| └ Capability Registry | **語彙として動作** | IMPLEMENTED/PARTIAL/MISSINGの3値。**生成結果ではない**。Planが`unsupported`を名指しする |
+| └ 名指しした未対応を利用者へ出す | **未実装** | Planは知っているが画面にも会話にも出ない(TD90) |
 | └ 崩れ(overflow/content fit/long text) | **PASS** | `date_field`のラベル貫通・desktopで1950px幅・見出しの省略を直し、再描画で確認 |
 | └ 空状態の質 | **PASS** | 話題が分からないとき例示せず空状態を出す。「最初の項目」「牛乳・卵・パン」をやめた。**分かるときは今までどおり出す** |
 | └ アプリ名 | **動作** | `naming.py`。名前の形をしたものだけ採る。通らなければDomainの日本語名、それも無ければ`新しいアプリ`——**分からなかったと認める**。compile 2経路の両方を通す |
-| └ Domain判定 | **8件中2件が誤り** | 朝の支度→`child_growth`、写真日記→`travel`(TD89)。**アプリ名を直したことで初めて見えた**——要求文がタイトルに出ている間は隠れていた |
+| └ Domain判定 | **動作** | actor(子ども)/context(旅行)を構造決定から外した(TD89解消)。実描画で体重・身長も持ち物リストも消えた |
 | └ 字形 | **UNVERIFIED** | 撮影時だけローカルのIPAGothicを差し替えている。配置は見てよいが字形は本番と違う(TD88) |
 | └ AI/fallback provenance | **動作** | AIが選んだroleとForgeが既定で埋めたroleを型で分離 |
 | └ 数値の意味(MeasureSemantics) | **動作** | 評価は平均・サイズは最大・金額は合計。**分からない数値はKPIにしない** |
@@ -72,6 +75,8 @@
 | Web Capability(search/fetch/browser) | **契約のみ** | 実Web往復は**UNVERIFIED**。Web本文は命令として扱わない |
 | Teacher / Gym / Novel Benchmark / Dataset | **契約のみ** | run 0件・比較0件(TD84) |
 | Adapter / Training pipeline / Self-Extension | **未実装** | 契約のみ |
+| **Level 0 の計測契約** | **動作** | probeがCuratedへ落ちたら`INVALID_PROBE`(FAILと別)。実際に通ったTaskを観測。`model_id`と`model_digest`を分離 |
+| **このPCで何が測れるか** | **動作** | `scripts/forge_doctor.py`(読むだけ)。`docs/MACHINE-INDEPENDENT-POLICY.md` |
 | **Real Local Model** | **未実行(runs 0)** | Ollama/llama.cpp/torch未インストール、GPU無し、かつ`huggingface.co`/`ollama.com`がnetwork policyで拒否(実測)。**Mockを数えていない** |
 | Local AI 学習基盤 | **記録開始** | R0で`/converse`・`/generate`・`/update`から実際に記録。実Geminiで確認済み。学習・永続化は未着手 |
 | └ 生成物のEvidence | 動作 | 013で`GenerationRecord`を追加。**AIを呼ばないCurated生成も**`source=curated`として残る(TD65解決) |

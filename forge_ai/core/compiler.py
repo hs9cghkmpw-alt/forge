@@ -375,7 +375,8 @@ class Compiler:
         self._prompt_builder = prompt_builder or PromptBuilder()
 
     def compile(
-        self, plan: ApplicationPlan, *, domain_category: str | None = None, template: str = "checklist"
+        self, plan: ApplicationPlan, *, domain_category: str | None = None,
+        template: str = "checklist", entity_label: str = "",
     ) -> ForgeIRDocument:
         """ApplicationPlanから、ForgeIRDocumentを決定的に組み立てる
         (タイトル・初期データ例のみProviderの判断を反映する)。
@@ -422,9 +423,12 @@ class Compiler:
         # `decide_app_name()` は候補を全部 `is_name_like()` へ通す。
         # 要求文は落ちる。落ちたら Domain の日本語名へ、それも無ければ
         # 「分からなかった」と認める（`naming.py` 参照）。
+        # `entity_label` は Capability Plan が役から決めた主題である
+        #（GENERATED-UI-QG-V2-R4）。「子どもが朝の支度を…」で
+        # 「支度」が取れるようになったので、`新しいアプリ` へ落ちない。
         app_name = decide_app_name(
             ai_title=str(response.structured.get("title") or ""),
-            entity_label=str(plan.title or ""),
+            entity_label=entity_label or str(plan.title or ""),
             domain_label=domain_label_for(domain_category),
         )
         # 長さ上限（1〜80文字）は最後に必ず通す。`decide_app_name()` は

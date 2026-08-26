@@ -60,8 +60,8 @@
       "need": "子どもが朝の支度をひとつずつチェックできるようにしたい",
       "rendered": true,
       "validator_passed": true,
-      "domain": "child_growth",
-      "template": "template=tracker",
+      "domain": "generic",
+      "template": "template=checklist",
       "provider_used": "mock",
       "screen_count": 1,
       "widget_types": [
@@ -80,18 +80,28 @@
       "need": "旅行の写真を日付ごとに残してメモを付けたい",
       "rendered": true,
       "validator_passed": true,
-      "domain": "travel",
+      "domain": "generic",
       "template": "template=checklist",
       "provider_used": "mock",
       "screen_count": 1,
       "widget_types": [
-        "add_item",
+        "add_record",
         "button",
-        "checklist",
         "column",
-        "row",
+        "composite",
+        "date_field",
+        "delete_record",
+        "form",
+        "record_list",
+        "record_list_view",
+        "required",
+        "reset_state",
+        "section_header",
+        "selected_record",
         "string",
-        "text_field"
+        "tab_view",
+        "text_field",
+        "update_record"
       ]
     },
     {
@@ -138,13 +148,22 @@
       "provider_used": "mock",
       "screen_count": 1,
       "widget_types": [
-        "add_item",
+        "add_record",
         "button",
-        "checklist",
         "column",
-        "row",
+        "composite",
+        "delete_record",
+        "form",
+        "record_list",
+        "record_list_view",
+        "required",
+        "reset_state",
+        "section_header",
+        "selected_record",
         "string",
-        "text_field"
+        "tab_view",
+        "text_field",
+        "update_record"
       ]
     },
     {
@@ -158,13 +177,25 @@
       "provider_used": "mock",
       "screen_count": 1,
       "widget_types": [
-        "add_item",
+        "add_record",
+        "bar_chart",
         "button",
-        "checklist",
         "column",
-        "row",
+        "composite",
+        "delete_record",
+        "form",
+        "metric_view",
+        "pattern",
+        "record_list",
+        "record_list_view",
+        "required",
+        "reset_state",
+        "section_header",
+        "selected_record",
         "string",
-        "text_field"
+        "tab_view",
+        "text_field",
+        "update_record"
       ]
     },
     {
@@ -178,13 +209,25 @@
       "provider_used": "mock",
       "screen_count": 1,
       "widget_types": [
-        "add_item",
+        "add_record",
+        "bar_chart",
         "button",
-        "checklist",
         "column",
-        "row",
+        "composite",
+        "delete_record",
+        "form",
+        "metric_view",
+        "pattern",
+        "record_list",
+        "record_list_view",
+        "required",
+        "reset_state",
+        "section_header",
+        "selected_record",
         "string",
-        "text_field"
+        "tab_view",
+        "text_field",
+        "update_record"
       ]
     }
   ],

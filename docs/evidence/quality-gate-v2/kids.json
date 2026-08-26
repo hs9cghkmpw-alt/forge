@@ -4,22 +4,11 @@
   "screens": [
     {
       "id": "generated_screen",
-      "title": "こどもの成長",
+      "title": "支度",
       "state": {
         "items": {
           "type": "checklist",
-          "value": [
-            {
-              "id": "item_1",
-              "text": "体重測定",
-              "done": false
-            },
-            {
-              "id": "item_2",
-              "text": "身長測定",
-              "done": false
-            }
-          ]
+          "value": []
         },
         "new_item_text": {
           "type": "string",
@@ -63,19 +52,19 @@
     }
   ],
   "app": {
-    "title": "こどもの成長"
+    "title": "支度"
   },
   "design_tokens": {
     "color_scheme": {
-      "primary": "#D68C45",
-      "secondary": "#E8B37A",
-      "success": "#7A9D6F",
+      "primary": "#5B7C99",
+      "secondary": "#8FA8BD",
+      "success": "#6B9080",
       "error": "#C1666B"
     },
     "corner_radius": {
-      "small": 10,
-      "medium": 16,
-      "large": 24
+      "small": 8,
+      "medium": 12,
+      "large": 16
     },
     "spacing_scale": {
       "xs": 4,

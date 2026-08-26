@@ -748,3 +748,44 @@ Registry が無いのではない。**生成的 primitive を表現できる Reg
 3. **§26 能力単位の Dataset**——完成物単位しか作れていない
 4. **§33 学習イベントの網羅**——列挙のうち実際に出しているのは一部
 5. **§17/§18 を実際に走らせる**——Gym も Novel Benchmark も run 0件
+
+---
+
+## 実装状況の追記（FORGE-020A1 / QG-V2-R4、2026-08-26）
+
+### §22 Capability Registry — **語彙として作り直した**
+
+Registry を「Need を入れると画面が出る装置」にしない、という §22 の要求に
+対して、次を実装した（`docs/reports/FORGE-020A1-QG-V2-R4-report.md`）。
+
+```
+Need → Semantic Role Extraction → Capability Decomposition
+     → Capability Plan → IR Generation → Forge Language → Validator
+                ↑
+        Registry は「それが在るか」を答えるだけ
+```
+
+* `forge_ai/core/semantics/roles.py` — 8つの役
+* `forge_ai/core/semantics/capability_plan.py` — Registry（語彙）と Plan
+* `forge_ai/core/ir/capability_ir.py` — Plan → EntitySpec
+
+`CAPABILITY_REGISTRY` は id → (IMPLEMENTED / PARTIAL / MISSING, 説明)。
+**行を足しても作れるアプリの種類は増えない。** 増えるのは
+「Forge が正直に名指しできるものの種類」である。
+
+実測: 8つの Need の実描画 **32枚に重複が1枚も無い**（第3回は3アプリが
+バイト単位一致）。**専用 Template は1つも作っていない。**
+
+### 残っている（TD90）
+
+Plan は `unsupported` を**正しく名指ししている**のに、
+**その事実が利用者に届かない**。「作れない」と知っているのに黙っている。
+Vision が言う「作る側のAIが自分の限界を語れること」の、最後の1歩である。
+
+### §39 Level 0 — 計測契約を直した（測定はまだ）
+
+probe が Curated へ落ちていた（AI を1回も呼ばずに 200 が返る）ため、
+**Level 0 は今まで測定として成立していなかった**。
+`INVALID_PROBE` を新設し、Level 0 と Level 0.5 を分けた。
+
+**Level 0 は UNVERIFIED のまま。Real Local Model runs = 0。**

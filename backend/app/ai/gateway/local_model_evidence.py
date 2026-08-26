@@ -62,12 +62,18 @@ from app.ai.gateway.learning_events import Deployment
 from app.ai.gateway.tasks import ForgeTask
 
 __all__ = [
+    "CURATED_DOMAIN_RESOLUTION",
     "Level0Outcome",
     "LocalRuntimeBackend",
     "RealLocalModelRun",
     "RealLocalModelRunLog",
+    "WeightIdentity",
     "default_real_local_run_log",
 ]
+
+#: `decision_trace` の `domain_resolution` が「Curated 定義を使った」と
+#: 言うときの値。**Level 0 の probe がここへ落ちたら計測が無効である。**
+CURATED_DOMAIN_RESOLUTION = "curated"
 
 
 class LocalRuntimeBackend(str, Enum):
@@ -90,6 +96,39 @@ class LocalRuntimeBackend(str, Enum):
     """**既定値。** 記録し損ねたものを実測側へ倒さない。"""
 
 
+class WeightIdentity(str, Enum):
+    """**どの重みで動いたかを言えるか**（020A1、2026-08-26）。
+
+    ---
+
+    ## `model_id` を digest 扱いしていた
+
+    以前この script は OpenAI 互換 `/v1/models` の `id`
+    （`qwen2.5:1.5b-instruct` のような**ただの名前**）を、digest が
+    取れなかったときの代わりに `model_digest` へ入れていた。
+
+    名前は重みの識別子ではない。同じ名前で中身の違う重みを配ることは
+    誰にでもできる。**名前を digest と呼んだ時点で、その欄は嘘になる。**
+
+    分ける:
+
+    * `model_id`   — Runtime が名乗る名前。ほぼ必ず取れる
+    * `model_digest` — **Runtime が返した重みのハッシュ**。Ollama は返す。
+      llama-server 等は返さないことがある
+
+    digest が取れなければ `UNVERIFIED`。**それは Level 0 の失敗ではない**
+    ——Level 0 が証明するのは経路であって重みの同一性ではない
+    （下の `Level0Outcome` 参照）。重みの同一性を要求するのは
+    Level 0.5（Baseline Benchmark）である。
+    """
+
+    VERIFIED_DIGEST = "verified_digest"
+    """Runtime 自身が返した重みのハッシュがある。"""
+
+    UNVERIFIED = "unverified"
+    """**既定値。** 取れなかったものを取れたことにしない。"""
+
+
 class Level0Outcome(str, Enum):
     """Vision §39 Level 0（Local Model が動く）の判定。"""
 
@@ -99,6 +138,22 @@ class Level0Outcome(str, Enum):
 
     NOT_ATTEMPTED = "not_attempted"
     """**まだ試していない。** 失敗と区別する。"""
+
+    INVALID_PROBE = "invalid_probe"
+    """**測定そのものが成立していない**（020A1、2026-08-26）。
+
+    Local Model の失敗ではない。**Local Model に仕事が回っていない。**
+
+    実例: 既定の probe「毎日の支出を記録して合計を見たい」は
+    `household_budget` の Curated Domain Library へ解決される
+    （実測: `domain_resolution=curated`）。Curated 経路は**AI を1回も
+    呼ばずに**決定的に文書を作るので、Runtime が動いていようがいまいが
+    HTTP 200 が返り、Validator も通る。
+
+    これを `FAILED` と書くと「Local Model が駄目だった」という嘘になり、
+    `PASSED` と書けばもっと悪い。**probe が不適切だった**という第三の
+    結果を持つ。`NOT_APPLICABLE` 相当である。
+    """
 
 
 #: Provider 名として現れうる Test Double。**名前で弾く第一段。**
@@ -117,14 +172,61 @@ class RealLocalModelRun:
     provider: str
     model: str
     task: ForgeTask
+    """**この実行が実際に AIRouter へ渡した Task。**
+
+    ---
+
+    ## 手で書くと嘘になる（020A1、2026-08-26）
+
+    以前 script はここへ `ForgeTask.FORGE_LANGUAGE_UPDATE` を**定数として**
+    書いていた。実際に `/generate` が通るのは
+    `ForgeTask.COGNITIVE_STAGE` である（`prompt_pipeline.py` の
+    `ai_router.bind(ForgeTask.COGNITIVE_STAGE, ...)`）。
+
+    Task ごとに Routing も評価も分ける設計（011 §3）なので、
+    **記録した Task が違えば、その実測は別の Task の成績として
+    集計される。** 存在しない実績が生まれる。
+
+    `observed_tasks` と突き合わせて、**主張と観測が一致しなければ
+    数えない**。
+    """
+
+    observed_tasks: tuple[ForgeTask, ...] = ()
+    """**実際に AIRouter を通った Task の観測結果**（020A1）。
+
+    `ExperienceRecord.task` から読む——AIRouter が呼ばれるたびに
+    自分で残している事実であり、script の主張ではない。
+
+    空なら「観測できていない」。**その場合 `task` の主張は検証されて
+    いない**ので数えない。
+    """
+
+    domain_resolution: str = ""
+    """`decision_trace` の `domain_resolution` 段が返した判断（020A1）。
+
+    `"curated"` なら **Curated Domain Library が決定的に文書を作った**
+    ——AI は1回も呼ばれていない。Local Model の実測にならない。
+    `Level0Outcome.INVALID_PROBE` の判定に使う。
+    """
 
     runtime_backend: LocalRuntimeBackend = LocalRuntimeBackend.UNKNOWN
     runtime_version: str = ""
-    model_digest: str = ""
-    """**Runtime 自身が返した重みの識別子**（Ollama の digest 等）。
 
-    fixture や手書きの偽サーバには通常無い。無ければ数えない
-    ——「どの重みで動いたか言えない実行」を実測にしない。
+    model_id: str = ""
+    """**Runtime が名乗る Model の名前**（`qwen2.5:1.5b-instruct` 等）。
+
+    ほぼ必ず取れる。**これは重みの識別子ではない**（`model_digest` 参照）。
+    """
+
+    model_digest: str = ""
+    """**Runtime 自身が返した重みのハッシュ**（Ollama の digest 等）。
+
+    llama-server 等は返さないことがある。**`model_id` を代わりに入れない**
+    ——名前は重みの識別子ではない（`WeightIdentity` 参照）。
+
+    無いことは Level 0 の失敗ではない。Level 0 が証明するのは経路であって
+    重みの同一性ではない。**`weight_identity` が `UNVERIFIED` になるだけ**
+    であり、それを Level 0.5（Baseline Benchmark）が要求する。
     """
 
     quantization: str = ""
@@ -202,8 +304,41 @@ class RealLocalModelRun:
             reasons.append(f"LOCAL 実行ではない（{self.deployment.value}）")
         if not self.model.strip():
             reasons.append("Model 名が無い")
-        if not self.model_digest.strip():
-            reasons.append("重みの識別子（model_digest）が無い")
+        if not self.model_id.strip():
+            reasons.append("Runtime が名乗る Model 名（model_id）が無い")
+
+        # **重みの digest は Level 0 の条件から外した**（020A1、2026-08-26）。
+        #
+        # 以前はここで digest を必須にしていた。理由は2つ混ざっていた——
+        # 「どの重みで動いたか言えること」と「fixture を弾くこと」。
+        # 1つの欄に2つの仕事をさせていたので、どちらも半端だった:
+        #
+        # * digest を返さない Runtime（llama-server 等）が、本物でも
+        #   永久に Level 0 へ到達できない
+        # * digest を返す偽サーバは、digest があるので通ってしまう
+        #
+        # fixture を弾くのは `runtime_backend` / `generation_source` /
+        # `deployment` の仕事である。重みの同一性は `weight_identity` が
+        # 別に持ち、**Level 0.5（Baseline Benchmark）が要求する**。
+        #
+        # **これは緩和である。** 緩めたことを隠さずに書く。
+        # 代わりに `domain_resolution` と `observed_tasks` という、
+        # 以前は見ていなかった2つの検査を足した。
+
+        if self.domain_resolution.strip().lower() == CURATED_DOMAIN_RESOLUTION:
+            # **Curated 経路は AI を1回も呼ばない。**
+            # Runtime が動いていなくても 200 が返る（実測）。
+            reasons.append(
+                "Curated Domain Library が作った"
+                "（domain_resolution=curated / probe が不適切）"
+            )
+        if not self.observed_tasks:
+            reasons.append("AIRouter を通った Task を観測できていない")
+        elif self.task not in self.observed_tasks:
+            reasons.append(
+                f"記録した Task（{self.task.value}）が、実際に通った Task"
+                f"（{', '.join(t.value for t in self.observed_tasks)}）に無い"
+            )
         if not self.generation_evidence_uid.strip():
             # **本番経路を通っていない実行を Level 0 にしない。**
             reasons.append("Forge の本番経路を通った証拠（Evidence uid）が無い")
@@ -226,15 +361,50 @@ class RealLocalModelRun:
         return tuple(reasons)
 
     @property
+    def weight_identity(self) -> WeightIdentity:
+        """**どの重みで動いたか言えるか。** 名前では言えない。"""
+        return (
+            WeightIdentity.VERIFIED_DIGEST
+            if self.model_digest.strip()
+            else WeightIdentity.UNVERIFIED
+        )
+
+    @property
+    def probe_was_curated(self) -> bool:
+        """**Local Model に仕事が回らない probe だったか。**"""
+        return self.domain_resolution.strip().lower() == CURATED_DOMAIN_RESOLUTION
+
+    @property
     def level0_outcome(self) -> Level0Outcome:
-        return Level0Outcome.PASSED if self.counts_as_real_local else Level0Outcome.FAILED
+        if self.counts_as_real_local:
+            return Level0Outcome.PASSED
+        if self.probe_was_curated:
+            # **Local Model の失敗ではない。測定が成立していない。**
+            return Level0Outcome.INVALID_PROBE
+        return Level0Outcome.FAILED
+
+    @property
+    def ready_for_baseline(self) -> bool:
+        """**Level 0.5（Baseline Benchmark）へ進んでよいか**（020A1）。
+
+        Level 0 より厳しい。重みの同一性が言えなければ、
+        「どの重みの成績なのか」が分からない記録が Benchmark へ入る。
+        """
+        return self.counts_as_real_local and (
+            self.weight_identity is WeightIdentity.VERIFIED_DIGEST
+        )
 
     def to_dict(self) -> dict[str, object]:
         """報告へそのまま載せられる形。**数えなかった理由も出す。**"""
         return {
             "provider": self.provider,
             "model": self.model,
+            "model_id": self.model_id,
             "model_digest": self.model_digest,
+            "weight_identity": self.weight_identity.value,
+            "domain_resolution": self.domain_resolution,
+            "observed_tasks": [t.value for t in self.observed_tasks],
+            "ready_for_baseline": self.ready_for_baseline,
             "quantization": self.quantization,
             "runtime_backend": self.runtime_backend.value,
             "runtime_version": self.runtime_version,
@@ -291,10 +461,27 @@ class RealLocalModelRunLog:
         return tuple(self._runs)
 
     def level0(self) -> Level0Outcome:
-        """Vision §39 Level 0 の到達判定。"""
+        """Vision §39 Level 0 の到達判定。
+
+        **`INVALID_PROBE` を `FAILED` へ丸めない**（020A1）。
+        Curated へ落ちた計測は「Local Model が駄目だった」ではなく
+        「Local Model に仕事が回っていない」である。
+        """
         if not self._runs:
             return Level0Outcome.NOT_ATTEMPTED
-        return Level0Outcome.PASSED if self.count() > 0 else Level0Outcome.FAILED
+        if self.count() > 0:
+            return Level0Outcome.PASSED
+        rejected = self.rejected_runs()
+        if rejected and all(r.probe_was_curated for r in rejected):
+            return Level0Outcome.INVALID_PROBE
+        return Level0Outcome.FAILED
+
+    def baseline_ready_runs(self) -> tuple[RealLocalModelRun, ...]:
+        """**Level 0.5 へ渡してよい実行**（020A1）。
+
+        Level 0 を通っただけでは足りない。重みの同一性が言えるものだけ。
+        """
+        return tuple(r for r in self._runs if r.ready_for_baseline)
 
     def reset(self) -> None:
         self._runs.clear()
