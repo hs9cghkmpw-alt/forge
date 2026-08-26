@@ -11,7 +11,9 @@
 
 | | 結果 |
 |---|---|
-| CI（HEAD 87991ef の run 32983961000） | **infrastructure failure**（コードの失敗ではない） |
+| CI（HEAD `cf1f8e23` / run `33015811555`） | ✅ **green**（4 jobs すべて success） |
+| └ run 32983961000（HEAD 87991ef） | infrastructure failure（runner 未割当。**いまだに queued**） |
+| └ run 33015298405（HEAD 47c95e5） | **私のテストの誤り**（下記 §1） |
 | Level 0 script の Evidence Integrity（A/B/C/D） | ✅ 4件とも修正 |
 | TD89（Domain 判定が外れる） | ✅ **解消**（実描画で確認） |
 | TD87（8アプリが3種類の画面） | ✅ **解消**（32枚に重複が1枚も無い） |
@@ -72,6 +74,23 @@ AssertionError: '27' unexpectedly found in
 > **2つの failure は別物である。**
 > `32983961000` は runner 未割当（infrastructure）。
 > `33015298405` は**私のテストの誤り**（コード）。混ぜて書かない。
+
+### CI は green になった（`cf1f8e23`、run `33015811555`）
+
+| job | 結果 |
+|---|---|
+| backend smoke（起動 + CORS） | ✅ success |
+| frontend (Flutter)（analyze / test / build web） | ✅ success |
+| backend + forge_ai (Python 3.11) | ✅ success |
+| backend + forge_ai (Python 3.12) | ✅ success |
+
+4 jobs すべて runner が割り当たり、steps も実行された上での success で
+ある。**「runner が付かなかった run」と混同しないこと。**
+
+> 残っている問題: `32983961000` は**いまだに `queued` のまま**である。
+> 打ち切られた run が queued で残り続けている。Actions の利用枠・
+> runner 割当は引き続き確認してほしい。
+
 
 ---
 
@@ -448,7 +467,7 @@ backend  : 1768 passed, 16 skipped   (+24)
 forge_ai :  567 passed               (+30)
 flutter  : analyze No issues found / 514 passed
 ruff     : 新規・変更ファイルは clean
-CI       : **未取得**（§1、runner 未割当）
+CI       : ✅ green（HEAD cf1f8e23 / run 33015811555、4 jobs すべて success）
 ```
 
 ## 8. Real Local Model runs

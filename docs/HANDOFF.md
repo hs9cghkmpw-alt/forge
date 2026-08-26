@@ -13,7 +13,7 @@
 
 ## CEOへの依頼
 
-### 1. CI が runner を掴めていない（**要確認**）
+### 1. CI が runner を掴めない run がある（**要確認**）
 
 `run 32983961000`（HEAD `87991ef`）は **conclusion=failure** だが、
 **コードは1行も実行されていない**。
@@ -39,6 +39,23 @@ GitHub Actions 側の事象である。再実行を要求したが jobs 0件の�
 >
 > **runner が割り当たらない件は残っている。** Actions の利用枠・
 > runner 割当を確認してほしい。
+
+### CI は green になった（`cf1f8e23`、run `33015811555`）
+
+| job | 結果 |
+|---|---|
+| backend smoke（起動 + CORS） | ✅ success |
+| frontend (Flutter)（analyze / test / build web） | ✅ success |
+| backend + forge_ai (Python 3.11) | ✅ success |
+| backend + forge_ai (Python 3.12) | ✅ success |
+
+4 jobs すべて runner が割り当たり、steps も実行された上での success で
+ある。**「runner が付かなかった run」と混同しないこと。**
+
+> 残っている問題: `32983961000` は**いまだに `queued` のまま**である。
+> 打ち切られた run が queued で残り続けている。Actions の利用枠・
+> runner 割当は引き続き確認してほしい。
+
 
 ### 2. 前セッションから残っている件
 
