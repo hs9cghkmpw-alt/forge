@@ -1,0 +1,193 @@
+{
+  "needs": [
+    {
+      "key": "finance",
+      "label": "家計",
+      "need": "毎日の収入と支出を記録して残高を見たい",
+      "rendered": true,
+      "validator_passed": true,
+      "domain": "household_budget",
+      "template": "template=tracker",
+      "provider_used": "mock",
+      "screen_count": 1,
+      "widget_types": [
+        "add_record",
+        "bar_chart",
+        "button",
+        "choice_field",
+        "column",
+        "composite",
+        "date_field",
+        "delete_record",
+        "form",
+        "metric_view",
+        "pattern",
+        "record_list",
+        "record_list_view",
+        "required",
+        "reset_state",
+        "section_header",
+        "selected_record",
+        "string",
+        "tab_view",
+        "text_field",
+        "update_record"
+      ]
+    },
+    {
+      "key": "worklog",
+      "label": "業務/Todo",
+      "need": "今日やる作業を登録して、終わったものを消していきたい",
+      "rendered": true,
+      "validator_passed": true,
+      "domain": "task_management",
+      "template": "template=checklist",
+      "provider_used": "mock",
+      "screen_count": 1,
+      "widget_types": [
+        "add_item",
+        "button",
+        "checklist",
+        "column",
+        "row",
+        "string",
+        "text_field"
+      ]
+    },
+    {
+      "key": "kids",
+      "label": "子ども向け",
+      "need": "子どもが朝の支度をひとつずつチェックできるようにしたい",
+      "rendered": true,
+      "validator_passed": true,
+      "domain": "child_growth",
+      "template": "template=tracker",
+      "provider_used": "mock",
+      "screen_count": 1,
+      "widget_types": [
+        "add_item",
+        "button",
+        "checklist",
+        "column",
+        "row",
+        "string",
+        "text_field"
+      ]
+    },
+    {
+      "key": "photo",
+      "label": "写真中心",
+      "need": "旅行の写真を日付ごとに残してメモを付けたい",
+      "rendered": true,
+      "validator_passed": true,
+      "domain": "travel",
+      "template": "template=checklist",
+      "provider_used": "mock",
+      "screen_count": 1,
+      "widget_types": [
+        "add_item",
+        "button",
+        "checklist",
+        "column",
+        "row",
+        "string",
+        "text_field"
+      ]
+    },
+    {
+      "key": "map",
+      "label": "地図/探索",
+      "need": "釣った場所を地図に残して魚の種類を記録したい",
+      "rendered": true,
+      "validator_passed": true,
+      "domain": "fishing_log",
+      "template": "template=tracker",
+      "provider_used": "mock",
+      "screen_count": 1,
+      "widget_types": [
+        "add_record",
+        "bar_chart",
+        "button",
+        "column",
+        "composite",
+        "date_field",
+        "delete_record",
+        "form",
+        "metric_view",
+        "pattern",
+        "record_list",
+        "record_list_view",
+        "required",
+        "reset_state",
+        "section_header",
+        "selected_record",
+        "string",
+        "tab_view",
+        "text_field",
+        "update_record"
+      ]
+    },
+    {
+      "key": "game",
+      "label": "ゲーム風",
+      "need": "植物を育てながら音を組み合わせるゲームを作りたい",
+      "rendered": true,
+      "validator_passed": true,
+      "domain": "generic",
+      "template": "template=checklist",
+      "provider_used": "mock",
+      "screen_count": 1,
+      "widget_types": [
+        "add_item",
+        "button",
+        "checklist",
+        "column",
+        "row",
+        "string",
+        "text_field"
+      ]
+    },
+    {
+      "key": "analytics",
+      "label": "データ分析",
+      "need": "部署ごとの売上を月別に集計してグラフで比べたい",
+      "rendered": true,
+      "validator_passed": true,
+      "domain": "generic",
+      "template": "template=checklist",
+      "provider_used": "mock",
+      "screen_count": 1,
+      "widget_types": [
+        "add_item",
+        "button",
+        "checklist",
+        "column",
+        "row",
+        "string",
+        "text_field"
+      ]
+    },
+    {
+      "key": "study",
+      "label": "学習アプリ",
+      "need": "英単語を出題して、正解率の推移を見たい",
+      "rendered": true,
+      "validator_passed": true,
+      "domain": "generic",
+      "template": "template=checklist",
+      "provider_used": "mock",
+      "screen_count": 1,
+      "widget_types": [
+        "add_item",
+        "button",
+        "checklist",
+        "column",
+        "row",
+        "string",
+        "text_field"
+      ]
+    }
+  ],
+  "rendered": 8,
+  "total": 8
+}

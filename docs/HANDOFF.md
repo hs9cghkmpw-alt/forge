@@ -332,6 +332,58 @@ TD82 lock がプロセス内 / TD83 意味的操作の実装が1件 / TD84 020 �
 
 ---
 
+## Generated UI Quality Gate v2 — 第1回を実施した（2026-08-26）
+
+`docs/visual-evidence/QUALITY-GATE-V2/manifest.md`
+
+本番の `/generate` で **8 アプリ**を生成し、**同じ Renderer** で
+**4 viewport × 8 = 32 枚**を実描画・撮影し、**全部開いて**評価した。
+
+> ### Golden Quality Gate: **FAIL**
+>
+> 崩れているから落ちたのではない。**同じ画面しか出てこないから**落ちた。
+
+### 8 アプリが 3 種類の画面にしかならない
+
+| 画面 | アプリ |
+|---|---|
+| tracker（21 widget型） | finance |
+| tracker（20 widget型） | map |
+| **checklist（7 widget型）** | **worklog / kids / photo / game / analytics / study** |
+
+**6 アプリが構造的に同一。** 実描画でも、データ分析アプリと子ども向け
+アプリが**同じチェックリスト2行**になり、違うのは追加ボタンの色だけ
+だった。
+
+overlap も overflow も無いので、**v1 の基準なら通ってしまう。**
+Quality Gate v2 が要る理由がここにある。
+
+### 実バグを1つ見つけて直した（再描画で確認）
+
+`date_field` のラベルを入力欄の**上枠線が貫通**していた
+（全 viewport で再現）。`InputDecorator.isEmpty` の既定 `false` を
+渡していなかったため、空でもラベルが浮いていた。
+
+**019C の Visual Review では見つからなかった。** あのときは同じ家計簿でも
+「一覧」タブしか見ておらず、`date_field` を含む「追加」タブを描いて
+いなかった。**1画面だけ見て「実描画を確認した」と言っていた**ことになる。
+
+### 13 軸: PASS 2 / FAIL 9 / 要修正 1 / UNVERIFIED 1
+
+主な FAIL: hierarchy / typography / density / empty-state /
+long-text（**生の要求文をアプリ名にしている**）/ navigation /
+visual identity / content fit（desktop で入力欄が 1950px 幅）。
+
+### 直す順（manifest §「直すべきものの順」）
+
+1. アプリ名を生の要求文にしない
+2. 仮データ（`最初の項目`）を空状態にする
+3. desktop / tablet の最大幅と列
+4. touch target 44px 下限
+5. checklist へ落ちる範囲を狭める（← Capability Registry の作り直し）
+
+1〜4 は**今の土台のまま直せる**。5 は生成側の話。
+
 ## ここで作業を止めた（2026-08-26、CEO指示）
 
 **中断であって、完了ではない。** 止めた時点の状態を正直に書く。

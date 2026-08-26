@@ -71,6 +71,16 @@ Widget buildDateField(
             errorText: error,
             suffixIcon: const Icon(Icons.calendar_today_rounded, size: 18),
           ),
+          // `InputDecorator.isEmpty` の既定は **false** である。渡さないと
+          // 「値が入っている」と見なされ、**空でもラベルが浮いたまま**に
+          // なる。ForgeTheme の `OutlineInputBorder`(角丸20) と重なり、
+          // ラベルの文字を枠線が貫通していた
+          // (Generated UI Quality Gate v2 の実描画で発見、2026-08-26。
+          //  mobile / small / tablet / desktop の全 viewport で再現)。
+          //
+          // 値の有無を渡すと、空のときは他の入力欄と同じように内側へ、
+          // 入力後は notch 付きで浮く——`text_field` と見た目が揃う。
+          isEmpty: currentValue.isEmpty,
           child: Text(currentValue.isEmpty ? '' : currentValue),
         ),
       );

@@ -1,5 +1,49 @@
 # CHANGELOG
 
+## 2026-08-26 — Generated UI Quality Gate v2 第1回（Golden Gate: FAIL）
+
+本番の `/generate` で 8 アプリを生成し、同じ Renderer で 4 viewport ×
+8 = 32 枚を実描画・撮影し、**全部開いて**評価した
+（`docs/visual-evidence/QUALITY-GATE-V2/`）。
+
+### 判定: FAIL
+
+崩れているからではなく、**同じ画面しか出てこないから**落ちた。
+8 アプリが 3 種類の画面にしかならず、うち 6 アプリ（Todo / 子ども向け /
+写真 / ゲーム / データ分析 / 学習）は**構造的に同一**である。
+実描画でも違いはアクセント色1つだけだった。
+
+overlap も overflow も無いので v1 の基準なら通る。v2 が要る理由。
+
+### 実バグ: `date_field` のラベルを枠線が貫通（修正済み）
+
+`InputDecorator.isEmpty` の既定は `false`。渡していなかったので空でも
+ラベルが浮き、`OutlineInputBorder`（角丸20）と衝突していた。全 viewport
+で再現。`isEmpty: currentValue.isEmpty` を渡して再 build → 再撮影 →
+目視で確認した。
+
+**019C の Visual Review では見つからなかった**——同じ家計簿でも「一覧」
+タブしか描いておらず、`date_field` のある「追加」タブを見ていなかった。
+
+### 13 軸: PASS 2 / FAIL 9 / 要修正 1 / UNVERIFIED 1
+
+### 足したもの
+
+- `docs/spec/GENERATED-UI-QUALITY-GATE-V2.md`（仕様、前 commit）
+- `scripts/export_quality_gate_fixtures.py` — 本番から撮影対象を作る
+- `scripts/capture_quality_gate_v2.py` — 4 viewport × N アプリ撮影
+- `frontend/lib/forge_quality_gate_visual.dart` — 撮影ハーネス
+  （**アプリごとの分岐を書かない**。書いた時点で測れない）
+- `docs/visual-evidence/QUALITY-GATE-V2/` — before/after 64 枚 + manifest
+
+### 撮影基盤の修正
+
+- `--no-web-resources-cdn` を使う（CanvasKit を CDN から取らない）。
+  bootstrap の書き換えは保険として残す
+- 二重挿入ガードが `canvasKitBaseUrl` の部分一致で誤判定し、**一度も
+  挿入されずに真っ白なPNGを作っていた**。挿入する設定そのものを印にした
+- Playwright の Chromium を明示的に指す（headless shell が無い環境）
+
 ## 2026-08-26 — FORGE-020A Local Model 本番経路 + Level 0 計測契約
 
 CEO決定: **この container の network policy は広げない。** Level 0 の実測は

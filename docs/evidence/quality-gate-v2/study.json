@@ -1,0 +1,88 @@
+{
+  "version": "1.5",
+  "initial_screen_id": "generated_screen",
+  "screens": [
+    {
+      "id": "generated_screen",
+      "title": "英単語を出題して、正解率の推移を見たい",
+      "state": {
+        "items": {
+          "type": "checklist",
+          "value": [
+            {
+              "id": "item_1",
+              "text": "最初の項目",
+              "done": false
+            },
+            {
+              "id": "item_2",
+              "text": "2つめの項目",
+              "done": false
+            }
+          ]
+        },
+        "new_item_text": {
+          "type": "string",
+          "value": ""
+        }
+      },
+      "body": {
+        "type": "column",
+        "id": "root_column",
+        "children": [
+          {
+            "type": "checklist",
+            "id": "list_view",
+            "state_ref": "items",
+            "empty_state_text": "まだ何もありません"
+          },
+          {
+            "type": "row",
+            "id": "add_row",
+            "children": [
+              {
+                "type": "text_field",
+                "id": "add_field",
+                "state_ref": "new_item_text",
+                "placeholder": "追加する"
+              },
+              {
+                "type": "button",
+                "id": "add_button",
+                "label": "追加",
+                "action": {
+                  "type": "add_item",
+                  "target_state_ref": "items",
+                  "source_state_ref": "new_item_text"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "app": {
+    "title": "英単語を出題して、正解率の推移を見たい"
+  },
+  "design_tokens": {
+    "color_scheme": {
+      "primary": "#5B7C99",
+      "secondary": "#8FA8BD",
+      "success": "#6B9080",
+      "error": "#C1666B"
+    },
+    "corner_radius": {
+      "small": 8,
+      "medium": 12,
+      "large": 16
+    },
+    "spacing_scale": {
+      "xs": 4,
+      "sm": 8,
+      "md": 16,
+      "lg": 24,
+      "xl": 32
+    }
+  }
+}

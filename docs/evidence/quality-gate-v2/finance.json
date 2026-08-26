@@ -1,0 +1,481 @@
+{
+  "version": "1.12",
+  "initial_screen_id": "generated_screen",
+  "screens": [
+    {
+      "id": "generated_screen",
+      "title": "毎日の収入と支出を記録して残高を見たい",
+      "state": {
+        "records": {
+          "type": "record_list",
+          "value": [],
+          "schema_ref": "transaction"
+        },
+        "field_entry_type": {
+          "type": "string",
+          "value": ""
+        },
+        "field_category": {
+          "type": "string",
+          "value": ""
+        },
+        "field_amount": {
+          "type": "string",
+          "value": ""
+        },
+        "field_date": {
+          "type": "string",
+          "value": ""
+        },
+        "field_payment_method": {
+          "type": "string",
+          "value": ""
+        },
+        "selected": {
+          "type": "selected_record",
+          "value": null
+        },
+        "edit_field_entry_type": {
+          "type": "string",
+          "value": ""
+        },
+        "edit_field_category": {
+          "type": "string",
+          "value": ""
+        },
+        "edit_field_amount": {
+          "type": "string",
+          "value": ""
+        },
+        "edit_field_date": {
+          "type": "string",
+          "value": ""
+        },
+        "edit_field_payment_method": {
+          "type": "string",
+          "value": ""
+        }
+      },
+      "body": {
+        "type": "tab_view",
+        "id": "root_tabs",
+        "tab_titles": [
+          "家計簿記録を追加",
+          "家計簿記録一覧",
+          "家計簿記録を編集"
+        ],
+        "style_role": "density.normal",
+        "children": [
+          {
+            "type": "column",
+            "id": "create_tab",
+            "children": [
+              {
+                "type": "section_header",
+                "id": "create_section_header",
+                "style_role": "text.headline",
+                "title": "家計簿記録を追加",
+                "subtitle": "必要な情報を入力してください"
+              },
+              {
+                "type": "form",
+                "id": "record_form",
+                "style_role": "button.primary",
+                "submit_label": "保存",
+                "submit_action": {
+                  "type": "composite",
+                  "actions": [
+                    {
+                      "type": "add_record",
+                      "target_state_ref": "records",
+                      "field_bindings": {
+                        "entry_type": "field_entry_type",
+                        "category": "field_category",
+                        "amount": "field_amount",
+                        "date": "field_date",
+                        "payment_method": "field_payment_method"
+                      }
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "field_entry_type"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "field_category"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "field_amount"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "field_date"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "field_payment_method"
+                    }
+                  ]
+                },
+                "children": [
+                  {
+                    "type": "choice_field",
+                    "id": "field_entry_type_input",
+                    "state_ref": "field_entry_type",
+                    "label": "収支",
+                    "options": [
+                      "支出",
+                      "収入"
+                    ]
+                  },
+                  {
+                    "type": "choice_field",
+                    "id": "field_category_input",
+                    "state_ref": "field_category",
+                    "label": "カテゴリ",
+                    "options": [
+                      "食費",
+                      "交通費",
+                      "娯楽",
+                      "その他"
+                    ]
+                  },
+                  {
+                    "type": "text_field",
+                    "id": "field_amount_input",
+                    "state_ref": "field_amount",
+                    "placeholder": "金額",
+                    "validation": {
+                      "rules": [
+                        {
+                          "type": "required",
+                          "message": "金額を入力してください"
+                        },
+                        {
+                          "type": "pattern",
+                          "message": "金額は数字で入力してください",
+                          "value": "^-?[0-9]+(\\.[0-9]+)?$"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "type": "date_field",
+                    "id": "field_date_input",
+                    "state_ref": "field_date",
+                    "label": "日付"
+                  },
+                  {
+                    "type": "text_field",
+                    "id": "field_payment_method_input",
+                    "state_ref": "field_payment_method",
+                    "placeholder": "支払方法"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "column",
+            "id": "list_tab",
+            "children": [
+              {
+                "type": "metric_view",
+                "id": "records_balance_metric",
+                "style_role": "metric.primary",
+                "state_ref": "records",
+                "value_field": "amount",
+                "aggregate": "sum",
+                "label": "残高",
+                "empty_text": "まだ記録がありません",
+                "sign_field": "entry_type",
+                "negative_when": "支出"
+              },
+              {
+                "type": "metric_view",
+                "id": "records_income_metric",
+                "style_role": "finance.income",
+                "state_ref": "records",
+                "value_field": "amount",
+                "aggregate": "sum",
+                "label": "収入の合計",
+                "empty_text": "まだ記録がありません",
+                "filter_field": "entry_type",
+                "filter_value": "収入"
+              },
+              {
+                "type": "metric_view",
+                "id": "records_expense_metric",
+                "style_role": "finance.expense",
+                "state_ref": "records",
+                "value_field": "amount",
+                "aggregate": "sum",
+                "label": "支出の合計",
+                "empty_text": "まだ記録がありません",
+                "filter_field": "entry_type",
+                "filter_value": "支出"
+              },
+              {
+                "type": "record_list_view",
+                "id": "records_list_view",
+                "state_ref": "records",
+                "layout": "card",
+                "display_fields": [
+                  "entry_type",
+                  "category",
+                  "amount",
+                  "date",
+                  "payment_method"
+                ],
+                "empty_state_text": "まだ家計簿記録がありません",
+                "selectable": true,
+                "selected_state_ref": "selected",
+                "select_field_bindings": {
+                  "entry_type": "edit_field_entry_type",
+                  "category": "edit_field_category",
+                  "amount": "edit_field_amount",
+                  "date": "edit_field_date",
+                  "payment_method": "edit_field_payment_method"
+                },
+                "style_role": "surface.card"
+              },
+              {
+                "type": "bar_chart",
+                "id": "records_bar_chart",
+                "style_role": "card.summary",
+                "state_ref": "records",
+                "value_field": "amount",
+                "label_field": "category",
+                "title": "家計簿記録の金額"
+              }
+            ]
+          },
+          {
+            "type": "column",
+            "id": "edit_tab",
+            "children": [
+              {
+                "type": "section_header",
+                "id": "edit_section_header",
+                "style_role": "text.headline",
+                "title": "家計簿記録を編集",
+                "subtitle": "一覧からカードを選ぶと入力欄が埋まります"
+              },
+              {
+                "type": "form",
+                "id": "record_edit_form",
+                "submit_label": "更新",
+                "submit_action": {
+                  "type": "composite",
+                  "actions": [
+                    {
+                      "type": "update_record",
+                      "target_state_ref": "records",
+                      "record_id_ref": "selected",
+                      "field_bindings": {
+                        "entry_type": "edit_field_entry_type",
+                        "category": "edit_field_category",
+                        "amount": "edit_field_amount",
+                        "date": "edit_field_date",
+                        "payment_method": "edit_field_payment_method"
+                      }
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_entry_type"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_category"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_amount"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_date"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_payment_method"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "selected"
+                    }
+                  ]
+                },
+                "children": [
+                  {
+                    "type": "choice_field",
+                    "id": "edit_field_entry_type_edit_input",
+                    "state_ref": "edit_field_entry_type",
+                    "label": "収支",
+                    "options": [
+                      "支出",
+                      "収入"
+                    ]
+                  },
+                  {
+                    "type": "choice_field",
+                    "id": "edit_field_category_edit_input",
+                    "state_ref": "edit_field_category",
+                    "label": "カテゴリ",
+                    "options": [
+                      "食費",
+                      "交通費",
+                      "娯楽",
+                      "その他"
+                    ]
+                  },
+                  {
+                    "type": "text_field",
+                    "id": "edit_field_amount_edit_input",
+                    "state_ref": "edit_field_amount",
+                    "placeholder": "金額",
+                    "validation": {
+                      "rules": [
+                        {
+                          "type": "required",
+                          "message": "金額を入力してください"
+                        },
+                        {
+                          "type": "pattern",
+                          "message": "金額は数字で入力してください",
+                          "value": "^-?[0-9]+(\\.[0-9]+)?$"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "type": "date_field",
+                    "id": "edit_field_date_edit_input",
+                    "state_ref": "edit_field_date",
+                    "label": "日付"
+                  },
+                  {
+                    "type": "text_field",
+                    "id": "edit_field_payment_method_edit_input",
+                    "state_ref": "edit_field_payment_method",
+                    "placeholder": "支払方法"
+                  }
+                ]
+              },
+              {
+                "type": "button",
+                "id": "record_delete_button",
+                "style_role": "button.secondary",
+                "label": "削除",
+                "action": {
+                  "type": "composite",
+                  "actions": [
+                    {
+                      "type": "delete_record",
+                      "target_state_ref": "records",
+                      "record_id_ref": "selected"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_entry_type"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_category"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_amount"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_date"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "edit_field_payment_method"
+                    },
+                    {
+                      "type": "reset_state",
+                      "state_ref": "selected"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "app": {
+    "title": "毎日の収入と支出を記録して残高を見たい"
+  },
+  "record_schemas": {
+    "transaction": {
+      "fields": [
+        {
+          "name": "entry_type",
+          "type": "choice",
+          "label": "収支",
+          "required": true,
+          "options": [
+            "支出",
+            "収入"
+          ]
+        },
+        {
+          "name": "category",
+          "type": "choice",
+          "label": "カテゴリ",
+          "required": true,
+          "options": [
+            "食費",
+            "交通費",
+            "娯楽",
+            "その他"
+          ]
+        },
+        {
+          "name": "amount",
+          "type": "number",
+          "label": "金額",
+          "required": true
+        },
+        {
+          "name": "date",
+          "type": "date",
+          "label": "日付",
+          "required": false
+        },
+        {
+          "name": "payment_method",
+          "type": "string",
+          "label": "支払方法",
+          "required": false
+        }
+      ]
+    }
+  },
+  "design_tokens": {
+    "color_scheme": {
+      "primary": "#5B7C99",
+      "secondary": "#8FA8BD",
+      "success": "#6B9080",
+      "error": "#C1666B"
+    },
+    "corner_radius": {
+      "small": 8,
+      "medium": 12,
+      "large": 16
+    },
+    "spacing_scale": {
+      "xs": 4,
+      "sm": 8,
+      "md": 16,
+      "lg": 24,
+      "xl": 32
+    }
+  }
+}
