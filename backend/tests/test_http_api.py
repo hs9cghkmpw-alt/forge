@@ -108,7 +108,8 @@ class TestGenerateEndpoint(unittest.TestCase):
 
     def test_unknown_provider_string_is_rejected_by_pydantic_before_reaching_pipeline(self) -> None:
         """CEO実物監査(3回目)対応: `provider`もHTTP層で`Literal["mock",
-        "openai", "claude", "gemini", "oss"]`に制限されている(Fix 1)ため、
+        "openai", "claude", "gemini", "oss", "local"]`に制限されている
+        (Fix 1。`local`はFORGE-020Aで追加)ため、
         許可リストに無い文字列はPydantic入力層で拒否され、
         `ProviderRouter.resolve()`(よって`provider_error`/`unavailable`)
         には一切到達しない。契約: 未知のengine/provider文字列 →
@@ -241,14 +242,48 @@ class TestGenerateEndpoint(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 422)
 
-    def test_provider_local_is_rejected_by_http_allowlist(self) -> None:
-        """Fix 1回帰テスト: 'local'はRouter内部の'oss'エイリアスだが、
-        HTTP公開APIのproviderには含まれない。"""
+    def test_provider_local_is_accepted_by_http_allowlist(self) -> None:
+        """**FORGE-020A で決定が変わった**(2026-08-26)。
+
+        ---
+
+        ## 元のテストの前提が、いま事実でない
+
+        このテストは以前
+
+            'local'はRouter内部の'oss'エイリアスだが、
+            HTTP公開APIのproviderには含まれない
+
+        と書いて422を期待していた。当時はそうだった。
+
+        しかし現在の`local`は**エイリアスではない**——Provider Registry
+        の独立した`provider_id`であり、`implementation_status=IMPLEMENTED`
+        `deployment=LOCAL` `supports_structured_output=True`、
+        `ProviderRouter._SPECIFIC_FACTORIES["local"] = LocalModelProvider`
+        という実装を持つ。むしろ`oss`の方が
+        `NotImplementedError`を投げるスタブで、Registry自身が
+        「`local`が実質的な後継」と書いている。
+
+        つまり**動く方を弾いて、動かない方を通していた**。
+
+        `native` / `forge_ai` を弾く理由（Engine名との混同を型で防ぐ、
+        ADR 4.0節）は`local`には当てはまらない。**Provider名である。**
+
+        Vision §39 Level 0（Local Model が動く）は
+
+            Runtime → LocalModelProvider → AIRouter → Forge pipeline
+              → Validator → Evidence
+
+        を通ることの証明なので、ここが閉じていると実機でも測れない。
+        """
         response = self.client.post(
             "/api/v1/ai/generate",
             json={"version": "1.0", "input": {"natural_language": "test", "generation_options": {"provider": "local"}}},
         )
-        self.assertEqual(response.status_code, 422)
+        self.assertNotEqual(
+            response.status_code, 422,
+            "provider='local' が schema で弾かれている（本番経路が無い）",
+        )
 
     def test_provider_forge_ai_is_rejected_by_http_allowlist(self) -> None:
         """Fix 1回帰テスト: 'forge_ai'はEngine名であり、HTTP公開APIの

@@ -580,9 +580,52 @@ Forge が作るべき Local AI は「すべてを暗記したAI」ではなく�
 
 > **Forge Local AI は Level 0 に到達していない。**
 
-`Real Local Model runs = 0`。この container に Ollama / llama.cpp /
-torch は無く、GPU も無い。加えて `huggingface.co` / `ollama.com` が
-network policy で拒否される（実測）ため、**model 重みを取得できない**。
+`Real Local Model runs = 0`。
+
+### 測る場所は決まった（CEO決定、2026-08-26）
+
+**この container の network policy は広げない。** Level 0 の実測は、
+インターネットへ通常接続できる**別の実機**（Local Model Execution Host）
+で行う。
+
+* 現 container では `huggingface.co` / `ollama.com` / `github.com` が 403
+* Ollama / llama.cpp / torch が無く、GPU も無い
+* 配布元の追加CDNまで allowlist を広げ続けたくない
+* **Forge が将来実際に動くローカルPCで測る方が deployment evidence として
+  価値が高い**
+
+したがって**この container では Level 0 を UNVERIFIED のまま維持する。**
+実際、ここで `scripts/verify_local_model_level0.py` を走らせると
+`FAILED` になる。それが正しい状態である。
+
+### 何を数えるか（`local_model_evidence.py`）
+
+CEO 決定:
+
+> Real Local Model runs は、実際の open-weight model から応答が返り、
+> **Forge production path を通った場合だけ**加算する。
+> fake server / mock / fixture は加算しない。
+
+これを型と述語にした。**全部**満たさなければ数えない。
+
+| 条件 | 何を防ぐか |
+|---|---|
+| Provider が Test Double でない | Mock を数える |
+| Runtime を特定できている | 「何が動いたか言えない」実行 |
+| 重みの識別子（digest）がある | fixture を数える |
+| Evidence uid がある | 横から Provider を叩いた実行 |
+| **`GenerationSource.LOCAL_AI`** | **200 OK だが Curated が作った** |
+| Validator を通っている | 壊れた出力 |
+| `Verification.REAL` | 未実測 |
+
+`GenerationSource` の検査が決定的である——Runtime を起動していない状態で
+`provider="local"` を指定しても **HTTP 200 が返り Validator も通った**
+（実測 92ms）。作ったのは Curated Domain Library で、**LLM は1回も
+呼ばれていない**。「Local を指定したら 200 が返った」は Level 0 の証拠に
+まったくならない。
+
+> 偽サーバを立てて騙すことまでは防げない。**防げないと書いておく**方が、
+> 「検証済み」と言い切るより誠実である。
 
 Level 1 以降は Level 0 を前提とするので、**現時点ではどれも到達して
 いない。** ただし Level 2〜6 で要求される**契約と検査は先に作ってある**

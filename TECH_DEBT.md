@@ -1,5 +1,31 @@
 # TECH_DEBT.md
 
+## FORGE-020A で見つけた実バグ（2026-08-26、すべて修正済み）
+
+- **Local Model への本番経路が1つも無かった。** `local` は Registry上
+  `IMPLEMENTED` で adapter も結び付いているのに、`/generate` `/converse`
+  `/update` のどれからも選べなかった。代わりに公開していた `oss` は
+  `NotImplementedError` を投げるスタブ。**動く方を隠して動かない方を
+  公開していた**——「作ったが本番から呼ばれない」の7例目。
+  → 3経路とも開けた。`test_forge_020a_local_model_path.py` が
+  「実装済みの Local Provider は HTTP から選べる」を固定する（M24/M25）
+- **AIを1回も呼ばずに「local が答えた」と報告していた。**
+  `_provider_used()` の `or provider` が、要求した名前を答えた名前として
+  返していた。019B §4 の `revision_provider` と同じ嘘。
+  → `or provider` を外した。呼んでいなければ `"none"`
+
+## TD85. `Deployment` enum が2つある（2026-08-26、未統合）
+
+`app/ai/gateway/provider_registry.Deployment` と
+`app/ai/gateway/learning_events.Deployment` は別の enum である。
+値は同じでも `is` 比較は**必ず `False`** になる。
+
+今困っていない理由: それぞれの層の中で閉じて使われている。
+将来困る条件: 層を跨ぐ比較を書いたとき、**条件が常に偽になって
+guard が黙って無効化される**（020A のテストで実際に踏んだ。緑のまま
+何も守らない状態になった）。
+直し方: どちらかへ寄せるか、名前を変えて取り違えを起こせなくする。
+
 ## FORGE-019C/020 follow-ups (2026-08-25)
 
 ### 019B から**解消した**もの

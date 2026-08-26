@@ -572,8 +572,29 @@ class PromptPipeline:
             抜けた場合に起きる)。以前ここは「既定として選ばれるはずの
             名前」を返しており、AIを呼んでいなくても`"mock"`と報告して
             いた。呼んでいないなら、呼んでいないと言う。
+
+            ---
+
+            ## `or provider` を外した (FORGE-020A、2026-08-26)
+
+            上の説明に反して、`or provider` が残っていたため
+            **AIを1回も呼んでいなくても「要求されたProvider名」を
+            報告していた**。
+
+            実測: Local Runtimeが起動していない状態で
+            `provider="local"` を指定すると、Curated Domain Library が
+            決定的に文書を作り(`GenerationSource.CURATED`)、LLMは1回も
+            呼ばれないのに `provider_used: "local"` が返っていた。
+
+            これは019B §4で`revision_provider`について直したものと
+            **同じ嘘**である——「呼んでもいないProviderの手柄」。
+            Local AIのLevel 0を測るときにこれが残っていると、
+            **200 OK と `provider_used: local` を見て「動いた」と
+            誤認する**。
+
+            要求した名前は要求でしかない。**答えた事実だけを報告する。**
             """
-            return bound.last_provider_used or provider or "none"
+            return bound.last_provider_used or "none"
 
         # 3. M004 run_cognitive_pipeline()を1回だけ呼ぶ(個別コンポーネントは
         # 呼ばない、Blueprint v1.3 Task1.2)。`CognitiveOrchestrator`は

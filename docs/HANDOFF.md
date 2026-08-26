@@ -6,44 +6,64 @@
 - Current phase: R1 Generated App Quality / Growing AI
 - Current task: **FORGE-019C/020 — Revision Atomic Closure + Local
   Generative Intelligence Foundation**
-- **Real Local Model runs: 0**（環境要因。下記「CEOへの依頼」）
+- **Real Local Model runs: 0**（Level 0 は別実機で測る。下記「環境判断」）
 
 ---
 
-## CEOへの依頼（先に読んでほしいところ）
+## 環境判断は決まった（CEO決定、2026-08-26）
 
-### 1. 実 Local Model を動かすには、**環境の network policy** が要る
+**この container の network policy は広げない。**
+Level 0 の実測は、インターネットへ通常接続できる**別の実機**
+（Local Model Execution Host）で行う。
 
-install の許可だけでは足りない。実測:
+理由（CEO）:
 
-```
-https://pypi.org/simple/  → 200
-https://huggingface.co/   → 403（proxy が拒否）
-https://ollama.com/       → 403
-https://github.com/       → 403
-```
+- 現 container では `huggingface.co` / `ollama.com` / `github.com` が 403
+- Ollama / llama.cpp / torch が無く、GPU も無い
+- 配布元の追加CDNまで allowlist を広げ続けたくない
+- **Forge が将来実際に動くローカルPCで測る方が deployment evidence として
+  価値が高い**
 
-**モデル重みの取得先が塞がっている。** この container に Ollama も
-llama.cpp も torch も無く、GPU も無い（RAM は 15 GB あるので容量は足りる）。
+### 役割分担
 
-必要なもの:
-
-| | |
+| | やること |
 |---|---|
-| Runtime | Ollama もしくは llama.cpp（`llama-server`）。**どちらも OpenAI互換なので既存の `LocalModelProvider` が `base_url` だけで繋がる** |
-| Model | `qwen2.5:1.5b-instruct`（約 1.0 GB / Q4）または `qwen2.5:7b-instruct`（約 4.5 GB / Q4） |
-| RAM 目安 | 1.5B で 4 GB、7B で 8〜10 GB。**この環境で足りる** |
-| 追加で必要 | **`huggingface.co` / `ollama.com` への到達許可**（network policy） |
+| **Claude Code 環境（ここ）** | 実装 / Tests / Benchmark contract / Episode / Dataset・Training foundation / GitHub handoff |
+| **別実機** | Ollama または llama.cpp / Real Open-weight Model / Forge backend / LocalModelProvider / **実推論・実測** |
 
-判断が要るのは「install してよいか」ではなく「**この環境から model を
-取れるようにするか / 別の環境で走らせるか**」である。
+### 最初の Level 0 は小型 Q4 で構わない
 
-### 2. 前セッションから残っている件
+目的は**能力評価ではなく実 E2E 証明**である。
 
-以前のセッションで貼られた OpenAI API key（`sk-proj-...`）は
-**どこにも保存していない**が、**まだ失効させていないなら失効させてほしい。**
+```
+Runtime → LocalModelProvider → AIRouter → Forge pipeline
+  → Validator → Evidence
+```
 
----
+成功後に、より強いモデルで Baseline Benchmark へ進む。
+
+### 実機での手順
+
+```
+ollama serve
+ollama pull qwen2.5:1.5b-instruct
+
+export FORGE_LOCAL_BASE_URL=http://127.0.0.1:11434/v1
+export FORGE_LOCAL_MODEL=qwen2.5:1.5b-instruct
+python scripts/verify_local_model_level0.py
+```
+
+結果は `docs/evidence/level0/<timestamp>.json` へ出る。
+**PASS したときだけ** `Real Local Model runs` を増やし、
+Vision の Level 0 を UNVERIFIED から動かす。
+
+> **この container では Level 0 を UNVERIFIED のまま維持する**（CEO指示）。
+> 実際、ここで走らせると `FAILED` になる。それが正しい状態である。
+
+### 前セッションから残っている件
+
+以前貼られた OpenAI API key（`sk-proj-...`）は**どこにも保存していない**が、
+**まだ失効させていないなら失効させてほしい。**
 
 ## 何をしたか
 
@@ -105,6 +125,73 @@ LearningEvent 0 / 版 0 / replay 0**。
 5. **Gym / Novel Benchmark を実際に走らせる** — どちらも run 0件
 
 ---
+
+## FORGE-020A — Level 0 の準備で**実バグを3つ**見つけた
+
+実モデルは動かせないが、**動かす前に塞いでおくべき穴**が出た。
+どれも「実機で測った瞬間に嘘の結果を出す」種類である。
+
+### 1. Local Model への本番経路が1つも無かった
+
+`local`（`LocalModelProvider`。Registry上 `IMPLEMENTED` / `LOCAL` /
+構造化出力対応、`ProviderRouter` に実装も結び付いている）は、
+**`/generate` `/converse` `/update` のどれからも選べなかった。**
+
+代わりに `/generate` が受理していた `oss` は `NotImplementedError` を
+投げるスタブで、Registry 自身が「`local` が実質的な後継」と書いている。
+
+> **動く方を隠して、動かない方を公開していた。**
+
+「作ったが本番から呼ばれない」の**7例目**である
+（TD59 / 007 §10 / 010 Phase B / TD64 / TD69 / 016A / これ）。
+
+3つとも開けた。**この穴が残ったままなら、実機でも測れなかった。**
+
+### 2. AIを1回も呼ばずに「local が答えた」と報告していた
+
+Runtime を起動していない状態で `provider="local"` を指定すると、
+**HTTP 200 が返る**（実測 92ms、Validator も通る）。
+
+作ったのは Curated Domain Library であり、**LLM は1回も呼ばれていない**
+（`GenerationSource.CURATED`）。それでも `diagnostics.provider_used` は
+`"local"` と報告していた。
+
+原因は `_provider_used()` の `or provider`——**要求した名前を、答えた
+名前として返していた**。関数自身の docstring が「呼んでいないなら
+呼んでいないと言う」と書いているのに、実装がそうなっていなかった。
+
+019B §4 で `revision_provider` について直したものと**同じ嘘**である。
+`or provider` を外した。
+
+### 3. `Deployment` enum が2つある
+
+`provider_registry.Deployment` と `learning_events.Deployment` は別物で、
+`is` 比較は必ず `False` になる。テストを書くとき取り違えて、
+**条件が常に空集合になった**（緑のまま何も守らない状態）。
+気付いて直したが、**踏みやすい**ので記録しておく。
+
+## Level 0 を測るための道具
+
+- `backend/app/ai/gateway/local_model_evidence.py`
+  — **何を「実モデルで動いた」と数えるか**の契約
+- `scripts/verify_local_model_level0.py`
+  — 実機で1コマンド。証拠 JSON を出す
+
+数えるには**全部**満たす必要がある。
+
+| 条件 | 何を防ぐか |
+|---|---|
+| Provider が Test Double でない | Mock を数える |
+| Runtime を特定できている | 「何が動いたか言えない」実行 |
+| 重みの識別子がある | fixture を数える |
+| **Evidence uid がある** | 横から Provider を叩いた実行 |
+| **`GenerationSource.LOCAL_AI`** | **200 OK だが Curated が作った**（上記2） |
+| Validator を通っている | 壊れた出力 |
+| `Verification.REAL` | 未実測 |
+
+> 偽サーバを立てて騙すことまでは防げない。**防げないと書いてある。**
+> `runtime_backend` / `model_digest` / `host_id` を記録に残すので、
+> 偽るなら記録に嘘を書くしかない形にしてある。
 
 ## Production wiring
 
@@ -244,6 +331,50 @@ TD82 lock がプロセス内 / TD83 意味的操作の実装が1件 / TD84 020 �
 本番未配線 / TD75(b) Web build に同梱フォントが無い。
 
 ---
+
+## ここで作業を止めた（2026-08-26、CEO指示）
+
+**中断であって、完了ではない。** 止めた時点の状態を正直に書く。
+
+### このセッションで終わったもの
+
+| | 状態 |
+|---|---|
+| 019C Revision Atomic Closure | ✅ 実装・テスト・mutation・CI |
+| 020 基盤（Agent / Web / Episode / Teacher / Gym / Novel / Dataset） | ✅ 契約 + テスト（本番配線なし。それは意図どおり） |
+| Visual Review（実描画・目視） | ✅ 家計簿1種類のみ |
+| Vision / Generative Software Direction 文書 | ✅ 記録済み |
+| **020A Level 0 の準備** | ✅ 経路・計測契約・実機用 runner |
+| **Real Local Model 実測** | ⬜ **別実機待ち**（CEO決定） |
+| **Generated UI Quality Gate v2** | ⬜ **未着手。仕様だけ記録した** |
+
+### 次の Agent がすぐ着手できるもの（実モデル不要）
+
+1. **Generated UI Quality Gate v2**
+   — `docs/spec/GENERATED-UI-QUALITY-GATE-V2.md`（CEO指示、2026-08-26）。
+   **いま実描画で確かめたのは家計簿1種類だけ**である。性格の違う
+   5〜10 アプリ × 4 viewport を実生成・実描画し、**人が全部開いて**
+   評価する。「崩れていない」を PASS にしない
+2. **§22 Capability Registry の作り直し**
+   — Registry は在るが Widget と 1:1 の人手維持。生成的 primitive
+   （Scene / Entity / State Machine / Grid / Drag / Game Loop）が無い
+3. **§26 能力単位の Dataset** / **§33 学習イベントの網羅**
+4. **TD75(b) Web build の同梱フォント**
+   — Quality Gate v2 でフォントを触るなら先に決める必要がある
+
+### 別実機でやること（Level 0）
+
+```
+ollama serve && ollama pull qwen2.5:1.5b-instruct
+export FORGE_LOCAL_BASE_URL=http://127.0.0.1:11434/v1
+export FORGE_LOCAL_MODEL=qwen2.5:1.5b-instruct
+python scripts/verify_local_model_level0.py
+```
+
+**PASS したときだけ** Level 0 を UNVERIFIED から動かす。
+この container で走らせると `FAILED` になる——それが正しい。
+
+## Next task
 
 ## Next task
 

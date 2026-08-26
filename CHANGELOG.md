@@ -1,5 +1,47 @@
 # CHANGELOG
 
+## 2026-08-26 — FORGE-020A Local Model 本番経路 + Level 0 計測契約
+
+CEO決定: **この container の network policy は広げない。** Level 0 の実測は
+別実機（Local Model Execution Host）で行う。ここでは経路と計測契約まで。
+
+### 実バグを3つ見つけた（すべて修正）
+
+- **Local Model への本番経路が1つも無かった。** `local` は Registry上
+  `IMPLEMENTED` / `Deployment.LOCAL` / 構造化出力対応で、
+  `ProviderRouter._SPECIFIC_FACTORIES` に `LocalModelProvider` も
+  結び付いているのに、`/generate` `/converse` `/update` のどれからも
+  選べなかった。代わりに公開していた `oss` は `NotImplementedError` を
+  投げるスタブで、Registry 自身が「`local` が実質的な後継」と書いている。
+  **動く方を隠して、動かない方を公開していた**——「作ったが本番から
+  呼ばれない」の7例目
+- **AIを1回も呼ばずに「local が答えた」と報告していた。**
+  Runtime 未起動で `provider="local"` を指定すると HTTP 200 が返り
+  （実測 92ms、Validator も通過）、作ったのは Curated Domain Library
+  なのに `diagnostics.provider_used` は `"local"` だった。原因は
+  `_provider_used()` の `or provider`——要求した名前を答えた名前として
+  返していた。019B §4 の `revision_provider` と同じ嘘。外した
+- **`Deployment` enum が2つある**（registry / learning_events）。
+  取り違えるとテストの条件が常に空集合になり、**緑のまま何も守らない**。
+  実際に踏んだ（TD85）
+
+### 足したもの
+
+- `backend/app/ai/gateway/local_model_evidence.py`
+  — 何を「実モデルで動いた」と数えるかの契約。Provider が Test Double /
+  Runtime 未特定 / 重み識別子なし / **本番経路の Evidence uid なし** /
+  **`GenerationSource.LOCAL_AI` でない** / Validator 未通過 / 未実測 の
+  どれか1つでも当てはまれば数えない。数えなかった理由も残す
+- `scripts/verify_local_model_level0.py` — 実機で1コマンド。証拠 JSON を出す
+- `docs/spec/GENERATED-UI-QUALITY-GATE-V2.md` — **次タスクの仕様**（CEO指示）。
+  性格の違う5〜10アプリ × 4 viewport を実描画し、人が全部開いて評価する。
+  **⬜ 未着手**
+
+### Real Local Model runs: 0（変わらず）
+
+この container では `verify_local_model_level0.py` は `FAILED` になる。
+**それが正しい状態である。**
+
 ## 2026-08-25 — FORGE-019C/020 Revision Atomic Closure + Local Generative Intelligence Foundation
 
 独立レビューが 019B へ挙げた A/B/C/D は**すべて実コードで再現できた**。

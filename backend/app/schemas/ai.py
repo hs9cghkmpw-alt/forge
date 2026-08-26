@@ -42,9 +42,40 @@ class GenerationOptionsDTO(BaseModel):
     engine: Literal["forge_ai"] | None = Field(
         default=None, description="どの認知パイプライン実装を使うか。現状は'forge_ai'のみ有効。"
     )
-    provider: Literal["mock", "openai", "claude", "gemini", "oss"] | None = Field(
-        default=None, description="Engineが内部で使うLLM実装。既定は'mock'。'native'/'local'/'forge_ai'はHTTP経由では指定不可。"
+    provider: Literal["mock", "openai", "claude", "gemini", "oss", "local"] | None = Field(
+        default=None,
+        description=(
+            "Engineが内部で使うLLM実装。既定は'mock'。"
+            "'native'/'forge_ai'はEngine名なのでHTTP経由では指定不可。"
+        ),
     )
+    """**`local`はProvider名なので受理する**（FORGE-020A、2026-08-26）。
+
+    ---
+
+    ## ここが塞がっていた
+
+    `local`（`LocalModelProvider`。Registry上 `IMPLEMENTED` /
+    `Deployment.LOCAL` / 構造化出力対応）は、`_SPECIFIC_FACTORIES` にも
+    Provider Registry にも在るのに、**HTTPからは1つも選べなかった**。
+    代わりに受理していた `oss` は `NotImplementedError` を投げるスタブで、
+    Registry自身が「`local`が実質的な後継」と書いている。
+
+    つまり**動く方を隠して、動かない方を公開していた。**
+    Forgeが繰り返している「作ったが本番から呼ばれない」の7例目である。
+
+    以前の説明文は「'native'/'local'/'forge_ai' は Engine名との混同を
+    防ぐため受理しない」と書いていたが、`local` は Engine名ではない
+    ——Provider Registry の `provider_id` である。除外の理由が
+    当てはまっていなかった。
+
+    Vision §39 Level 0（Local Model が動く）は
+
+        Runtime → LocalModelProvider → AIRouter → Forge pipeline
+          → Validator → Evidence
+
+    を通ることの証明なので、**ここが開いていないと実機でも測れない。**
+    """
     # CEO実物監査対応: M005契約「Repair最大2回・Validator最大3回」と
     # 矛盾しないよう、HTTP入力層でも上限を2に制限する(以前はle=10だった)。
     max_repair_attempts: int | None = Field(default=None, ge=0, le=2)
@@ -265,9 +296,12 @@ class ConverseRequest(BaseModel):
     version: Literal["1.0"] = "1.0"
     session_id: str | None = Field(default=None, description="2ターン目以降、直前のレスポンスのsession_idをそのまま送る")
     message: str = Field(..., min_length=1, max_length=2000)
-    provider: Literal["mock", "gemini"] | None = Field(
-        default=None, description="ConversationEngineが使うLLM Provider。既定は'mock'。"
+    provider: Literal["mock", "gemini", "local"] | None = Field(
+        default=None,
+        description="ConversationEngineが使うLLM Provider。既定は'mock'。",
     )
+    """`local` は FORGE-020A で開けた。**会話がForgeの本線である**ので、
+    ここが塞がったままだと Local Model は本線を1度も通れない。"""
     current_document: dict[str, Any] | None = Field(
         default=None,
         description=(
@@ -407,7 +441,9 @@ class UpdateRequest(BaseModel):
     version: Literal["1.0"] = "1.0"
     forge_document: dict[str, Any] = Field(..., description="更新対象の既存Forge Document(現在の状態そのまま)")
     change_request: str = Field(..., min_length=1, max_length=2000, description="ユーザーの変更要求(自然言語)")
-    provider: Literal["mock", "gemini"] | None = None
+    provider: Literal["mock", "gemini", "local"] | None = None
+    """`local` は FORGE-020A で開けた（上の `ConverseRequest` と同じ理由）。"""
+
     artifact_id: str | None = Field(None, min_length=1)
     seen_version_token: str | None = Field(None, min_length=1)
     idempotency_key: str | None = Field(None, max_length=200)

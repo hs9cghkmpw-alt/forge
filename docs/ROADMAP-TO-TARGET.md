@@ -24,7 +24,7 @@
 > | | 内容 | 状態 |
 > |---|---|---|
 > | 019C | Revision Atomic Closure（atomicity / CAS / 並行 / Outbox / operation honesty） | ✅ 実装・テスト・mutation 済み |
-> | 020A | Real Local Model Runtime | ⬜ **未着手**（環境要因。`docs/HANDOFF.md`）。**Vision §39 の Level 0** |
+> | 020A | Real Local Model Runtime | 🟨 **経路と計測契約は実装済み。実測は別実機**（CEO決定 2026-08-26）。**Vision §39 の Level 0 は UNVERIFIED のまま** |
 > | 020B | Tool-Using Local Agent | 🟨 契約 + テスト。**本番配線なし** |
 > | 020C | Generation Episode | ✅ 契約 + **本番配線済み**（Revision 経路） |
 > | 020D | Web / Browser Capability | 🟨 契約 + テスト。**実Web往復は UNVERIFIED** |
