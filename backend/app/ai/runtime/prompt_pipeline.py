@@ -276,6 +276,19 @@ def _record_generation(
             design_decisions=_design_decisions(context, forge_document),
             visual_structure=_visual_structure(forge_document),
             knowledge_references=knowledge_references,
+            # **Capability Plan の結論を Evidence へ残す**
+            # （GENERATED-UI-QG-V2-R4、2026-08-26）。
+            #
+            # `capabilities` は「使われた Capability の識別子」を持つ欄と
+            # して013から在ったが、**本番から一度も埋まっていなかった**。
+            # R4 で Capability Plan が本番経路に入ったので、その結論が
+            # ここへ来る。
+            #
+            # Diagnostics の `decision_trace` はリクエスト単位で消える。
+            # Local AI が後から「どういう Capability の組み合わせが
+            # 受け入れられたか」を突き合わせるには、**残る側**に無いと
+            # 意味がない。
+            capabilities=_capabilities_used(context),
         )
     )
     # **番号を返す。** 013はここで捨てていた。捨てると、後から
@@ -283,6 +296,46 @@ def _record_generation(
     # 書くか」を本番が知らない——R0以前にExperienceで踏んだのと
     # 同じ形である(Storeもmethodもあるが、refが流れていない)。
     return stored.ref
+
+
+def _capabilities_used(context) -> tuple[str, ...]:  # noqa: ANN001
+    """Capability Plan が要求した能力の識別子（R4、2026-08-26）。
+
+    ---
+
+    ## なぜ Context から読むのか
+
+    最初これを `decision_trace` の `reason` 文字列から正規表現的に
+    切り出す形で書いた。**書式へ依存する**——`reason` の書き方を変えた
+    だけで Evidence が黙って空になる。同じ批判が `design_intent` の
+    コメントに既に書いてある（「Decision Trace の文字列だけにすると、
+    後から由来を取り出すのに書式へ依存することになる」）。
+
+    `CognitiveContext.capability_plan` を読む。
+
+    ## なぜ `unsupported` も残すのか
+
+    `GenerationRecord.capabilities` は013から在ったが、**本番から一度も
+    埋まっていなかった**。R4 で Capability Plan が本番経路に入ったので
+    ここへ来る。
+
+    **「持っていなかった」という事実も学習の材料である。** 出来たことだけ
+    記録すると、Forge は自分の限界を学べない。接頭辞を付けて区別する。
+
+    値は入らない——利用者の言葉も生成物の本文もここへは来ない
+    （`GenerationRecord` の Privacy 境界、006 §22）。名前だけである。
+    """
+    plan = getattr(context, "capability_plan", None)
+    if plan is None:
+        return ()
+    names: list[str] = []
+    names.extend(getattr(plan, "views", ()) or ())
+    names.extend(getattr(plan, "interactions", ()) or ())
+    names.extend(f"partial:{name}" for name in getattr(plan, "partial", ()) or ())
+    names.extend(
+        f"unsupported:{name}" for name in getattr(plan, "unsupported", ()) or ()
+    )
+    return tuple(dict.fromkeys(names))
 
 
 def _domain_identifier(context) -> str:  # noqa: ANN001

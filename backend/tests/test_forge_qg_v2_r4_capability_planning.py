@@ -244,3 +244,63 @@ class TestDifferentNeedsProduceDifferentStructures(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheCapabilityPlanReachesDurableEvidence(unittest.TestCase):
+    """**Plan の結論が `GenerationRecord` に残ること**（R4）。
+
+    `decision_trace` はリクエスト単位で消える診断であり、Local AI が
+    後から「どういう Capability の組み合わせが受け入れられたか」を
+    突き合わせるには**残る側**に無いと意味がない。
+
+    `GenerationRecord.capabilities` は013から在った欄だが、
+    **本番から一度も埋まっていなかった**。R4 で初めて埋まる。
+    """
+
+    def setUp(self) -> None:
+        self.client = TestClient(app)
+
+    def _record_for(self, need: str):  # noqa: ANN202
+        from app.ai.gateway.generation_evidence import default_generation_store
+
+        store = default_generation_store()
+        before = len(store.all_records())
+        _generate(self.client, need)
+        records = store.all_records()
+        self.assertGreater(len(records), before, "GenerationRecord が残っていない")
+        return records[-1]
+
+    def test_capabilities_are_recorded(self) -> None:
+        record = self._record_for(STUDY_NEED)
+        self.assertIn("view.trend", record.capabilities)
+
+    def test_what_forge_could_not_do_is_recorded_too(self) -> None:
+        """**「持っていなかった」も学習の材料である。**
+
+        出来たことだけ記録すると、Forge は自分の限界を学べない。
+        """
+        record = self._record_for(GAME_NEED)
+        self.assertIn("unsupported:simulate.loop", record.capabilities)
+        self.assertIn("unsupported:media.compose", record.capabilities)
+
+    def test_partial_support_is_distinguished_from_full_support(self) -> None:
+        record = self._record_for(PHOTO_NEED)
+        self.assertIn("partial:record.photo", record.capabilities)
+        self.assertNotIn("record.photo", record.capabilities)
+
+    def test_a_checklist_records_its_interaction(self) -> None:
+        record = self._record_for(KIDS_NEED)
+        self.assertIn("interact.check_off", record.capabilities)
+
+    def test_no_user_words_leak_into_the_evidence(self) -> None:
+        """**Privacy 境界を跨がない**（006 §22）。名前だけ。"""
+        for need in (STUDY_NEED, GAME_NEED, PHOTO_NEED, KIDS_NEED):
+            with self.subTest(need=need):
+                record = self._record_for(need)
+                for capability in record.capabilities:
+                    self.assertNotIn(capability, need)
+                    # 識別子は ASCII の英小文字・記号だけで出来ている。
+                    self.assertTrue(
+                        capability.replace(":", "").replace(".", "").replace("_", "").isascii(),
+                        capability,
+                    )

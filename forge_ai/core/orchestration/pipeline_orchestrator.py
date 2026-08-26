@@ -392,6 +392,10 @@ class CognitiveOrchestrator:
             # なかったものは**全部 checklist へ落ちていた**（TD87）。
             # 「作れないものを、作れる形に見せる」処理だった。
             capability_plan = plan_capabilities(context.raw_input)
+            # **Context へ持たせる。** Decision Trace の文字列だけにすると、
+            # 後から Evidence を作るのに reason の書式へ依存することになる
+            # （`design_intent` を Context へ載せたのと同じ理由）。
+            context = context.with_capability_plan(capability_plan)
             context = context.with_decision(_trace(
                 "capability_plan",
                 f"shape={capability_plan.shape.value}",

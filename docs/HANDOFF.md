@@ -461,11 +461,30 @@ Need → Semantic Role Extraction → Capability Decomposition
 
 このPCの実測: テスト◯ / 実描画◯ / GitHub◯ / **model取得✗ Level 0✗**。
 
-### 配線破壊試験 14件 — 置物を1件見つけた
+### Capability Plan の結論が durable Evidence へ残る
 
-M11（ACTOR/CONTEXT から Entity を作る）が**最初生き残った**。
-`_subject_of()` を守っていたのは**表の中身**であってコードではなかった。
-コード側でも除外し、表と役 lexicon の重なりが空であることを静的検査。
+`GenerationRecord.capabilities` は013から在ったが**本番から一度も埋まって
+いなかった**。R4 で埋まるようになった。
+
+    植物を育てながら… → view.list, partial:record.sound,
+                        unsupported:media.compose, unsupported:simulate.loop
+
+**「持っていなかった」も残す。** 出来たことだけ記録すると、Forge は
+自分の限界を学べない。`decision_trace` の文字列ではなく
+`CognitiveContext` 経由で渡している（書式依存を避ける）。
+
+### 配線破壊試験 18件 — 置物を2件見つけた
+
+M11（ACTOR/CONTEXT から Entity を作る）と M17（`/v1/models` の `id` を
+digest 扱いへ戻す）が**最初生き残った**。
+
+* M11: `_subject_of()` を守っていたのは**表の中身**であってコードでは
+  なかった。コード側でも除外し、静的検査を足した
+* M17: 「名前は digest ではない」規則は Evidence 型でしか固定されて
+  おらず、**嘘は入口（script の probe）で入る**。入口を直接見るテストを
+  足した
+
+どちらも再試験で落ちるようになった。
 
 ---
 

@@ -151,10 +151,29 @@ viewport でバイト単位一致していた。TD87 / TD89 はどちらも解�
 インストールも設定変更もしない。テストが「秘密が1文字も漏れないこと」
 「環境を変えないこと」「source に install 系が無いこと」を固定する。
 
+### Capability Plan の結論が durable Evidence へ残るようになった
+
+`GenerationRecord.capabilities` は013から在った欄だが、**本番から一度も
+埋まっていなかった**。R4 で Capability Plan が本番経路に入ったので、
+その結論がここへ来る。
+
+    英単語を出題して…  → view.list, view.trend, partial:view.trend
+    植物を育てながら…  → view.list, partial:record.sound,
+                          unsupported:media.compose, unsupported:simulate.loop
+    子どもが朝の支度…  → interact.check_off
+
+**「持っていなかった」も残す。** 出来たことだけ記録すると、Forge は
+自分の限界を学べない。
+
+最初これを `decision_trace` の `reason` 文字列から切り出す形で書いたが、
+**書式へ依存する**（reason の書き方を変えただけで Evidence が黙って空に
+なる）。`CognitiveContext.capability_plan` を持たせ、そこから読む形へ
+直した——`design_intent` を Context へ載せたのと同じ理由である。
+
 ### 検証
 
 ```
-backend  : 1768 passed, 16 skipped  (+24)
+backend  : 1777 passed, 16 skipped  (+33)
 forge_ai :  567 passed              (+30)
 flutter  : analyze No issues found / 514 passed
 CI       : green（HEAD cf1f8e23 / run 33015811555、4 jobs すべて success）
