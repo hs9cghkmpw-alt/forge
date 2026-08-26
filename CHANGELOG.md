@@ -7,8 +7,32 @@
 HEAD 87991ef の run 32983961000 は failure だが、**コードは1行も実行されて
 いない**——created から5秒で終わり、4 jobs すべて queued / steps 0 / runner
 未割当。1つ前の commit は success。GitHub Actions 側の事象である。
-再実行を要求したが、本 commit 時点でも jobs 0件のまま。
-**green evidence は未取得。最新 HEAD を CI PASS とは書かない。**
+再実行を要求したが jobs 0件のままだった。
+
+**次の push（47c95e5）では runner が付き、そして本当に落ちた**
+（run 33015298405）。原因は**私が書いたテスト**である。「秘密の長さを
+出さない」検査を `assertNotIn(str(len(secret)), output)` と書いたため、
+長さ 27 が runner のホスト名 `runnervm76f27` に一致した。任意の出力から
+数字の部分文字列を探すのは誤検知の温床である。→ 長さの違う2つの秘密で
+`env:` 行が1バイトも変わらないことを見る形へ直した（誤検知の余地が無い）。
+
+**CI は green になった**（`cf1f8e23` / run `33015811555`）。
+
+| job | 結果 |
+|---|---|
+| backend smoke（起動 + CORS） | success |
+| frontend (Flutter)（analyze / test / build web） | success |
+| backend + forge_ai (Python 3.11) | success |
+| backend + forge_ai (Python 3.12) | success |
+
+4 jobs すべて runner が割り当たり、steps も実行された上での success で
+ある。**3つの run は別物である。**
+
+    32983961000  runner 未割当（infrastructure、いまだに queued）
+    33015298405  私のテストの誤り（コード）
+    33015811555  green
+
+**runner が割り当たらない件は残っている。**
 
 ### Level 0 script の Evidence Integrity（最優先2、A/B/C/D）
 
@@ -133,7 +157,7 @@ viewport でバイト単位一致していた。TD87 / TD89 はどちらも解�
 backend  : 1768 passed, 16 skipped  (+24)
 forge_ai :  567 passed              (+30)
 flutter  : analyze No issues found / 514 passed
-CI       : 未取得（runner 未割当）
+CI       : green（HEAD cf1f8e23 / run 33015811555、4 jobs すべて success）
 ```
 
 **Real Local Model runs は 0 のまま。** 勝手に増やしていない。
