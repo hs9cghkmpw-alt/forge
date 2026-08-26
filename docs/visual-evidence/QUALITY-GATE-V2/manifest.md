@@ -1,4 +1,4 @@
-# Generated UI Quality Gate v2 — 第1回
+# Generated UI Quality Gate v2 — 第1回・第2回
 
 - Task: Generated UI Quality Gate v2（`docs/spec/GENERATED-UI-QUALITY-GATE-V2.md`）
 - Branch: `claude/forge-master-handoff-k46jns`
@@ -10,11 +10,30 @@
 
 ## 判定
 
-> ## Golden Quality Gate: **FAIL**
->
-> 「このまま普通のアプリとして使いたいと思えるか」——**思えない。**
+| | Golden Quality Gate |
+|---|---|
+| 第1回（修正前） | **FAIL** |
+| 第2回（修正後） | **FAIL**（改善したが、まだ「使いたい」とは言えない） |
+
+「このまま普通のアプリとして使いたいと思えるか」——**まだ思えない。**
 
 崩れているから落ちたのではない。**同じ画面しか出てこないから**落ちた。
+第2回でも、そこは変わっていない。
+
+`before/` = 第1回、`after/` = 第2回（修正後の再描画）。
+
+### 第2回で直ったもの
+
+| 軸 | 第1回 | 第2回 |
+|---|---|---|
+| overflow / clipping | FAIL | **PASS** — `date_field` のラベル貫通を修正 |
+| content fit | FAIL | **PASS** — 本文を最大 720px に制限（desktop） |
+| long-text resilience | FAIL | **PASS** — 見出しを2行まで許可、省略が消えた |
+| empty-state quality | FAIL | **PASS** — 偽の中身をやめ、空状態を出す |
+
+### 第2回でも直っていないもの
+
+**8アプリが3種類の画面にしかならない。** ここが本体である。
 
 ---
 
@@ -110,7 +129,7 @@ Quality Gate v2 が要る理由がここにある。
 | empty-state quality | **FAIL** | 空状態が無い。代わりに `最初の項目` / `2つめの項目` という**内部の仮データ**が出ている |
 | long-text resilience | **FAIL** | 見出しが `子どもが朝の支度をひとつずつチ…` と省略。**生の要求文をアプリ名にしている** |
 | navigation clarity | **FAIL**（desktop） | tab が 1440px に等間隔で散り、関連が読めない。checklist 系は画面1枚で navigation 自体が無い |
-| touch target | **要修正** | チェック丸・削除 ✕ が約 24 CSS px。44px 下限を下回る |
+| touch target | **PASS（第1回の記載を訂正）** | 第1回は「約 24px で下限割れ」と書いたが**誤り**。実装は `IconButton` であり、Material の既定で **48px の tap 領域**を持つ。**画像で測ったのは字の大きさであって、触れる範囲ではない**——スクリーンショットに写らないものを写真から判定していた。見た目の小ささは残るが、この軸は通る |
 | visual identity | **FAIL** | アプリごとの佇まいが**アクセント色1つ**しか変わらない |
 | content fit | **FAIL**（desktop） | 入力欄・ボタンが 1950px 幅まで伸びる。金額欄が画面いっぱい |
 | accessibility | UNVERIFIED | contrast 比・意味ラベル・screen reader は**測っていない** |
@@ -133,19 +152,95 @@ Quality Gate v2 が要る理由がここにある。
 
 ---
 
+## 第2回で直したもの（すべて再描画で確認）
+
+### 1. `date_field` のラベルを枠線が貫通する
+
+`InputDecorator.isEmpty` の既定は `false`。渡していなかったので空でも
+ラベルが浮き、`OutlineInputBorder`（角丸20）と衝突していた。
+`isEmpty: currentValue.isEmpty` を渡した。
+→ `defect-date-field-after.png`
+
+### 2. 広い画面で入力欄が 1950px まで伸びる
+
+本文を `maxWidth: 720` で中央寄せにした。**mobile では何も変わらない**
+——すでに通っている見た目を壊さずに、広い画面だけ直す。
+→ `after-desktop-content-fit.png` / `after/finance-desktop-1440x900.png`
+
+### 3. 見出しが1行で省略される
+
+`AppBar` の既定 maxLines 1 をやめ、2行まで許した（`toolbarHeight: 72`）。
+「部署ごとの売上を月別に集計してグラフで比べたい」が全部読める。
+→ `after/analytics-mobile-390x844.png`
+
+### 4. 中身が嘘だった
+
+**これが一番たちが悪かった。**
+
+第1回では `最初の項目` / `2つめの項目` という**Forge の内部語**が
+2件入った状態でアプリが開いていた。それを直したら、今度は
+
+* 「部署ごとの売上を月別に集計してグラフで比べたい」
+* 「植物を育てながら音を組み合わせるゲームを作りたい」
+* 「英単語を出題して、正解率の推移を見たい」
+
+の**すべてが牛乳・卵・パンで始まった**。
+
+追ったら、Planner が概念を1つも取り出せなかったときに
+`data_needed: ["item"]` を差し込んでおり（`entities: []`）、
+Compiler 側の `_EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT["item"]` が
+それを「品物 → 牛乳・卵・パン」と解釈していた。
+
+`item` は語彙ではなく、**何も分からなかったときの内部の既定値**である。
+それを根拠に食品を並べるのは、分からないものを楽観側へ倒している
+（`CLAUDE.md` §3）。
+
+分からないときは例示を出さず、**空状態を見せる**ようにした。
+
+* 「まだ何もありません」＋「追加する」欄 → 次にすることが分かる
+* **本物の買い物アプリは牛乳・卵・パンのまま**（`買い物リストを作りたい`
+  で確認）——分かるときは今までどおり出す
+
+> これは同じ穴の2度目である。#29「mockの品質: 内部識別子を出さない」で
+> 一度直したが、**fallback 経路だけ残っていた**。
+
 ## 直すべきものの順（提案）
 
-1. **アプリ名を生の要求文にしない** — 見出しの省略はこれが原因。
-   命名は生成の一部である
-2. **仮データを空状態にする** — `最初の項目` はアプリの中身ではない
-3. **desktop / tablet の最大幅と列** — 単一列全幅をやめる
-4. **touch target 44px 下限**
-5. **checklist へ落ちる範囲を狭める** — 写真・分析・学習・ゲームが
-   全部 checklist になるのは、Capability 分解が効いていない証拠。
-   `docs/LEARNABLE-LOCAL-AI-VISION.md` §22 の Registry 作り直しと同じ根
+| | 内容 | 状態 |
+|---|---|---|
+| ~~2~~ | 仮データを空状態にする | ✅ 第2回で完了 |
+| ~~3~~ | desktop / tablet の最大幅 | ✅ 第2回で完了 |
+| ~~4~~ | touch target | ✅ 元から通っていた（第1回の判定が誤り） |
+| **1** | **アプリ名を生の要求文にしない** | ⬜ **残っている（最優先）** |
+| **5** | **checklist へ落ちる範囲を狭める** | ⬜ **残っている（本体）** |
 
-1〜4 は Renderer / Design Language の話で、**今の土台のまま直せる**。
-5 は生成側の話であり、**Capability Registry の作り直し**が要る。
+### 1 をこのセッションで直さなかった理由
+
+見出しの**省略**は直した（2行まで許した）。しかし
+「毎日の収入と支出を記録して残高を見たい」が**アプリ名として出ている**
+ことは直っていない。
+
+日本語の願望文（〜したい / 〜できるようにしたい）から名詞句を取り出す
+のは、形態素解析なしでは壊れやすい。「残高を見たい」から「たい」だけ
+落とすと「残高を見」になる。**半端に壊れた名前は、元の文より悪い。**
+
+推測で直さない（`CLAUDE.md` §3）。
+
+**正しい直し方の候補**は2つある。
+
+1. **命名を生成の一部にする** ← 本筋。名前を付けるのは理解の結果であり、
+   AI がやるべき仕事である
+2. Domain → 名前の対応表を fallback にする（`household_budget` → 家計簿）。
+   Mock Provider は既に `_TOPIC_PROFILES` で似た表を持っている
+
+### 5 が本体である
+
+写真・分析・学習・ゲームが全部 checklist になるのは、Capability 分解が
+効いていない証拠であり、`docs/LEARNABLE-LOCAL-AI-VISION.md` §22 の
+Capability Registry 作り直しと**同じ根**である。
+
+Renderer をいくら磨いても、**出てくる画面が2種類しかない**限り
+Golden Quality Gate は通らない。
 
 ---
 

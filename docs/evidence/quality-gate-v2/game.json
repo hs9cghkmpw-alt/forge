@@ -8,18 +8,7 @@
       "state": {
         "items": {
           "type": "checklist",
-          "value": [
-            {
-              "id": "item_1",
-              "text": "最初の項目",
-              "done": false
-            },
-            {
-              "id": "item_2",
-              "text": "2つめの項目",
-              "done": false
-            }
-          ]
+          "value": []
         },
         "new_item_text": {
           "type": "string",

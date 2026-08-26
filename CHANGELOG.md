@@ -1,5 +1,73 @@
 # CHANGELOG
 
+## 2026-08-26 — Generated UI Quality Gate v2 第2回（直して撮り直した。Golden Gate は依然 FAIL）
+
+第1回で落ちた軸を直し、**同じ手順で撮り直して、もう一度評価した**
+（spec §8 の E→F→G）。**測って終わりにしない。**
+`before/` = 第1回、`after/` = 第2回。
+
+### 直した4件（すべて実描画で確認）
+
+| 軸 | 第1回 | 第2回 | 直した場所 |
+|---|---|---|---|
+| overflow / clipping | FAIL | **PASS** | `widget_registry_v1_7.dart` — `InputDecorator(isEmpty:)` |
+| content fit | FAIL | **PASS** | `forge_renderer.dart` — 本文を最大 720px で中央寄せ |
+| long-text resilience | FAIL | **PASS** | `forge_renderer.dart` — 見出し 2 行 / `toolbarHeight: 72` |
+| empty-state quality | FAIL | **PASS** | `providers.py` + `compiler.py` — 偽の中身をやめた |
+
+`maxWidth: 720` は **mobile では何も変わらない**（1440 未満）。すでに
+通っている見た目を壊さずに広い画面だけ直す。
+
+### 中身が嘘だった（分からないものを楽観側へ倒していた）
+
+第1回は `最初の項目` / `2つめの項目` という **Forge の内部語**が2件
+入った状態でアプリが開いていた。`_DEFAULT_EXAMPLES` を空にしたら、
+今度は分析・ゲーム・学習アプリの**すべてが牛乳・卵・パンで始まった**。
+
+Planner は概念を1つも取り出せないとき `data_needed: ["item"]` を差し込む
+（`entities: []`）。Compiler の `_EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT["item"]`
+がそれを「品物 → 牛乳・卵・パン」と読んでいた。`item` は語彙ではなく
+**何も分からなかったときの内部の既定値**である（`CLAUDE.md` §3）。
+
+Compiler で `["item"]` を「不明」として扱い、不明なら例示せず
+**空状態を見せる**ようにした。`checklist` は `empty_state_text` で
+次にすることを言える。**本物の買い物アプリは牛乳・卵・パンのまま**
+（`買い物リストを作りたい` で確認）。
+
+> 同じ穴の2度目。#29「mockの品質: 内部識別子を出さない」で一度直したが
+> **fallback 経路だけ残っていた**。
+
+`forge_ai/tests/test_compiler.py` の4件は `item` = 食料品を前提に
+書かれていたので書き直した（3件は本物の `task` 概念へ、1件は
+「空になる」ことを主張する意図へ）。
+
+### 自分の判定を1件撤回した
+
+第1回で「touch target が約24px」と書いたのは**誤り**。`IconButton` の
+既定タップ領域は 48px ある。**グリフを測ってタップ領域を測った気に
+なっていた**——スクリーンショットに写らないものを写真から判定していた。
+manifest に訂正を残した。
+
+### Golden Quality Gate: **FAIL**（変わらず）
+
+**8アプリが3種類の画面にしかならない**ところは直っていない。ここが本体で
+あり、`LEARNABLE-LOCAL-AI-VISION.md` §22 Capability Registry の作り直しと
+同じ根である。Renderer を磨いても、出てくる画面が2種類しかない限り
+通らない。
+
+残り2件: **(1) アプリ名を生の要求文にしている**（命名を生成の一部に
+する。半端に壊れた名前は元の文より悪いので推測で直さなかった）/
+**(5) checklist へ落ちる範囲が広すぎる**。
+
+### 検証
+
+```
+backend  : 1739 passed, 16 skipped
+forge_ai :  521 passed
+flutter  : analyze 0 issues / 514 passed
+ruff     : 変更した3ファイルは clean（repo 全体の 17 件は既存・CI 対象外）
+```
+
 ## 2026-08-26 — Generated UI Quality Gate v2 第1回（Golden Gate: FAIL）
 
 本番の `/generate` で 8 アプリを生成し、同じ Renderer で 4 viewport ×

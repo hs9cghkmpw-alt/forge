@@ -3,7 +3,7 @@
 現在のForgeが「どこまで動くか」を一枚で示す。詳細な履歴は`CHANGELOG.md`、
 未解消の課題は`TECH_DEBT.md`・`KNOWN_ISSUES.md`を参照。
 
-**最終更新**: 2026-08-25(FORGE-019C/020: Revision Atomic Closure + Local Generative Intelligence Foundation)
+**最終更新**: 2026-08-26(Generated UI Quality Gate v2 第1回・第2回。Golden Gate は **FAIL**)
 
 > このファイルはFORGE-CONVERSATION-READY-001指示書15章の要請で新設した。
 > それ以前は同等の役割を`KNOWN_ISSUES.md`と各`*-report.md`が分担しており、
@@ -44,6 +44,11 @@
 | └ roleの視覚差 | **動作** | button(filled/outlined)・metric.primaryの実描画・density 3段・surface 2種・意味色のLight/Dark。Flutter 508 passed（CI） |
 | └ Semantic Design Critic | **動作** | 主KPI乱立・被覆不足・持ち上げすぎ・finance/state混同を評価。壊れていればrelease_readyにしない |
 | └ Visual Structure Evidence | **動作** | 主KPI数・被覆率・階層深さ等の決定的な事実。「美しさ」は測っていない |
+| **生成UIの見た目(Quality Gate v2)** | **FAIL** | 8アプリ×4 viewport×2回を実描画・目視。崩れではなく**8アプリが3種類の画面にしかならない**ので落ちた(TD87)。`docs/reports/GENERATED-UI-QUALITY-GATE-V2-report.md` |
+| └ 崩れ(overflow/content fit/long text) | **PASS** | `date_field`のラベル貫通・desktopで1950px幅・見出しの省略を直し、再描画で確認 |
+| └ 空状態の質 | **PASS** | 話題が分からないとき例示せず空状態を出す。「最初の項目」「牛乳・卵・パン」をやめた。**分かるときは今までどおり出す** |
+| └ アプリ名 | **FAIL** | 生の要求文がそのまま名前になる(TD86)。命名を生成の一部にするのが本筋 |
+| └ 字形 | **UNVERIFIED** | 撮影時だけローカルのIPAGothicを差し替えている。配置は見てよいが字形は本番と違う(TD88) |
 | └ AI/fallback provenance | **動作** | AIが選んだroleとForgeが既定で埋めたroleを型で分離 |
 | └ 数値の意味(MeasureSemantics) | **動作** | 評価は平均・サイズは最大・金額は合計。**分からない数値はKPIにしない** |
 | └ お金の出入り(MonetaryFlow) | **動作** | 残高=収入−支出。単純な合計を「残高」と呼ばない |

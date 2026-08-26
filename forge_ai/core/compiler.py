@@ -417,8 +417,40 @@ class Compiler:
 
         primary_screen = plan.screens[0] if plan.screens else None
         elements = list(primary_screen.key_elements) if primary_screen else list(plan.data_entities)
+        #: 概念を1つも取り出せなかった、という事実を保持する
+        #: （Quality Gate v2、2026-08-26）。
+        #:
+        #: 以前はここで黙って `["item"]` を入れていた。すると下の
+        #: `_EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT["item"]` に当たり、
+        #: **「牛乳・卵・パン」が入った状態でアプリが開く**。
+        #:
+        #: 実描画で確認したところ、
+        #:
+        #: * 「部署ごとの売上を月別に集計してグラフで比べたい」
+        #: * 「植物を育てながら音を組み合わせるゲームを作りたい」
+        #: * 「英単語を出題して、正解率の推移を見たい」
+        #:
+        #: のすべてが牛乳・卵・パンで始まっていた。
+        #:
+        #: `item` は「品物」という意味ではなく、**何も分からなかった**
+        #: ときの内部の既定値である。それを根拠に食品を並べるのは、
+        #: 分からないものを楽観側へ倒している（`CLAUDE.md` §3）。
+        concept_is_unknown = not elements
         if not elements:
             elements = ["item"]
+        # Planner も、概念を1つも取り出せなかったときに `["item"]` を
+        # 差し込む（`data_needed: ["item"]`、`entities: []`）。つまり
+        # ここへ届く時点で「分からなかった」という事実が
+        # **`item` という普通の概念名に化けている**。
+        #
+        # 実測（Quality Gate v2、2026-08-26）:
+        #
+        #     「部署ごとの売上を月別に集計してグラフで比べたい」
+        #       → entities=[] / data_needed=["item"] → 牛乳・卵・パン
+        #
+        # `item` は語彙ではなく**内部の既定値**である。同じ扱いにする。
+        if elements == ["item"]:
+            concept_is_unknown = True
 
         # FORGE_v0.2_修正指示.md P3対応: 先頭要素(主要概念)が既知の
         # 識別子と一致する場合、生の識別子ではなく複数件の現実的な
@@ -441,6 +473,10 @@ class Compiler:
         )
         if provider_items:
             elements = provider_items
+        elif concept_is_unknown:
+            # **分からないときは例を出さない。** 空状態を見せる方が正しい
+            #（`checklist` は `empty_state_text` で次にすることを言える）。
+            elements = []
         else:
             example_items = _EXAMPLE_ITEMS_BY_PRIMARY_CONCEPT.get(primary_concept)
             if example_items:

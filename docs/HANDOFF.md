@@ -4,8 +4,8 @@
 - Start HEAD: `63ad43403606c9731f76c98248a9b0e9149e94bf`
 - Implementation Agent: **Claude Code**
 - Current phase: R1 Generated App Quality / Growing AI
-- Current task: **FORGE-019C/020 — Revision Atomic Closure + Local
-  Generative Intelligence Foundation**
+- Current task: **Generated UI Quality Gate v2**（第2回まで実施。
+  Golden Gate は **FAIL**）。前段の FORGE-019C/020 は完了
 - **Real Local Model runs: 0**（Level 0 は別実機で測る。下記「環境判断」）
 
 ---
@@ -332,7 +332,7 @@ TD82 lock がプロセス内 / TD83 意味的操作の実装が1件 / TD84 020 �
 
 ---
 
-## Generated UI Quality Gate v2 — 第1回を実施した（2026-08-26）
+## Generated UI Quality Gate v2 — 第1回・第2回を実施した（2026-08-26）
 
 `docs/visual-evidence/QUALITY-GATE-V2/manifest.md`
 
@@ -374,17 +374,66 @@ Quality Gate v2 が要る理由がここにある。
 long-text（**生の要求文をアプリ名にしている**）/ navigation /
 visual identity / content fit（desktop で入力欄が 1950px 幅）。
 
-### 直す順（manifest §「直すべきものの順」）
+### 第2回: 落ちた軸を直して、撮り直して、もう一度評価した
 
-1. アプリ名を生の要求文にしない
-2. 仮データ（`最初の項目`）を空状態にする
-3. desktop / tablet の最大幅と列
-4. touch target 44px 下限
-5. checklist へ落ちる範囲を狭める（← Capability Registry の作り直し）
+**測って終わりにしない**（spec §8 E→F→G）。4件直し、**すべて再描画で
+確認**した。`before/` = 第1回、`after/` = 第2回。
 
-1〜4 は**今の土台のまま直せる**。5 は生成側の話。
+| 軸 | 第1回 | 第2回 | 直した場所 |
+|---|---|---|---|
+| overflow / clipping | FAIL | **PASS** | `widget_registry_v1_7.dart`（`isEmpty`） |
+| content fit | FAIL | **PASS** | `forge_renderer.dart`（本文 max 720px） |
+| long-text resilience | FAIL | **PASS** | `forge_renderer.dart`（見出し2行） |
+| empty-state quality | FAIL | **PASS** | `providers.py` + `compiler.py`（偽の中身をやめた） |
 
-## ここで作業を止めた（2026-08-26、CEO指示）
+#### 「中身が嘘だった」が一番たちが悪かった
+
+第1回は `最初の項目` / `2つめの項目` という**Forge の内部語**が
+2件入った状態でアプリが開いていた。直したら、今度は
+
+* 「部署ごとの売上を月別に集計してグラフで比べたい」
+* 「植物を育てながら音を組み合わせるゲームを作りたい」
+* 「英単語を出題して、正解率の推移を見たい」
+
+の**すべてが牛乳・卵・パンで始まった**。
+
+Planner が概念を1つも取り出せないとき `data_needed: ["item"]` を
+差し込み、Compiler がそれを「品物 → 牛乳・卵・パン」と読んでいた。
+`item` は語彙ではなく**何も分からなかったときの内部の既定値**である。
+分からないものを楽観側へ倒していた（`CLAUDE.md` §3）。
+
+分からないときは例示せず**空状態を見せる**ようにした。
+**本物の買い物アプリは牛乳・卵・パンのまま**（`買い物リストを作りたい`
+で確認）——分かるときは今までどおり出す。
+
+> 同じ穴の2度目である。#29「mockの品質: 内部識別子を出さない」で一度
+> 直したが、**fallback 経路だけ残っていた**。
+
+#### 自分の判定を1件撤回した
+
+第1回で「touch target が約24px」と書いたのは**誤り**である。
+`IconButton` の既定タップ領域は 48px あり、私は**グリフを測って
+タップ領域を測った気になっていた**。スクリーンショットに写らないものを
+写真から判定していた。manifest に訂正を残した。
+
+### それでも Golden Quality Gate は **FAIL**
+
+| | Golden Quality Gate |
+|---|---|
+| 第1回（修正前） | **FAIL** |
+| 第2回（修正後） | **FAIL**（改善したが、まだ「使いたい」とは言えない） |
+
+**8アプリが3種類の画面にしかならない**ところは変わっていない。
+Renderer をいくら磨いても、出てくる画面が2種類しかない限り通らない。
+
+### 残っている2件
+
+| | 内容 | なぜ残したか |
+|---|---|---|
+| **1** | **アプリ名を生の要求文にしている** | 日本語の願望文から名詞句を取り出すのは形態素解析なしでは壊れやすい。「残高を見たい」→「残高を見」になる。**半端に壊れた名前は元の文より悪い**ので、推測で直さなかった（`CLAUDE.md` §3）。正しい直し方は **命名を生成の一部にする**（名前を付けるのは理解の結果であり AI の仕事）。fallback として Domain→名前の対応表 |
+| **5** | **checklist へ落ちる範囲が広すぎる** | **これが本体。** `LEARNABLE-LOCAL-AI-VISION.md` §22 Capability Registry 作り直しと同じ根 |
+
+## いまの状態（2026-08-26）
 
 **中断であって、完了ではない。** 止めた時点の状態を正直に書く。
 
@@ -394,19 +443,18 @@ visual identity / content fit（desktop で入力欄が 1950px 幅）。
 |---|---|
 | 019C Revision Atomic Closure | ✅ 実装・テスト・mutation・CI |
 | 020 基盤（Agent / Web / Episode / Teacher / Gym / Novel / Dataset） | ✅ 契約 + テスト（本番配線なし。それは意図どおり） |
-| Visual Review（実描画・目視） | ✅ 家計簿1種類のみ |
+| Visual Review（実描画・目視） | ✅ **8アプリ × 4 viewport × 2回**（第1回 32枚 / 第2回 32枚） |
 | Vision / Generative Software Direction 文書 | ✅ 記録済み |
 | **020A Level 0 の準備** | ✅ 経路・計測契約・実機用 runner |
 | **Real Local Model 実測** | ⬜ **別実機待ち**（CEO決定） |
-| **Generated UI Quality Gate v2** | ⬜ **未着手。仕様だけ記録した** |
+| **Generated UI Quality Gate v2** | ⚠️ **第1回・第2回まで実施。Golden Gate は FAIL のまま**（4軸を直して再描画で確認、残り2件） |
 
 ### 次の Agent がすぐ着手できるもの（実モデル不要）
 
-1. **Generated UI Quality Gate v2**
-   — `docs/spec/GENERATED-UI-QUALITY-GATE-V2.md`（CEO指示、2026-08-26）。
-   **いま実描画で確かめたのは家計簿1種類だけ**である。性格の違う
-   5〜10 アプリ × 4 viewport を実生成・実描画し、**人が全部開いて**
-   評価する。「崩れていない」を PASS にしない
+1. **Quality Gate v2 の残り2件**（上表）。
+   **1（命名）を先にやる。** 生成の一部として AI に名前を付けさせる。
+   `docs/spec/GENERATED-UI-QUALITY-GATE-V2.md` §8 の E→F→G
+   （直す→撮り直す→判定を記録する）は第2回で1周した。次は2周目
 2. **§22 Capability Registry の作り直し**
    — Registry は在るが Widget と 1:1 の人手維持。生成的 primitive
    （Scene / Entity / State Machine / Grid / Drag / Game Loop）が無い
@@ -428,11 +476,11 @@ python scripts/verify_local_model_level0.py
 
 ## Next task
 
-## Next task
+**Quality Gate v2 第3回 — 命名を生成の一部にする（修正1）。**
+実モデルを待たずに着手できる。その次が修正5（Capability Registry）。
 
-**FORGE-020A — Real Local Model Runtime。**
-
-上の「CEOへの依頼」が解決してから着手する。解決すれば
+並行して **FORGE-020A — Real Local Model Runtime**（別実機待ち）。
+Level 0 が通れば
 
 ```
 LocalModelProvider（既存・OpenAI互換）
@@ -450,6 +498,6 @@ LocalModelProvider（既存・OpenAI互換）
 
 ## Next three moves
 
-1. push した HEAD / diff / tests / CI / mutation を独立レビューで確認する
-2. 実 Local Model の環境（network policy / 別マシン）を決める
-3. TD75(b)（同梱フォント）を直すかどうかを決める
+1. Quality Gate v2 修正1（命名）→ 再描画 → 第3回の判定を記録する
+2. 別実機で Level 0 を走らせ、`Real Local Model runs` を 0 から動かす
+3. 修正5（Capability Registry 作り直し / Vision §22）に着手する

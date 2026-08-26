@@ -67,12 +67,23 @@ class TestCompiler(unittest.TestCase):
                 self.assertIsNotNone(ir)
 
     def test_compile_handles_empty_key_elements_without_crashing(self) -> None:
-        """MockProviderが1つも概念を返さなかった場合(空入力等)でも、
-        Compilerが空のchecklistを作らず、最低1件のfallback itemを持つことを
-        確認する(TECH_DEBT的な既知の空チェックリスト問題を未然に防ぐ)。"""
+        """**Quality Gate v2 で期待が変わった**(2026-08-26)。
+
+        以前は「空のchecklistを作らず、最低1件のfallback itemを持つ」を
+        期待していた。だが実描画で見ると、その1件は**内容と無関係な
+        例示**（牛乳・卵・パン）であり、売上分析アプリもゲームも
+        それで始まっていた。
+
+        概念を1つも取り出せなかったことは「買い物リストだ」ではなく
+        「**分からなかった**」である。分からないなら空状態を見せる。
+
+        ここで確かめるのは**落ちないこと**と、checklist の器が正しく
+        できることであって、中身を捏造することではない。
+        """
         ir = _run_pipeline_to_compile("", DomainCategory.GENERIC, self.provider)
         checklist_state = ir.screens[0].state["items"]
-        self.assertGreater(len(checklist_state.value), 0)
+        self.assertEqual(checklist_state.value, [])
+        self.assertEqual(checklist_state.type, "checklist")
 
     @unittest.skipUnless(
         importlib.util.find_spec("app") is not None or os.path.isdir(
@@ -198,15 +209,42 @@ class TestCompilerRealisticExampleItems(unittest.TestCase):
         texts = [entry["text"] for entry in ir.screens[0].state["items"].value]
         self.assertEqual(texts, ["totally_unknown_concept_xyz"])
 
-    def test_empty_key_elements_still_falls_back_to_generic_item(self) -> None:
-        """既存の空要素フォールバック(`["item"]`)は、今回の変更でも
-        壊れていない(むしろ"item"という識別子自体が、Shopping向けの
-        例値テーブルにも登録されているため、空の場合は牛乳・卵・パンに
-        なる。これは意図した挙動である: 空の場合の既定Domainは
-        Shopping相当のGenericフォールバックのため)。"""
+    def test_empty_key_elements_seeds_nothing(self) -> None:
+        """**Generated UI Quality Gate v2 で判断が変わった**(2026-08-26)。
+
+        ---
+
+        ## 以前の期待とその理由
+
+        このテストは以前
+
+            空の場合の既定Domainは Shopping相当のGenericフォールバック
+            のため、牛乳・卵・パンになる。これは意図した挙動である
+
+        と書いて「1件以上入っていること」を期待していた。
+
+        ## 実描画で見たら、意図した挙動ではなかった
+
+        8アプリを実際に描いて目で見たところ、
+
+        * 「部署ごとの売上を月別に集計してグラフで比べたい」
+        * 「植物を育てながら音を組み合わせるゲームを作りたい」
+        * 「英単語を出題して、正解率の推移を見たい」
+
+        のすべてが**牛乳・卵・パンが入った状態で開いた**。
+
+        `key_elements` が空とは「**何も分からなかった**」という意味で
+        あって、「買い物リストだ」という意味ではない。`["item"]` は
+        内部の既定値であり、それを根拠に食品を並べるのは、分からない
+        ものを楽観側へ倒している(`CLAUDE.md` §3)。
+
+        分からないなら**空状態を見せる**。`checklist` は
+        `empty_state_text` を持っており、そちらは「まだありません」と
+        次にすることを言える。嘘の中身よりそちらが正しい。
+        """
         ir = self._compile_with_key_elements(())
         texts = [entry["text"] for entry in ir.screens[0].state["items"].value]
-        self.assertGreater(len(texts), 0)
+        self.assertEqual(texts, [], "何も分からないのに例示を入れている")
 
 
 class _StubProvider:
@@ -252,25 +290,38 @@ class TestCompilerProviderExampleItems(unittest.TestCase):
     def test_empty_provider_example_items_falls_back_to_static_table(self) -> None:
         """Providerが`example_items`を返さない(空リスト)場合は、既存の
         静的テーブルへ安全にフォールバックする(既存動作を壊さない)。"""
-        ir = self._compile_with(("item",), {"title": "買い物リスト", "example_items": []})
+        # 概念は `task` を使う（同上。`item` は内部の既定値であって
+        # 「品物」ではない）。
+        ir = self._compile_with(("task",), {"title": "やることリスト", "example_items": []})
         texts = [entry["text"] for entry in ir.screens[0].state["items"].value]
-        self.assertEqual(texts, ["牛乳", "卵", "パン"])
+        self.assertEqual(texts, ["買い物に行く", "部屋を掃除する", "メールを返信する"])
 
     def test_missing_example_items_key_falls_back_to_static_table(self) -> None:
         """`example_items`キー自体が無い場合(MockProvider・旧LLM応答)も、
         既存の静的テーブルへ安全にフォールバックする。"""
-        ir = self._compile_with(("item",), {"title": "買い物リスト"})
+        # **概念は `task` を使う**（Quality Gate v2、2026-08-26）。
+        #
+        # 以前は `("item",)` を使っていたが、`item` は「品物」ではなく
+        # **Plannerが何も分からなかったときに差し込む内部の既定値**
+        # である。それを「買い物リストの概念」として扱っていたので、
+        # 売上分析アプリにも牛乳・卵・パンが入っていた。
+        #
+        # ここで確かめたいのは「Providerが例示を返さないとき静的テーブル
+        # へ落ちる」ことなので、**実在する概念**で確かめる。
+        ir = self._compile_with(("task",), {"title": "やることリスト"})
         texts = [entry["text"] for entry in ir.screens[0].state["items"].value]
-        self.assertEqual(texts, ["牛乳", "卵", "パン"])
+        self.assertEqual(texts, ["買い物に行く", "部屋を掃除する", "メールを返信する"])
 
     def test_non_string_or_malformed_example_items_are_ignored(self) -> None:
         """Providerが不正な形(文字列以外の要素・非リスト)を返しても、
         クラッシュせず静的テーブルへフォールバックする(実LLM応答の
         構造がGeminiのStructured Output契約に厳密に沿わない場合の
         安全策)。"""
-        ir = self._compile_with(("item",), {"title": "買い物リスト", "example_items": [1, 2, None, "  "]})
+        # 概念は `task` を使う（同上。`item` は内部の既定値であって
+        # 「品物」ではない）。
+        ir = self._compile_with(("task",), {"title": "やることリスト", "example_items": [1, 2, None, "  "]})
         texts = [entry["text"] for entry in ir.screens[0].state["items"].value]
-        self.assertEqual(texts, ["牛乳", "卵", "パン"])
+        self.assertEqual(texts, ["買い物に行く", "部屋を掃除する", "メールを返信する"])
 
 
 class TestCompilerAfterIRMigration(unittest.TestCase):

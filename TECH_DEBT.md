@@ -1,5 +1,58 @@
 # TECH_DEBT.md
 
+## Generated UI Quality Gate v2 で見えた負債（2026-08-26）
+
+第1回・第2回の実描画・目視で残ったもの
+（`docs/reports/GENERATED-UI-QUALITY-GATE-V2-report.md`）。
+
+### TD86. アプリ名が生の要求文のまま（**Golden Gate の残り1件目**）
+
+「毎日の収入と支出を記録して残高を見たい」が**そのままアプリ名**として
+表示される。見出しの省略は直した（2行まで許した）が、名前が文のままなのは
+直っていない。
+
+今回直さなかった理由: 日本語の願望文から名詞句を取り出すのは形態素解析
+なしでは壊れやすい。「残高を見たい」→「残高を見」。**半端に壊れた名前は
+元の文より悪い**ので、推測で直さなかった（`CLAUDE.md` §3）。
+
+直し方: **命名を生成の一部にする**（名前を付けるのは理解の結果であり
+AI の仕事）。fallback として Domain→名前の対応表
+（Mock Provider は既に `_TOPIC_PROFILES` で似た表を持つ）。
+
+### TD87. 8アプリが3種類の画面にしかならない（**本体**）
+
+写真 / データ分析 / 学習 / ゲーム / 作業記録 / 子ども向けの**6つが
+構造的に同一の checklist** になる。overlap も overflow も無いので
+**v1 の基準なら通ってしまう**。
+
+`docs/GENERATIVE-SOFTWARE-DIRECTION.md` が禁じている「有限 Widget
+Builder」そのものであり、`LEARNABLE-LOCAL-AI-VISION.md` §22 Capability
+Registry の作り直しと**同じ根**である。
+
+Renderer を磨いても、出てくる画面が2種類しかない限り Golden Quality
+Gate は通らない。
+
+### TD88. Quality Gate v2 の撮影は本番の字形ではない
+
+この container は `fonts.gstatic.com` を拒否するので、撮影時だけ
+ローカルの IPAGothic を差し替えている。配置・重なり・階層は見てよいが、
+**字形と字送りは本番と一致しない**。TD75(b)（Web build へフォントを
+同梱する）を決めるまで解消しない。
+
+また contrast / accessibility は**数値で測っていない**（目視のみ、
+UNVERIFIED）。静止画のみで**操作していない**。
+
+### 第2回で解消したもの
+
+- ~~`date_field` のラベルを枠線が貫通する~~ → `InputDecorator(isEmpty:)`
+- ~~広い画面で入力欄が 1950px まで伸びる~~ → 本文 max 720px
+- ~~見出しが1行で省略される~~ → 2行 + `toolbarHeight: 72`
+- ~~分からない話題で「最初の項目」「牛乳・卵・パン」を出す~~
+  → 不明なら例示せず空状態（**同じ穴の2度目**。#29 で一度直したが
+  fallback 経路だけ残っていた）
+- ~~touch target が 24px~~ → **判定が誤りだった。**`IconButton` の既定
+  タップ領域は 48px。グリフを測ってタップ領域を測った気になっていた
+
 ## FORGE-020A で見つけた実バグ（2026-08-26、すべて修正済み）
 
 - **Local Model への本番経路が1つも無かった。** `local` は Registry上

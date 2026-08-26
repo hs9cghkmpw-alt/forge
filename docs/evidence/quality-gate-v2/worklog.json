@@ -11,12 +11,17 @@
           "value": [
             {
               "id": "item_1",
-              "text": "最初の項目",
+              "text": "買い物に行く",
               "done": false
             },
             {
               "id": "item_2",
-              "text": "2つめの項目",
+              "text": "部屋を掃除する",
+              "done": false
+            },
+            {
+              "id": "item_3",
+              "text": "メールを返信する",
               "done": false
             }
           ]

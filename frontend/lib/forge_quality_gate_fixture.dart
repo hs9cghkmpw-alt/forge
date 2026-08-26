@@ -20,18 +20,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
         'state': <String, dynamic>{
           'items': <String, dynamic>{
             'type': 'checklist',
-            'value': <dynamic>[
-              <String, dynamic>{
-                'id': 'item_1',
-                'text': '最初の項目',
-                'done': false,
-              },
-              <String, dynamic>{
-                'id': 'item_2',
-                'text': '2つめの項目',
-                'done': false,
-              },
-            ],
+            'value': <dynamic>[],
           },
           'new_item_text': <String, dynamic>{
             'type': 'string',
@@ -589,18 +578,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
         'state': <String, dynamic>{
           'items': <String, dynamic>{
             'type': 'checklist',
-            'value': <dynamic>[
-              <String, dynamic>{
-                'id': 'item_1',
-                'text': '最初の項目',
-                'done': false,
-              },
-              <String, dynamic>{
-                'id': 'item_2',
-                'text': '2つめの項目',
-                'done': false,
-              },
-            ],
+            'value': <dynamic>[],
           },
           'new_item_text': <String, dynamic>{
             'type': 'string',
@@ -680,12 +658,12 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
             'value': <dynamic>[
               <String, dynamic>{
                 'id': 'item_1',
-                'text': '最初の項目',
+                'text': '体重測定',
                 'done': false,
               },
               <String, dynamic>{
                 'id': 'item_2',
-                'text': '2つめの項目',
+                'text': '身長測定',
                 'done': false,
               },
             ],
@@ -1309,18 +1287,7 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
         'state': <String, dynamic>{
           'items': <String, dynamic>{
             'type': 'checklist',
-            'value': <dynamic>[
-              <String, dynamic>{
-                'id': 'item_1',
-                'text': '最初の項目',
-                'done': false,
-              },
-              <String, dynamic>{
-                'id': 'item_2',
-                'text': '2つめの項目',
-                'done': false,
-              },
-            ],
+            'value': <dynamic>[],
           },
           'new_item_text': <String, dynamic>{
             'type': 'string',
@@ -1400,12 +1367,17 @@ const Map<String, Map<String, dynamic>> forgeQualityGateDocuments =
             'value': <dynamic>[
               <String, dynamic>{
                 'id': 'item_1',
-                'text': '最初の項目',
+                'text': '買い物に行く',
                 'done': false,
               },
               <String, dynamic>{
                 'id': 'item_2',
-                'text': '2つめの項目',
+                'text': '部屋を掃除する',
+                'done': false,
+              },
+              <String, dynamic>{
+                'id': 'item_3',
+                'text': 'メールを返信する',
                 'done': false,
               },
             ],

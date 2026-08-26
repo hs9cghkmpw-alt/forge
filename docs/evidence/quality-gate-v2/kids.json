@@ -11,12 +11,12 @@
           "value": [
             {
               "id": "item_1",
-              "text": "最初の項目",
+              "text": "体重測定",
               "done": false
             },
             {
               "id": "item_2",
-              "text": "2つめの項目",
+              "text": "身長測定",
               "done": false
             }
           ]

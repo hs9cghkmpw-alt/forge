@@ -298,16 +298,44 @@ class _ForgeScreenViewState extends State<ForgeScreenView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.screen.title)),
+      appBar: AppBar(
+        // **見出しを1行で切らない**（Quality Gate v2、2026-08-26）。
+        //
+        // 既定の `AppBar` は maxLines 1 で省略するので、
+        // 「子どもが朝の支度をひとつずつチ…」のように**何のアプリか
+        // 分からない**状態になっていた。2行まで許す。
+        title: Text(widget.screen.title, maxLines: 2),
+        toolbarHeight: 72,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: _build(widget.screen.body, 0),
+          // **幅を制限する**（Quality Gate v2、2026-08-26）。
+          //
+          // desktop(1440px) で実描画したところ、入力欄も保存ボタンも
+          // **画面幅いっぱい（約1950px）**まで伸びていた。金額1つ入れる
+          // 欄が1950pxあるのは、広いのではなく**読めない**。
+          //
+          // mobile では 1440 未満なので**何も変わらない**——
+          // すでに通っている見た目を壊さずに、広い画面だけ直す。
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _maxContentWidth),
+              child: _build(widget.screen.body, 0),
+            ),
+          ),
         ),
       ),
     );
   }
 }
+
+/// 本文の最大幅（Quality Gate v2）。
+///
+/// 一般的な読みやすい行長（60〜80字）と、Material のブレークポイントを
+/// 踏まえた値。これを超える幅は余白にする——**広い画面で全幅へ伸ばすのは
+/// 「対応した」ではない**。
+const double _maxContentWidth = 720;
 
 class _ForgeRenderErrorScreen extends StatelessWidget {
   final String reason;
