@@ -32,7 +32,17 @@ HEAD 87991ef の run 32983961000 は failure だが、**コードは1行も実�
     33015298405  私のテストの誤り（コード）
     33015811555  green
 
-**runner が割り当たらない件は残っている。**
+**runner が割り当たらない件は残っている。**（`32983961000` はいまだに
+`queued` のまま）
+
+green を確認した SHA:
+
+    33015811555  cf1f8e23  success（4 jobs）
+    33016468327  a1c49ad4  success（4 jobs、steps 9〜12）
+
+**この行を書き換える commit の CI は、その次の run になる。**
+文書に「最新 HEAD は green」と書き続けると追いかけても終わらないので、
+残すのは「どの SHA が green だったか」である。
 
 ### Level 0 script の Evidence Integrity（最優先2、A/B/C/D）
 

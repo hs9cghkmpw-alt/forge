@@ -87,9 +87,24 @@ AssertionError: '27' unexpectedly found in
 4 jobs すべて runner が割り当たり、steps も実行された上での success で
 ある。**「runner が付かなかった run」と混同しないこと。**
 
+### CI green の確定記録
+
+| run | HEAD | 結果 |
+|---|---|---|
+| `33015811555` | `cf1f8e23` | ✅ success（4 jobs） |
+| `33015909…`   | `917a495c` | ✅ success（4 jobs） |
+| **`33016468327`** | **`a1c49ad4`** | ✅ **success（4 jobs、steps 9〜12）** |
+
+> **この行自体を書き換える commit の CI は、その次の run になる。**
+> 文書に「最新 HEAD は green」と書き続けると、書いた瞬間に「最新」が
+> ずれる——追いかけても終わらない。
+>
+> **ここに残すのは「どの SHA が green だったか」である。**
+> 以降の doc-only commit の CI は、Reviewer が
+> `gh run list --branch claude/forge-master-handoff-k46jns` で確認できる。
+
 > 残っている問題: `32983961000` は**いまだに `queued` のまま**である。
-> 打ち切られた run が queued で残り続けている。Actions の利用枠・
-> runner 割当は引き続き確認してほしい。
+> Actions の利用枠・runner 割当は引き続き確認してほしい。
 
 
 ---
