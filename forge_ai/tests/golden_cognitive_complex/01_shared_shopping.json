@@ -18,6 +18,7 @@
     "capability_plan",
     "entity_source",
     "design_intent",
+    "structure_source",
     "semantic_design"
   ],
   "domain": "shopping",

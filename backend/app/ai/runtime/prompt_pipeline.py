@@ -35,7 +35,8 @@ Cognitive Revisionを含む、M006 Cognitive Architectureの全段階が本番�
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import dataclasses
+from dataclasses import dataclass, field
 from typing import Any
 
 from forge_ai.core.orchestration.outcomes import (
@@ -50,6 +51,15 @@ from forge_ai.repair.repair_engine import RepairEngine
 
 from app.ai.foundation.interfaces import CriticResult
 from app.ai.gateway.ai_router import AIRouter, NoProviderAvailableError, default_router
+from app.ai.gateway.capability_evidence import (
+    CapabilityUsage,
+    CapabilityUsageSource,
+    CapabilityUsageStatus,
+    GenerationStructureSource,
+    structure_source_is_ai,
+)
+from app.ai.runtime.capability import CAPABILITY_REGISTRY
+from app.ai.runtime.capability_gap import CapabilityGap, gap_from_plan
 from app.ai.gateway.generation_evidence import (
     DesignDecisionSource,
     DesignRoleDecision,
@@ -139,7 +149,7 @@ class Diagnostics:
 # 「Curatedの成功が1件も記録されない」に静かに戻る。
 _DOMAIN_RESOLUTION_STAGE = "domain_resolution"
 
-def _generation_source(decision_trace, provider_used: str | None) -> GenerationSource:  # noqa: ANN001
+def _generation_source(decision_trace, provider_used: str | None, context=None) -> GenerationSource:  # noqa: ANN001
     """その生成物を**誰が作ったか**を、2つの事実から決める(014 §2)。
 
     ```
@@ -178,7 +188,38 @@ def _generation_source(decision_trace, provider_used: str | None) -> GenerationS
             if str(entry.get("decision", "")).strip().lower() == "curated":
                 return GenerationSource.CURATED
             break
-    return source_for_generated(provider_used)
+
+    # **構造を作ったのが AI でないなら、AI の手柄にしない**
+    # （FORGE-020A2 §3、2026-08-26）。
+    #
+    # R4 以降、`Capability Plan → 決定的な EntitySpec → IR` で構造が
+    # 決まったあと、**Design Intent だけ AI を呼ぶ**ことがある。
+    # `provider_used` だけを見ると、そこで `local` が返るので
+    # `LOCAL_AI`——「Local Model が構造を決めた」——になってしまう。
+    #
+    # それは嘘である。Local Model は**見た目の役だけ**答えた。
+    candidate = source_for_generated(provider_used)
+    structure = _structure_source(context)
+
+    # **構造を Forge が決定的に組んだと分かっているときだけ**格下げする。
+    #
+    # `UNKNOWN` では格下げしない。「記録されていない」を「決定的だった」
+    # と読むのは推測であり、それこそこの層が禁じていることである
+    # （`CLAUDE.md` §3）。代わりに、**本番が `UNKNOWN` を記録しないこと**
+    # を別のテストで固定する——provenance の配線を外せばそちらが落ちる。
+    deterministic = structure in (
+        GenerationStructureSource.CURATED,
+        GenerationStructureSource.DETERMINISTIC_CAPABILITY_PLAN,
+    )
+    if deterministic and candidate in (
+        GenerationSource.LOCAL_AI, GenerationSource.CLOUD_AI,
+    ):
+        # AI は Design Intent だけ答えた。**構造を作った手柄にしない。**
+        #
+        # `TEST_DOUBLE` はここへ来ない——Mock の成功を `COMPOSITION` へ
+        # 洗い流すと「Mock だった」が消える（014 §2 で分けた理由）。
+        return GenerationSource.COMPOSITION
+    return candidate
 
 
 def _design_decisions(context, forge_document: dict):  # noqa: ANN001, ANN201
@@ -266,7 +307,9 @@ def _record_generation(
     ai_calls = len(getattr(bound, "experience_refs", ()) or ())
     stored = store.record(
         GenerationRecord(
-            source=_generation_source(decision_trace, getattr(bound, "last_provider_used", None)),
+            source=_generation_source(
+                decision_trace, getattr(bound, "last_provider_used", None), context,
+            ),
             domain=_domain_identifier(context),
             validator_passed=validator_passed,
             forge_language_version=str(forge_document.get("version", "") or ""),
@@ -289,6 +332,10 @@ def _record_generation(
             # 受け入れられたか」を突き合わせるには、**残る側**に無いと
             # 意味がない。
             capabilities=_capabilities_used(context),
+            capability_usage=_capability_usage(context, forge_document),
+            structure_source=_structure_source(context),
+            structure_provider=_structure_provider(context, bound),
+            structure_task=_structure_task(bound),
         )
     )
     # **番号を返す。** 013はここで捨てていた。捨てると、後から
@@ -296,6 +343,125 @@ def _record_generation(
     # 書くか」を本番が知らない——R0以前にExperienceで踏んだのと
     # 同じ形である(Storeもmethodもあるが、refが流れていない)。
     return stored.ref
+
+
+def _structure_source(context) -> GenerationStructureSource:  # noqa: ANN001
+    """**構造を作った段**（020A2 §3）。
+
+    `CognitiveContext.structure_source` を読む。**Decision Trace の文字列を
+    parse しない**——reason の書き方を変えただけで Evidence が壊れる。
+
+    forge_ai 側の enum とは**値の文字列**で照合する（forge_ai は backend を
+    import できない）。食い違いはテストが落とす。
+    """
+    value = getattr(getattr(context, "structure_source", None), "value", "")
+    try:
+        return GenerationStructureSource(value)
+    except ValueError:
+        # **知らない値を AI 側へ倒さない。**
+        return GenerationStructureSource.UNKNOWN
+
+
+def _structure_provider(context, bound) -> str:  # noqa: ANN001
+    """構造を作った段が**実際に**使った Provider 名。
+
+    決定的な経路（Curated / Capability Plan）は AI を呼んでいない——
+    そこで Provider 名を書くと、また「呼んでもいない Provider の手柄」に
+    なる（019B §4 / 020A で2回踏んだ）。**空にする。**
+    """
+    if structure_source_is_ai(_structure_source(context)):
+        return str(getattr(bound, "last_provider_used", "") or "")
+    return ""
+
+
+def _structure_task(bound) -> str:  # noqa: ANN001
+    """構造を作った段の Task。**観測した値**を入れる。"""
+    task = getattr(bound, "task", None)
+    return str(getattr(task, "value", "") or "")
+
+
+def _capability_usage(context, forge_document: dict):  # noqa: ANN001, ANN201
+    """Capability ごとの事実（020A2 §4）。
+
+    ---
+
+    ## ID の並びでは足りない
+
+    R4 の `capabilities` は `unsupported:` のような**接頭辞つき文字列**で
+    区別していた。書式に意味を持たせているだけで、読む側は必ず parse を
+    書くことになる。将来 JSONL Dataset へ落とすとき、
+
+        求められた / 実際に使われた / 一部だけ / 無かった
+
+    の4つが区別できないと「この構成なら上手くいく」を学習できない。
+
+    ## `used` は生成物を見て決める
+
+    Plan が求めただけでは `used` にしない。**実際に文書へ現れたか**を
+    Widget 型から確かめる。求めたのに出ていないものは
+    `requested=True, used=False` として残る——それが「出せなかった」で
+    ある。
+
+    値も利用者の本文も入らない。**Capability ID だけ。**
+    """
+    plan = getattr(context, "capability_plan", None)
+    if plan is None:
+        return ()
+
+    present = _widget_types_in(forge_document)
+    usage: list[CapabilityUsage] = []
+    seen: set[str] = set()
+
+    def add(capability_id: str, status: CapabilityUsageStatus,
+            source: CapabilityUsageSource) -> None:
+        if capability_id in seen:
+            return
+        seen.add(capability_id)
+        binding = CAPABILITY_REGISTRY.get(capability_id)
+        widgets = set(binding.widget_types) if binding else set()
+        usage.append(CapabilityUsage(
+            capability_id=capability_id,
+            requested=True,
+            # Widget と結び付いていないものは、出たかどうかを判定できない。
+            used=bool(widgets & present),
+            status=status,
+            source=source,
+        ))
+
+    missing = set(getattr(plan, "missing", ()) or ())
+    partial = set(getattr(plan, "partial", ()) or ())
+    for capability_id in getattr(plan, "requested", ()) or ():
+        if capability_id in missing:
+            status = CapabilityUsageStatus.MISSING
+        elif capability_id in partial:
+            status = CapabilityUsageStatus.PARTIAL
+        else:
+            status = CapabilityUsageStatus.IMPLEMENTED
+        add(capability_id, status, CapabilityUsageSource.SEMANTIC_PLAN)
+
+    # Field の Capability は Plan の `requested` に入っているが、
+    # **構造上必ず要るもの**（`data.entity` 等）は決定的に足している。
+    for planned in getattr(plan, "fields", ()) or ():
+        add(
+            planned.capability, CapabilityUsageStatus.IMPLEMENTED,
+            CapabilityUsageSource.DETERMINISTIC,
+        )
+    return tuple(usage)
+
+
+def _widget_types_in(node: object) -> set[str]:
+    """生成物に**実際に現れた** Widget 型。"""
+    found: set[str] = set()
+    if isinstance(node, dict):
+        kind = node.get("type")
+        if isinstance(kind, str):
+            found.add(kind)
+        for value in node.values():
+            found |= _widget_types_in(value)
+    elif isinstance(node, list):
+        for value in node:
+            found |= _widget_types_in(value)
+    return found
 
 
 def _capabilities_used(context) -> tuple[str, ...]:  # noqa: ANN001
@@ -378,6 +544,14 @@ class PipelineRunResult:
     validation: ValidationResult
     quality: CriticResult | None
     diagnostics: Diagnostics
+
+    capability_gap: CapabilityGap = field(default_factory=CapabilityGap)
+    """**作れないと分かっていることを利用者へ伝える**（TD90 / 020A2 §5）。
+
+    Plan は R4 の時点で `simulate.loop` を MISSING と正しく名指しできて
+    いたのに、返っていたのは CRUD だけだった。**Forge は知っていて
+    黙っていた。** ここが利用者へ届く口である。
+    """
 
     generation_ref: int | None = None
     """この生成物の`GenerationRecord`番号(014 §3)。
@@ -779,6 +953,23 @@ class PromptPipeline:
             # (実行して確認: 引数無しの場合、単純な入力でscore=100が
             # 返り続けることを確認した上で、この行を修正した)。
             critic_result = to_critic_result(quality_score, critic_report=context.critic_report)
+
+            # --- Capability Gap（TD90 / 020A2 §5）----------------------
+            #
+            # **求められたことの本質が出来ていないなら「仕上がった」と
+            # 言わない。** 新しい状態 enum は増やさず、既存の
+            # `release_ready` を使う——「これは仕上がっている」という
+            # 意味の欄が既にある。
+            capability_gap = gap_from_plan(getattr(context, "capability_plan", None))
+            if capability_gap.blocks_completion and critic_result is not None:
+                critic_result = dataclasses.replace(
+                    critic_result,
+                    release_ready=False,
+                    required_fixes=(
+                        *critic_result.required_fixes,
+                        capability_gap.message,
+                    ),
+                )
             _note_generation_outcome(bound, validator_passed=True, repair_attempts=repair_attempts)
             generation_ref = _record_generation(
                 bound, context=context,
@@ -848,6 +1039,7 @@ class PromptPipeline:
             forge_document=forge_document,
             validation=validation,
             quality=critic_result,
+            capability_gap=capability_gap,
             diagnostics=diagnostics,
         )
 

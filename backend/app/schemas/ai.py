@@ -189,6 +189,17 @@ class GenerateResultDTO(BaseModel):
     forge_document: dict[str, Any] = Field(..., description="Forge Language準拠のJSON。Validator合格済みのもののみ(ADR 2.3節)")
     validation: ValidationResultDTO
     quality: CriticResultDTO | None = None
+    capability_gap: dict[str, Any] | None = None
+    """**作れないと分かっていることを利用者へ返す**（TD90 / 020A2 §5）。
+
+    Plan は `simulate.loop` を MISSING と正しく名指しできていたのに、
+    返っていたのは CRUD だけだった。**知っていて黙っていた**のを
+    やめるための欄である。
+
+    `blocks_completion=True` のときは `quality.release_ready` も
+    `False` になる——求められたことの本質が出来ていないなら、
+    「仕上がった」と言わない。
+    """
     diagnostics: DiagnosticsDTO
     artifact: ArtifactRefDTO | None = Field(
         default=None,

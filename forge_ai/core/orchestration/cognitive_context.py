@@ -22,6 +22,7 @@ from forge_ai.core.orchestration.cognitive_types import (
 )
 from forge_ai.core.ir.design_intent import DesignIntent
 from forge_ai.core.semantics.capability_plan import CapabilityPlan
+from forge_ai.core.semantics.structure_provenance import StructureSource
 from forge_ai.core.planner import ApplicationPlan
 from forge_ai.core.world_model import World
 
@@ -56,6 +57,9 @@ class CognitiveContext:
     # 静かに壊れる。「後から文字列を読んで意味を取り出す」設計は、
     # 読む側が壊れたことに気付けない。
     design_intent: "DesignIntent | None" = None
+
+    structure_source: "StructureSource" = StructureSource.UNKNOWN
+    """**構造を作った段**（020A2 §3）。Decision Trace の文字列に頼らない。"""
 
     capability_plan: "CapabilityPlan | None" = None
     """役から決まった「何を作るか」（GENERATED-UI-QG-V2-R4、2026-08-26）。
@@ -110,6 +114,9 @@ class CognitiveContext:
 
     def with_capability_plan(self, value: "CapabilityPlan") -> "CognitiveContext":
         return dataclasses.replace(self, capability_plan=value)
+
+    def with_structure_source(self, value: "StructureSource") -> "CognitiveContext":
+        return dataclasses.replace(self, structure_source=value)
 
     def with_decision(self, trace: DecisionTrace) -> "CognitiveContext":
         return dataclasses.replace(self, decision_trace=self.decision_trace + (trace,))

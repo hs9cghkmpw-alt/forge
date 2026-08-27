@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from forge_ai.core.critic.semantic_design_critic import evaluate_semantic_design
 from forge_ai.core.domain_model import DomainRegistry
 from forge_ai.core.ir.domain_resolution import SolutionSource, resolve_domain_source
-from forge_ai.core.ir.capability_ir import entity_spec_from_plan
+from forge_ai.core.ir.capability_ir import compose_layout, entity_spec_from_plan
 from forge_ai.core.ir.forge_language_compiler import ForgeLanguageCompiler
 from forge_ai.core.ir.ir_generator import SUPPORTED_DOMAIN_CATEGORIES, IRGenerator
 from forge_ai.core.orchestration.cognitive_context import CognitiveContext
@@ -32,6 +32,7 @@ from forge_ai.core.orchestration.cognitive_types import CriticIssue, CriticRepor
 from forge_ai.core.orchestration.confidence import compute_legacy_escalation_reasons, compute_overall_confidence, compute_shadow_judgment
 from forge_ai.core.orchestration.errors import AmbiguityError, ConfirmationRequired, CriticFailure, PlanningError
 from forge_ai.core.semantics.capability_plan import plan_capabilities
+from forge_ai.core.semantics.structure_provenance import StructureSource
 from forge_ai.core.semantics.roles import (
     SemanticRole,
     concepts_blocked_by_role,
@@ -398,19 +399,27 @@ class CognitiveOrchestrator:
             context = context.with_capability_plan(capability_plan)
             context = context.with_decision(_trace(
                 "capability_plan",
-                f"shape={capability_plan.shape.value}",
+                f"structure={capability_plan.structure.value}",
                 f"entity={capability_plan.entity_name or '(無し)'} "
                 f"fields={[f.name for f in capability_plan.fields]} "
                 f"views={list(capability_plan.views)} "
-                f"unsupported={list(capability_plan.unsupported)} "
+                f"interactions={list(capability_plan.interactions)} "
+                f"missing={list(capability_plan.missing)} "
                 f"partial={list(capability_plan.partial)}",
             ))
 
             ir = None
             entity_source = "curated"
+            # **構造を作った段を、その場で記録する**（020A2 §3）。
+            #
+            # 後から「provider が local だったから Local Model が構造を
+            # 作った」と推定してはならない。Design Intent だけ AI を
+            # 呼んだ場合も `last_provider_used` は local になる。
+            structure_source = StructureSource.UNKNOWN
             if resolution.source is SolutionSource.CURATED:
                 ir = IRGenerator().generate(context.plan, domain_category=domain_category_value)
                 assert ir is not None  # CURATEDを選ぶのはSUPPORTED_DOMAIN_CATEGORIESに含まれる場合だけ
+                structure_source = StructureSource.CURATED
             elif (planned_spec := entity_spec_from_plan(capability_plan)) is not None:
                 # **役から組めるなら、AI を待たずに組む。**
                 #
@@ -418,7 +427,9 @@ class CognitiveOrchestrator:
                 # AI 合成が既に通っている、まったく同じ入口である。
                 # ここから先は3者を区別しない。**専用 Template は無い。**
                 ir = IRGenerator().build_from_spec(planned_spec)
-                entity_source = f"capability_plan({capability_plan.shape.value})"
+                entity_source = f"capability_plan({capability_plan.structure.value})"
+                # **AI は構造を作っていない。** 決定的な Plan である。
+                structure_source = StructureSource.DETERMINISTIC_CAPABILITY_PLAN
             elif deps.entity_synthesizer is not None:
                 synthesized_spec = deps.entity_synthesizer.synthesize(
                     context.plan,
@@ -428,10 +439,13 @@ class CognitiveOrchestrator:
                 if synthesized_spec is not None:
                     ir = IRGenerator().build_from_spec(synthesized_spec)
                     entity_source = "synthesized"
+                    # **ここだけが「AI が構造を作った」である。**
+                    structure_source = StructureSource.AI_ENTITY_SYNTHESIS
                 elif domain_category_value in SUPPORTED_DOMAIN_CATEGORIES:
                     # 合成に失敗した場合、Curatedが存在するなら
                     # Checklistへ落ちるより手作り定義の方がまだ良い。
                     ir = IRGenerator().generate(context.plan, domain_category=domain_category_value)
+                    structure_source = StructureSource.CURATED
 
             if ir is not None:
                 context = context.with_decision(_trace(
@@ -476,6 +490,10 @@ class CognitiveOrchestrator:
                 forge_document = ForgeLanguageCompiler().compile(
                     ir, domain_category=domain_category_value, title=context.plan.title,
                     design_intent=design_intent,
+                    # **Capability の構成で画面の性格を変える**（TD91）。
+                    # 専用 Template を作らずに、比較・推移を求めた人には
+                    # 集計の方を先に見せる。
+                    layout_emphasis=compose_layout(capability_plan).value,
                 )
             else:
                 # FORGE-AI-QUALITY-001(2026-08-11): 以前はここで
@@ -485,6 +503,9 @@ class CognitiveOrchestrator:
                 # compile()`が実際に分岐へ対応しているのは現状"form"のみ
                 # (`compiler.py`参照)、それ以外のtemplate名は引き続き
                 # Checklistへフォールバックする。
+                # checklist 経路。構造は Compiler が決定的に組む。
+                if structure_source is StructureSource.UNKNOWN:
+                    structure_source = StructureSource.DETERMINISTIC_CAPABILITY_PLAN
                 forge_document = deps.compiler.compile(
                     context.plan, domain_category=domain_category_value,
                     template=context.template_selection.template,
@@ -492,6 +513,13 @@ class CognitiveOrchestrator:
                     # checklist 経路でも「支度」「やること」と名乗れる。
                     entity_label=capability_plan.entity_label,
                 )
+
+            context = context.with_structure_source(structure_source)
+            context = context.with_decision(_trace(
+                "structure_source", structure_source.value,
+                "この文書の**構造**を作った段。Provider 名から推定しない"
+                "（Design Intent だけ AI を呼んでも構造は AI が作っていない）",
+            ))
 
             # --- Semantic Design Critic（FORGE-R1-CLOSURE-015 §3）--------
             #

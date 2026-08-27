@@ -233,6 +233,15 @@ def _result_dto(result, *, session_id: str | None = None) -> GenerateResultDTO: 
             else None
         ),
         diagnostics=_diagnostics_dto(result.diagnostics),
+        # **作れないと分かっていることを返す**（TD90 / 020A2 §5）。
+        # `_result_dto()` は成功レスポンスを組む3経路すべてが通る唯一の
+        # 場所なので、新しい経路を足した人が呼び忘れても載る。
+        capability_gap=(
+            gap.to_dict()
+            if (gap := getattr(result, "capability_gap", None)) is not None
+            and not gap.is_empty
+            else None
+        ),
     )
 
 

@@ -278,15 +278,18 @@ class TestTheCapabilityPlanReachesDurableEvidence(unittest.TestCase):
         """**「持っていなかった」も学習の材料である。**
 
         出来たことだけ記録すると、Forge は自分の限界を学べない。
+
+        020A2 で ID を Canonical へ統一した（`media.compose` →
+        `effect.media_compose`）。会話側と同じ ID を見る。
         """
         record = self._record_for(GAME_NEED)
         self.assertIn("unsupported:simulate.loop", record.capabilities)
-        self.assertIn("unsupported:media.compose", record.capabilities)
+        self.assertIn("unsupported:effect.media_compose", record.capabilities)
 
     def test_partial_support_is_distinguished_from_full_support(self) -> None:
+        """020A2: `record.photo` は廃止。Canonical は `data.photo`。"""
         record = self._record_for(PHOTO_NEED)
-        self.assertIn("partial:record.photo", record.capabilities)
-        self.assertNotIn("record.photo", record.capabilities)
+        self.assertIn("partial:data.photo", record.capabilities)
 
     def test_a_checklist_records_its_interaction(self) -> None:
         record = self._record_for(KIDS_NEED)

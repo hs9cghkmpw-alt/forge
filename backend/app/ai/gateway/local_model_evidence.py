@@ -57,12 +57,17 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from app.ai.gateway.benchmark_evidence import Verification
+from app.ai.gateway.capability_evidence import (
+    GenerationStructureSource,
+    structure_source_is_ai,
+)
 from app.ai.gateway.generation_evidence import GenerationSource
 from app.ai.gateway.learning_events import Deployment
 from app.ai.gateway.tasks import ForgeTask
 
 __all__ = [
     "CURATED_DOMAIN_RESOLUTION",
+    "GenerationStructureSource",
     "Level0Outcome",
     "LocalRuntimeBackend",
     "RealLocalModelRun",
@@ -201,6 +206,27 @@ class RealLocalModelRun:
     いない**ので数えない。
     """
 
+    structure_source: GenerationStructureSource = GenerationStructureSource.UNKNOWN
+    """**その文書の構造を誰が作ったか**（020A2 §3、2026-08-26）。
+
+    ---
+
+    ## `domain_resolution != curated` では足りない
+
+    R4 以降、`Capability Plan → 決定的な EntitySpec → IR` で構造が
+    決まったあと、**Design Intent だけ Local Model を呼ぶ**ことがある。
+    そのとき `domain_resolution` は `generated` で、
+    `last_provider_used` は `local` になる——両方の条件を満たすのに、
+    **Local Model はソフトウェアの構造を1つも作っていない。**
+
+    Level 0 が証明したいのは「Local Model が構造生成を担当した」こと
+    である。`structure_source_is_ai()` がその判定であり、
+    `DETERMINISTIC_CAPABILITY_PLAN` は通らない。
+
+    通らなかった場合は `INVALID_PROBE`——**Local Model の失敗ではなく、
+    その probe では測れていない**。
+    """
+
     domain_resolution: str = ""
     """`decision_trace` の `domain_resolution` 段が返した判断（020A1）。
 
@@ -332,6 +358,14 @@ class RealLocalModelRun:
                 "Curated Domain Library が作った"
                 "（domain_resolution=curated / probe が不適切）"
             )
+        if not structure_source_is_ai(self.structure_source):
+            # **構造を作ったのが AI でなければ、Level 0 の証拠にならない**
+            # （020A2 §3）。Design Intent だけ Local Model を呼んでも、
+            # ソフトウェアの構造は Forge が決定的に組んでいる。
+            reasons.append(
+                f"Local Model が構造生成を担当していない"
+                f"（structure_source={self.structure_source.value}）"
+            )
         if not self.observed_tasks:
             reasons.append("AIRouter を通った Task を観測できていない")
         elif self.task not in self.observed_tasks:
@@ -371,8 +405,18 @@ class RealLocalModelRun:
 
     @property
     def probe_was_curated(self) -> bool:
-        """**Local Model に仕事が回らない probe だったか。**"""
-        return self.domain_resolution.strip().lower() == CURATED_DOMAIN_RESOLUTION
+        """**Local Model に仕事が回らない probe だったか。**
+
+        020A2 で条件を広げた。Curated へ落ちた場合だけでなく、
+        **構造を Forge が決定的に組んでしまった場合**も同じである——
+        どちらも「Local Model に構造生成の仕事が回らなかった」。
+        """
+        if self.domain_resolution.strip().lower() == CURATED_DOMAIN_RESOLUTION:
+            return True
+        return self.structure_source in (
+            GenerationStructureSource.CURATED,
+            GenerationStructureSource.DETERMINISTIC_CAPABILITY_PLAN,
+        )
 
     @property
     def level0_outcome(self) -> Level0Outcome:
@@ -403,6 +447,7 @@ class RealLocalModelRun:
             "model_digest": self.model_digest,
             "weight_identity": self.weight_identity.value,
             "domain_resolution": self.domain_resolution,
+            "structure_source": self.structure_source.value,
             "observed_tasks": [t.value for t in self.observed_tasks],
             "ready_for_baseline": self.ready_for_baseline,
             "quantization": self.quantization,

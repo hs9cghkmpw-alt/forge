@@ -222,6 +222,28 @@ def _resolution_from_diagnostics(diagnostics: object) -> str:
     return ""
 
 
+def _structure_from_diagnostics(diagnostics: object) -> str:
+    """`decision_trace` の `structure_source` 段（020A2 §3）。"""
+    if not isinstance(diagnostics, dict):
+        return ""
+    for entry in diagnostics.get("decision_trace") or ():
+        if isinstance(entry, dict) and entry.get("stage") == "structure_source":
+            return str(entry.get("decision") or "").strip().lower()
+    return ""
+
+
+def _structure_source_of(value: str):  # noqa: ANN201
+    """観測した文字列を backend の enum へ写す。**未知は UNKNOWN。**"""
+    from app.ai.gateway.capability_evidence import (  # noqa: PLC0415
+        GenerationStructureSource,
+    )
+
+    try:
+        return GenerationStructureSource(value)
+    except ValueError:
+        return GenerationStructureSource.UNKNOWN
+
+
 def _domain_resolution_of(need: str) -> str:
     """**Local Model を呼ぶ前に** probe の解決先を確かめる（020A1）。
 
@@ -340,6 +362,7 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
     latency_ms = 0.0
     failure = ""
     post_resolution = ""
+    post_structure = ""
     observed_tasks: tuple[object, ...] = ()
 
     try:
@@ -378,6 +401,7 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
             structured_ok = bool(result.get("forge_document"))
             validator_passed = bool((result.get("validation") or {}).get("valid"))
             post_resolution = _resolution_from_diagnostics(result.get("diagnostics"))
+            post_structure = _structure_from_diagnostics(result.get("diagnostics"))
             records = default_generation_store().all_records()
             if len(records) > before:
                 generation_uid = records[-1].uid
@@ -392,6 +416,8 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
                   "   ← local_ai でなければ Local Model は動いていない")
             print(f"        domain_resolution={post_resolution or '(観測できず)'}"
                   "   ← curated なら測定不成立")
+            print(f"        structure_source={post_structure or '(観測できず)'}"
+                  "   ← ai_entity_synthesis でなければ Level 0 ではない")
             print("        observed_tasks="
                   + (", ".join(x.value for x in observed_tasks) or "(AIを1回も呼んでいない)"))
         else:
@@ -424,6 +450,10 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
         task=attributed_task,  # type: ignore[arg-type]
         observed_tasks=observed_tasks,  # type: ignore[arg-type]
         domain_resolution=post_resolution or pre_resolution,
+        # **「Local Model が構造を作った」を Provider 名から推定しない**
+        # （020A2 §3）。決定的な Capability Plan が構造を組み、
+        # Design Intent だけ Local を呼んだ実行は Level 0 ではない。
+        structure_source=_structure_source_of(post_structure),
         runtime_backend=backend_map.get(
             str(probe["backend"]), LocalRuntimeBackend.UNKNOWN,
         ),
@@ -479,6 +509,7 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
             "domain_resolution_before": pre_resolution,
             "domain_resolution_after": post_resolution,
             "is_curated_trap": pre_resolution == CURATED_DOMAIN_RESOLUTION,
+            "structure_source_after": post_structure,
             "level0_probe_recommended": LEVEL0_PROBE,
             "known_curated_trap": CURATED_TRAP_PROBE,
         },

@@ -59,6 +59,7 @@ from app.ai.gateway.local_model_evidence import (  # noqa: E402
     Level0Outcome,
     LocalRuntimeBackend,
     RealLocalModelRun,
+    GenerationStructureSource,
     RealLocalModelRunLog,
     WeightIdentity,
 )
@@ -249,6 +250,11 @@ class TestRealLocalModelRunCounting(unittest.TestCase):
             "task": ForgeTask.COGNITIVE_STAGE,
             "observed_tasks": (ForgeTask.COGNITIVE_STAGE,),
             "domain_resolution": "generated",
+            # **本物の Level 0 は「AI が構造を設計した」実行である**
+            # （020A2 §3）。`domain_resolution=generated` だけでは、
+            # 決定的な Capability Plan が構造を作り Design Intent だけ
+            # Local を呼んだ実行も通ってしまう。
+            "structure_source": GenerationStructureSource.AI_ENTITY_SYNTHESIS,
             "runtime_backend": LocalRuntimeBackend.OLLAMA,
             "runtime_version": "0.5.0",
             "model_id": "qwen2.5:1.5b-instruct",
@@ -607,3 +613,57 @@ class TestTheProbeNeverTurnsAModelIdIntoADigest(unittest.TestCase):
         self.assertIs(run.weight_identity, WeightIdentity.UNVERIFIED)
         self.assertTrue(run.counts_as_real_local, run.why_not_counted())
         self.assertFalse(run.ready_for_baseline)
+
+
+class TestADesignIntentOnlyRunIsNotLevel0(unittest.TestCase):
+    """**構造を作っていない Local 呼び出しを Level 0 にしない**（020A2 §3）。
+
+    再現: `Capability Plan → 決定的な EntitySpec → IR` で構造が決まり、
+    Local Provider は **Design Intent だけ**答えた。
+
+    * `domain_resolution` は `generated`
+    * `last_provider_used` は `local`
+
+    R4 の判定では**両方の条件を満たす**ので Level 0 に見えた。
+    しかし Local Model はソフトウェアの構造を1つも作っていない。
+    """
+
+    def _run(self, **overrides) -> RealLocalModelRun:  # noqa: ANN003
+        return TestRealLocalModelRunCounting._passing_run(self, **overrides)  # type: ignore[arg-type]
+
+    def test_a_deterministic_plan_run_is_not_counted(self) -> None:
+        run = self._run(
+            structure_source=GenerationStructureSource.DETERMINISTIC_CAPABILITY_PLAN,
+        )
+        self.assertFalse(run.counts_as_real_local)
+        self.assertTrue(
+            any("構造生成を担当していない" in r for r in run.why_not_counted()),
+            run.why_not_counted(),
+        )
+
+    def test_it_is_an_invalid_probe_not_a_failure(self) -> None:
+        """**Local Model の FAIL にしない。** 測れていないだけである。"""
+        run = self._run(
+            structure_source=GenerationStructureSource.DETERMINISTIC_CAPABILITY_PLAN,
+        )
+        self.assertIs(run.level0_outcome, Level0Outcome.INVALID_PROBE)
+
+    def test_an_unrecorded_structure_is_not_counted(self) -> None:
+        """**記録し損ねたものを AI 側へ倒さない。**"""
+        run = self._run(structure_source=GenerationStructureSource.UNKNOWN)
+        self.assertFalse(run.counts_as_real_local)
+
+    def test_a_real_synthesis_run_still_counts(self) -> None:
+        """弾きすぎて Local AI が永久に実績を持てない、では意味がない。"""
+        run = self._run(
+            structure_source=GenerationStructureSource.AI_ENTITY_SYNTHESIS,
+        )
+        self.assertTrue(run.counts_as_real_local, run.why_not_counted())
+
+    def test_the_log_reports_invalid_probe_for_such_runs(self) -> None:
+        log = RealLocalModelRunLog()
+        log.record(self._run(
+            structure_source=GenerationStructureSource.DETERMINISTIC_CAPABILITY_PLAN,
+        ))
+        self.assertIs(log.level0(), Level0Outcome.INVALID_PROBE)
+        self.assertEqual(log.count(), 0)

@@ -158,6 +158,13 @@ from forge_ai.core.ir.ir_types import (
 )
 from forge_ai.core.ir.solution_shape import SolutionShape, select_solution_shape
 
+#: **まとめ・比較を先に見せる性格**（TD91 / 020A2 §6）。
+#:
+#: `forge_ai.core.ir.capability_ir.LayoutEmphasis` の値。ここで enum を
+#: import しないのは、Compiler が Capability 層へ依存しないためである
+#: （値の一致はテストが照合する）。
+_SUMMARY_LEADING_EMPHASES = frozenset({"summary_first", "comparison_first"})
+
 # FORGE v1.0新規(Product Quality Sprint1)。Entityの`visual_style`
 # (IR層、プラットフォーム非依存の「雰囲気」ヒント)から、実際の
 # Forge Language `design_tokens`(色コード・角丸・余白という、Flutter
@@ -262,6 +269,7 @@ class ForgeLanguageCompiler:
     def compile(
         self, ir: ForgeIR, *, domain_category: str, title: str,
         design_intent: "DesignIntent | None" = None,
+        layout_emphasis: str = "",
     ) -> ForgeIRDocument:
         errors = ir.referential_integrity_errors()
         if errors:
@@ -316,7 +324,7 @@ class ForgeLanguageCompiler:
             return self._compile_checklist_screen(entity, safe_title, domain_category=domain_category)
 
         return self._compile_single_screen(
-            entity, safe_title,
+                entity, safe_title, layout_emphasis=layout_emphasis,
             include_crud=edit_form_view is not None, domain_category=domain_category,
             design_intent=design_intent,
         )
@@ -409,6 +417,7 @@ class ForgeLanguageCompiler:
     def _compile_single_screen(
         self, entity: Entity, title: str, *, include_crud: bool, domain_category: str,
         design_intent: "DesignIntent | None" = None,
+        layout_emphasis: str = "",
     ) -> ForgeIRDocument:
         """FORGE v0.6でList View + Form Viewを単一画面へ変換する設計を
         導入し(モジュールdocstring参照)、FORGE v0.7で出力の中身を
@@ -540,8 +549,27 @@ class ForgeLanguageCompiler:
         if bar_chart_widget is not None:
             list_tab_children.append(bar_chart_widget)
 
-        tab_titles = [f"{entity.label}を追加", f"{entity.label}一覧"]
-        tabs = [create_tab, ForgeIRWidget(type="column", id="list_tab", children=tuple(list_tab_children))]
+        list_tab = ForgeIRWidget(
+            type="column", id="list_tab", children=tuple(list_tab_children),
+        )
+        create_title = f"{entity.label}を追加"
+        list_title = f"{entity.label}一覧"
+
+        # **Capability の構成で、最初に見える画面を変える**（TD91 / 020A2 §6）。
+        #
+        # R4 では record entity のアプリが**全部「追加」タブで始まって**
+        # いた。写真アプリもデータ分析アプリも入口が同じで、Shape の違いは
+        # 一覧タブ側にあるので**開いた瞬間には区別が付かなかった**。
+        #
+        # 「比べたい」「推移が見たい」と言った人にとって、最初に見たいのは
+        # 入力欄ではなく**集計の方**である。専用 Template ではなく、
+        # Capability の構成から順序を決める。
+        if layout_emphasis in _SUMMARY_LEADING_EMPHASES:
+            tab_titles = [list_title, create_title]
+            tabs = [list_tab, create_tab]
+        else:
+            tab_titles = [create_title, list_title]
+            tabs = [create_tab, list_tab]
 
         if include_crud:
             edit_form_children, edit_field_states = self._build_field_inputs(

@@ -1,46 +1,79 @@
-"""Capability Layer(FORGE-ARCHITECTURE-REVIEW-AND-IMPLEMENT-005 §32、
-2026-08-13)。
+"""**Runtime Capability Adapter**（FORGE-020A2、2026-08-26）。
 
-`docs/spec/FORGE-SELF-EXTENSION-ARCH-REVIEW.md` §6〜§9で採用した
-Vertical Sliceの実装:
+もとは Capability Layer の実装そのものだった
+（FORGE-ARCHITECTURE-REVIEW-AND-IMPLEMENT-005 §32、2026-08-13）。
+Vertical Slice の役割は変わっていない:
 
     Missing Capability Detection
       → Solution Hypothesis
       → User Correction
       → Revised Capability Spec
 
-**この層がやらないこと(重要)**:
+---
 
-* Capabilityを**自動生成しない**。Registryは人手管理の静的テーブルで
-  あり、AIは読むだけで書き換えられない(レビュー §3.2 / §5)。
-  Flutterは動的コード実行ができないため、AIにWidgetを作らせる方式は
-  そもそも成立しない。
-* LLMを一切呼ばない。`conversation_policy.py`と同じく純粋関数の集まり
-  であり、同じ入力なら常に同じ出力になる。
-* 実装していないものを「できる」と言わない(レビュー F3)。Registryに
-  無いものは`supported=False`のまま扱い、会話でも正直にそう伝える。
+## 020A2 で変えたこと: **意味の表をここから外した**
 
-**3層に分けた理由**(レビュー §3.1): 構想は`text` `number` `chart`
-`map` `notification`を同じ平面に並べていたが、これらは抽象度が違う
-(`number`は型、`chart`は表示、`notification`は権限の要るOS機能)。
-同じRegistryへ入れると依存関係が表現できず、安全なものと危険なものが
-混在する。3層に分けると、**EffectCapabilityだけが安全審査の対象**に
-なり、粒度の議論も終わる。
+R4 の時点で、同じ「Forge Capability」に **Source of Truth が2つ**あった。
 
-    DataCapability   : 何を記録するか   (text/number/date/choice/bool)
-    ViewCapability   : どう見せるか     (list/card/grid/chart/tabs)
-    EffectCapability : 外へ何をするか   (share/notify/camera/location…)
+| | 場所 |
+|---|---|
+| A | ここ（会話・Missing Capability） |
+| B | `forge_ai/core/semantics/capability_plan.py`（生成） |
 
-`supported`は`app/ai/validators/schema_validator.py`のWidget Registry
-(v1.11で20種)と1:1で対応させて手で維持する。**Registryを増やす際は
-Validator・Runtime・ここの3箇所を同時に更新すること**(TD37: 登録漏れで
-4種のWidgetが描画不能だった実バグ)。
+同じ概念が別の ID で書かれていた（`data.photo` と `record.photo`、
+`effect.notify` と `interact.notify`、`view.metric` と `view.total`）。
+**会話と生成が別々のことを言う**状態であり、片方だけ直せば静かに
+食い違う。
+
+意味の表は `forge_ai/core/semantics/capabilities.py` へ寄せた。
+`forge_ai` は `backend` を import できないが逆は出来るので、
+両方から読める場所はそこしかない。
+
+```
+Semantic Capability Catalog   forge_ai/core/semantics/capabilities.py
+        ↓
+Runtime Support Adapter       ← ここ
+        ↓
+Validator / Renderer / Conversation
+```
+
+## ここが持つもの
+
+**Canonical ID → Forge Language の Widget との結び付き**、それだけである。
+
+* `id` / `layer` / `label_ja` / `detection_keywords` /
+  `nearest_supported_id` は Catalog から**引いて**くる。ここには書かない
+* `widget_types` はここにしか無い
+* `requires_confirmation` は Catalog の `SafetyClass` から**導出**する。
+  人が2箇所で揃える運用にしない
+
+`supported` は Catalog の `SupportLevel` から導出する（`IMPLEMENTED`
+だけが `True`。`PARTIAL` は「出来る」と言い切らない）。
+
+Catalog と Widget 結び付きの整合は**テストが機械的に照合する**
+（`IMPLEMENTED` なのに Widget が無い / `MISSING` なのに Widget がある、
+のどちらも落ちる）。
+
+## この層がやらないこと（変わらず）
+
+* Capability を**自動生成しない**。AI は読むだけである
+* LLM を一切呼ばない。純粋関数の集まりであり、同じ入力なら同じ出力
+* 実装していないものを「できる」と言わない
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import Enum
+
+from forge_ai.core.semantics.capabilities import (
+    SEMANTIC_CAPABILITIES,
+    SafetyClass,
+    SupportLevel,
+)
+from forge_ai.core.semantics.capabilities import (
+    CapabilityLayer as SemanticCapabilityLayer,
+)
 
 __all__ = [
     "CAPABILITY_QUESTION_KEY_PREFIX",
@@ -62,126 +95,98 @@ __all__ = [
 ]
 
 
-class CapabilityLayer(str, Enum):
-    """Capabilityの層。安全審査の対象は`EFFECT`だけである。"""
-
-    DATA = "data"
-    VIEW = "view"
-    EFFECT = "effect"
+#: 層は Catalog の定義をそのまま使う。**ここで別の enum を作らない。**
+CapabilityLayer = SemanticCapabilityLayer
 
 
 @dataclass(frozen=True)
 class Capability:
-    """1つのCapabilityの定義(静的、人手管理)。"""
+    """Runtime から見た1つの Capability。
+
+    **意味の欄は Catalog から引いた写しである**（020A2）。ここで手書き
+    しない——書けてしまうと、また2つの Source of Truth になる。
+    `_binding()` が唯一の組み立て口である。
+    """
 
     id: str
     layer: CapabilityLayer
     label_ja: str
-    """ユーザーへ見せる日本語。内部IDをそのままUIへ出さない
-    (§9で実際に起きた「「Shopping」「Diary」」の再発防止)。"""
-
     supported: bool
-    """Forgeが**実際に**作れるかどうか。Widget Registryに実装がある場合のみ`True`。"""
+    """**`SupportLevel.IMPLEMENTED` のときだけ `True`。**
+
+    `PARTIAL`（写真を文字で残す等）は `False` である——出来ることに
+    しない。「近いことは出来る」は `nearest_supported_id` が言う。
+    """
 
     widget_types: tuple[str, ...] = ()
-    """対応するForge LanguageのWidget型(`supported=True`の場合のみ意味を持つ)。"""
+    """対応する Forge Language の Widget 型。**ここにしか無い情報。**"""
 
     requires_confirmation: bool = False
-    """実行前にユーザーの確認が要るか。EffectCapabilityのみ`True`になりうる
-    (指示書:「ユーザーが欲しいと言ったから」だけで自動的に危険Capabilityを
-    実行可能にしない)。"""
+    """Catalog の `SafetyClass` から**導出**する。手書きしない。"""
 
     detection_keywords: tuple[str, ...] = ()
-    """このCapabilityが要求されたと判定する語。決定的なsubstringマッチング
-    (`forge_ai/core/lexicon.py`と同じ手法。形態素解析は使わない)。"""
-
     nearest_supported_id: str | None = None
-    """`supported=False`のとき、代わりに提案できる実装済みCapability。
-    `None`なら代替が無い(その場合は正直に「できない」と言う)。"""
+
+    support_level: SupportLevel = SupportLevel.MISSING
+    """Catalog の宣言そのまま。`supported` が潰す3値の区別を残す。"""
+
+    limitation: str = ""
+    """**何が出来ないのか。** 利用者へそのまま見せられる言葉。"""
 
 
-def _cap(*args, **kwargs) -> Capability:
-    return Capability(*args, **kwargs)
+#: **Canonical ID → Forge Language Widget。** ここが Adapter の本体である。
+#:
+#: 意味は書かない。書いてよいのは「その能力を Forge Language の何で
+#: 実現しているか」だけである。
+#:
+#: 載っていない ID は Widget と結び付いていない——`SupportLevel` が
+#: `IMPLEMENTED` ならテストが落ちる（`test_forge_020a2_capability_sot.py`）。
+_RUNTIME_BINDINGS: dict[str, tuple[str, ...]] = {
+    "data.entity": ("record_list_view", "form"),
+    "data.text": ("text_field",),
+    "data.number": ("text_field", "slider"),
+    "data.date": ("date_field",),
+    "data.choice": ("choice_field",),
+    "data.bool": ("checkbox", "checklist"),
+    "view.list": ("list", "record_list_view", "checklist"),
+    "view.grid": ("record_list_view",),
+    "view.metric": ("metric_view",),
+    "view.bar_chart": ("bar_chart",),
+    "view.tabs": ("tab_view",),
+    "view.group_compare": ("bar_chart", "metric_view"),
+    "interact.check_off": ("checklist", "checkbox"),
+    "interact.edit": ("form", "record_list_view"),
+    # PARTIAL のものは**近いもので代用している**という結び付きを持つ。
+    # 「出来る」ことにはしない（`supported` は False のまま）。
+    "data.photo": ("text_field",),
+    "data.audio": ("text_field",),
+    "view.trend": ("bar_chart", "record_list_view"),
+}
 
 
-# ---------------------------------------------------------------------------
-# Capability Registry(静的・人手管理)
-#
-# `supported=True`のものは、Widget Registry v1.11(20種)に実装がある。
-# `supported=False`のものは「よく要求されるが、まだ作れない」もので、
-# **検出のためだけに**列挙している——実装済みだと偽らないための一覧である。
-# ---------------------------------------------------------------------------
-_REGISTRY: tuple[Capability, ...] = (
-    # --- Data(安全。何を記録するか) ---------------------------------
-    _cap("data.text", CapabilityLayer.DATA, "文字の記録", True, ("text_field",),
-         detection_keywords=("メモ", "名前", "タイトル", "内容")),
-    _cap("data.number", CapabilityLayer.DATA, "数値の記録", True, ("text_field", "slider"),
-         detection_keywords=("金額", "値段", "点数", "回数", "体重", "サイズ", "個数")),
-    _cap("data.date", CapabilityLayer.DATA, "日付の記録", True, ("date_field",),
-         detection_keywords=("日付", "いつ", "期限", "何日")),
-    _cap("data.choice", CapabilityLayer.DATA, "選択肢からの記録", True, ("choice_field",),
-         detection_keywords=("カテゴリ", "種類", "分類", "選択肢")),
-    _cap("data.bool", CapabilityLayer.DATA, "済/未済の記録", True, ("checkbox", "checklist"),
-         detection_keywords=("チェック", "済み", "完了したか")),
-    # 未実装のData。
-    _cap("data.photo", CapabilityLayer.DATA, "写真の記録", False,
-         detection_keywords=("写真", "画像", "撮った"), nearest_supported_id="data.text"),
-    _cap("data.audio", CapabilityLayer.DATA, "音声の記録", False,
-         detection_keywords=("録音", "音声で残"), nearest_supported_id="data.text"),
+def _binding(definition) -> Capability:  # noqa: ANN001
+    """Catalog の1件を Runtime から見た形へ写す。**唯一の組み立て口。**"""
+    return Capability(
+        id=definition.id,
+        layer=definition.layer,
+        label_ja=definition.label_ja,
+        supported=definition.support is SupportLevel.IMPLEMENTED,
+        widget_types=_RUNTIME_BINDINGS.get(definition.id, ()),
+        # **導出する。** 「安全区分が SENSITIVE なら確認が要る」を
+        # 2箇所で手管理しない。
+        requires_confirmation=definition.safety is SafetyClass.SENSITIVE,
+        detection_keywords=definition.detection_keywords,
+        nearest_supported_id=definition.nearest_supported_id,
+        support_level=definition.support,
+        limitation=definition.limitation,
+    )
 
-    # --- View(安全。どう見せるか) -----------------------------------
-    _cap("view.list", CapabilityLayer.VIEW, "一覧で見る", True, ("list", "record_list_view", "checklist"),
-         detection_keywords=("一覧", "リストで見", "並べて")),
-    _cap("view.grid", CapabilityLayer.VIEW, "タイル状に見る", True, ("record_list_view",),
-         detection_keywords=("タイル", "グリッド")),
-    _cap("view.bar_chart", CapabilityLayer.VIEW, "棒グラフで見る", True, ("bar_chart",),
-         detection_keywords=("棒グラフ", "グラフで", "グラフにして")),
-    _cap("view.tabs", CapabilityLayer.VIEW, "タブで切り替える", True, ("tab_view",),
-         detection_keywords=("タブ", "切り替え")),
-    # v1.11(FORGE-R1、TD69)。合計・平均を**画面で一番大きい1つの数値**
-    # として見せる。v1.10で語彙へ`metric.primary`を入れたのに、出力先の
-    # Widgetが無いまま置かれていた穴を塞いだもの。
-    _cap("view.metric", CapabilityLayer.VIEW, "合計を大きく見る", True, ("metric_view",),
-         detection_keywords=("合計", "総額", "残高", "いくら使った", "トータル")),
-    # 未実装のView。§33の例(釣果を地図で)はここに当たる。
-    _cap("view.map", CapabilityLayer.VIEW, "地図で見る", False,
-         detection_keywords=("地図", "マップ", "地図上"), nearest_supported_id="view.list"),
-    _cap("view.heatmap", CapabilityLayer.VIEW, "濃淡で分布を見る", False,
-         detection_keywords=("ヒートマップ", "色の濃さ", "色を濃く", "濃淡"),
-         nearest_supported_id="view.bar_chart"),
-    _cap("view.calendar", CapabilityLayer.VIEW, "カレンダーで見る", False,
-         detection_keywords=("カレンダー", "月表示", "月ごとの表"), nearest_supported_id="view.list"),
-    _cap("view.line_chart", CapabilityLayer.VIEW, "推移を折れ線で見る", False,
-         detection_keywords=("折れ線", "推移をグラフ", "変化をグラフ"),
-         nearest_supported_id="view.bar_chart"),
 
-    # --- Effect(安全審査の対象。外へ何をするか) ---------------------
-    # いずれも未実装。**実装されても自動では許可しない**——
-    # `requires_confirmation=True`により、既存のCONFIRM Policyへ直結する。
-    _cap("effect.share", CapabilityLayer.EFFECT, "ほかの人へ送る・共有する", False,
-         requires_confirmation=True,
-         detection_keywords=("共有", "シェア", "送って", "送信", "公開", "招待")),
-    _cap("effect.notify", CapabilityLayer.EFFECT, "通知を出す", False,
-         requires_confirmation=True,
-         detection_keywords=("通知", "リマインド", "お知らせして", "アラーム")),
-    _cap("effect.camera", CapabilityLayer.EFFECT, "カメラを使う", False,
-         requires_confirmation=True,
-         detection_keywords=("カメラ", "撮影")),
-    _cap("effect.location", CapabilityLayer.EFFECT, "現在地を取得する", False,
-         requires_confirmation=True,
-         detection_keywords=("現在地", "位置情報", "GPS")),
-    _cap("effect.contacts", CapabilityLayer.EFFECT, "連絡先を読む", False,
-         requires_confirmation=True,
-         detection_keywords=("連絡先", "アドレス帳")),
-    _cap("effect.payment", CapabilityLayer.EFFECT, "支払いを扱う", False,
-         requires_confirmation=True,
-         detection_keywords=("決済", "課金", "支払い機能", "送金")),
-    _cap("effect.http", CapabilityLayer.EFFECT, "外部サービスへ接続する", False,
-         requires_confirmation=True,
-         detection_keywords=("API", "外部サービスと連携", "連携して")),
-)
-
-CAPABILITY_REGISTRY: dict[str, Capability] = {c.id: c for c in _REGISTRY}
+#: 会話側が読む Registry。**Catalog から組み立てる。**
+CAPABILITY_REGISTRY: dict[str, Capability] = {
+    definition.id: _binding(definition)
+    for definition in SEMANTIC_CAPABILITIES.values()
+}
 
 
 def capability_by_id(capability_id: str) -> Capability | None:
@@ -207,7 +212,7 @@ def detect_capabilities(text: str) -> tuple[Capability, ...]:
         return ()
     lowered = text.lower()
     found: list[Capability] = []
-    for capability in _REGISTRY:
+    for capability in CAPABILITY_REGISTRY.values():
         if any(keyword.lower() in lowered for keyword in capability.detection_keywords):
             found.append(capability)
     return tuple(found)

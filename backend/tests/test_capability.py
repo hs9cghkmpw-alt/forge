@@ -60,13 +60,38 @@ class TestRegistryIntegrity(unittest.TestCase):
                 for widget_type in capability.widget_types:
                     self.assertIn(widget_type, WIDGET_TYPES_ALL, f"{capability.id} -> {widget_type}")
 
-    def test_unsupported_capabilities_claim_no_widget_types(self) -> None:
-        """未実装のものが、実装済みのふりをしていないこと(レビュー F3)。"""
+    def test_missing_capabilities_claim_no_widget_types(self) -> None:
+        """未実装のものが、実装済みのふりをしていないこと(レビュー F3)。
+
+        020A2 で `PARTIAL` を分けた。`MISSING`（本当に何も無い）は
+        Widget を1つも持たない。`PARTIAL`（写真を文字で残す等）は
+        **代用している Widget** を持つ——それは「ふり」ではなく、
+        `limitation` で何が出来ないかを明言した上での代用である。
+        """
+        from forge_ai.core.semantics.capabilities import SupportLevel
+
         for capability in CAPABILITY_REGISTRY.values():
-            if capability.supported:
+            if capability.support_level is not SupportLevel.MISSING:
                 continue
             with self.subTest(capability=capability.id):
                 self.assertEqual(capability.widget_types, ())
+
+    def test_partial_capabilities_are_not_reported_as_supported(self) -> None:
+        """**`PARTIAL` を「出来る」にしない**（020A2）。"""
+        from forge_ai.core.semantics.capabilities import SupportLevel
+
+        partial = [
+            c for c in CAPABILITY_REGISTRY.values()
+            if c.support_level is SupportLevel.PARTIAL
+        ]
+        self.assertTrue(partial, "PARTIAL が1件も無い（分けた意味が消えている）")
+        for capability in partial:
+            with self.subTest(capability=capability.id):
+                self.assertFalse(capability.supported)
+                self.assertTrue(
+                    capability.limitation.strip(),
+                    "代用するなら、何が出来ないのかを必ず書くこと",
+                )
 
     def test_only_effect_layer_requires_confirmation(self) -> None:
         """安全審査の対象はEffectだけ、という3層分割の意味(レビュー §3.1)を

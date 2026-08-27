@@ -103,6 +103,11 @@ Validator不合格でも残す。実測で確認済み:
 
 from __future__ import annotations
 
+from app.ai.gateway.capability_evidence import (
+    CapabilityUsage,
+    GenerationStructureSource,
+)
+
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -391,6 +396,34 @@ class GenerationRecord:
     """この生成物のために呼んだAIの回数。**Curatedなら0**。
     0が異常値ではないことが、この型を作った理由である。"""
 
+    structure_source: GenerationStructureSource = GenerationStructureSource.UNKNOWN
+    """**その文書の構造を誰が作ったか**（FORGE-020A2 §3、2026-08-26）。
+
+    `source`（誰が生成したか＝Provider の話）とは**別の軸**である。
+
+    R4 以降、`Capability Plan → 決定的な EntitySpec → IR` で構造が
+    決まったあと、**Design Intent だけ AI を呼ぶ**ことがある。その状態で
+    `last_provider_used == "local"` を見て `LOCAL_AI` にすると、
+    「Local Model が構造を決めた」という**嘘の Evidence**になる。
+
+    Level 0 はこちらを見る。`DETERMINISTIC_CAPABILITY_PLAN` は
+    「Local Model が構造生成を担当した」ではない。
+    """
+
+    structure_provider: str = ""
+    """構造を作った段が**実際に**使った Provider 名。呼んでいなければ空。"""
+
+    structure_task: str = ""
+    """構造を作った段の `ForgeTask`。**手で書かない**——観測した値を入れる。"""
+
+    capability_usage: tuple[CapabilityUsage, ...] = ()
+    """Capability ごとの事実（FORGE-020A2 §4）。
+
+    `capabilities`（ID の並び）では、**求められた / 実際に使われた /
+    一部だけ / 無かった**の4つが区別できない。将来 JSONL Dataset へ
+    落とすときに必要になるので、型で持つ。**値は入らない。**
+    """
+
     knowledge_references: tuple[str, ...] = ()
     """この生成に渡した知識の**識別子と版**(FORGE-016A commit D)。
 
@@ -471,6 +504,10 @@ class GenerationRecord:
             "capabilities": list(self.capabilities),
             "design_language_roles": list(self.design_language_roles),
             "design_decisions": [d.to_dict() for d in self.design_decisions],
+            "structure_source": self.structure_source.value,
+            "structure_provider": self.structure_provider,
+            "structure_task": self.structure_task,
+            "capability_usage": [u.to_dict() for u in self.capability_usage],
             "knowledge_references": list(self.knowledge_references),
             "visual_structure": dict(self.visual_structure),
             "forge_language_version": self.forge_language_version,

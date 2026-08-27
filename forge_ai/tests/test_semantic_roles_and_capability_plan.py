@@ -14,10 +14,12 @@ from __future__ import annotations
 import unittest
 
 from forge_ai.core.ir.capability_ir import entity_spec_from_plan
+from forge_ai.core.semantics.capabilities import (
+    SEMANTIC_CAPABILITIES,
+    SupportLevel,
+)
 from forge_ai.core.semantics.capability_plan import (
-    CAPABILITY_REGISTRY,
-    CapabilityStatus,
-    PlanShape,
+    StructuralMode,
     plan_capabilities,
 )
 from forge_ai.core.semantics.roles import (
@@ -95,20 +97,34 @@ class TestConceptBlocking(unittest.TestCase):
 
 
 class TestCapabilityPlanShapes(unittest.TestCase):
-    def test_each_need_gets_its_own_shape(self) -> None:
+    """020A2 で `PlanShape` を `StructuralMode` + views へ分けた。
+
+    「どういう構造か」と「何を見たいか」は別の軸である——組み合わせ
+    enum を増やすと、複数の見せ方を求められたときに残りが黙って消える
+    （実測済み、`test_020a2_compositional_plan.py`）。
+    """
+
+    def test_each_need_gets_its_own_structure_and_views(self) -> None:
         expected = {
-            KIDS: PlanShape.CHECKLIST,
-            WORKLOG: PlanShape.CHECKLIST,
-            PHOTO: PlanShape.RECORD_LOG,
-            MAP: PlanShape.RECORD_LOG,
-            GAME: PlanShape.RECORD_LOG,
-            FINANCE: PlanShape.RECORD_LOG_WITH_TOTAL,
-            ANALYTICS: PlanShape.RECORD_LOG_WITH_GROUP_COMPARE,
-            STUDY: PlanShape.RECORD_LOG_WITH_TREND,
+            KIDS: (StructuralMode.CHECKLIST, set()),
+            WORKLOG: (StructuralMode.CHECKLIST, set()),
+            PHOTO: (StructuralMode.RECORD_ENTITY, {"view.list"}),
+            MAP: (StructuralMode.RECORD_ENTITY, {"view.list"}),
+            GAME: (StructuralMode.RECORD_ENTITY, {"view.list"}),
+            FINANCE: (StructuralMode.RECORD_ENTITY, {"view.list", "view.metric"}),
+            ANALYTICS: (
+                StructuralMode.RECORD_ENTITY,
+                {"view.list", "view.group_compare", "view.bar_chart"},
+            ),
+            STUDY: (StructuralMode.RECORD_ENTITY, {"view.list", "view.trend"}),
         }
-        for need, shape in expected.items():
+        for need, (structure, views) in expected.items():
             with self.subTest(need=need):
-                self.assertIs(plan_capabilities(need).shape, shape)
+                plan = plan_capabilities(need)
+                self.assertIs(plan.structure, structure)
+                self.assertTrue(
+                    views <= set(plan.views), f"{views} ⊄ {set(plan.views)}",
+                )
 
     def test_the_morning_routine_records_nothing_and_is_a_checklist(self) -> None:
         plan = plan_capabilities(KIDS)
@@ -129,10 +145,10 @@ class TestCapabilityPlanShapes(unittest.TestCase):
         self.assertIn("department", [f.name for f in plan_capabilities(ANALYTICS).fields])
         self.assertNotIn("trip", [f.name for f in plan_capabilities(PHOTO).fields])
 
-    def test_an_unknown_need_yields_an_unknown_shape(self) -> None:
+    def test_an_unknown_need_yields_an_unknown_structure(self) -> None:
         """**既定の checklist へ倒さない。**"""
         plan = plan_capabilities("ぷるぷるした何か")
-        self.assertIs(plan.shape, PlanShape.UNKNOWN)
+        self.assertIs(plan.structure, StructuralMode.UNKNOWN)
         self.assertFalse(plan.is_actionable)
 
 
@@ -140,25 +156,34 @@ class TestThePlanAdmitsWhatForgeCannotDo(unittest.TestCase):
     def test_a_game_names_what_is_missing(self) -> None:
         """**無いものを checklist で代用して黙らない。**"""
         plan = plan_capabilities(GAME)
-        self.assertIn("simulate.loop", plan.unsupported)
-        self.assertIn("media.compose", plan.unsupported)
+        self.assertIn("simulate.loop", plan.missing)
+        self.assertIn("effect.media_compose", plan.missing)
 
     def test_photo_is_recorded_as_partial_not_as_done(self) -> None:
         plan = plan_capabilities(PHOTO)
-        self.assertIn("record.photo", plan.partial)
+        self.assertIn("data.photo", plan.partial)
         self.assertIs(
-            CAPABILITY_REGISTRY["record.photo"][0], CapabilityStatus.PARTIAL,
+            SEMANTIC_CAPABILITIES["data.photo"].support, SupportLevel.PARTIAL,
         )
 
     def test_trend_is_declared_partial(self) -> None:
         """推移は**時系列グラフではない**。近似だと書いてある。"""
         self.assertIn("view.trend", plan_capabilities(STUDY).partial)
 
-    def test_every_registry_entry_has_a_status_and_a_description(self) -> None:
-        for capability, (status, description) in CAPABILITY_REGISTRY.items():
-            with self.subTest(capability=capability):
-                self.assertIsInstance(status, CapabilityStatus)
-                self.assertTrue(description.strip())
+    def test_every_catalog_entry_is_described(self) -> None:
+        for capability_id, definition in SEMANTIC_CAPABILITIES.items():
+            with self.subTest(capability=capability_id):
+                self.assertIsInstance(definition.support, SupportLevel)
+                self.assertTrue(definition.label_ja.strip())
+                self.assertTrue(definition.intent.strip())
+
+    def test_everything_not_implemented_says_what_it_cannot_do(self) -> None:
+        """**「partial」とだけ書いて済ませない。**"""
+        for definition in SEMANTIC_CAPABILITIES.values():
+            if definition.support is SupportLevel.IMPLEMENTED:
+                continue
+            with self.subTest(capability=definition.id):
+                self.assertTrue(definition.limitation.strip())
 
 
 class TestPlanToEntitySpec(unittest.TestCase):
@@ -200,17 +225,17 @@ class TestNoPerNeedTemplates(unittest.TestCase):
     なる。それは対応したことにならない——9つ目でまた同じ問題が起きる。
     """
 
-    def test_the_shape_vocabulary_stays_small(self) -> None:
+    def test_the_structural_vocabulary_stays_small(self) -> None:
         self.assertLessEqual(
-            len(PlanShape), 6,
-            "Need ごとに Shape を足している（それは Template と同じ）",
+            len(StructuralMode), 4,
+            "Need ごとに構造を足している（それは Template と同じ）",
         )
 
-    def test_no_shape_is_named_after_a_need(self) -> None:
+    def test_no_structure_is_named_after_a_need(self) -> None:
         forbidden = ("kids", "photo", "analytics", "game", "study", "travel", "child")
-        for shape in PlanShape:
+        for mode in StructuralMode:
             for word in forbidden:
-                self.assertNotIn(word, shape.value)
+                self.assertNotIn(word, mode.value)
 
 
 if __name__ == "__main__":

@@ -1,43 +1,62 @@
-"""**役の組み合わせから、作るものの形を決める**
-（GENERATED-UI-QG-V2-R4 / TD87、2026-08-26）。
+"""**役の組み合わせから、作るものを決める**
+（GENERATED-UI-QG-V2-R4 / FORGE-020A2、2026-08-26）。
 
 ---
 
 ## Capability Registry は語彙であって、生成結果ではない
 
 `LEARNABLE-LOCAL-AI-VISION.md` §22 が言っているのはこれである。
-Registry は「Forge が何を持っているか（語彙・制約・実装状態）」を
-宣言する表であり、**Need を入れると画面が出てくる装置ではない。**
-
-```
-Need → 役 → 必要な Capability → Capability Plan → IR → Forge Language
-                    ↑
-            Registry は「それが在るか」を答えるだけ
-```
+Registry は「Forge が何を持っているか」を宣言する表であり、
+**Need を入れると画面が出てくる装置ではない。**
 
 Registry を引いて画面を返す設計にすると、Registry の行数が
-「作れるアプリの種類」の上限になる。それが TD87
-（8アプリが3種類の画面にしかならない）の形である。
+「作れるアプリの種類」の上限になる。それが TD87 の形だった。
 
-## 専用 Template を作らない
+**Capability の表はここに無い。**
+`forge_ai/core/semantics/capabilities.py` が唯一の場所である
+（020A2 §1。R4 まではここに2つ目の表があり、会話側と ID が食い違って
+いた）。
 
-`kids_template` / `photo_template` / `analytics_template` を作れば
-8つの Need は「違う画面」になる。**それは対応したことにならない。**
-9つ目の Need でまた同じ問題が起きる。
+## 020A2 §2: 排他的な Shape をやめた
 
-ここで使うのは一般的な primitive だけである。
+R4 の `PlanShape` は
 
-* 記録する 1 件（Entity）と、その Field
-* 一覧
-* 集計（合計 / グループ別）
-* 推移
-* チェックの On/Off
+    RECORD_LOG_WITH_TOTAL
+    RECORD_LOG_WITH_GROUP_COMPARE
+    RECORD_LOG_WITH_TREND
 
-## 分からなかったことを Plan に残す
+という**組み合わせ enum** だった。複数の見せ方を求められると1つしか
+選べず、**残りは黙って捨てられていた**。修正前の実測:
 
-`unsupported` を持つ。ゲームループも音の合成も Forge には無い。
-**無いものを「checklist で代用」して黙るのが今までの壊れ方**だった。
-持っていないなら Plan にそう書く。
+```
+「部署ごとの売上を比較して、合計と月別推移も見たい」
+  役 : group_by, compare, total, trend   ← 4つ要求している
+  結果: view.list, view.group_compare    ← total と trend が消えた
+```
+
+`RECORD_LOG_WITH_TOTAL_AND_TREND` を足すのは**禁止**である。組み合わせの
+数だけ enum が増え、5つ目で破綻する。
+
+**直交する成分に分けた。**
+
+| 成分 | 何を言うか |
+|---|---|
+| `structure` | どういうデータ構造か（`StructuralMode`） |
+| `fields` | 1件ごとに何を残すか |
+| `views` | 何を見たいか（**集合**。1つ選ばない） |
+| `interactions` | 画面で何をするか |
+| `effects` | 外へ何をするか |
+| `partial` / `missing` | **出来ないと分かっていること** |
+
+「どういう構造か」と「何を見たいか」は別の軸である。
+
+## 要求は必ずどこかに現れる
+
+`requested` に入ったものは、`views` / `interactions` / `effects` /
+`fields` / `partial` / `missing` の**どれかに必ず現れる**
+（`test_everything_requested_is_accounted_for` が固定する）。
+
+消えるのと「出来ないと言われる」のは違う。
 """
 
 from __future__ import annotations
@@ -45,6 +64,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+from forge_ai.core.semantics.capabilities import (
+    SEMANTIC_CAPABILITIES,
+    SupportLevel,
+)
 from forge_ai.core.semantics.roles import (
     SemanticRole,
     SemanticRoleExtraction,
@@ -52,85 +75,27 @@ from forge_ai.core.semantics.roles import (
 )
 
 __all__ = [
-    "CAPABILITY_REGISTRY",
-    "CapabilityStatus",
     "CapabilityPlan",
-    "PlanShape",
     "PlannedField",
+    "StructuralMode",
     "plan_capabilities",
 ]
 
 
-class CapabilityStatus(str, Enum):
-    """**Forge がその能力を持っているか。** 実装状態の宣言。"""
+class StructuralMode(str, Enum):
+    """**どういうデータ構造の道具か。** 見せ方は含まない。
 
-    IMPLEMENTED = "implemented"
-    PARTIAL = "partial"
-    """出来るが本来の形ではない（写真を**文字で**記録する等）。"""
-
-    MISSING = "missing"
-    """**持っていない。** 代用して黙らない。"""
-
-
-#: Capability の語彙と実装状態。**これは表であって、生成器ではない。**
-#:
-#: 行を足しても「作れるアプリの種類」は増えない。増えるのは
-#: 「Forge が正直に名指しできるものの種類」である。
-CAPABILITY_REGISTRY: dict[str, tuple[CapabilityStatus, str]] = {
-    "record.entity": (CapabilityStatus.IMPLEMENTED, "1件分のデータを記録する"),
-    "record.text": (CapabilityStatus.IMPLEMENTED, "文字を記録する"),
-    "record.number": (CapabilityStatus.IMPLEMENTED, "数値を記録する"),
-    "record.date": (CapabilityStatus.IMPLEMENTED, "日付を記録する"),
-    "record.choice": (CapabilityStatus.IMPLEMENTED, "選択肢から選ぶ"),
-    "record.photo": (
-        CapabilityStatus.PARTIAL,
-        "写真そのものは扱えない。ファイル名・説明を文字として記録する",
-    ),
-    "record.sound": (
-        CapabilityStatus.PARTIAL,
-        "音そのものは扱えない。名前・メモを文字として記録する",
-    ),
-    "view.list": (CapabilityStatus.IMPLEMENTED, "記録を一覧で見る"),
-    "view.total": (CapabilityStatus.IMPLEMENTED, "合計・残高を出す"),
-    "view.group_compare": (
-        CapabilityStatus.IMPLEMENTED, "グループごとに集計して比べる",
-    ),
-    "view.trend": (
-        CapabilityStatus.PARTIAL,
-        "推移は**時系列グラフでは無い**。日付順の一覧と平均で近似する",
-    ),
-    "interact.check_off": (CapabilityStatus.IMPLEMENTED, "1件ずつ済みにする"),
-    "interact.notify": (CapabilityStatus.MISSING, "通知は送れない"),
-    "simulate.loop": (CapabilityStatus.MISSING, "ゲームループ・時間経過は無い"),
-    "media.compose": (CapabilityStatus.MISSING, "音や画像を合成できない"),
-}
-
-
-class PlanShape(str, Enum):
-    """**作るものの骨格。** Template 名ではない。
-
-    Template は「この画面を出す」という指定である。Shape は
-    「この道具は何をする道具か」という性質であり、同じ Shape でも
-    Field が違えば別の画面になる。
+    view を足しても、この enum は増えない。それが R4 との違いである。
     """
+
+    UNKNOWN = "unknown"
+    """**何も分からなかった。** 既定の checklist へ倒さない。"""
 
     CHECKLIST = "checklist"
     """1件ずつ済みにしていく。**記録する値を持たない。**"""
 
-    RECORD_LOG = "record_log"
-    """1件ずつ値を残して、一覧で見る。"""
-
-    RECORD_LOG_WITH_TOTAL = "record_log_with_total"
-    """記録 + 合計・残高。"""
-
-    RECORD_LOG_WITH_GROUP_COMPARE = "record_log_with_group_compare"
-    """記録 + グループごとの集計比較。"""
-
-    RECORD_LOG_WITH_TREND = "record_log_with_trend"
-    """記録 + 推移。"""
-
-    UNKNOWN = "unknown"
-    """**何も分からなかった。** 既定の checklist へ倒さない。"""
+    RECORD_ENTITY = "record_entity"
+    """1件ずつ値を残す。合計も比較も推移も、**この構造の上の見せ方**である。"""
 
 
 @dataclass(frozen=True)
@@ -145,34 +110,77 @@ class PlannedField:
     measure: str = "unknown"
     """`additive`（足せる）/ `average`（平均する）/ `unknown`。"""
 
-    capability: str = "record.text"
+    capability: str = "data.text"
+    """**Canonical Capability ID**（`capabilities.py`）。"""
+
     origin_role: SemanticRole = SemanticRole.RECORDED_DATA
 
 
 #: 正規化値 → 記録する Field の作り方。**一般的な primitive だけ。**
+#:
+#: `capability` は Canonical ID である（`record.text` のような別名は
+#: 020A2 で廃止した）。
 _FIELD_BLUEPRINT: dict[str, tuple[str, str, str, str]] = {
-    # value: (name, label, kind, capability)
-    "photo": ("photo", "写真", "string", "record.photo"),
-    "note": ("note", "メモ", "string", "record.text"),
-    "date": ("date", "日付", "date", "record.date"),
-    "deadline": ("deadline", "期限", "date", "record.date"),
-    "amount": ("amount", "金額", "number", "record.number"),
-    "accuracy": ("accuracy", "正解率", "number", "record.number"),
-    "difficulty": ("difficulty", "難易度", "number", "record.number"),
-    "impression": ("impression", "手応え", "string", "record.text"),
-    "mood": ("mood", "気分", "string", "record.text"),
-    "weight": ("weight", "体重", "number", "record.number"),
-    "height": ("height", "身長", "number", "record.number"),
-    "place": ("place", "場所", "string", "record.text"),
-    "kind": ("kind", "種類", "string", "record.text"),
-    "condition": ("condition", "条件", "string", "record.text"),
-    "result": ("result", "結果", "string", "record.text"),
-    "sound": ("sound", "音", "string", "record.sound"),
+    # value: (name, label, kind, canonical capability id)
+    "photo": ("photo", "写真", "string", "data.photo"),
+    "note": ("note", "メモ", "string", "data.text"),
+    "date": ("date", "日付", "date", "data.date"),
+    "deadline": ("deadline", "期限", "date", "data.date"),
+    "amount": ("amount", "金額", "number", "data.number"),
+    "accuracy": ("accuracy", "正解率", "number", "data.number"),
+    "difficulty": ("difficulty", "難易度", "number", "data.number"),
+    "impression": ("impression", "手応え", "string", "data.text"),
+    "mood": ("mood", "気分", "string", "data.text"),
+    "weight": ("weight", "体重", "number", "data.number"),
+    "height": ("height", "身長", "number", "data.number"),
+    "place": ("place", "場所", "string", "data.text"),
+    "kind": ("kind", "種類", "string", "data.text"),
+    "condition": ("condition", "条件", "string", "data.text"),
+    "result": ("result", "結果", "string", "data.text"),
+    "sound": ("sound", "音", "string", "data.audio"),
 }
 
 #: 平均する量（合計しても意味が無いもの）。`CLAUDE.md` の Measure Semantics。
 _AVERAGED_VALUES = frozenset({"accuracy", "difficulty", "weight", "height"})
 _ADDITIVE_VALUES = frozenset({"amount"})
+
+#: **見たい形 → Canonical Capability ID。**
+#:
+#: `elif` ではない。**役に現れたものを全部引く**——ここが 020A2 の要点で
+#: ある。1つ選ぶ構造だったから、残りが消えていた。
+_VIEW_CAPABILITIES: dict[str, str] = {
+    "list": "view.list",
+    "total": "view.metric",
+    "balance": "view.metric",
+    "aggregate": "view.group_compare",
+    "compare": "view.group_compare",
+    # **`group_by` だけでは比較を求めていない**（020A2 §6 で気付いた）。
+    #
+    # 「日付ごとに残して」の「ごと」は並べ方の話であって、
+    # 「部署ごとに比べたい」の比較とは違う。ここを同じ扱いにしていたので、
+    # 写真アプリが **comparison-first** の画面になっていた。
+    #
+    # `group_by` は役としては残る（`roles`）。**Capability の要求では
+    # ない**というだけである。
+    "chart": "view.bar_chart",
+    "trend": "view.trend",
+    "filter": "interact.filter",
+}
+
+#: 画面での操作 → Canonical ID。
+_INTERACTION_CAPABILITIES: dict[str, str] = {
+    "check_off": "interact.check_off",
+}
+
+#: 外への作用 → Canonical ID。
+_EFFECT_CAPABILITIES: dict[str, str] = {
+    "notify": "effect.notify",
+}
+
+#: 行い → 「Forge が持っていない振る舞い」の Canonical ID。
+_ACTIVITY_CAPABILITIES: dict[str, tuple[str, ...]] = {
+    "combine": ("effect.media_compose",),
+}
 
 #: `MANAGED_OBJECT` / `ACTIVITY` → Entity の名前と表示名。
 _SUBJECT_LABELS: dict[str, tuple[str, str]] = {
@@ -198,10 +206,7 @@ _SUBJECT_LABELS: dict[str, tuple[str, str]] = {
     "clinic_visit": ("visit_log", "通院"),
 }
 
-#: `CONTEXT` → グループ分けに使える次元の表示名。
-#:
-#: **CONTEXT だけでは Field にならない。** `DESIRED_VIEW` が
-#: 「〜ごとに比べたい」と言ったときにだけ、比較の軸として昇格する。
+#: `CONTEXT` → 比較の軸として使える次元。
 _GROUPING_LABELS: dict[str, tuple[str, str]] = {
     "department": ("department", "部署"),
     "school": ("school", "学校"),
@@ -209,67 +214,89 @@ _GROUPING_LABELS: dict[str, tuple[str, str]] = {
     "travel": ("trip", "旅行"),
     "meeting": ("meeting", "会議"),
     "store": ("store", "店"),
+    "team": ("team", "チーム"),
 }
 
 
 @dataclass(frozen=True)
 class CapabilityPlan:
-    """**この Need のために何を作るか。**"""
+    """**この Need のために何を作るか。**
+
+    直交する成分を持つ。1つを選んで残りを捨てる構造にしない。
+    """
 
     roles: SemanticRoleExtraction
-    shape: PlanShape
+    structure: StructuralMode
+
     entity_name: str = ""
     entity_label: str = ""
     fields: tuple[PlannedField, ...] = ()
+
     views: tuple[str, ...] = ()
+    """**集合である。** `view.list` と `view.metric` と `view.trend` は
+    同時に成立する。"""
+
     interactions: tuple[str, ...] = ()
-    unsupported: tuple[str, ...] = field(default=())
-    """**持っていない能力**。名指しして残す。代用して黙らない。"""
+    effects: tuple[str, ...] = ()
+
+    structure_capabilities: tuple[str, ...] = ()
+    """構造そのものが満たす Capability（`data.entity` 等）。
+
+    Field にも View にも現れないが**要求は満たされている**。ここが無いと
+    「要求されたのにどこにも記録されていない」判定に引っかかる。
+    """
+
+    requested: tuple[str, ...] = ()
+    """**利用者が求めた Capability 全部。** 出来た / 出来ないの前の姿。
+
+    `requested` にあって他のどこにも無い ID は、**黙って消えた**という
+    ことである。テストがそれを落とす。
+    """
 
     partial: tuple[str, ...] = field(default=())
-    """出来るが本来の形ではない能力。"""
+    """出来るが本来の形ではないもの。"""
+
+    missing: tuple[str, ...] = field(default=())
+    """**持っていないもの。** 名指しして残す。代用して黙らない。"""
 
     @property
     def is_actionable(self) -> bool:
         """**IR を組めるだけの材料が揃っているか。**"""
-        return self.shape is not PlanShape.UNKNOWN and bool(self.entity_label)
+        return self.structure is not StructuralMode.UNKNOWN and bool(self.entity_label)
+
+    @property
+    def unsupported(self) -> tuple[str, ...]:
+        """R4 までの名前。**`missing` の別名として残す**（呼び出し側互換）。"""
+        return self.missing
+
+    def limitations(self) -> tuple[tuple[str, str], ...]:
+        """**何が出来ないのか**を、利用者へ見せられる言葉で返す。
+
+        `(capability_id, 説明)`。Catalog の `limitation` を引く——
+        ここで文言を書かない（また2箇所になる）。
+        """
+        found: list[tuple[str, str]] = []
+        for capability_id in (*self.missing, *self.partial):
+            definition = SEMANTIC_CAPABILITIES.get(capability_id)
+            if definition is not None and definition.limitation:
+                found.append((capability_id, definition.limitation))
+        return tuple(found)
 
     def to_dict(self) -> dict[str, object]:
         """Decision Trace / Evidence へそのまま載せる。"""
         return {
-            "shape": self.shape.value,
+            "structure": self.structure.value,
             "entity": self.entity_name,
             "fields": [f.name for f in self.fields],
             "views": list(self.views),
             "interactions": list(self.interactions),
-            "unsupported": list(self.unsupported),
+            "effects": list(self.effects),
+            "structure_capabilities": list(self.structure_capabilities),
+            "requested": list(self.requested),
             "partial": list(self.partial),
+            "missing": list(self.missing),
             "roles": self.roles.to_dict(),
         }
-
-
-def _subject_of(roles: SemanticRoleExtraction) -> tuple[str, str]:
-    """Entity の名前と表示名。**ACTOR / CONTEXT からは作らない。**
-
-    「子ども」からEntityを作ると「こどもの成長」になる。それが TD89。
-    """
-    # **ACTOR / CONTEXT の値は、表に載っていても採らない。**
-    #
-    # 配線破壊試験で分かったこと（M11、2026-08-26）: 下の for が
-    # 構造役だけを回っていても、それを守っていたのは**表の中身**で
-    # あって、コードではなかった。`_SUBJECT_LABELS` に `travel` を
-    # 1行足せば、この関数は黙って「旅行」を Entity にする。
-    #
-    # 規則をコード側にも置き、静的検査（`test_semantic_roles_and_
-    # capability_plan.py`）で表の中身も固定する。二重にする。
-    forbidden = set(roles.of(SemanticRole.ACTOR)) | set(roles.of(SemanticRole.CONTEXT))
-    for role in (SemanticRole.MANAGED_OBJECT, SemanticRole.ACTIVITY, SemanticRole.SUBJECT):
-        for value in roles.of(role):
-            if value in forbidden:
-                continue
-            if value in _SUBJECT_LABELS:
-                return _SUBJECT_LABELS[value]
-    return ("", "")
 
 
 def _subject_of_role(
@@ -285,40 +312,73 @@ def _subject_of_role(
     return None
 
 
-def _shape_of(roles: SemanticRoleExtraction, fields: tuple[PlannedField, ...]) -> PlanShape:
-    views = set(roles.of(SemanticRole.DESIRED_VIEW))
-    # **チェックして消す道具に、記録する値は要らない。**
-    if "check_off" in views and not fields:
-        return PlanShape.CHECKLIST
-    if not fields:
-        return PlanShape.CHECKLIST if "check_off" in views else PlanShape.UNKNOWN
-    if views & {"compare", "aggregate", "chart"}:
-        return PlanShape.RECORD_LOG_WITH_GROUP_COMPARE
-    if "trend" in views:
-        return PlanShape.RECORD_LOG_WITH_TREND
-    if views & {"total", "balance"}:
-        return PlanShape.RECORD_LOG_WITH_TOTAL
-    return PlanShape.RECORD_LOG
+def _subject_of(roles: SemanticRoleExtraction) -> tuple[str, str]:
+    """Entity の名前と表示名。**ACTOR / CONTEXT からは作らない。**
+
+    「子ども」から Entity を作ると「こどもの成長」になる。それが TD89。
+
+    配線破壊試験（M11）で分かったこと: 下の for が構造役だけを回っていても、
+    それを守っていたのは**表の中身**であってコードではなかった。
+    `_SUBJECT_LABELS` に `travel` を1行足せば、黙って「旅行」を Entity に
+    する。規則をコード側にも置く。
+    """
+    forbidden = set(roles.of(SemanticRole.ACTOR)) | set(roles.of(SemanticRole.CONTEXT))
+    for role in (SemanticRole.MANAGED_OBJECT, SemanticRole.ACTIVITY, SemanticRole.SUBJECT):
+        for value in roles.of(role):
+            if value in forbidden:
+                continue
+            if value in _SUBJECT_LABELS:
+                return _SUBJECT_LABELS[value]
+    return ("", "")
 
 
-def plan_capabilities(text: str) -> CapabilityPlan:
+def _classify(requested: set[str]) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """要求を **出来る / 一部 / 出来ない** へ分ける。
+
+    判定は Catalog の `SupportLevel` だけを見る。**ここで status を
+    書かない**——書いた時点で2つ目の Source of Truth になる。
+    """
+    ok: list[str] = []
+    partial: list[str] = []
+    missing: list[str] = []
+    for capability_id in sorted(requested):
+        definition = SEMANTIC_CAPABILITIES.get(capability_id)
+        if definition is None:
+            # **知らない ID を黙って通さない。**
+            missing.append(capability_id)
+            continue
+        if definition.support is SupportLevel.IMPLEMENTED:
+            ok.append(capability_id)
+        elif definition.support is SupportLevel.PARTIAL:
+            ok.append(capability_id)
+            partial.append(capability_id)
+        else:
+            missing.append(capability_id)
+    return tuple(ok), tuple(partial), tuple(missing)
+
+
+def plan_capabilities(text: str) -> CapabilityPlan:  # noqa: PLR0912 — 段の見通しを優先
     """Need から Capability Plan を作る。**決定的**。
 
     Domain 名は1つも出てこない。出てくるのは役と、その役から必要になる
-    能力だけである。
+    Capability だけである。
     """
     roles = extract_semantic_roles(text)
     if roles.is_empty:
-        return CapabilityPlan(roles=roles, shape=PlanShape.UNKNOWN)
+        return CapabilityPlan(roles=roles, structure=StructuralMode.UNKNOWN)
 
+    requested: set[str] = set()
+
+    # -- 1件ごとに残す値 ------------------------------------------------
     fields: list[PlannedField] = []
     for value in roles.of(SemanticRole.RECORDED_DATA):
         blueprint = _FIELD_BLUEPRINT.get(value)
         if blueprint is None:
             continue
-        name, label, kind, capability = blueprint
+        name, label, kind, capability_id = blueprint
+        requested.add(capability_id)
         fields.append(PlannedField(
-            name=name, label=label, kind=kind, capability=capability,
+            name=name, label=label, kind=kind, capability=capability_id,
             measure=(
                 "additive" if value in _ADDITIVE_VALUES
                 else "average" if value in _AVERAGED_VALUES
@@ -326,112 +386,104 @@ def plan_capabilities(text: str) -> CapabilityPlan:
             ),
         ))
 
-    views = set(roles.of(SemanticRole.DESIRED_VIEW))
+    view_values = set(roles.of(SemanticRole.DESIRED_VIEW))
 
     # **CONTEXT が Field へ昇格するのは、比較を求められたときだけ。**
     #
-    # 「部署ごとの売上を比べたい」は、部署を記録しなければ比べられない。
-    # 一方「旅行の写真を残したい」の旅行は、記録すべき値ではなく場面で
-    # ある。求められた view が違うので、扱いも違ってよい。
-    #
-    # **`group_by` だけでは昇格させない**（実装中に踏んだ）。
-    # 「日付ごとに残して」の「ごと」で `group_by` が立ち、CONTEXT の
-    # 「旅行」が Field へ昇格して**写真1枚ごとに「旅行」欄**が出た。
-    # 「〜ごと」は日付でも成立する——**比較（compare / aggregate）を
-    # 明示的に求められたときだけ**、軸として記録する必要が生まれる。
-    if views & {"compare", "aggregate"}:
+    # 「〜ごと」だけでは昇格させない（R4 で踏んだ）——「日付ごとに残して」
+    # の「ごと」で写真1枚ごとに「旅行」欄が出ていた。
+    if view_values & {"compare", "aggregate"}:
         for value in roles.of(SemanticRole.CONTEXT):
             grouping = _GROUPING_LABELS.get(value)
             if grouping is not None:
                 name, label = grouping
+                requested.add("data.text")
                 fields.insert(0, PlannedField(
                     name=name, label=label, kind="string",
-                    capability="record.text", origin_role=SemanticRole.CONTEXT,
+                    capability="data.text", origin_role=SemanticRole.CONTEXT,
                 ))
                 break
 
-    entity_name, entity_label = _subject_of(roles)
+    wants_check_off = "check_off" in view_values
 
-    # **記録する主題そのものを1件目の欄にする**（実描画で見て直した）。
+    # -- 数えられる対象には1件ずつの名前が要る --------------------------
     #
-    # Round 4 の2回目、「英単語を出題して、正解率の推移を見たい」が
-    # **正解率の欄しか無い**画面になっていた。どの単語の正解率なのかを
-    # 入れる場所が無い。「植物を育てながら…」も同じで、植物の名前を
-    # 入れられなかった。
-    #
-    # `MANAGED_OBJECT` は**数えられる対象**である。数えられるものには
-    # 1件ずつの名前が要る。Need ごとの表ではなく、役の性質から出る規則。
+    # 「済みにしていく」道具は値を持たない（checklist）。それ以外で
+    # 数えられる対象があるなら、**その対象自体が記録の1件**である
+    # ——「作業を記録して…比べたい」に記録欄が無いのはおかしい。
     managed = _subject_of_role(roles, SemanticRole.MANAGED_OBJECT)
-    if managed and fields:
+    if managed and not wants_check_off:
         name, label = managed
         if all(f.name != name for f in fields):
+            requested.add("data.text")
             fields.insert(0, PlannedField(
                 name=name, label=label, kind="string",
-                capability="record.text", origin_role=SemanticRole.MANAGED_OBJECT,
+                capability="data.text", origin_role=SemanticRole.MANAGED_OBJECT,
             ))
 
     field_tuple = tuple(fields)
-    shape = _shape_of(roles, field_tuple)
 
-    if shape is not PlanShape.UNKNOWN and not entity_label:
-        # 主題が取れないが記録する値はある。
-        #
-        # **記録している値そのものから名乗る**（実描画で見て直した）。
-        # Round 4 の1回目、写真アプリもデータ分析アプリも両方
-        # 「記録」という名前になっていた。間違いではないが、
-        # 何の道具か分からない。
-        #
-        # 利用者が実際に使った語（`surface`）を使う。「売上」「写真」は
-        # 要求文の一部だが、**1語の名詞は名前である**（`naming.py` の
-        # `is_name_like` が判定する）。文を写しているわけではない。
-        #
-        # Domain 表は引かない。**役から名乗る。**
-        recorded = roles.surfaces_of(SemanticRole.RECORDED_DATA)
-        first = next(
-            (s for s in recorded
-             if any(f.origin_role is SemanticRole.RECORDED_DATA for f in field_tuple)),
-            "",
-        )
-        entity_name = "record"
-        entity_label = f"{first}記録" if first else "記録"
+    # -- 構造（見せ方とは独立） -----------------------------------------
+    if field_tuple:
+        structure = StructuralMode.RECORD_ENTITY
+    elif wants_check_off:
+        structure = StructuralMode.CHECKLIST
+    else:
+        structure = StructuralMode.UNKNOWN
 
-    planned_views: list[str] = ["view.list"]
-    interactions: list[str] = []
-    if shape is PlanShape.CHECKLIST:
-        planned_views = []
-        interactions.append("interact.check_off")
-    elif shape is PlanShape.RECORD_LOG_WITH_GROUP_COMPARE:
-        planned_views.append("view.group_compare")
-    elif shape is PlanShape.RECORD_LOG_WITH_TREND:
-        planned_views.append("view.trend")
-    elif shape is PlanShape.RECORD_LOG_WITH_TOTAL:
-        planned_views.append("view.total")
+    # -- 見せ方（**集合**。1つ選ばない） --------------------------------
+    for value in view_values:
+        capability_id = _VIEW_CAPABILITIES.get(value)
+        if capability_id is not None:
+            requested.add(capability_id)
+    if structure is StructuralMode.RECORD_ENTITY:
+        # 記録する道具は、必ず一覧を持つ。
+        requested.add("view.list")
+        requested.add("data.entity")
+        requested.add("interact.edit")
 
-    # **持っていない能力を名指しする。**
-    requested = set(f.capability for f in field_tuple) | set(planned_views) | set(interactions)
-    if roles.has(SemanticRole.EFFECT):
-        requested.add("interact.notify")
+    # -- 画面での操作 / 外への作用 --------------------------------------
+    if wants_check_off:
+        requested.add(_INTERACTION_CAPABILITIES["check_off"])
+    for value in roles.of(SemanticRole.EFFECT):
+        capability_id = _EFFECT_CAPABILITIES.get(value)
+        if capability_id is not None:
+            requested.add(capability_id)
+    for value in roles.of(SemanticRole.ACTIVITY):
+        for capability_id in _ACTIVITY_CAPABILITIES.get(value, ()):
+            requested.add(capability_id)
+
+    # **ゲームは「育てる」と「組み合わせる」が揃ったときに要求される。**
     activities = set(roles.of(SemanticRole.ACTIVITY))
-    if "combine" in activities:
-        requested.add("media.compose")
     if "grow" in activities and "combine" in activities:
         requested.add("simulate.loop")
 
-    unsupported = tuple(sorted(
-        c for c in requested
-        if CAPABILITY_REGISTRY.get(c, (CapabilityStatus.MISSING, ""))[0]
-        is CapabilityStatus.MISSING
-    ))
-    partial = tuple(sorted(
-        c for c in requested
-        if CAPABILITY_REGISTRY.get(c, (CapabilityStatus.MISSING, ""))[0]
-        is CapabilityStatus.PARTIAL
-    ))
+    ok, partial, missing = _classify(requested)
+
+    entity_name, entity_label = _subject_of(roles)
+    if structure is StructuralMode.RECORD_ENTITY and not entity_label:
+        # 主題が取れないが記録する値はある。**記録している値そのものから
+        # 名乗る**（R4 の実描画で「記録」ばかりになったので直した）。
+        recorded = roles.surfaces_of(SemanticRole.RECORDED_DATA)
+        first = next(iter(recorded), "")
+        entity_name = "record"
+        entity_label = f"{first}記録" if first else "記録"
+
+    # 出来ると判定されたものを、層ごとに仕分ける。
+    views = tuple(c for c in ok if c.startswith("view."))
+    interactions = tuple(c for c in ok if c.startswith("interact."))
+    effects = tuple(c for c in ok if c.startswith("effect."))
+    field_capabilities = {f.capability for f in field_tuple}
+    structure_capabilities = tuple(
+        c for c in ok if c.startswith("data.") and c not in field_capabilities
+    )
 
     return CapabilityPlan(
-        roles=roles, shape=shape,
+        roles=roles, structure=structure,
         entity_name=entity_name, entity_label=entity_label,
-        fields=field_tuple, views=tuple(planned_views),
-        interactions=tuple(interactions),
-        unsupported=unsupported, partial=partial,
+        fields=field_tuple,
+        views=views, interactions=interactions, effects=effects,
+        structure_capabilities=structure_capabilities,
+        requested=tuple(sorted(requested)),
+        partial=partial, missing=missing,
     )
