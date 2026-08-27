@@ -53,6 +53,7 @@ from app.ai.gateway.benchmark_evidence import Verification  # noqa: E402
 from app.ai.gateway.generation_evidence import (  # noqa: E402
     GenerationSource,
     StructureProvenance,
+    StructureProvider,
 )
 from app.ai.gateway.learning_events import Deployment  # noqa: E402
 from app.ai.gateway.provider_registry import (  # noqa: E402
@@ -251,13 +252,23 @@ class TestRealLocalModelRunCounting(unittest.TestCase):
             # 呼ぶ。以前ここは FORGE_LANGUAGE_UPDATE を書いており、
             # **別の Task の成績として集計される**状態だった。
             "task": ForgeTask.COGNITIVE_STAGE,
-            "observed_tasks": (ForgeTask.COGNITIVE_STAGE,),
+            # **構造を作った Task も実際に通っていること**（020A3B §3）。
+            # `entity_synthesis` が観測に無ければ Level 0 ではない。
+            "observed_tasks": (
+                ForgeTask.COGNITIVE_STAGE, ForgeTask.ENTITY_SYNTHESIS,
+            ),
             "domain_resolution": "generated",
             # **本物の Level 0 は「AI が構造を設計した」実行である**
             # （020A2 §3）。`domain_resolution=generated` だけでは、
             # 決定的な Capability Plan が構造を作り Design Intent だけ
             # Local を呼んだ実行も通ってしまう。
             "structure_source": GenerationStructureSource.AI_ENTITY_SYNTHESIS,
+            # **「AI が作った」だけでは足りない**（020A3B §3）。
+            # Cloud が合成した実行も Test Double が合成した実行も
+            # `AI_ENTITY_SYNTHESIS` になる。Level 0 は「**Local Model が**
+            # 作った」の証拠なので、Provider と stage を独立に要求する。
+            "structure_provider": StructureProvider.LOCAL,
+            "structure_task": ForgeTask.ENTITY_SYNTHESIS.value,
             "runtime_backend": LocalRuntimeBackend.OLLAMA,
             "runtime_version": "0.5.0",
             "model_id": "qwen2.5:1.5b-instruct",

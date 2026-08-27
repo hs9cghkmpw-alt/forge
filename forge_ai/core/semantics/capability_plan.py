@@ -74,11 +74,29 @@ from forge_ai.core.semantics.roles import (
     extract_semantic_roles,
 )
 
+class UnknownCapabilityError(LookupError):
+    """**Catalog に無い Capability ID が Plan から出た。**
+
+    利用者の要求の問題ではなく、`capability_plan.py` と
+    `capabilities.py` の食い違いである。MISSING で握り潰すと、
+    「作れません」という嘘の説明になって表に出る。
+    """
+
+    def __init__(self, capability_id: str) -> None:
+        super().__init__(
+            f"Catalog に無い Capability ID: {capability_id!r}。"
+            " forge_ai/core/semantics/capabilities.py へ足すか、"
+            " Plan 側の綴りを直すこと（MISSING へ倒さない）",
+        )
+        self.capability_id = capability_id
+
+
 __all__ = [
     "CapabilityPlan",
     "PlannedField",
     "StructuralMode",
     "plan_capabilities",
+    "UnknownCapabilityError",
 ]
 
 
@@ -344,9 +362,21 @@ def _classify(requested: set[str]) -> tuple[tuple[str, ...], tuple[str, ...], tu
     for capability_id in sorted(requested):
         definition = SEMANTIC_CAPABILITIES.get(capability_id)
         if definition is None:
-            # **知らない ID を黙って通さない。**
-            missing.append(capability_id)
-            continue
+            # **知らない ID を MISSING へ倒さない**（020A3B §4、2026-08-27）。
+            #
+            # 以前はここで `missing.append()` していた。それは
+            # 「Forge がその能力を持っていない」という**利用者向けの事実**
+            # だが、実際に起きているのは**綴りを間違えた**か
+            # **Catalog へ足し忘れた**である。
+            #
+            # 黙って MISSING になると:
+            #
+            # * 利用者へ「それは作れません」と嘘を言う
+            # * `capability_gap` に内部 ID が出る
+            # * Catalog への追加漏れが永久に気付かれない
+            #
+            # **未知の semantic ID は設定/実装の誤りである。** 落とす。
+            raise UnknownCapabilityError(capability_id)
         if definition.support is SupportLevel.IMPLEMENTED:
             ok.append(capability_id)
         elif definition.support is SupportLevel.PARTIAL:

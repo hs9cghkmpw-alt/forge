@@ -1,5 +1,69 @@
 # CHANGELOG
 
+## 2026-08-27 — FORGE-020A3B: CLOSEOUT INTEGRITY AND CI RECOVERY
+
+指示書は HEAD を `a6ce369`（CI FAILURE）としていたが、着手時点の最新は
+`77d1a05` で **CI は 4 jobs すべて success** だった（run 33064545042）。
+020A3 の3 commit が赤だったのを merge commit が解消済みである。
+§1 は完了済みだったので**条件を満たしているかだけ確認**し、未着手だった
+§2〜§5 を実装した。詳細は `docs/reports/FORGE-020A3B-CLOSEOUT-report.md`。
+
+### §3 Level 0 に structure_provider / structure_task を必須化（**実バグ**）
+
+`RealLocalModelRun` は `structure_provider` も `structure_task` も
+**持っていなかった**。Level 0 は `structure_source` しか見ておらず、
+`AI_ENTITY_SYNTHESIS` は「**AI が**作った」までしか言わないので、
+**Cloud が構造を設計した実行が Local Model の実績として数えられる**
+状態だった（019B §4 / 020A と同じ「呼んでもいない Provider の手柄」）。
+
+Level 0 は `structure_provider == LOCAL` かつ
+`structure_task == entity_synthesis` かつ **その Task が実際に
+AIRouter を通っていること**まで要求する。stage 名は
+`ForgeTask.ENTITY_SYNTHESIS` から引く。
+
+Mutation M1–M5 すべてで対応するテストが落ちることを確認した。
+
+### §4 未知 Capability ID を MISSING へ倒すのをやめた
+
+`_classify()` が Catalog に無い ID を MISSING にしていた。実際に起きる
+のは綴り間違いか足し忘れであり、黙って MISSING にすると
+**利用者へ「作れません」と嘘を言い、追加漏れが永久に気付かれない**。
+→ `UnknownCapabilityError`。
+
+`effects` / `structure_capabilities` が Evidence へ**一度も届いて
+いなかった**のも直した。今は必ず空だが、**空だから落としてよいわけ
+ではない**——成分を1つでも落としたら落ちるテストを置いた。
+
+`interact.notify` は 020A2 の SoT 統一で既に解消済みだった。
+
+### §5 PARTIAL を「成功」として学習させない
+
+legacy `capabilities` に `data.photo` と `partial:data.photo` が
+**両方**入っていた。素の並びだけを読む Dataset Builder は
+「写真を扱えた」を成功例として学習する——実際には写真そのものは扱えず、
+文字で残しているだけである。
+
+素の ID は「**全部出来て、実際に使った**」の意味に限った。
+新しい Source of Truth は typed な `capability_usage` であることを
+docstring とテストで固定した。
+
+### §2 Quality Gate を Need の種類で分けた
+
+振り分けは `capability_gap.blocks_completion` という**述語1つ**。
+Need 名の分岐は作らない（本番に `ゲーム` 等の語が無いことを静的に固定）。
+
+- build 可能 → 文書の品質
+- critical missing → **完成品を偽って返していないか**
+  （`release_ready` が false で、**その理由が gap であること**まで見る）
+
+最初に書いた版は配線を外しても通る置物だったので書き直した。
+
+### 検証（LOCAL）
+
+backend **1884 passed / 16 skipped**、forge_ai **585 passed**、
+変更ファイルの ruff クリーン。QG fixture は再生成しても文書が変わらない
+ので Round 5 の56枚はそのまま有効。**Real Local Model runs = 0。**
+
 ## 2026-08-27 — FORGE-020A2 / QG-V2-R5: Capability SoT統一 + 直交Plan + Structure Provenance + 操作して撮る
 
 Reviewer 判定は 020A1/R4 に対して **NO-GO** だった。その3件（HIGH）を含む

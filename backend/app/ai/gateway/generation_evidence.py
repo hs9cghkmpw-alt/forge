@@ -374,7 +374,34 @@ class GenerationRecord:
     """Forge Language Validatorを通ったか。"""
 
     capabilities: tuple[str, ...] = ()
-    """使われたCapabilityの識別子。**値ではなく名前**。"""
+    """使われたCapabilityの識別子。**値ではなく名前**。
+
+    **これは古い契約である。Source of Truth は `capability_usage` の方**
+    （020A3B §5、2026-08-27）。新しく読む側は typed の方を読むこと。
+
+    ---
+
+    ## 接頭辞の意味（読む側が必ず守ること）
+
+    | 形 | 意味 |
+    |---|---|
+    | `view.list` | **全部出来て、実際に使った** |
+    | `partial:data.photo` | 出来たが本来の形ではない |
+    | `unsupported:simulate.loop` | 求められたが**持っていない** |
+
+    **素の ID と `partial:` が同じ ID について両方入ることはない。**
+    以前は両方入っており、素の並びだけを読む利用者が
+    「写真を扱えた」を成功例として学習しうる状態だった
+    （`test_forge_020a3b_partial_is_not_success.py` が固定する）。
+
+    ## なぜ残してあるか
+
+    「持っていなかった」という事実も学習の材料だからである。
+    ただし接頭辞を parse させる設計は脆い——だから
+    `capability_usage` が `status` を**欄で**言う。
+
+    Dataset Builder / Local AI の学習は `capability_usage` を読むこと。
+    """
 
     entity_synthesis_attempted: bool = False
     """AI の Entity 合成を**試したか**（020A3）。"""

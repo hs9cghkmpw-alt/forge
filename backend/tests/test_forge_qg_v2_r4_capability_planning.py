@@ -271,8 +271,21 @@ class TestTheCapabilityPlanReachesDurableEvidence(unittest.TestCase):
         return records[-1]
 
     def test_capabilities_are_recorded(self) -> None:
+        """**020A3B §5 で意味を狭めた。**
+
+        R4 では `view.trend` が素の ID で入っていた。しかし
+        `view.trend` は PARTIAL である——時系列グラフは描けず、
+        日付順の一覧と合計で近似している。
+
+        素の ID は「**全部出来て、実際に使った**」の意味に限ったので、
+        PARTIAL は `partial:` 付きだけになる。素の並びを読む
+        Dataset Builder が「推移を描けた」と学習しないようにするため。
+        """
         record = self._record_for(STUDY_NEED)
-        self.assertIn("view.trend", record.capabilities)
+        self.assertIn("partial:view.trend", record.capabilities)
+        self.assertNotIn("view.trend", record.capabilities)
+        # **記録自体は残っている。** 消したわけではない。
+        self.assertIn("view.list", record.capabilities)
 
     def test_what_forge_could_not_do_is_recorded_too(self) -> None:
         """**「持っていなかった」も学習の材料である。**

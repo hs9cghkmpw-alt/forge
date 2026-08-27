@@ -3,10 +3,12 @@
 - Branch: `claude/forge-master-handoff-k46jns`
 - Implementation Agent: **Claude Code**
 - Current phase: R1 Generated App Quality / Growing AI
-- Current task: **FORGE-020A2 / GENERATED-UI-QG-V2-R5** — 完了
+- Current task: **FORGE-020A3B / CLOSEOUT-INTEGRITY-AND-CI-RECOVERY** — 完了
+- 前段: FORGE-020A2 / QG-V2-R5、FORGE-020A3（どちらも統合済み）
 - Golden Quality Gate: **FAIL**（理由は下記。結果を先に決めていない）
 - **Real Local Model runs: 0**（実 Local Model を動かしていないので増やしていない）
-- 詳細: `docs/reports/FORGE-020A2-QG-V2-R5-report.md`
+- 詳細: `docs/reports/FORGE-020A3B-CLOSEOUT-report.md`
+  ／ `docs/reports/FORGE-020A2-QG-V2-R5-report.md`
 - 視覚 Evidence: `docs/visual-evidence/QUALITY-GATE-V2/round-5/manifest.md`
 
 ---
@@ -77,7 +79,20 @@ python scripts/verify_local_model_level0.py
 作業を分ける（別 branch にする / 担当領域を分ける）かどうかは、
 CEO の判断をもらえると助かる。
 
-### 4. CI runner の割当（**継続確認**）
+### 4. Capability ID の綴りを揃え直すか（**判断がほしい**）
+
+020A3B の指示書は fields を `record.*`、合成を `media.*` と書いていた。
+それは **020A3 branch の綴り**であり、merge 済みの正典（GitHub 上の
+現在の Source of Truth）は `data.*` / `effect.media_compose` である。
+
+指示の**要件**——「責務ごとに namespace を分ける」「Plan が出す全 ID が
+Catalog にある」——は満たしており、機械が検査している。
+
+**綴りを `record.*` / `media.*` へ揃え直すかは CEO の判断**なので、
+勝手には変えていない。やるなら機械的な rename で、invariant テストが
+守る（QG 生成物の再出力も要る）。
+
+### 5. CI runner の割当（**継続確認**）
 
 `run 32983961000`（HEAD `87991ef`）は failure だが**コードが1行も
 実行されていない**（4 jobs すべて queued / steps 0 / runner 未割当、
@@ -236,8 +251,8 @@ Playwright で実際にタブを押してから撮る。
 
 | 対象 | 結果 |
 |---|---|
-| `backend` 全件 | **1845 passed / 16 skipped**（020A3 との merge 後） |
-| `forge_ai` 全件 | **585 passed**（同上） |
+| `backend` 全件 | **1884 passed / 16 skipped**（020A3B 後） |
+| `forge_ai` 全件 | **585 passed** |
 | `flutter analyze` | **No issues found!** |
 | `flutter test` | **516 passed** |
 | `flutter build web`（撮影ハーネス） | 成功 |
@@ -249,8 +264,13 @@ Playwright で実際にタブを押してから撮る。
 
 ### CI（最新 HEAD）
 
-<!-- CI-STATUS -->
-push 直後に追記する。**green を確認するまで PASS と書かない。**
+| run | HEAD | 結果 |
+|---|---|---|
+| `33064545042` | `77d1a05` | **4 jobs すべて success** |
+
+> **020A3 の3 commit（`8ca31a7` / `a6ce369` / `df42dbf`）は赤だった。**
+> backend テストが Python 3.11 / 3.12 の両方で落ちていた。
+> `77d1a05`（020A2/R5 と 020A3 の merge）が解消している。
 
 ### Mutation（§9）
 
@@ -265,9 +285,53 @@ M1–M12 は 020A2 の実装時に確認済み。今回追加分:
 
 ---
 
+## 020A3B で直したこと（要点）
+
+**指示書の前提を1つ訂正した。** 指示は HEAD を `a6ce369`（CI FAILURE）と
+していたが、着手時点の最新は `77d1a05` で **CI は全 green** だった。
+§1（CI recovery）は完了済みだったので、条件（テストを消していないか、
+昔の動作へ戻していないか）だけ確認した。**§2〜§5 には本当に未着手のものが
+あった。**
+
+### §3 Level 0 が「誰が構造を作ったか」を見ていなかった（**実バグ**）
+
+`RealLocalModelRun` に `structure_provider` も `structure_task` も
+無かった。`AI_ENTITY_SYNTHESIS` は「**AI が**作った」までしか言わない
+ので、**Cloud が設計した実行が Local Model の実績として Level 0 に
+数えられる**状態だった。
+
+Level 0 は Provider（`LOCAL`）と stage（`entity_synthesis`）を独立に
+要求し、**その Task が実際に AIRouter を通ったこと**まで見る。
+Mutation M1–M5 すべてで落ちることを確認した。
+
+### §4 未知の Capability ID が黙って「作れません」に化けていた
+
+綴り間違いや Catalog への足し忘れが MISSING になり、利用者へ**嘘の説明**
+として出ていた。落とすようにした（`UnknownCapabilityError`）。
+
+`effects` / `structure_capabilities` が Evidence へ**一度も届いて
+いなかった**のも直した（「作ったが呼ばれない」5回目）。
+
+### §5 PARTIAL が「成功」として学習される状態だった
+
+`data.photo` と `partial:data.photo` が Evidence に**両方**入っていた。
+素の並びを読む Dataset Builder は「写真を扱えた」を成功例として学習する
+——実際には写真そのものは扱えない。素の ID は「全部出来て、実際に
+使った」の意味に限った。
+
+### §2 Quality Gate を Need の種類で分けた
+
+`capability_gap.blocks_completion` という**述語1つ**で振り分ける。
+Need 名の分岐は作らない。critical missing の Need は「文書の品質」では
+なく「**完成品を偽っていないか**」で見る。
+
+---
+
 ## 次にやること
 
 **020B production wiring はまだ開始していない**（CEO指示）。
+
+**020A4 へは進んでいない。**
 
 先に片付けるべきは **TD95** である。
 

@@ -514,14 +514,48 @@ def _capabilities_used(context) -> tuple[str, ...]:  # noqa: ANN001
     # ID は正典（`forge_ai/core/semantics/capabilities.py`）の語彙で
     # ある。`record.entity` のような別系統の名前をここで作らない——
     # それが 020A2 §1 が禁じた「2つ目の表」の始まり方である。
+    # **Plan の成分を1つも落とさない**（020A3B §4、2026-08-27）。
+    #
+    # 以前は fields / views / interactions しか載せていなかった。
+    # `effects` と `structure_capabilities` は Plan にありながら
+    # **Evidence へ一度も届いていなかった**——欄はあるが誰も読まない、
+    # このリポジトリが4回踏んだ形である。
+    #
+    # 今は `effect.*` が全部 MISSING なので実際には空になるが、
+    # **空だから落としてよいわけではない。** 1つ実装された日に、
+    # 誰かが「ここへ足す」のを忘れないための配線である
+    # （`test_forge_020a3b_capability_id_integrity.py` が固定する）。
     names.extend(field.capability for field in (getattr(plan, "fields", ()) or ()))
+    names.extend(getattr(plan, "structure_capabilities", ()) or ())
     names.extend(getattr(plan, "views", ()) or ())
     names.extend(getattr(plan, "interactions", ()) or ())
+    names.extend(getattr(plan, "effects", ()) or ())
     names.extend(f"partial:{name}" for name in getattr(plan, "partial", ()) or ())
     names.extend(
         f"unsupported:{name}" for name in getattr(plan, "unsupported", ()) or ()
     )
-    return tuple(dict.fromkeys(names))
+
+    # **一部しか出来ていないものを「出来た」の顔で残さない**
+    # （020A3B §5、2026-08-27）。
+    #
+    # `partial` の Capability は `views` / `fields` にも入っている
+    # （出来ることは出来るので）。そのままだと、この並びに
+    #
+    #     data.photo          ← 素の ID。実装済み成功と見分けが付かない
+    #     partial:data.photo
+    #
+    # が**両方**入る。Dataset Builder や Local AI が素の方だけを読むと、
+    # **「写真を扱えた」を成功例として学習する**——実際には写真そのものは
+    # 扱えず、ファイル名を文字で持っただけである。
+    #
+    # 素の ID は「**全部出来て、実際に使った**」の意味に限る。
+    qualified = {
+        name.split(":", 1)[1] for name in names if ":" in name
+    }
+    return tuple(
+        name for name in dict.fromkeys(names)
+        if ":" in name or name not in qualified
+    )
 
 
 def _domain_identifier(context) -> str:  # noqa: ANN001

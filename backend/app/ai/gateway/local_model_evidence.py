@@ -59,11 +59,19 @@ from enum import Enum
 from app.ai.gateway.benchmark_evidence import Verification
 from app.ai.gateway.capability_evidence import (
     GenerationStructureSource,
+    StructureProvider,
     structure_source_is_ai,
 )
 from app.ai.gateway.generation_evidence import GenerationSource
 from app.ai.gateway.learning_events import Deployment
 from app.ai.gateway.tasks import ForgeTask
+
+#: **AI が構造を作る唯一の stage**（020A3B §3）。
+#:
+#: ここを定数にしておくのは、Level 0 の条件を「それらしい文字列」で
+#: 通せないようにするためである。`ForgeTask` から引くので、Task 名を
+#: 変えたら Level 0 の条件も一緒に動く。
+_STRUCTURE_GENERATION_TASK = ForgeTask.ENTITY_SYNTHESIS
 
 __all__ = [
     "CURATED_DOMAIN_RESOLUTION",
@@ -227,6 +235,26 @@ class RealLocalModelRun:
     その probe では測れていない**。
     """
 
+    structure_provider: StructureProvider = StructureProvider.NONE
+    """**構造を作ったのが誰か**（020A3B §3、2026-08-27）。
+
+    `structure_source` は「どの段が作ったか」で、こちらは「どの種類の
+    Provider が作ったか」である。**2つを混ぜない。**
+
+    混ぜると、Cloud が Entity を合成した実行が Local の実績になる——
+    `AI_ENTITY_SYNTHESIS` だけでは「AI が作った」しか言っていない。
+    Level 0 は「**Local Model が**作った」の証拠なので、ここが `LOCAL`
+    でなければ数えない。
+    """
+
+    structure_task: str = ""
+    """構造生成を担当した stage。**Level 0 では `entity_synthesis` のみ。**
+
+    `entity_structure`（決定的な Capability Plan）や
+    `entity_synthesis_fallback`（合成に失敗して Curated へ落ちた）は、
+    AI が構造を作っていないので Level 0 ではない。
+    """
+
     domain_resolution: str = ""
     """`decision_trace` の `domain_resolution` 段が返した判断（020A1）。
 
@@ -366,6 +394,40 @@ class RealLocalModelRun:
                 f"Local Model が構造生成を担当していない"
                 f"（structure_source={self.structure_source.value}）"
             )
+        # **「どの段が作ったか」と「誰が作ったか」を独立に見る**
+        # （020A3B §3、2026-08-27）。
+        #
+        # `AI_ENTITY_SYNTHESIS` は「AI が構造を作った」までしか言って
+        # いない。Cloud が合成した実行も、Test Double が合成した実行も、
+        # 同じ値になる。**Level 0 は「Local Model が作った」の証拠**なので、
+        # Provider を別に要求する。
+        if self.structure_provider is not StructureProvider.LOCAL:
+            reasons.append(
+                f"構造を作ったのが Local Provider ではない"
+                f"（structure_provider={self.structure_provider.value}）"
+            )
+
+        # **どの段が構造を作ったかも、名指しで要求する。**
+        #
+        # 決定的な Capability Plan（`entity_structure`）や、合成に失敗して
+        # Curated へ落ちた経路（`entity_synthesis_fallback`）は、
+        # AI が構造を作っていない。
+        if self.structure_task != _STRUCTURE_GENERATION_TASK.value:
+            reasons.append(
+                f"構造生成を担当した stage が"
+                f"{_STRUCTURE_GENERATION_TASK.value} ではない"
+                f"（structure_task={self.structure_task or '(記録なし)'}）"
+            )
+        elif _STRUCTURE_GENERATION_TASK not in self.observed_tasks:
+            # **記録と実測を突き合わせる。** stage 名を書いただけで
+            # 通ってはならない——その Task が実際に AIRouter を通った
+            # ことまで要る。
+            reasons.append(
+                f"{_STRUCTURE_GENERATION_TASK.value} が実際には"
+                f"AIRouter を通っていない"
+                f"（観測: {', '.join(t.value for t in self.observed_tasks) or 'なし'}）"
+            )
+
         if not self.observed_tasks:
             reasons.append("AIRouter を通った Task を観測できていない")
         elif self.task not in self.observed_tasks:
@@ -465,6 +527,8 @@ class RealLocalModelRun:
             "weight_identity": self.weight_identity.value,
             "domain_resolution": self.domain_resolution,
             "structure_source": self.structure_source.value,
+            "structure_provider": self.structure_provider.value,
+            "structure_task": self.structure_task,
             "observed_tasks": [t.value for t in self.observed_tasks],
             "ready_for_baseline": self.ready_for_baseline,
             "quantization": self.quantization,

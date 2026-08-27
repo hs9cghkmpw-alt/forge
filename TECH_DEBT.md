@@ -1,5 +1,38 @@
 # TECH_DEBT.md
 
+## FORGE-020A3B で解消したもの（2026-08-27）
+
+### ~~Level 0 が structure_provider を見ていない~~ → **解消**
+
+`RealLocalModelRun` に `structure_provider` / `structure_task` が無く、
+**Cloud が構造を設計した実行が Local Model の実績になりうる**状態だった。
+Level 0 は Provider と stage を独立に要求するようになった（M1–M5 確認済み）。
+
+### ~~未知 Capability ID が黙って MISSING になる~~ → **解消**
+
+綴り間違い・Catalog への足し忘れが「作れません」という**嘘の説明**に
+化けていた。`UnknownCapabilityError` を送出する。
+
+### ~~`effects` / `structure_capabilities` が Evidence へ届かない~~ → **解消**
+
+Plan に欄はあるが誰も読んでいなかった（このリポジトリが4回踏んだ形）。
+成分を落としたら落ちるテストを置いた。
+
+### ~~PARTIAL が素の ID でも Evidence に入る~~ → **解消**
+
+`data.photo` と `partial:data.photo` が同時に入っており、素の並びを読む
+Dataset Builder が「写真を扱えた」を成功例として学習しうる状態だった。
+素の ID は「全部出来て、実際に使った」の意味に限った。
+**新しい Source of Truth は typed な `capability_usage`。**
+
+### Capability ID の綴り（CEO 判断待ち、2026-08-27）
+
+指示書は fields を `record.*`、合成を `media.*` と書いていたが、merge 済みの
+正典は `data.*` / `effect.media_compose` である。**要件（責務ごとの
+namespace / 全 ID が Catalog にある）は満たしている**ので機能上の負債では
+ないが、綴りを揃え直すかは CEO の判断。やる場合は機械的な rename で、
+`test_forge_020a3b_capability_id_integrity.py` が守る。
+
 ## FORGE-020A2 / QG-V2-R5 で解消したもの・増えたもの（2026-08-27）
 
 ### ~~TD90. 作れないと分かっているのに、利用者へ言わない~~ → **解消**

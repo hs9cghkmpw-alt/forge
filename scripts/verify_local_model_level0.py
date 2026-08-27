@@ -304,7 +304,7 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
     os.environ.setdefault("FORGE_LOCAL_TIMEOUT_SECONDS", str(args.timeout))
 
     from app.ai.gateway.benchmark_evidence import Verification
-    from app.ai.gateway.generation_evidence import GenerationSource
+    from app.ai.gateway.generation_evidence import GenerationSource, StructureProvider
     from app.ai.gateway.learning_events import Deployment
     from app.ai.gateway.local_model_evidence import (
         CURATED_DOMAIN_RESOLUTION,
@@ -363,6 +363,8 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
     generation_uid = ""
     generation_source = None
     structure_provenance = None
+    structure_provider = None
+    structure_task = ""
     validator_passed = False
     structured_ok = False
     latency_ms = 0.0
@@ -415,15 +417,22 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
                 # Local Model の成果ではない（実測でそうなった）。
                 generation_source = records[-1].source
                 structure_provenance = records[-1].structure_source
+                # **「誰が作ったか」を別に持ってくる**（020A3B §3）。
+                # `AI_ENTITY_SYNTHESIS` は「AI が作った」までしか
+                # 言っていない——Cloud が作った実行も同じ値である。
+                structure_provider = records[-1].structure_provider
+                structure_task = records[-1].structure_task
             print(f"      ✓ HTTP 200  ({latency_ms:.0f} ms)")
             print(f"        validator_passed={validator_passed}"
                   f" evidence_uid={generation_uid or '(無し)'}")
             print(f"        generation_source="
                   f"{generation_source.value if generation_source else '(無し)'}"
                   "   ← local_ai でなければ Local Model は動いていない")
-            print(f"        structure_provenance="
-                  f"{structure_provenance.value if structure_provenance else '(無し)'}"
-                  "   ← local_ai でなければ構造生成の実績ではない")
+            print(f"        structure_provider="
+                  f"{structure_provider.value if structure_provider else '(無し)'}"
+                  "   ← local でなければ Local Model の実績ではない")
+            print(f"        structure_task={structure_task or '(無し)'}"
+                  "   ← entity_synthesis でなければ構造を作っていない")
             print(f"        domain_resolution={post_resolution or '(観測できず)'}"
                   "   ← curated なら測定不成立")
             print(f"        structure_source={post_structure or '(観測できず)'}"
@@ -484,6 +493,11 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
         validator_passed=validator_passed,
         generation_evidence_uid=generation_uid,
         generation_source=generation_source or GenerationSource.UNKNOWN,
+        # **構造を作った Provider と stage を、推測せずそのまま運ぶ**
+        # （020A3B §3）。取れなければ既定（NONE / 空）のままにする——
+        # 「記録し損ね」を「Local だった」へ倒さない。
+        structure_provider=structure_provider or StructureProvider.NONE,
+        structure_task=structure_task,
         host_id=str(host["host_id"]),
         ram_total_mb=int(host["ram_total_mb"]),
         vram_total_mb=int(host["vram_total_mb"]),
