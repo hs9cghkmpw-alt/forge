@@ -46,5 +46,11 @@ Level 0.5 accepts CPU benchmarks. GPU/VRAM are performance/model-size Evidence, 
 
 ## GitHub / CI / next task
 
-Push/fetch/remote equality/clean tree and CI are measured after commit. Next task is an
-independent review and dependency-complete verification without weakening Level 0 truth.
+- Implementation commit: `8ca31a7e02db767bf64c51ace3156c0ab9181e93`.
+- Push: PASS. Post-push `git fetch origin`: PASS. Implementation local/remote HEAD:
+  equal. Working tree after implementation commit: clean.
+- GitHub commit API: commit and diff observed. Workflow runs/status checks returned zero
+  entries for this SHA, so CI is **UNVERIFIED (run not observed)**, not green.
+
+Next task is independent review and dependency-complete verification without weakening
+Level 0 truth.
