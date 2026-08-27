@@ -1,0 +1,245 @@
+name: AI Worker Relay
+
+on:
+  issue_comment:
+    types: [created]
+  repository_dispatch:
+    types: [claude_task, codex_review]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: ai-worker-${{ github.event.client_payload.issue_number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  route-command:
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.actor == 'hs9cghkmpw-alt' &&
+      github.event.issue.user.login == 'hs9cghkmpw-alt' &&
+      github.event.issue.pull_request == null &&
+      (startsWith(github.event.comment.body, '/ai claude') || startsWith(github.event.comment.body, '/ai codex'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch requested worker
+        uses: actions/github-script@v7
+        env:
+          COMMAND: ${{ github.event.comment.body }}
+        with:
+          script: |
+            const command = process.env.COMMAND.trim();
+            const issueNumber = context.issue.number;
+            const eventType = command.startsWith('/ai claude') ? 'claude_task' : 'codex_review';
+            await github.rest.repos.createDispatchEvent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              event_type: eventType,
+              client_payload: {
+                issue_number: issueNumber,
+                branch_name: eventType === 'codex_review' ? context.payload.repository.default_branch : '',
+                phase: 'manual-command'
+              }
+            });
+
+  claude-worker:
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'claude_task'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Load issue
+        id: issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = Number(context.payload.client_payload.issue_number);
+            const { data } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber
+            });
+            if (data.user.login !== 'hs9cghkmpw-alt') core.setFailed('Untrusted issue author');
+            core.setOutput('title', data.title);
+            core.setOutput('body', data.body || '');
+
+      - name: Checkout default branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            You are the primary implementation worker for GitHub issue #${{ github.event.client_payload.issue_number }}.
+            Treat the issue contract below as authoritative, then read AGENTS.md, CLAUDE.md, and relevant Source-of-Truth docs in the repository.
+
+            ISSUE TITLE:
+            ${{ steps.issue.outputs.title }}
+
+            ISSUE BODY:
+            ${{ steps.issue.outputs.body }}
+
+            Rules:
+            - Perform only the Claude Code responsibility described by the issue.
+            - Never commit directly to the repository default branch.
+            - Create or reuse a focused feature branch for this issue.
+            - Keep changes maintainable: small responsibilities, no duplicated business logic, no spaghetti code.
+            - Run the relevant tests, lint/static checks, and report exact results.
+            - Do not merge PRs, close issues, weaken tests, or bypass security boundaries.
+            - If implementation is complete, create or update a draft PR that references the issue.
+            - If blocked, explain the blocker precisely and do not invent a PASS.
+          claude_args: |
+            --max-turns 25
+
+      - name: Relay successful Claude work to Codex
+        if: steps.claude.outputs.conclusion == 'success' && steps.claude.outputs.branch_name != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = Number(context.payload.client_payload.issue_number);
+            const branchName = '${{ steps.claude.outputs.branch_name }}';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: `🤖 Claude Code worker completed its run on branch \`${branchName}\`. Dispatching Codex independent review.`
+            });
+            await github.rest.repos.createDispatchEvent({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              event_type: 'codex_review',
+              client_payload: {
+                issue_number: issueNumber,
+                branch_name: branchName,
+                phase: 'post-claude-review'
+              }
+            });
+
+      - name: Report Claude run without reviewable branch
+        if: steps.claude.outputs.conclusion != 'success' || steps.claude.outputs.branch_name == ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = Number(context.payload.client_payload.issue_number);
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: 'AI-HANDOFF:CHATGPT — Claude Code did not produce a reviewable successful branch. PM review is required before retrying.'
+            });
+
+  codex-worker:
+    if: github.event_name == 'repository_dispatch' && github.event.action == 'codex_review'
+    runs-on: ubuntu-latest
+    outputs:
+      result: ${{ steps.codex.outputs.final-message }}
+    steps:
+      - name: Load issue
+        id: issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = Number(context.payload.client_payload.issue_number);
+            const { data } = await github.rest.issues.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber
+            });
+            if (data.user.login !== 'hs9cghkmpw-alt') core.setFailed('Untrusted issue author');
+            core.setOutput('title', data.title);
+            core.setOutput('body', data.body || '');
+
+      - name: Checkout review target
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.client_payload.branch_name || github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch default branch for local diff
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: git fetch --no-tags origin "$DEFAULT_BRANCH"
+
+      - name: Run Codex independent review
+        id: codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: ':read-only'
+          prompt: |
+            You are the independent reviewer for GitHub issue #${{ github.event.client_payload.issue_number }}.
+            Review the repository state against the issue contract. If the checked-out branch differs from the default branch, review ONLY the relevant diff plus its integration impact. If it is the default branch, perform the design/repository review requested by the issue.
+
+            ISSUE TITLE:
+            ${{ steps.issue.outputs.title }}
+
+            ISSUE BODY:
+            ${{ steps.issue.outputs.body }}
+
+            Review priorities:
+            - correctness and acceptance criteria
+            - real production wiring, not dead/ornamental code
+            - security/permission boundaries
+            - regression risk and test quality
+            - maintainability, responsibility separation, duplicated logic, spaghetti-code risk
+            - do not claim real-device verification unless evidence exists
+
+            Return PASS only when there are no Critical or Major blockers. Determine next_agent from the issue contract and current phase: use CLAUDE only when the issue explicitly requires Claude implementation after this review; use HUMAN when implementation is review-clean and real-device/product validation is next; otherwise use CHATGPT. If verdict is BLOCKED, next_agent must be CHATGPT.
+          output-schema: |
+            {
+              "type": "object",
+              "properties": {
+                "verdict": {"type": "string", "enum": ["PASS", "BLOCKED"]},
+                "summary": {"type": "string"},
+                "blocking_findings": {"type": "array", "items": {"type": "string"}},
+                "next_agent": {"type": "string", "enum": ["CLAUDE", "HUMAN", "CHATGPT"]}
+              },
+              "required": ["verdict", "summary", "blocking_findings", "next_agent"],
+              "additionalProperties": false
+            }
+
+      - name: Report result and route next agent
+        uses: actions/github-script@v7
+        env:
+          CODEX_RESULT: ${{ steps.codex.outputs.final-message }}
+        with:
+          script: |
+            const issueNumber = Number(context.payload.client_payload.issue_number);
+            let result;
+            try {
+              result = JSON.parse(process.env.CODEX_RESULT);
+            } catch (error) {
+              result = { verdict: 'BLOCKED', summary: 'Codex returned a non-JSON result.', blocking_findings: [String(error)], next_agent: 'CHATGPT' };
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: `## 🤖 Codex automated review\n\n**Verdict:** ${result.verdict}\n\n${result.summary}\n\n**Blocking findings:**\n${(result.blocking_findings || []).map(x => `- ${x}`).join('\n') || '- none'}\n\n**Next agent:** ${result.next_agent}`
+            });
+
+            if (result.verdict === 'PASS' && result.next_agent === 'CLAUDE') {
+              await github.rest.repos.createDispatchEvent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                event_type: 'claude_task',
+                client_payload: { issue_number: issueNumber, branch_name: '', phase: 'post-codex-design-review' }
+              });
+            } else {
+              const marker = result.verdict === 'PASS' && result.next_agent === 'HUMAN'
+                ? 'AI-HANDOFF:HUMAN — automated implementation/review stage is complete; real-device/product verification is required.'
+                : 'AI-HANDOFF:CHATGPT — PM review is required before any further automated work.';
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: marker
+              });
+            }
