@@ -64,7 +64,7 @@ python scripts/forge_doctor.py
 | GitHub 同期 | git + github.com |
 | open-weight model の取得 | huggingface.co / ollama.com |
 | **Level 0**（実 Local Model の E2E） | Runtime が起動していること |
-| **Level 0.5**（Baseline Benchmark） | Runtime + GPU + 重みの digest |
+| **Level 0.5**（Baseline Benchmark） | Runtime + 重みの digest（CPU計測も有効。GPU/VRAMは性能・モデルサイズのEvidenceであり必須条件ではない） |
 
 ## 5. 実行できない項目は UNVERIFIED
 
@@ -90,7 +90,7 @@ python scripts/forge_doctor.py
 ✓ GitHub 同期
 ✗ open-weight model の取得      （huggingface.co / ollama.com が到達不能）
 ✗ Level 0（実 Local Model の E2E）（Runtime が無い）
-✗ Level 0.5（Baseline Benchmark） （GPU が無い）
+✗ Level 0.5（Baseline Benchmark） （Runtime が無い。GPUの有無だけでは不可判定にしない）
 ```
 
 したがって **Real Local Model runs = 0 のまま**であり、

@@ -1,5 +1,13 @@
 # Forge Generative Software Direction
 
+## FORGE-020A3 implementation note (2026-08-27)
+
+Capability planning is compositional: structure mode, entity/fields, views, interactions,
+effects/runtime behaviors and missing/partial status are independent axes. Semantic
+capability identity is canonical in forge_ai; backend owns runtime bindings/support
+resolution. Structure provenance is typed at its production creation point, not rebuilt
+from diagnostic strings.
+
 > **位置づけ**
 >
 > ```

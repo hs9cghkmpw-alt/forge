@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import Enum
+from forge_ai.core.semantics.capabilities import CAPABILITIES as SEMANTIC_CAPABILITIES
 
 __all__ = [
     "CAPABILITY_QUESTION_KEY_PREFIX",
@@ -113,47 +114,47 @@ def _cap(*args, **kwargs) -> Capability:
 # ---------------------------------------------------------------------------
 _REGISTRY: tuple[Capability, ...] = (
     # --- Data(安全。何を記録するか) ---------------------------------
-    _cap("data.text", CapabilityLayer.DATA, "文字の記録", True, ("text_field",),
+    _cap("record.text", CapabilityLayer.DATA, "文字の記録", True, ("text_field",),
          detection_keywords=("メモ", "名前", "タイトル", "内容")),
-    _cap("data.number", CapabilityLayer.DATA, "数値の記録", True, ("text_field", "slider"),
+    _cap("record.number", CapabilityLayer.DATA, "数値の記録", True, ("text_field", "slider"),
          detection_keywords=("金額", "値段", "点数", "回数", "体重", "サイズ", "個数")),
-    _cap("data.date", CapabilityLayer.DATA, "日付の記録", True, ("date_field",),
+    _cap("record.date", CapabilityLayer.DATA, "日付の記録", True, ("date_field",),
          detection_keywords=("日付", "いつ", "期限", "何日")),
-    _cap("data.choice", CapabilityLayer.DATA, "選択肢からの記録", True, ("choice_field",),
+    _cap("record.choice", CapabilityLayer.DATA, "選択肢からの記録", True, ("choice_field",),
          detection_keywords=("カテゴリ", "種類", "分類", "選択肢")),
-    _cap("data.bool", CapabilityLayer.DATA, "済/未済の記録", True, ("checkbox", "checklist"),
+    _cap("record.boolean", CapabilityLayer.DATA, "済/未済の記録", True, ("checkbox", "checklist"),
          detection_keywords=("チェック", "済み", "完了したか")),
     # 未実装のData。
-    _cap("data.photo", CapabilityLayer.DATA, "写真の記録", False,
-         detection_keywords=("写真", "画像", "撮った"), nearest_supported_id="data.text"),
-    _cap("data.audio", CapabilityLayer.DATA, "音声の記録", False,
-         detection_keywords=("録音", "音声で残"), nearest_supported_id="data.text"),
+    _cap("record.photo", CapabilityLayer.DATA, "写真の記録", False,
+         detection_keywords=("写真", "画像", "撮った"), nearest_supported_id="record.text"),
+    _cap("record.sound", CapabilityLayer.DATA, "音声の記録", False,
+         detection_keywords=("録音", "音声で残"), nearest_supported_id="record.text"),
 
     # --- View(安全。どう見せるか) -----------------------------------
     _cap("view.list", CapabilityLayer.VIEW, "一覧で見る", True, ("list", "record_list_view", "checklist"),
          detection_keywords=("一覧", "リストで見", "並べて")),
     _cap("view.grid", CapabilityLayer.VIEW, "タイル状に見る", True, ("record_list_view",),
          detection_keywords=("タイル", "グリッド")),
-    _cap("view.bar_chart", CapabilityLayer.VIEW, "棒グラフで見る", True, ("bar_chart",),
+    _cap("view.group_compare", CapabilityLayer.VIEW, "棒グラフで見る", True, ("bar_chart",),
          detection_keywords=("棒グラフ", "グラフで", "グラフにして")),
     _cap("view.tabs", CapabilityLayer.VIEW, "タブで切り替える", True, ("tab_view",),
          detection_keywords=("タブ", "切り替え")),
     # v1.11(FORGE-R1、TD69)。合計・平均を**画面で一番大きい1つの数値**
     # として見せる。v1.10で語彙へ`metric.primary`を入れたのに、出力先の
     # Widgetが無いまま置かれていた穴を塞いだもの。
-    _cap("view.metric", CapabilityLayer.VIEW, "合計を大きく見る", True, ("metric_view",),
+    _cap("view.total", CapabilityLayer.VIEW, "合計を大きく見る", True, ("metric_view",),
          detection_keywords=("合計", "総額", "残高", "いくら使った", "トータル")),
     # 未実装のView。§33の例(釣果を地図で)はここに当たる。
     _cap("view.map", CapabilityLayer.VIEW, "地図で見る", False,
          detection_keywords=("地図", "マップ", "地図上"), nearest_supported_id="view.list"),
     _cap("view.heatmap", CapabilityLayer.VIEW, "濃淡で分布を見る", False,
          detection_keywords=("ヒートマップ", "色の濃さ", "色を濃く", "濃淡"),
-         nearest_supported_id="view.bar_chart"),
+         nearest_supported_id="view.group_compare"),
     _cap("view.calendar", CapabilityLayer.VIEW, "カレンダーで見る", False,
          detection_keywords=("カレンダー", "月表示", "月ごとの表"), nearest_supported_id="view.list"),
-    _cap("view.line_chart", CapabilityLayer.VIEW, "推移を折れ線で見る", False,
+    _cap("view.trend", CapabilityLayer.VIEW, "推移を折れ線で見る", False,
          detection_keywords=("折れ線", "推移をグラフ", "変化をグラフ"),
-         nearest_supported_id="view.bar_chart"),
+         nearest_supported_id="view.group_compare"),
 
     # --- Effect(安全審査の対象。外へ何をするか) ---------------------
     # いずれも未実装。**実装されても自動では許可しない**——
@@ -182,6 +183,15 @@ _REGISTRY: tuple[Capability, ...] = (
 )
 
 CAPABILITY_REGISTRY: dict[str, Capability] = {c.id: c for c in _REGISTRY}
+if len(CAPABILITY_REGISTRY) != len(_REGISTRY):
+    raise RuntimeError("duplicate runtime capability adapter id")
+unknown_adapter_ids = set(CAPABILITY_REGISTRY) - set(SEMANTIC_CAPABILITIES)
+if unknown_adapter_ids:
+    raise RuntimeError(f"runtime adapter ids missing from canonical catalog: {sorted(unknown_adapter_ids)}")
+for capability_id, binding in CAPABILITY_REGISTRY.items():
+    canonical = SEMANTIC_CAPABILITIES[capability_id]
+    if canonical.runtime_binding_required and canonical.status.value == "implemented" and not binding.widget_types:
+        raise RuntimeError(f"canonical supported capability lacks runtime binding: {capability_id}")
 
 
 def capability_by_id(capability_id: str) -> Capability | None:

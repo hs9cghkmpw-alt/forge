@@ -210,7 +210,9 @@ def verdict(findings: list[Finding]) -> dict[str, bool]:
         "model_download": have.get("net:huggingface.co", False)
         or have.get("net:ollama.com", False),
         "level0_local_model": runtime_present and have.get("runtime:listening", False),
-        "level0_5_baseline": runtime_present and have.get("gpu:nvidia", False),
+        # CPU benchmark is valid. GPU/VRAM characterize performance and viable
+        # model size; they are evidence, never a prerequisite.
+        "level0_5_baseline": runtime_present,
     }
 
 

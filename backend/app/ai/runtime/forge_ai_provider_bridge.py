@@ -165,6 +165,11 @@ class ForgeAIProviderBridge:
     def __init__(self, llm_adapter: LLMAdapter) -> None:
         self._llm_adapter = llm_adapter
 
+    @property
+    def provider_id(self) -> str:
+        """Actual provider selected by the adapter, for typed provenance."""
+        return str(getattr(self._llm_adapter, "last_provider_used", "") or "")
+
     def complete(self, prompt: Prompt) -> ProviderResponse:
         """forge_ai.AIProvider Protocolの実装本体。"""
         flat_prompt = _flatten_prompt_to_string(prompt)

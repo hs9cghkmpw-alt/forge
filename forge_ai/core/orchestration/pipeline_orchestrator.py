@@ -26,7 +26,10 @@ from forge_ai.core.ir.domain_resolution import SolutionSource, resolve_domain_so
 from forge_ai.core.ir.capability_ir import entity_spec_from_plan
 from forge_ai.core.ir.forge_language_compiler import ForgeLanguageCompiler
 from forge_ai.core.ir.ir_generator import SUPPORTED_DOMAIN_CATEGORIES, IRGenerator
-from forge_ai.core.orchestration.cognitive_context import CognitiveContext
+from forge_ai.core.orchestration.cognitive_context import (
+    CognitiveContext, EntitySynthesisAttempt, StructureProvenance,
+    StructureProvider, StructureSource,
+)
 from forge_ai.core.orchestration.cognitive_dependencies import CognitiveDependencies
 from forge_ai.core.orchestration.cognitive_types import CriticIssue, CriticReport, OverallConfidence
 from forge_ai.core.orchestration.confidence import compute_legacy_escalation_reasons, compute_overall_confidence, compute_shadow_judgment
@@ -410,6 +413,8 @@ class CognitiveOrchestrator:
             entity_source = "curated"
             if resolution.source is SolutionSource.CURATED:
                 ir = IRGenerator().generate(context.plan, domain_category=domain_category_value)
+                context = context.with_structure_provenance(StructureProvenance(
+                    StructureSource.CURATED, StructureProvider.NONE, "entity_structure"))
                 assert ir is not None  # CURATEDを選ぶのはSUPPORTED_DOMAIN_CATEGORIESに含まれる場合だけ
             elif (planned_spec := entity_spec_from_plan(capability_plan)) is not None:
                 # **役から組めるなら、AI を待たずに組む。**
@@ -418,20 +423,46 @@ class CognitiveOrchestrator:
                 # AI 合成が既に通っている、まったく同じ入口である。
                 # ここから先は3者を区別しない。**専用 Template は無い。**
                 ir = IRGenerator().build_from_spec(planned_spec)
-                entity_source = f"capability_plan({capability_plan.shape.value})"
+                entity_source = f"capability_plan({capability_plan.structural_mode.value})"
+                context = context.with_structure_provenance(StructureProvenance(
+                    StructureSource.DETERMINISTIC_CAPABILITY_PLAN,
+                    StructureProvider.NONE, "entity_structure"))
             elif deps.entity_synthesizer is not None:
-                synthesized_spec = deps.entity_synthesizer.synthesize(
-                    context.plan,
-                    user_text=context.raw_input,
-                    domain_name=domain_category_value,
-                )
+                if hasattr(deps.entity_synthesizer, "synthesize_with_attempt"):
+                    synthesized_spec, synthesis_attempt = deps.entity_synthesizer.synthesize_with_attempt(
+                        context.plan, user_text=context.raw_input,
+                        domain_name=domain_category_value,
+                    )
+                else:
+                    synthesized_spec = deps.entity_synthesizer.synthesize(
+                        context.plan, user_text=context.raw_input,
+                        domain_name=domain_category_value,
+                    )
+                    synthesis_attempt = EntitySynthesisAttempt(
+                        attempted=True, accepted=synthesized_spec is not None,
+                    )
+                context = context.with_entity_synthesis_attempt(synthesis_attempt)
                 if synthesized_spec is not None:
                     ir = IRGenerator().build_from_spec(synthesized_spec)
                     entity_source = "synthesized"
+                    provider = getattr(deps.entity_synthesizer, "_provider", None)
+                    provider_name = str(getattr(provider, "provider_id", "") or
+                                        getattr(provider, "name", "")).lower()
+                    structure_provider = (
+                        StructureProvider.TEST_DOUBLE if "mock" in provider_name or "fake" in provider_name
+                        else StructureProvider.LOCAL if "local" in provider_name or "ollama" in provider_name
+                        else StructureProvider.CLOUD
+                    )
+                    context = context.with_structure_provenance(StructureProvenance(
+                        StructureSource.AI_ENTITY_SYNTHESIS, structure_provider,
+                        "entity_synthesis"))
                 elif domain_category_value in SUPPORTED_DOMAIN_CATEGORIES:
                     # 合成に失敗した場合、Curatedが存在するなら
                     # Checklistへ落ちるより手作り定義の方がまだ良い。
                     ir = IRGenerator().generate(context.plan, domain_category=domain_category_value)
+                    context = context.with_structure_provenance(StructureProvenance(
+                        StructureSource.CURATED, StructureProvider.NONE,
+                        "entity_synthesis_fallback"))
 
             if ir is not None:
                 context = context.with_decision(_trace(

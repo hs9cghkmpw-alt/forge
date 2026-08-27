@@ -295,7 +295,8 @@ class TestTheRecordCannotHoldContent(unittest.TestCase):
             # (FORGE-017A §3、Dataset Lineage用の永続ID)。
             # 追加するときは「識別子か、内容か」を必ず判断すること
             # ——このテストは判断を強制するために在る。
-            text_fields, {"domain", "forge_language_version", "uid"},
+            text_fields, {"domain", "forge_language_version", "uid", "structure_task",
+                          "entity_synthesis_rejection_reason"},
             f"内容を入れられるフィールドが増えている: {text_fields}",
         )
 

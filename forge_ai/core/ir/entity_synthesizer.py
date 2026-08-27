@@ -44,6 +44,10 @@ from forge_ai.core.ir.ir_types import FieldType, MeasureSemantics
 from forge_ai.core.planner import ApplicationPlan
 from forge_ai.prompt.prompt_builder import PromptBuilder
 from forge_ai.provider.provider_interface import AIProvider
+from forge_ai.core.orchestration.cognitive_context import (
+    EntitySynthesisAttempt,
+    EntitySynthesisRejectionReason,
+)
 
 # Forge Language の `record_schemas` キー・`identifier`パターンに揃える
 # (`ir_types.Entity`のdocstring参照)。
@@ -126,6 +130,27 @@ class EntitySynthesizer:
         )
         response = self._provider.complete(prompt)
         return self._spec_from_structured(response.structured)
+
+    def synthesize_with_attempt(
+        self, plan: ApplicationPlan, *, user_text: str, domain_name: str
+    ) -> tuple[EntitySpec | None, EntitySynthesisAttempt]:
+        prompt = self._prompt_builder.build_entity_synthesis_prompt(
+            user_text=user_text,
+            plan_summary={"title": plan.title, "data_entities": list(plan.data_entities),
+                          "screens": [{"name": s.name, "purpose": s.purpose,
+                                       "key_elements": list(s.key_elements)} for s in plan.screens]},
+            domain_name=domain_name,
+        )
+        response = self._provider.complete(prompt)
+        structured = response.structured
+        if not isinstance(structured, dict) or not structured:
+            return None, EntitySynthesisAttempt(True, False, EntitySynthesisRejectionReason.EMPTY_OUTPUT)
+        if _sanitize_identifier(structured.get("entity_name")) is None:
+            return None, EntitySynthesisAttempt(True, False, EntitySynthesisRejectionReason.INVALID_IDENTIFIER)
+        spec = self._spec_from_structured(structured)
+        if spec is None:
+            return None, EntitySynthesisAttempt(True, False, EntitySynthesisRejectionReason.NO_VALID_FIELDS)
+        return spec, EntitySynthesisAttempt(True, True, None)
 
     # -- 以下、AI応答の決定的な検証・サニタイズ -------------------------
 

@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from forge_ai.core.ir.ir_generator import EntitySpec, FieldSpec
 from forge_ai.core.ir.ir_types import FieldType, MeasureSemantics
-from forge_ai.core.semantics.capability_plan import CapabilityPlan, PlanShape
+from forge_ai.core.semantics.capability_plan import CapabilityPlan, StructuralMode
 
 __all__ = ["entity_spec_from_plan", "visual_style_for_plan"]
 
@@ -53,17 +53,18 @@ _MEASURES: dict[str, MeasureSemantics] = {
 #:
 #: 「比べる道具」と「毎日つける道具」は性格が違う、という一般的な
 #: 対応だけを置く。Need が増えても行は増えない。
-_SHAPE_STYLES: dict[PlanShape, str] = {
-    PlanShape.CHECKLIST: "warm",
-    PlanShape.RECORD_LOG: "calm",
-    PlanShape.RECORD_LOG_WITH_TOTAL: "neutral",
-    PlanShape.RECORD_LOG_WITH_GROUP_COMPARE: "vibrant",
-    PlanShape.RECORD_LOG_WITH_TREND: "vibrant",
+_MODE_STYLES: dict[StructuralMode, str] = {
+    StructuralMode.CHECKLIST: "warm",
+    StructuralMode.RECORD_ENTITY: "calm",
 }
 
 
 def visual_style_for_plan(plan: CapabilityPlan) -> str:
-    return _SHAPE_STYLES.get(plan.shape, "calm")
+    if "view.group_compare" in plan.views or "view.trend" in plan.views:
+        return "vibrant"
+    if "view.total" in plan.views:
+        return "neutral"
+    return _MODE_STYLES.get(plan.structural_mode, "calm")
 
 
 def entity_spec_from_plan(plan: CapabilityPlan) -> EntitySpec | None:
@@ -72,7 +73,7 @@ def entity_spec_from_plan(plan: CapabilityPlan) -> EntitySpec | None:
     `CHECKLIST` は Entity を持たない道具なので、ここでは組まない
     （`ForgeLanguageCompiler` の checklist 経路が受け持つ）。
     """
-    if not plan.is_actionable or plan.shape is PlanShape.CHECKLIST:
+    if not plan.is_actionable or plan.structural_mode is StructuralMode.CHECKLIST:
         return None
     if not plan.fields:
         return None

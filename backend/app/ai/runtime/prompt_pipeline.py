@@ -55,7 +55,11 @@ from app.ai.gateway.generation_evidence import (
     DesignRoleDecision,
     GenerationRecord,
     GenerationSource,
+    CapabilityUsageEvidence,
+    CapabilityUsageSource,
+    CapabilityUsageStatus,
     StructureProvenance,
+    StructureProvider,
     default_generation_store,
     source_for_generated,
 )
@@ -182,24 +186,16 @@ def _generation_source(decision_trace, provider_used: str | None) -> GenerationS
     return source_for_generated(provider_used)
 
 
-def _structure_provenance(decision_trace, provider_used: str | None) -> StructureProvenance:  # noqa: ANN001
-    """構造を作ったstageをProvider呼出しとは独立に分類する。"""
-    decision = ""
-    for entry in decision_trace or ():
-        if entry.get("stage") == "entity_source":
-            decision = str(entry.get("decision", "")).strip().lower()
-            break
-    if decision.startswith("curated("):
-        return StructureProvenance.CURATED
-    if decision.startswith("capability_plan("):
-        return StructureProvenance.DETERMINISTIC_CAPABILITY_PLAN
-    if decision.startswith("synthesized("):
-        return {
-            GenerationSource.LOCAL_AI: StructureProvenance.LOCAL_AI,
-            GenerationSource.CLOUD_AI: StructureProvenance.CLOUD_AI,
-            GenerationSource.TEST_DOUBLE: StructureProvenance.TEST_DOUBLE,
-        }.get(source_for_generated(provider_used), StructureProvenance.UNKNOWN)
-    return StructureProvenance.UNKNOWN
+def _structure_provenance(context) -> tuple[StructureProvenance, StructureProvider, str]:  # noqa: ANN001
+    """Read typed pipeline wiring only; diagnostics are intentionally irrelevant."""
+    provenance = getattr(context, "structure_provenance", None)
+    source = str(getattr(getattr(provenance, "source", None), "value", "unknown"))
+    provider = str(getattr(getattr(provenance, "provider", None), "value", "none"))
+    return (
+        StructureProvenance(source) if source in StructureProvenance._value2member_map_ else StructureProvenance.UNKNOWN,
+        StructureProvider(provider) if provider in StructureProvider._value2member_map_ else StructureProvider.NONE,
+        str(getattr(provenance, "task", "") or ""),
+    )
 
 
 def _design_decisions(context, forge_document: dict):  # noqa: ANN001, ANN201
@@ -285,12 +281,14 @@ def _record_generation(
     """
     store = default_generation_store()
     ai_calls = len(getattr(bound, "experience_refs", ()) or ())
+    structure_source, structure_provider, structure_task = _structure_provenance(context)
+    synthesis_attempt = getattr(context, "entity_synthesis_attempt", None)
     stored = store.record(
         GenerationRecord(
             source=_generation_source(decision_trace, getattr(bound, "last_provider_used", None)),
-            structure_provenance=_structure_provenance(
-                decision_trace, getattr(bound, "last_provider_used", None)
-            ),
+            structure_provenance=structure_source,
+            structure_provider=structure_provider,
+            structure_task=structure_task,
             domain=_domain_identifier(context),
             validator_passed=validator_passed,
             forge_language_version=str(forge_document.get("version", "") or ""),
@@ -313,6 +311,12 @@ def _record_generation(
             # 受け入れられたか」を突き合わせるには、**残る側**に無いと
             # 意味がない。
             capabilities=_capabilities_used(context),
+            capability_usage=_capability_usage(context),
+            entity_synthesis_attempted=bool(getattr(synthesis_attempt, "attempted", False)),
+            entity_synthesis_accepted=bool(getattr(synthesis_attempt, "accepted", False)),
+            entity_synthesis_rejection_reason=(
+                getattr(getattr(synthesis_attempt, "rejection_reason", None), "value", None)
+            ),
         )
     )
     # **番号を返す。** 013はここで捨てていた。捨てると、後から
@@ -353,6 +357,9 @@ def _capabilities_used(context) -> tuple[str, ...]:  # noqa: ANN001
     if plan is None:
         return ()
     names: list[str] = []
+    if getattr(plan, "entity_label", ""):
+        names.append("record.entity")
+    names.extend(field.capability for field in (getattr(plan, "fields", ()) or ()))
     names.extend(getattr(plan, "views", ()) or ())
     names.extend(getattr(plan, "interactions", ()) or ())
     names.extend(f"partial:{name}" for name in getattr(plan, "partial", ()) or ())
@@ -360,6 +367,27 @@ def _capabilities_used(context) -> tuple[str, ...]:  # noqa: ANN001
         f"unsupported:{name}" for name in getattr(plan, "unsupported", ()) or ()
     )
     return tuple(dict.fromkeys(names))
+
+
+def _capability_usage(context) -> tuple[CapabilityUsageEvidence, ...]:  # noqa: ANN001
+    plan = getattr(context, "capability_plan", None)
+    if plan is None:
+        return ()
+    ids = _capabilities_used(context)
+    partial = set(getattr(plan, "partial", ()) or ())
+    missing = set(getattr(plan, "unsupported", ()) or ())
+    evidence = []
+    for raw in ids:
+        capability_id = raw.removeprefix("partial:").removeprefix("unsupported:")
+        status = (CapabilityUsageStatus.MISSING if capability_id in missing
+                  else CapabilityUsageStatus.PARTIAL if capability_id in partial
+                  else CapabilityUsageStatus.IMPLEMENTED)
+        evidence.append(CapabilityUsageEvidence(
+            capability_id=capability_id, requested=True,
+            used=status is not CapabilityUsageStatus.MISSING,
+            status=status, source=CapabilityUsageSource.SEMANTIC_PLAN,
+        ))
+    return tuple(evidence)
 
 
 def _domain_identifier(context) -> str:  # noqa: ANN001
@@ -761,6 +789,28 @@ class PromptPipeline:
         current_ir = outcome.ir
         forge_document = current_ir.to_json_dict()
         context = outcome.context
+
+        # Critical semantic gaps are an existing confirmation outcome, not a
+        # successful CRUD build. Persist typed evidence without user content.
+        missing = tuple(getattr(getattr(context, "capability_plan", None), "unsupported", ()) or ())
+        if missing:
+            _record_generation(
+                bound, context=context,
+                decision_trace=_decision_trace_to_dicts(context.decision_trace),
+                forge_document=forge_document, validator_passed=False,
+                repair_attempts=0, knowledge_references=knowledge_context.references,
+            )
+            return PipelineNeedsConfirmationResult(
+                reason="missing_capability",
+                message="要求どおりにはまだ作れていません。現在のForgeにない機能が含まれています。",
+                open_questions=("不足機能を除いた形で進めますか？",),
+                reached_stage="capability_planning", engine_used=engine,
+                provider_used=_provider_used(), requested_provider=provider,
+                decision_trace=_decision_trace_to_dicts(context.decision_trace),
+                ambiguity_report=_ambiguity_report_to_dict(context.ambiguity_report),
+                domain_classification=_domain_classification_to_dict(context.domain_classification),
+                injection_report=injection_report,
+            )
 
         # 6. Validator(1回目)
         validation = validate_forge_document(forge_document)

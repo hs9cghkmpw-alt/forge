@@ -118,6 +118,10 @@ __all__ = [
     "GenerationRecord",
     "GenerationSource",
     "StructureProvenance",
+    "StructureProvider",
+    "CapabilityUsageEvidence",
+    "CapabilityUsageStatus",
+    "CapabilityUsageSource",
     "source_for_generated",
     "RuntimeOutcome",
     "default_generation_store",
@@ -185,10 +189,42 @@ class StructureProvenance(str, Enum):
 
     CURATED = "curated"
     DETERMINISTIC_CAPABILITY_PLAN = "deterministic_capability_plan"
-    LOCAL_AI = "local_ai"
-    CLOUD_AI = "cloud_ai"
-    TEST_DOUBLE = "test_double"
+    AI_ENTITY_SYNTHESIS = "ai_entity_synthesis"
+    AI_GENERATED_EXTENSION = "ai_generated_extension"
+    COMPOSED = "composed"
+    LOCAL_AI = "ai_entity_synthesis"
+    CLOUD_AI = "ai_entity_synthesis"
+    TEST_DOUBLE = "ai_entity_synthesis"
     UNKNOWN = "unknown"
+
+
+class StructureProvider(str, Enum):
+    LOCAL = "local"
+    CLOUD = "cloud"
+    TEST_DOUBLE = "test_double"
+    NONE = "none"
+
+
+class CapabilityUsageStatus(str, Enum):
+    IMPLEMENTED = "implemented"
+    PARTIAL = "partial"
+    MISSING = "missing"
+
+
+class CapabilityUsageSource(str, Enum):
+    SEMANTIC_PLAN = "semantic_plan"
+    DETERMINISTIC = "deterministic"
+    AI = "ai"
+    FALLBACK = "fallback"
+
+
+@dataclass(frozen=True)
+class CapabilityUsageEvidence:
+    capability_id: str
+    requested: bool
+    used: bool
+    status: CapabilityUsageStatus
+    source: CapabilityUsageSource
 
 
 def source_for_generated(provider_used: str | None) -> GenerationSource:
@@ -370,8 +406,16 @@ class GenerationRecord:
     として数えないための境界である。
     """
 
+    structure_provider: StructureProvider = StructureProvider.NONE
+    structure_task: str = ""
+
     capabilities: tuple[str, ...] = ()
     """使われたCapabilityの識別子。**値ではなく名前**。"""
+
+    capability_usage: tuple[CapabilityUsageEvidence, ...] = ()
+    entity_synthesis_attempted: bool = False
+    entity_synthesis_accepted: bool = False
+    entity_synthesis_rejection_reason: str | None = None
 
     design_language_roles: tuple[str, ...] = ()
     """選ばれたDesign Languageの役割(`metric.primary`等)。

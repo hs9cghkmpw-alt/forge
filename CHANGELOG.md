@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-08-27 — FORGE-020A3 / Capability Composition and Typed Provenance
+
+- Typed structure source/provider/task from CognitiveContext to durable Evidence.
+- Canonical semantic catalog plus runtime adapter integrity checks.
+- Composable StructuralMode and independent multi-view capability plan.
+- Typed capability usage and entity synthesis rejection Evidence.
+- Honest existing confirmation outcome for critical missing capabilities.
+- CPU Level 0.5 benchmarks are valid; GPU/VRAM are Evidence rather than prerequisites.
+
 ## 2026-08-27 — FORGE-020A2 / GENERATED-UI-QG-V2-R5
 
 ### Local AI Structure Provenance / Level 0 Integrity

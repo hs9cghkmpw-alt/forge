@@ -1,5 +1,13 @@
 # TECH_DEBT.md
 
+## FORGE-020A3 update (2026-08-27)
+
+- TD91 is resolved at implemented entity-synthesis rejection points with a closed,
+  privacy-safe durable reason enum; raw model output remains excluded.
+- Combination PlanShape and decision-trace structure truth are removed.
+- Verification debt: active Python lacks pytest/httpx/fastapi and Flutter commands stalled.
+  Backend full, Ruff, Flutter, Browser/Playwright and Real Local Model remain UNVERIFIED.
+
 ## FORGE-020A1 / QG-V2-R4 で解消したもの・増えたもの（2026-08-26）
 
 ### ~~TD87. 8アプリが3種類の画面にしかならない~~ → **解消**

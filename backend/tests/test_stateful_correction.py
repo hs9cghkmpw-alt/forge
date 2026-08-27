@@ -162,7 +162,7 @@ class TestCaseB_DataOnlyCorrection(unittest.TestCase):
         self.assertEqual(ids(v2.view), view_before, "Dataの訂正でViewが消えてはならない")
         for existing in data_before:
             self.assertIn(existing, ids(v2.data), "既存のDataが消えている(追加のはずが置換になっている)")
-        self.assertIn("data.date", ids(v2.data), "新しく言われた項目が足されていない")
+        self.assertIn("record.date", ids(v2.data), "新しく言われた項目が足されていない")
 
 
 class TestCaseC_ProblemCorrection(unittest.TestCase):
@@ -460,13 +460,13 @@ class TestMissingSurvivesUnrelatedCorrections(unittest.TestCase):
         c = _Conversation("釣果を記録したい")
         c.say("写真を記録して地図で見たい")
         v1 = c.hypothesis()
-        self.assertEqual(ids(v1.missing), ["data.photo", "view.map"])
+        self.assertEqual(ids(v1.missing), ["record.photo", "view.map"])
 
         c.say("違う、色の濃さで見たい")
         v2 = c.hypothesis()
 
         self.assertIn(
-            "data.photo", ids(v2.missing),
+            "record.photo", ids(v2.missing),
             "訂正していない層のMissingが消えている(指摘2の再発)",
         )
         self.assertIn("view.heatmap", ids(v2.missing), "訂正した層が反映されていない")

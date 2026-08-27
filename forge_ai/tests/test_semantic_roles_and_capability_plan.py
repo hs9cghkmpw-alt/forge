@@ -17,7 +17,7 @@ from forge_ai.core.ir.capability_ir import entity_spec_from_plan
 from forge_ai.core.semantics.capability_plan import (
     CAPABILITY_REGISTRY,
     CapabilityStatus,
-    PlanShape,
+    StructuralMode,
     plan_capabilities,
 )
 from forge_ai.core.semantics.roles import (
@@ -94,17 +94,17 @@ class TestConceptBlocking(unittest.TestCase):
                 self.assertEqual(concepts_blocked_by_role(need), frozenset())
 
 
-class TestCapabilityPlanShapes(unittest.TestCase):
+class TestComposableCapabilityPlans(unittest.TestCase):
     def test_each_need_gets_its_own_shape(self) -> None:
         expected = {
-            KIDS: PlanShape.CHECKLIST,
-            WORKLOG: PlanShape.CHECKLIST,
-            PHOTO: PlanShape.RECORD_LOG,
-            MAP: PlanShape.RECORD_LOG,
-            GAME: PlanShape.RECORD_LOG,
-            FINANCE: PlanShape.RECORD_LOG_WITH_TOTAL,
-            ANALYTICS: PlanShape.RECORD_LOG_WITH_GROUP_COMPARE,
-            STUDY: PlanShape.RECORD_LOG_WITH_TREND,
+            KIDS: StructuralMode.CHECKLIST,
+            WORKLOG: StructuralMode.CHECKLIST,
+            PHOTO: StructuralMode.RECORD_ENTITY,
+            MAP: StructuralMode.RECORD_ENTITY,
+            GAME: StructuralMode.RECORD_ENTITY,
+            FINANCE: StructuralMode.RECORD_ENTITY,
+            ANALYTICS: StructuralMode.RECORD_ENTITY,
+            STUDY: StructuralMode.RECORD_ENTITY,
         }
         for need, shape in expected.items():
             with self.subTest(need=need):
@@ -132,7 +132,7 @@ class TestCapabilityPlanShapes(unittest.TestCase):
     def test_an_unknown_need_yields_an_unknown_shape(self) -> None:
         """**既定の checklist へ倒さない。**"""
         plan = plan_capabilities("ぷるぷるした何か")
-        self.assertIs(plan.shape, PlanShape.UNKNOWN)
+        self.assertIs(plan.structural_mode, StructuralMode.UNKNOWN)
         self.assertFalse(plan.is_actionable)
 
 
@@ -202,13 +202,13 @@ class TestNoPerNeedTemplates(unittest.TestCase):
 
     def test_the_shape_vocabulary_stays_small(self) -> None:
         self.assertLessEqual(
-            len(PlanShape), 6,
+            len(StructuralMode), 3,
             "Need ごとに Shape を足している（それは Template と同じ）",
         )
 
     def test_no_shape_is_named_after_a_need(self) -> None:
         forbidden = ("kids", "photo", "analytics", "game", "study", "travel", "child")
-        for shape in PlanShape:
+        for shape in StructuralMode:
             for word in forbidden:
                 self.assertNotIn(word, shape.value)
 

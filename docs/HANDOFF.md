@@ -1,5 +1,15 @@
 # Forge Handoff
 
+## Current task: FORGE-020A3 / CAPABILITY-COMPOSITION-AND-TYPED-PROVENANCE
+
+- Branch: `claude/forge-master-handoff-k46jns`; start HEAD: `01c45421749905bb553c84dabed56c757173e5fd`.
+- Structure truth is typed on `CognitiveContext`; source/provider/task are orthogonal and `decision_trace` is diagnostic only.
+- Canonical semantic catalog: `forge_ai/core/semantics/capabilities.py`; backend is the runtime adapter/binding validator.
+- `StructuralMode` is unknown/checklist/record_entity. Views compose independently; list + total + group comparison + trend are retained.
+- Capability usage, synthesis rejection and critical missing outcomes are typed and privacy-safe.
+- Next task: independent FORGE-020A3 review and dependency-complete verification.
+- Evidence: `docs/reports/FORGE-020A3-report.md`.
+
 ## 2026-08-27 FORGE-020A2 / GENERATED-UI-QG-V2-R5 update
 
 - Start HEAD: `29d7c0aa3bff2231bed9e67496f8c9331a40a766`
@@ -31,7 +41,7 @@
 - Start HEAD: `63ad43403606c9731f76c98248a9b0e9149e94bf`
 - Implementation Agent: **Claude Code**
 - Current phase: R1 Generated App Quality / Growing AI
-- Current task: **FORGE-020A1 / QG-V2-R4**（Evidence Integrity +
+- Historical task: **FORGE-020A1 / QG-V2-R4**（Evidence Integrity +
   Generative Capability Planning）。**TD87・TD89 は解消**、
   Golden Gate は **FAIL**（理由が変わった）
 - **Real Local Model runs: 0**（2026-08-27にこのPCで実測したが、厳密判定は未PASS）

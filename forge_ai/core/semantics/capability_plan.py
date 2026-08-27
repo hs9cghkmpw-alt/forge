@@ -44,6 +44,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from forge_ai.core.semantics.capabilities import CAPABILITIES, CapabilityStatus
 
 from forge_ai.core.semantics.roles import (
     SemanticRole,
@@ -55,21 +56,10 @@ __all__ = [
     "CAPABILITY_REGISTRY",
     "CapabilityStatus",
     "CapabilityPlan",
-    "PlanShape",
+    "StructuralMode",
     "PlannedField",
     "plan_capabilities",
 ]
-
-
-class CapabilityStatus(str, Enum):
-    """**Forge がその能力を持っているか。** 実装状態の宣言。"""
-
-    IMPLEMENTED = "implemented"
-    PARTIAL = "partial"
-    """出来るが本来の形ではない（写真を**文字で**記録する等）。"""
-
-    MISSING = "missing"
-    """**持っていない。** 代用して黙らない。"""
 
 
 #: Capability の語彙と実装状態。**これは表であって、生成器ではない。**
@@ -105,8 +95,14 @@ CAPABILITY_REGISTRY: dict[str, tuple[CapabilityStatus, str]] = {
     "media.compose": (CapabilityStatus.MISSING, "音や画像を合成できない"),
 }
 
+# Backward-compatible projection only. The catalog above is canonical.
+CAPABILITY_REGISTRY = {
+    capability_id: (definition.status, definition.description)
+    for capability_id, definition in CAPABILITIES.items()
+}
 
-class PlanShape(str, Enum):
+
+class StructuralMode(str, Enum):
     """**作るものの骨格。** Template 名ではない。
 
     Template は「この画面を出す」という指定である。Shape は
@@ -117,17 +113,8 @@ class PlanShape(str, Enum):
     CHECKLIST = "checklist"
     """1件ずつ済みにしていく。**記録する値を持たない。**"""
 
-    RECORD_LOG = "record_log"
+    RECORD_ENTITY = "record_entity"
     """1件ずつ値を残して、一覧で見る。"""
-
-    RECORD_LOG_WITH_TOTAL = "record_log_with_total"
-    """記録 + 合計・残高。"""
-
-    RECORD_LOG_WITH_GROUP_COMPARE = "record_log_with_group_compare"
-    """記録 + グループごとの集計比較。"""
-
-    RECORD_LOG_WITH_TREND = "record_log_with_trend"
-    """記録 + 推移。"""
 
     UNKNOWN = "unknown"
     """**何も分からなかった。** 既定の checklist へ倒さない。"""
@@ -217,12 +204,14 @@ class CapabilityPlan:
     """**この Need のために何を作るか。**"""
 
     roles: SemanticRoleExtraction
-    shape: PlanShape
+    structural_mode: StructuralMode
     entity_name: str = ""
     entity_label: str = ""
     fields: tuple[PlannedField, ...] = ()
     views: tuple[str, ...] = ()
     interactions: tuple[str, ...] = ()
+    effects: tuple[str, ...] = ()
+    runtime_behaviors: tuple[str, ...] = ()
     unsupported: tuple[str, ...] = field(default=())
     """**持っていない能力**。名指しして残す。代用して黙らない。"""
 
@@ -232,12 +221,17 @@ class CapabilityPlan:
     @property
     def is_actionable(self) -> bool:
         """**IR を組めるだけの材料が揃っているか。**"""
-        return self.shape is not PlanShape.UNKNOWN and bool(self.entity_label)
+        return self.structural_mode is not StructuralMode.UNKNOWN and bool(self.entity_label)
+
+    @property
+    def shape(self) -> StructuralMode:
+        """Temporary source-compatible alias; it never encodes view combinations."""
+        return self.structural_mode
 
     def to_dict(self) -> dict[str, object]:
         """Decision Trace / Evidence へそのまま載せる。"""
         return {
-            "shape": self.shape.value,
+            "structural_mode": self.structural_mode.value,
             "entity": self.entity_name,
             "fields": [f.name for f in self.fields],
             "views": list(self.views),
@@ -285,20 +279,14 @@ def _subject_of_role(
     return None
 
 
-def _shape_of(roles: SemanticRoleExtraction, fields: tuple[PlannedField, ...]) -> PlanShape:
+def _structural_mode_of(roles: SemanticRoleExtraction, fields: tuple[PlannedField, ...]) -> StructuralMode:
     views = set(roles.of(SemanticRole.DESIRED_VIEW))
     # **チェックして消す道具に、記録する値は要らない。**
     if "check_off" in views and not fields:
-        return PlanShape.CHECKLIST
+        return StructuralMode.CHECKLIST
     if not fields:
-        return PlanShape.CHECKLIST if "check_off" in views else PlanShape.UNKNOWN
-    if views & {"compare", "aggregate", "chart"}:
-        return PlanShape.RECORD_LOG_WITH_GROUP_COMPARE
-    if "trend" in views:
-        return PlanShape.RECORD_LOG_WITH_TREND
-    if views & {"total", "balance"}:
-        return PlanShape.RECORD_LOG_WITH_TOTAL
-    return PlanShape.RECORD_LOG
+        return StructuralMode.CHECKLIST if "check_off" in views else StructuralMode.UNKNOWN
+    return StructuralMode.RECORD_ENTITY
 
 
 def plan_capabilities(text: str) -> CapabilityPlan:
@@ -309,7 +297,7 @@ def plan_capabilities(text: str) -> CapabilityPlan:
     """
     roles = extract_semantic_roles(text)
     if roles.is_empty:
-        return CapabilityPlan(roles=roles, shape=PlanShape.UNKNOWN)
+        return CapabilityPlan(roles=roles, structural_mode=StructuralMode.UNKNOWN)
 
     fields: list[PlannedField] = []
     for value in roles.of(SemanticRole.RECORDED_DATA):
@@ -371,9 +359,9 @@ def plan_capabilities(text: str) -> CapabilityPlan:
             ))
 
     field_tuple = tuple(fields)
-    shape = _shape_of(roles, field_tuple)
+    structural_mode = _structural_mode_of(roles, field_tuple)
 
-    if shape is not PlanShape.UNKNOWN and not entity_label:
+    if structural_mode is not StructuralMode.UNKNOWN and not entity_label:
         # 主題が取れないが記録する値はある。
         #
         # **記録している値そのものから名乗る**（実描画で見て直した）。
@@ -397,15 +385,16 @@ def plan_capabilities(text: str) -> CapabilityPlan:
 
     planned_views: list[str] = ["view.list"]
     interactions: list[str] = []
-    if shape is PlanShape.CHECKLIST:
+    if structural_mode is StructuralMode.CHECKLIST:
         planned_views = []
         interactions.append("interact.check_off")
-    elif shape is PlanShape.RECORD_LOG_WITH_GROUP_COMPARE:
-        planned_views.append("view.group_compare")
-    elif shape is PlanShape.RECORD_LOG_WITH_TREND:
-        planned_views.append("view.trend")
-    elif shape is PlanShape.RECORD_LOG_WITH_TOTAL:
-        planned_views.append("view.total")
+    else:
+        if views & {"total", "balance"}:
+            planned_views.append("view.total")
+        if views & {"compare", "aggregate", "chart"}:
+            planned_views.append("view.group_compare")
+        if "trend" in views:
+            planned_views.append("view.trend")
 
     # **持っていない能力を名指しする。**
     requested = set(f.capability for f in field_tuple) | set(planned_views) | set(interactions)
@@ -429,7 +418,7 @@ def plan_capabilities(text: str) -> CapabilityPlan:
     ))
 
     return CapabilityPlan(
-        roles=roles, shape=shape,
+        roles=roles, structural_mode=structural_mode,
         entity_name=entity_name, entity_label=entity_label,
         fields=field_tuple, views=tuple(planned_views),
         interactions=tuple(interactions),
