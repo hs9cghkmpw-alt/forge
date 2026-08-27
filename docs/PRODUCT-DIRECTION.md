@@ -200,3 +200,49 @@ Knowledge → Retrieval → Experience → Benchmark へ順次接続する。
 
 **どれかに問題がある場合、黙って目標を変更せず、問題・代替案・
 Trade-offを報告する。**
+
+---
+
+## 9. Mobile-first Access / Execution Location Independence
+
+Forgeは**PC専用の開発ツールを最終形としない。** 普通のスマートフォン、
+タブレット、PCなど、一般利用者が日常的に使う端末から、自然言語で
+ソフトウェアを生成・修正・確認・利用できる **Generative Software Platform**
+を正式な製品目標とする。
+
+スマートフォンでは少なくとも次を第一級の利用体験として成立させる。
+
+* Forgeとの会話によるNeedの伝達・追加・修正
+* 生成中／生成後のアプリのプレビュー
+* 「ここを変えて」のような自然言語によるDesign / Behavior Revision
+* 生成結果の承認・訂正・再生成
+* 生成したアプリそのものの利用
+
+ただし、**Forgeを操作している端末と、AIやbuild/testを実行する端末を同一に
+固定しない。** 「スマホでForgeを使える」ことと「すべてのAI生成をスマホ内で
+実行する」ことは別の要件である。
+
+実行場所は環境・性能・プライバシー・利用者の許可に応じて解決する。
+
+```
+Forge Client（Smartphone / Tablet / Desktop）
+  ↓
+Execution / Intelligence Resolver
+  ├─ On-device Local AI
+  ├─ LAN上のPersonal PC / Execution Host
+  ├─ Personal Server
+  └─ 明示的に許可されたCloud AI
+```
+
+### 原則
+
+1. **ClientとExecution Hostを分離可能にする。** 特定PCを「Forge本体」と仮定しない。
+2. **スマホをsecond-class clientにしない。** 主要な会話・preview・revision・acceptanceをスマホから完結可能にする。
+3. **Local-firstを維持する。** スマホ対応を理由にCloud必須へ退化させない。
+4. **On-deviceを強制しない。** 端末性能が足りない場合は、許可された別Execution Hostへ委譲できる。
+5. **Privacy / PermissionをRouting条件に含める。** 秘密・個人データ・外部送信は実行場所選択と分離して扱わない。
+6. **Generated Appもmulti-deviceを前提にする。** Flutter / Web等の適切なRuntimeを通じ、Android / iOS / Web / Desktopへ展開できる設計を維持する。
+7. **Roadmap・Architecture・Testでdesktop-only assumptionを増やさない。** 機能ごとに「Client側に必要なもの」と「Execution Host側に必要なもの」を区別する。
+
+この方針は「今すぐスマホ単体で大規模Local Modelを動かせる」という現在能力の
+主張ではない。**将来の製品境界をPCに固定しないための上位設計原則**である。

@@ -26,13 +26,15 @@ from forge_ai.core.ir.domain_resolution import SolutionSource, resolve_domain_so
 from forge_ai.core.ir.capability_ir import compose_layout, entity_spec_from_plan
 from forge_ai.core.ir.forge_language_compiler import ForgeLanguageCompiler
 from forge_ai.core.ir.ir_generator import SUPPORTED_DOMAIN_CATEGORIES, IRGenerator
-from forge_ai.core.orchestration.cognitive_context import CognitiveContext
+from forge_ai.core.orchestration.cognitive_context import (
+    CognitiveContext, EntitySynthesisAttempt, StructureProvenance,
+    StructureProvider, StructureSource,
+)
 from forge_ai.core.orchestration.cognitive_dependencies import CognitiveDependencies
 from forge_ai.core.orchestration.cognitive_types import CriticIssue, CriticReport, OverallConfidence
 from forge_ai.core.orchestration.confidence import compute_legacy_escalation_reasons, compute_overall_confidence, compute_shadow_judgment
 from forge_ai.core.orchestration.errors import AmbiguityError, ConfirmationRequired, CriticFailure, PlanningError
 from forge_ai.core.semantics.capability_plan import plan_capabilities
-from forge_ai.core.semantics.structure_provenance import StructureSource
 from forge_ai.core.semantics.roles import (
     SemanticRole,
     concepts_blocked_by_role,
@@ -415,11 +417,11 @@ class CognitiveOrchestrator:
             # 後から「provider が local だったから Local Model が構造を
             # 作った」と推定してはならない。Design Intent だけ AI を
             # 呼んだ場合も `last_provider_used` は local になる。
-            structure_source = StructureSource.UNKNOWN
             if resolution.source is SolutionSource.CURATED:
                 ir = IRGenerator().generate(context.plan, domain_category=domain_category_value)
+                context = context.with_structure_provenance(StructureProvenance(
+                    StructureSource.CURATED, StructureProvider.NONE, "entity_structure"))
                 assert ir is not None  # CURATEDを選ぶのはSUPPORTED_DOMAIN_CATEGORIESに含まれる場合だけ
-                structure_source = StructureSource.CURATED
             elif (planned_spec := entity_spec_from_plan(capability_plan)) is not None:
                 # **役から組めるなら、AI を待たずに組む。**
                 #
@@ -429,23 +431,46 @@ class CognitiveOrchestrator:
                 ir = IRGenerator().build_from_spec(planned_spec)
                 entity_source = f"capability_plan({capability_plan.structure.value})"
                 # **AI は構造を作っていない。** 決定的な Plan である。
-                structure_source = StructureSource.DETERMINISTIC_CAPABILITY_PLAN
+                context = context.with_structure_provenance(StructureProvenance(
+                    StructureSource.DETERMINISTIC_CAPABILITY_PLAN,
+                    StructureProvider.NONE, "entity_structure"))
             elif deps.entity_synthesizer is not None:
-                synthesized_spec = deps.entity_synthesizer.synthesize(
-                    context.plan,
-                    user_text=context.raw_input,
-                    domain_name=domain_category_value,
-                )
+                if hasattr(deps.entity_synthesizer, "synthesize_with_attempt"):
+                    synthesized_spec, synthesis_attempt = deps.entity_synthesizer.synthesize_with_attempt(
+                        context.plan, user_text=context.raw_input,
+                        domain_name=domain_category_value,
+                    )
+                else:
+                    synthesized_spec = deps.entity_synthesizer.synthesize(
+                        context.plan, user_text=context.raw_input,
+                        domain_name=domain_category_value,
+                    )
+                    synthesis_attempt = EntitySynthesisAttempt(
+                        attempted=True, accepted=synthesized_spec is not None,
+                    )
+                context = context.with_entity_synthesis_attempt(synthesis_attempt)
                 if synthesized_spec is not None:
                     ir = IRGenerator().build_from_spec(synthesized_spec)
                     entity_source = "synthesized"
                     # **ここだけが「AI が構造を作った」である。**
-                    structure_source = StructureSource.AI_ENTITY_SYNTHESIS
+                    provider = getattr(deps.entity_synthesizer, "_provider", None)
+                    provider_name = str(getattr(provider, "provider_id", "") or
+                                        getattr(provider, "name", "")).lower()
+                    structure_provider = (
+                        StructureProvider.TEST_DOUBLE if "mock" in provider_name or "fake" in provider_name
+                        else StructureProvider.LOCAL if "local" in provider_name or "ollama" in provider_name
+                        else StructureProvider.CLOUD
+                    )
+                    context = context.with_structure_provenance(StructureProvenance(
+                        StructureSource.AI_ENTITY_SYNTHESIS, structure_provider,
+                        "entity_synthesis"))
                 elif domain_category_value in SUPPORTED_DOMAIN_CATEGORIES:
                     # 合成に失敗した場合、Curatedが存在するなら
                     # Checklistへ落ちるより手作り定義の方がまだ良い。
                     ir = IRGenerator().generate(context.plan, domain_category=domain_category_value)
-                    structure_source = StructureSource.CURATED
+                    context = context.with_structure_provenance(StructureProvenance(
+                        StructureSource.CURATED, StructureProvider.NONE,
+                        "entity_synthesis_fallback"))
 
             if ir is not None:
                 context = context.with_decision(_trace(
@@ -504,8 +529,10 @@ class CognitiveOrchestrator:
                 # (`compiler.py`参照)、それ以外のtemplate名は引き続き
                 # Checklistへフォールバックする。
                 # checklist 経路。構造は Compiler が決定的に組む。
-                if structure_source is StructureSource.UNKNOWN:
-                    structure_source = StructureSource.DETERMINISTIC_CAPABILITY_PLAN
+                if context.structure_provenance.source is StructureSource.UNKNOWN:
+                    context = context.with_structure_provenance(StructureProvenance(
+                        StructureSource.DETERMINISTIC_CAPABILITY_PLAN,
+                        StructureProvider.NONE, "forge_language_compile"))
                 forge_document = deps.compiler.compile(
                     context.plan, domain_category=domain_category_value,
                     template=context.template_selection.template,
@@ -514,9 +541,8 @@ class CognitiveOrchestrator:
                     entity_label=capability_plan.entity_label,
                 )
 
-            context = context.with_structure_source(structure_source)
             context = context.with_decision(_trace(
-                "structure_source", structure_source.value,
+                "structure_source", context.structure_provenance.source.value,
                 "この文書の**構造**を作った段。Provider 名から推定しない"
                 "（Design Intent だけ AI を呼んでも構造は AI が作っていない）",
             ))

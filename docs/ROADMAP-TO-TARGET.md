@@ -52,6 +52,8 @@
 > **現在 Level 0 未到達。** `Real Local Model runs = 0`。
 > Level 1 以降は Level 0 を前提とするので、どれも到達していない。
 > 契約と検査は Level 2〜6 のぶんまで先に作ってあるが、
+> 2026-08-27にOllama/Qwen 7Bでproduction実測し、偽PASSを2回
+> `INVALID_PROBE`として拒否した。詳細はFORGE-020A2 report。
 > **それは「到達した」ではない**（`docs/LEARNABLE-LOCAL-AI-VISION.md` 現況節）。
 >
 > 次に埋めるべき穴（Vision 現況節より）:

@@ -302,8 +302,8 @@ CRUD フォームである。**ゲームではない。**
 
 | 対象 | 結果 |
 |---|---|
-| `backend` 全件 | **1840 passed / 16 skipped** |
-| `forge_ai` 全件 | **582 passed** |
+| `backend` 全件 | **1845 passed / 16 skipped**（020A3 との merge 後） |
+| `forge_ai` 全件 | **585 passed**（同上） |
 | `flutter analyze` | **No issues found!** |
 | `flutter test` | **516 passed** |
 | `flutter build web`（撮影ハーネス） | 成功 |
@@ -336,3 +336,160 @@ CRUD フォームである。**ゲームではない。**
 `GENERATIVE-SOFTWARE-DIRECTION.md` が禁じている形そのものである。
 §5 で作った告知の仕組みは正しく動くが、**Plan に載らないものは
 告知もされない**。次は語彙側（Semantic Role → Capability）である。
+
+---
+
+## 12. 実機で Level 0 を測った（020A3、ChatGPT 側の成果）
+
+**同じ branch で ChatGPT 側も 020A2/020A3 を実装していた。**
+その中に、この container では出来ないことが1つある——
+**実機で Real Local Model を動かした**。
+
+Windows 実機（`DESKTOP-1JNGG6N`）、Ollama 0.32.15、
+`qwen2.5:7b-instruct`（digest あり、Q4_K_M）。
+
+| Evidence | 結果 |
+|---|---|
+| `level0-20260827-103251.json` | FAILED（Provider 120秒 timeout。修正済み） |
+| `level0-20260827-103709.json` | **INVALID_PROBE** |
+| `level0-20260827-104126.json` | **INVALID_PROBE** |
+| `level0-20260827-104538.json` | **INVALID_PROBE** |
+
+後半3件は production HTTP 200 / Validator PASS / Evidence uid /
+`generation_source=local_ai` まで**通っている**。それでも数えない——
+**構造を作ったのは決定的な fallback** だったからである。
+
+```
+why_not_counted: Software structureをLocal Modelが作っていない（curated）
+real_local_model_runs: 0
+```
+
+> **これが §3 を作った理由そのものである。**
+> 「Local を指定して 200 が返った」だけで数えていたら、ここで 1 が立って
+> いた。実際に実機で動かして、実際に危うく数えるところだった。
+
+**Real Local Model runs は 0 のままである。** 増やしていない。
+
+### 実機側で直したもの（020A3）
+
+- Windows の CP932 で起動できなかった
+- script 180秒 / Provider 120秒という timeout の不一致
+
+---
+
+## 13. 020A3 との統合（merge の判断を残す）
+
+2つの実装が同じ指示に別々に答えていたので、**同じものが2系統**になって
+いた。**それは §1 が禁じている状態そのもの**なので、1つへ寄せた。
+
+| 重複していたもの | 寄せ先 | 理由 |
+|---|---|---|
+| Capability の表（`data.*` と `record.*`） | `forge_ai/core/semantics/capabilities.py` | `label_ja` / `SafetyClass` / `limitation` を持つ側でないと §5 の日本語が作れない |
+| `StructureSource` 等の型が3箇所 | `structure_provenance.py`（backend は**別名**） | 同じ値の enum が2つあると `is` が常に False（TD85） |
+| `GenerationRecord` の構造欄が2組 | `structure_source` / `structure_provider` / `structure_task` | dataclass に同名欄が2つあり、後勝ちで片方が死んでいた |
+| `RealLocalModelRun.structure_provenance` と `structure_source` | 欄は1つ、旧名は property | 同じ事実を2欄で持たない |
+| `_capability_usage()` が2つ | 生成物の widget と突き合わせる側 | 状態だけから `used` を決めると M2b mutation を素通りする |
+| `probe_was_curated` と `probe_bypassed_model_structure_generation` | 前者、後者は別名 | 同じ判定だった |
+
+型を1つにしたので、**`structure_provider` は enum になった**
+（020A3 の判断を採った）——決定的経路は `NONE` であり、空文字ではない。
+「記録し忘れ」と「AI を呼んでいない」が同じ値になると区別できない。
+
+### 採らなかったもの（理由を書く）
+
+020A3 は「不足 Capability があれば `needs_confirmation` を返して生成を
+止める」を入れていた。**採らなかった。**
+
+1. 指示は「作れないことを**会話の中で普通に伝える**。wizard 化しない」
+   である。はい／いいえを1段挟むのは wizard の作り方そのものである。
+2. 判定が `unsupported`（欠けたもの全部）だった。「地図で見たい」が
+   欠けただけで釣果記録まで止まる——`capability_gap` の表が
+   「VIEW / INTERACT は critical ではない（見え方が落ちるだけで道具は
+   使える）」と書いているのと食い違う。
+3. 止めると**何も返らない**ので、作れる範囲さえ利用者へ渡らない。
+   Quality Gate の視覚 Evidence も game について取れなくなる。
+
+代わりに `_result_dto()` が `capability_gap` を必ず載せ、本質
+（`SIMULATE` / `EFFECT`）が欠けていれば `release_ready` を false にする。
+**「仕上がっている」とは言わない**が、**作れる範囲は渡す。**
+
+> これは判断であって、消し忘れではない。異論があればここを見てほしい。
+
+---
+
+## 付録: 020A3 側の報告（原文）
+
+# FORGE-020A2 / GENERATED-UI-QG-V2-R5 Report
+
+- Branch: `claude/forge-master-handoff-k46jns`
+- Start HEAD: `29d7c0aa3bff2231bed9e67496f8c9331a40a766`
+- Implementation HEAD: `a796481724cb61abae50831ec99de30ebe86d6a2`
+- Date: 2026-08-27
+- Real Local Model runs: **0**
+- Overall: **INCOMPLETE — Level 0は未PASS**
+
+## Implementation / production wiring
+
+`GenerationRecord.structure_provenance`を追加し、リクエスト中にLocal Providerが
+応答した事実と、Software structureを実際に決めた主体を分離した。
+
+```
+pipeline entity_source
+  → prompt_pipeline._structure_provenance
+  → durable GenerationRecord
+  → verify_local_model_level0.py
+  → RealLocalModelRun.counts_as_real_local
+```
+
+Level 0はproduction `/generate`、AIRouter task観測、Validator、Evidence uid、
+`generation_source=local_ai`に加え、`structure_provenance=local_ai`を必須とする。
+deterministic Capability Plan / Curated fallbackが構造を作った場合はHTTP 200でも
+`INVALID_PROBE`であり、runへ加算しない。
+
+Level 0既定モデルは`qwen2.5:7b-instruct`。`bge-m3`はembedding専用で生成未使用。
+モデルdownloadは行っていない。Windows UTF-8表示とscript/provider timeoutの
+不一致も修正した。
+
+## Tests / mutation
+
+- focused: **105 passed**
+- backend full: **1779 passed, 17 skipped**
+- forge_ai full: **567 passed**
+- ruff changed Python: PASS
+- `git diff --check`: PASS
+- mutation: deterministic Capability PlanをLOCAL_AIと同様に許可すると、専用
+  偽PASS防止テストが`counts_as_real_local=True`となりFAIL。復元後green。
+
+## Real machine Level 0
+
+Ollama API/model availabilityを各公式実測前に確認した。Runtime 0.32.15、
+model `qwen2.5:7b-instruct`、digest
+`845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e`。
+
+- `level0-20260827-103251.json`: FAILED（Provider 120秒timeout、修正済み）
+- `level0-20260827-103709.json`: INVALID_PROBE
+- `level0-20260827-104126.json`: INVALID_PROBE
+- `level0-20260827-104538.json`: INVALID_PROBE
+
+後3件はproduction HTTP 200、Validator PASS、Evidence uid、
+`generation_source=local_ai`まで通ったが、structureは決定的fallback由来だった。
+したがって真のPASSではなく、**Real Local Model runs = 0**。
+
+単独entity synthesisおよび一時的production診断では有効構造と
+`entity_source=synthesized(generic)`を観測したが、公式Evidenceではないため
+runへ加算していない。
+
+## QG-V2-R5 visual status
+
+この変更はEvidence/Level 0判定とCLIのみで、UI・renderer・Design Language・
+generated-app appearanceを変更していない。新規visual captureは**対象外**。
+既存Golden GateのFAIL状態は変更しておらず、R5 visual quality改善は
+**INCOMPLETE**である。
+
+## GitHub handoff / UNVERIFIED / next task
+
+- Implementation commit `a796481`をpushし、local/remote一致を確認。
+- GitHub Actions run `33033252955`: **success**。4 jobsすべてgreen。
+- TD91: Entity synthesis不採用理由をraw応答なしの閉じたreason codeでdurable化。
+- Level 0 Integrity条件を緩めず、公式Evidenceでstructure generationがLocal AI
+  由来になった場合だけrunsを1へ更新する。

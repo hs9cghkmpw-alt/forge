@@ -227,7 +227,7 @@ class TestNoPerNeedTemplates(unittest.TestCase):
 
     def test_the_structural_vocabulary_stays_small(self) -> None:
         self.assertLessEqual(
-            len(StructuralMode), 4,
+            len(StructuralMode), 3,
             "Need ごとに構造を足している（それは Template と同じ）",
         )
 

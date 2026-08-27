@@ -419,10 +419,27 @@ class RealLocalModelRun:
         )
 
     @property
+    def structure_provenance(self) -> GenerationStructureSource:
+        """020A3 での名前。**`structure_source` の別名**（020A2 との merge）。
+
+        同じ事実を2つの欄で持っていたので、欄は1つにして名前だけ残す。
+        """
+        return self.structure_source
+
+    @property
+    def probe_bypassed_model_structure_generation(self) -> bool:
+        """決定的経路が構造を作り、Level 0を測れていないか。
+
+        **`probe_was_curated` と同じ判定である**（020A3 での名前）。
+        2つの述語が別々に同じことを見ていたので、片方へ寄せた。
+        """
+        return self.probe_was_curated
+
+    @property
     def level0_outcome(self) -> Level0Outcome:
         if self.counts_as_real_local:
             return Level0Outcome.PASSED
-        if self.probe_was_curated:
+        if self.probe_was_curated or self.probe_bypassed_model_structure_generation:
             # **Local Model の失敗ではない。測定が成立していない。**
             return Level0Outcome.INVALID_PROBE
         return Level0Outcome.FAILED
@@ -517,7 +534,10 @@ class RealLocalModelRunLog:
         if self.count() > 0:
             return Level0Outcome.PASSED
         rejected = self.rejected_runs()
-        if rejected and all(r.probe_was_curated for r in rejected):
+        if rejected and all(
+            r.probe_was_curated or r.probe_bypassed_model_structure_generation
+            for r in rejected
+        ):
             return Level0Outcome.INVALID_PROBE
         return Level0Outcome.FAILED
 

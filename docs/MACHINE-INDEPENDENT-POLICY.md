@@ -70,7 +70,7 @@ python scripts/forge_doctor.py
 | GitHub 同期 | git + github.com |
 | open-weight model の取得 | huggingface.co / ollama.com |
 | **Level 0**（実 Local Model の E2E） | Runtime が起動していること |
-| **Level 0.5**（Baseline Benchmark） | Runtime + 重みの digest（**GPU は必須ではない**） |
+| **Level 0.5**（Baseline Benchmark） | Runtime + 重みの digest（**GPU は必須ではない**。CPU 計測も実測である） |
 
 ## 5. 実行できない項目は UNVERIFIED
 
@@ -120,7 +120,9 @@ GPU / VRAM は別の意味を持つ:
 したがって **Real Local Model runs = 0 のまま**であり、
 `LEARNABLE-LOCAL-AI-VISION.md` の Level 0 は **UNVERIFIED** を維持する。
 
-これは失敗ではない。**このPCでは測れない**というだけである。
+2026-08-27に当該PCへOllama/Qwen 7Bが用意され、実測可能になった。
+ただし公式実測はFAILED 1回、INVALID_PROBE 2回で、PASSはまだ無い。
+したがってReal Local Model runsは0のままである。
 
 ## 7. Execution Host になったPCでやること
 

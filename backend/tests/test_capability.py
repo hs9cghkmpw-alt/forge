@@ -345,7 +345,7 @@ class TestConversationIntegration(unittest.TestCase):
             asked=(
                 "capability_gap:view.calendar",
                 "capability_gap:view.heatmap",
-                "capability_gap:view.line_chart",
+                "capability_gap:view.trend",
             ),
         ))
         self.assertIs(result.action, ConversationAction.BUILD)

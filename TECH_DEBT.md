@@ -56,6 +56,20 @@ TD90 で作った告知の仕組みは正しく動くが、**Plan に載らな�
 
 「金額」「日付」等が枠内の placeholder なので、**入力すると項目名が
 消える**。何を入れている欄か分からなくなる。
+## FORGE-020A3 の分（2026-08-27、merge 時に統合）
+
+同じ branch で ChatGPT 側も 020A2/020A3 を実装していた。内容は上と重なる
+ので、**残っている負債だけ**をここへ移す。
+
+- Entity 合成を落とした理由を、閉じた enum（`EntitySynthesisRejectionReason`）
+  で durable Evidence へ残す。生のモデル出力は入れない。→ 実装済み
+- 「試したが落とした」と「そもそも試していない」を区別する。→ 実装済み
+- **検証の負債（020A3 側の環境）**: その環境では pytest / httpx / fastapi が
+  無く、Flutter も止まっていたため、backend full / ruff / Flutter /
+  Playwright が UNVERIFIED のままだった。
+  → **このセッションで実行した**（`docs/reports/FORGE-020A2-QG-V2-R5-report.md` §10）。
+  Real Local Model は依然 UNVERIFIED（runs = 0）。
+
 
 ## FORGE-020A1 / QG-V2-R4 で解消したもの・増えたもの（2026-08-26）
 
@@ -3911,3 +3925,13 @@ blocked。UNKNOWNを許可へ倒さない。
 Projector障害でEvidence/生成成功を壊さない`SafeLearningObserver`相当の境界と
 failure count/error typeを実装した。ただしdurable監視、alert、再処理queueは
 未実装。raw Evidenceや秘密をerror recordへ保存しない制約は維持する。
+
+## TD91. Entity synthesis不採用のreason codeがdurable Evidenceに無い（2026-08-27）
+
+`qwen2.5:7b-instruct`は単独stageとproduction診断で有効なEntity構造を返し、
+`entity_source=synthesized(generic)`へ到達できた。一方、公式Level 0実測2回は
+HTTP 200/Validator PASSまで進んだが、Entity synthesisが採用されずCurated
+fallbackとなった。現在Evidenceには最終`structure_provenance`しかなく、空応答・
+identifier不正・field不採用等のどのsanitizer条件で落ちたかを後から区別できない。
+raw model outputを保存せず、閉じたreason codeとstage attempt/acceptedをdurableに
+残し、再現性と改善判断を得る必要がある。Level 0判定を緩めてはならない。

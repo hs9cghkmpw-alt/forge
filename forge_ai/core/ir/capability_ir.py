@@ -38,7 +38,6 @@ Capability の構成だけで性格が変わる。**
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import Enum
 
 from forge_ai.core.ir.ir_generator import EntitySpec, FieldSpec
@@ -133,17 +132,13 @@ def visual_style_for_plan(plan: CapabilityPlan) -> str:
     return _EMPHASIS_STYLES.get(compose_layout(plan), "calm")
 
 
-@dataclass(frozen=True)
-class _Unused:
-    """（将来 IR へ渡す追加情報の置き場。今は空。）"""
-
-
 def entity_spec_from_plan(plan: CapabilityPlan) -> EntitySpec | None:
     """Plan を `EntitySpec` にする。**組めなければ `None`。**
 
     `CHECKLIST` は Entity を持たない道具なので、ここでは組まない
     （`ForgeLanguageCompiler` の checklist 経路が受け持つ）。
     """
+    # **UNKNOWN も組まない。** 分からないものを楽観側（組める側）へ倒さない。
     if not plan.is_actionable or plan.structure is not StructuralMode.RECORD_ENTITY:
         return None
     if not plan.fields:

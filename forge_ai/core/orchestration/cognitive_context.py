@@ -22,7 +22,18 @@ from forge_ai.core.orchestration.cognitive_types import (
 )
 from forge_ai.core.ir.design_intent import DesignIntent
 from forge_ai.core.semantics.capability_plan import CapabilityPlan
-from forge_ai.core.semantics.structure_provenance import StructureSource
+# **構造の出所の型は1箇所にしか置かない**（020A2 §1/§3、merge 時に統合）。
+#
+# 020A2 と 020A3 が別々にこの4型を定義していた。同じ値の enum が2つ
+# あると `is` 比較が常に False になる——TD85（`Deployment` enum が2つ）
+# で実際に踏んだ形である。ここでは**再輸出するだけ**にする。
+from forge_ai.core.semantics.structure_provenance import (  # noqa: F401 — 再輸出
+    EntitySynthesisAttempt,
+    EntitySynthesisRejectionReason,
+    StructureProvenance,
+    StructureProvider,
+    StructureSource,
+)
 from forge_ai.core.planner import ApplicationPlan
 from forge_ai.core.world_model import World
 
@@ -58,15 +69,27 @@ class CognitiveContext:
     # 読む側が壊れたことに気付けない。
     design_intent: "DesignIntent | None" = None
 
-    structure_source: "StructureSource" = StructureSource.UNKNOWN
-    """**構造を作った段**（020A2 §3）。Decision Trace の文字列に頼らない。"""
-
     capability_plan: "CapabilityPlan | None" = None
     """役から決まった「何を作るか」（GENERATED-UI-QG-V2-R4、2026-08-26）。
 
     **Decision Trace の文字列に頼らない。** `design_intent` を Context へ
     持たせたのと同じ理由である——後から由来を取り出すのに書式へ依存すると、
     reason の書き方を変えただけで Evidence が壊れる。
+    """
+
+    structure_provenance: StructureProvenance = StructureProvenance()
+    """**構造を誰が作ったか**（020A2 §3 / 020A3）。
+
+    `source`（どの段） / `provider`（どの種類の AI） / `task`（どの stage）
+    の**3つで1つの事実**なので、まとめて持つ。別々の欄にすると片方だけ
+    更新してずれる。Decision Trace の文字列からは復元しない。
+    """
+
+    entity_synthesis_attempt: EntitySynthesisAttempt = EntitySynthesisAttempt()
+    """AI の Entity 合成を**試したか / 受け取ったか / なぜ落としたか**。
+
+    「試したが落とした」と「そもそも試していない」は違う。区別できないと
+    Local Model が伸びているのかどうかが分からない。
     """
 
     # Pipeline全体を通して蓄積
@@ -115,8 +138,11 @@ class CognitiveContext:
     def with_capability_plan(self, value: "CapabilityPlan") -> "CognitiveContext":
         return dataclasses.replace(self, capability_plan=value)
 
-    def with_structure_source(self, value: "StructureSource") -> "CognitiveContext":
-        return dataclasses.replace(self, structure_source=value)
+    def with_structure_provenance(self, value: StructureProvenance) -> "CognitiveContext":
+        return dataclasses.replace(self, structure_provenance=value)
+
+    def with_entity_synthesis_attempt(self, value: EntitySynthesisAttempt) -> "CognitiveContext":
+        return dataclasses.replace(self, entity_synthesis_attempt=value)
 
     def with_decision(self, trace: DecisionTrace) -> "CognitiveContext":
         return dataclasses.replace(self, decision_trace=self.decision_trace + (trace,))

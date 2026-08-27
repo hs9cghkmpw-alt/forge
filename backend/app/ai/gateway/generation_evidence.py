@@ -105,7 +105,10 @@ from __future__ import annotations
 
 from app.ai.gateway.capability_evidence import (
     CapabilityUsage,
+    CapabilityUsageSource,
+    CapabilityUsageStatus,
     GenerationStructureSource,
+    StructureProvider,
 )
 
 import time
@@ -122,6 +125,11 @@ __all__ = [
     "GenerationEvidenceStore",
     "GenerationRecord",
     "GenerationSource",
+    "StructureProvenance",
+    "StructureProvider",
+    "CapabilityUsageEvidence",
+    "CapabilityUsageStatus",
+    "CapabilityUsageSource",
     "source_for_generated",
     "RuntimeOutcome",
     "default_generation_store",
@@ -182,6 +190,16 @@ class GenerationSource(str, Enum):
             GenerationSource.LOCAL_AI,
             GenerationSource.COMPOSITION,
         }
+
+
+#: **構造を誰が作ったか** の型は1箇所にしか置かない
+#: （020A2 と 020A3 の merge、2026-08-27）。
+#:
+#: 両者が別々に同じ enum を書いていた。同じ値の enum が2つあると
+#: `is` 比較が常に False になる——TD85 で実際に踏んだ形である。
+#: ここは**別名**であって、写しではない。
+StructureProvenance = GenerationStructureSource
+CapabilityUsageEvidence = CapabilityUsage
 
 
 def source_for_generated(provider_used: str | None) -> GenerationSource:
@@ -358,6 +376,19 @@ class GenerationRecord:
     capabilities: tuple[str, ...] = ()
     """使われたCapabilityの識別子。**値ではなく名前**。"""
 
+    entity_synthesis_attempted: bool = False
+    """AI の Entity 合成を**試したか**（020A3）。"""
+
+    entity_synthesis_accepted: bool = False
+    """試した結果を**受け取ったか**。試していないときも False なので、
+    `entity_synthesis_attempted` と併せて読む。"""
+
+    entity_synthesis_rejection_reason: str | None = None
+    """落とした理由。`EntitySynthesisRejectionReason` の値。
+
+    「試したが落とした」と「そもそも試していない」を区別できないと、
+    Local Model が伸びているのかどうかが分からない。"""
+
     design_language_roles: tuple[str, ...] = ()
     """選ばれたDesign Languageの役割(`metric.primary`等)。
 
@@ -410,8 +441,12 @@ class GenerationRecord:
     「Local Model が構造生成を担当した」ではない。
     """
 
-    structure_provider: str = ""
-    """構造を作った段が**実際に**使った Provider 名。呼んでいなければ空。"""
+    structure_provider: StructureProvider = StructureProvider.NONE
+    """構造を作った段が**実際に**使った Provider の種類。
+
+    決定的に組んだときは `NONE` である——**空文字にしない**（020A3）。
+    「記録し忘れ」と「AI を呼んでいない」が同じ値になると区別できない。
+    """
 
     structure_task: str = ""
     """構造を作った段の `ForgeTask`。**手で書かない**——観測した値を入れる。"""
@@ -505,7 +540,7 @@ class GenerationRecord:
             "design_language_roles": list(self.design_language_roles),
             "design_decisions": [d.to_dict() for d in self.design_decisions],
             "structure_source": self.structure_source.value,
-            "structure_provider": self.structure_provider,
+            "structure_provider": self.structure_provider.value,
             "structure_task": self.structure_task,
             "capability_usage": [u.to_dict() for u in self.capability_usage],
             "knowledge_references": list(self.knowledge_references),

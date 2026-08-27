@@ -44,6 +44,7 @@ from app.ai.gateway.generation_evidence import (  # noqa: E402
     GenerationEvidenceStore,
     GenerationRecord,
     GenerationSource,
+    StructureProvenance,
     RuntimeOutcome,
     default_generation_store,
 )
@@ -170,6 +171,21 @@ class TestCuratedGenerationsLeaveEvidence(unittest.TestCase):
                     record.source, {GenerationSource.CLOUD_AI, GenerationSource.LOCAL_AI},
                 )
 
+    def test_capability_plan_structure_is_not_attributed_to_provider(self) -> None:
+        """後段でProviderが呼ばれても、構造は決定的Planの成果。"""
+        self._generate("実験の条件と結果を残して、条件ごとに成功率を比べたい")
+        record = self.store.all_records()[-1]
+        # `structure_provenance` は `structure_source` の別名である
+        # （020A2 と 020A3 の merge で欄を1つにした）。
+        self.assertIs(
+            record.structure_source,
+            StructureProvenance.DETERMINISTIC_CAPABILITY_PLAN,
+        )
+        # **Provider が後段で呼ばれても、構造を作ったのは AI ではない。**
+        self.assertIsNot(
+            record.structure_source, StructureProvenance.AI_ENTITY_SYNTHESIS,
+        )
+
     def test_a_test_double_is_not_a_training_candidate(self) -> None:
         """Mockの出力を教師にすると、Mockの癖を学ぶことになる。"""
         self.assertFalse(GenerationSource.TEST_DOUBLE.is_usable_for_training)
@@ -284,13 +300,17 @@ class TestTheRecordCannotHoldContent(unittest.TestCase):
             # (FORGE-017A §3、Dataset Lineage用の永続ID)。
             # 追加するときは「識別子か、内容か」を必ず判断すること
             # ——このテストは判断を強制するために在る。
-            # `structure_provider` / `structure_task`（020A2 §3）は
-            # **識別子**である——Provider 名と `ForgeTask` の値であり、
-            # 利用者の言葉も生成物の本文も入らない。判断した上で足した。
+            # `structure_task` / `entity_synthesis_rejection_reason`
+            # （020A2 §3 / 020A3）は**識別子**である——stage 名と
+            # 落とした理由の enum 値であり、利用者の言葉も生成物の本文も
+            # 入らない。判断した上で足した。
+            #
+            # `structure_provider` は enum になったので、文字列を入れられる
+            # 欄ではなくなった（merge で 020A3 側の型へ寄せた）。
             text_fields,
             {
                 "domain", "forge_language_version", "uid",
-                "structure_provider", "structure_task",
+                "structure_task", "entity_synthesis_rejection_reason",
             },
             f"内容を入れられるフィールドが増えている: {text_fields}",
         )

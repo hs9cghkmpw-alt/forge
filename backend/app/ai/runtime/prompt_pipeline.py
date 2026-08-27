@@ -65,6 +65,7 @@ from app.ai.gateway.generation_evidence import (
     DesignRoleDecision,
     GenerationRecord,
     GenerationSource,
+    StructureProvider,
     default_generation_store,
     source_for_generated,
 )
@@ -305,6 +306,7 @@ def _record_generation(
     """
     store = default_generation_store()
     ai_calls = len(getattr(bound, "experience_refs", ()) or ())
+    synthesis_attempt = getattr(context, "entity_synthesis_attempt", None)
     stored = store.record(
         GenerationRecord(
             source=_generation_source(
@@ -334,8 +336,14 @@ def _record_generation(
             capabilities=_capabilities_used(context),
             capability_usage=_capability_usage(context, forge_document),
             structure_source=_structure_source(context),
-            structure_provider=_structure_provider(context, bound),
-            structure_task=_structure_task(bound),
+            structure_provider=_structure_provider(context),
+            structure_task=_structure_task(context),
+            # **試したか / 受け取ったか / なぜ落としたか**（020A3）。
+            entity_synthesis_attempted=bool(getattr(synthesis_attempt, "attempted", False)),
+            entity_synthesis_accepted=bool(getattr(synthesis_attempt, "accepted", False)),
+            entity_synthesis_rejection_reason=(
+                getattr(getattr(synthesis_attempt, "rejection_reason", None), "value", None)
+            ),
         )
     )
     # **番号を返す。** 013はここで捨てていた。捨てると、後から
@@ -348,36 +356,37 @@ def _record_generation(
 def _structure_source(context) -> GenerationStructureSource:  # noqa: ANN001
     """**構造を作った段**（020A2 §3）。
 
-    `CognitiveContext.structure_source` を読む。**Decision Trace の文字列を
-    parse しない**——reason の書き方を変えただけで Evidence が壊れる。
+    `CognitiveContext.structure_provenance` を読む。**Decision Trace の
+    文字列を parse しない**——reason の書き方を変えただけで Evidence が
+    壊れる。
 
-    forge_ai 側の enum とは**値の文字列**で照合する（forge_ai は backend を
-    import できない）。食い違いはテストが落とす。
+    enum は `forge_ai` 側の1つだけである（`GenerationStructureSource` は
+    その別名）。**値の文字列で往復させない**——020A2 と 020A3 の merge で
+    重複定義を消したので、変換する相手がもう居ない。
     """
-    value = getattr(getattr(context, "structure_source", None), "value", "")
-    try:
-        return GenerationStructureSource(value)
-    except ValueError:
-        # **知らない値を AI 側へ倒さない。**
-        return GenerationStructureSource.UNKNOWN
+    source = getattr(getattr(context, "structure_provenance", None), "source", None)
+    if isinstance(source, GenerationStructureSource):
+        return source
+    # **知らないものを AI 側へ倒さない。**
+    return GenerationStructureSource.UNKNOWN
 
 
-def _structure_provider(context, bound) -> str:  # noqa: ANN001
-    """構造を作った段が**実際に**使った Provider 名。
+def _structure_provider(context) -> StructureProvider:  # noqa: ANN001
+    """構造を作った段が**実際に**使った Provider の種類。
 
     決定的な経路（Curated / Capability Plan）は AI を呼んでいない——
-    そこで Provider 名を書くと、また「呼んでもいない Provider の手柄」に
-    なる（019B §4 / 020A で2回踏んだ）。**空にする。**
+    そこで Provider を書くと、また「呼んでもいない Provider の手柄」に
+    なる（019B §4 / 020A で2回踏んだ）。**`NONE` にする。**
     """
-    if structure_source_is_ai(_structure_source(context)):
-        return str(getattr(bound, "last_provider_used", "") or "")
-    return ""
+    provider = getattr(getattr(context, "structure_provenance", None), "provider", None)
+    if not structure_source_is_ai(_structure_source(context)):
+        return StructureProvider.NONE
+    return provider if isinstance(provider, StructureProvider) else StructureProvider.NONE
 
 
-def _structure_task(bound) -> str:  # noqa: ANN001
-    """構造を作った段の Task。**観測した値**を入れる。"""
-    task = getattr(bound, "task", None)
-    return str(getattr(task, "value", "") or "")
+def _structure_task(context) -> str:  # noqa: ANN001
+    """構造を作った段の stage。**観測した値**を入れる。"""
+    return str(getattr(getattr(context, "structure_provenance", None), "task", "") or "")
 
 
 def _capability_usage(context, forge_document: dict):  # noqa: ANN001, ANN201
@@ -500,6 +509,12 @@ def _capabilities_used(context) -> tuple[str, ...]:  # noqa: ANN001
     if plan is None:
         return ()
     names: list[str] = []
+    # **Field の Capability も残す**（020A3 が足した観点）。
+    #
+    # ID は正典（`forge_ai/core/semantics/capabilities.py`）の語彙で
+    # ある。`record.entity` のような別系統の名前をここで作らない——
+    # それが 020A2 §1 が禁じた「2つ目の表」の始まり方である。
+    names.extend(field.capability for field in (getattr(plan, "fields", ()) or ()))
     names.extend(getattr(plan, "views", ()) or ())
     names.extend(getattr(plan, "interactions", ()) or ())
     names.extend(f"partial:{name}" for name in getattr(plan, "partial", ()) or ())
@@ -916,6 +931,24 @@ class PromptPipeline:
         current_ir = outcome.ir
         forge_document = current_ir.to_json_dict()
         context = outcome.context
+
+        # **作れないことは、止めるのではなく言う**（020A2 §5 / TD90）。
+        #
+        # 020A3 はここで「不足機能を除いた形で進めますか？」と訊いて
+        # 生成そのものを止めていた。merge にあたって**止めない側へ寄せた**。
+        # 理由は3つある。
+        #
+        # 1. 指示は「会話の中で普通に伝える。**wizard 化しない**」である。
+        #    はい／いいえを1段挟むのは wizard の作り方そのものである。
+        # 2. 判定が `unsupported`（欠けたもの全部）だった。「地図で見たい」
+        #    が欠けただけで釣果記録まで止まる——`capability_gap` の表が
+        #    「VIEW/INTERACT は critical ではない（見え方が落ちるだけで
+        #    道具は使える）」と書いているのと食い違う。
+        # 3. 止めると**何も返らない**ので、作れる範囲さえ利用者へ渡らない。
+        #
+        # 代わりに `_result_dto()` が `capability_gap` を必ず載せ、
+        # 本質（SIMULATE / EFFECT）が欠けていれば `release_ready` を
+        # false にする——**「仕上がっている」とは言わない。**
 
         # 6. Validator(1回目)
         validation = validate_forge_document(forge_document)

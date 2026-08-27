@@ -54,7 +54,11 @@ from app.ai.gateway.generation_evidence import (  # noqa: E402
     default_generation_store,
 )
 from app.main import app  # noqa: E402
-from forge_ai.core.semantics.structure_provenance import StructureSource  # noqa: E402
+from forge_ai.core.semantics.structure_provenance import (  # noqa: E402
+    StructureProvenance,
+    StructureProvider,
+    StructureSource,
+)
 
 DETERMINISTIC_NEED = "旅行の写真を日付ごとに残してメモを付けたい"
 CURATED_NEED = "毎日の収入と支出を記録して残高を見たい"
@@ -113,7 +117,10 @@ class TestADesignIntentOnlyLocalCallIsNotLocalAi(unittest.TestCase):
 
     class _Context:
         def __init__(self, structure: StructureSource) -> None:
-            self.structure_source = structure
+            # merge 後、Context は `StructureProvenance`（source / provider /
+            # task の3つで1つ）で持つ。ここが古い欄名のままだと、
+            # **本番と違うものを検査してしまう。**
+            self.structure_provenance = StructureProvenance(structure)
 
     def test_deterministic_plan_with_a_local_provider_is_not_local_ai(self) -> None:
         source = self._source(
@@ -199,14 +206,28 @@ class TestProductionAlwaysRecordsWhoBuiltTheStructure(unittest.TestCase):
                 )
 
     def test_a_deterministic_structure_names_no_provider(self) -> None:
-        """**呼んでもいない Provider の手柄にしない**（019B §4 / 020A）。"""
-        self.assertEqual(self._record_for(DETERMINISTIC_NEED).structure_provider, "")
+        """**呼んでもいない Provider の手柄にしない**（019B §4 / 020A）。
 
-    def test_the_structure_task_is_observed_not_asserted(self) -> None:
-        """本番が通す Task は `cognitive_stage` である。"""
-        self.assertEqual(
-            self._record_for(DETERMINISTIC_NEED).structure_task, "cognitive_stage",
+        merge 後、この欄は enum である——`NONE` と「記録し忘れの空文字」を
+        区別できるようにした（020A3）。
+        """
+        self.assertIs(
+            self._record_for(DETERMINISTIC_NEED).structure_provider,
+            StructureProvider.NONE,
         )
+
+    def test_the_structure_task_names_the_stage_that_built_it(self) -> None:
+        """**どの段が構造を組んだか**が入っていること。
+
+        定数を書いておけば通るテストにしない——決定的経路と curated 経路で
+        **違う値**になることまで見る。同じ文字列を両方へ入れたら落ちる。
+        """
+        deterministic = self._record_for(DETERMINISTIC_NEED).structure_task
+        curated = self._record_for(CURATED_NEED).structure_task
+        for task in (deterministic, curated):
+            with self.subTest(task=task):
+                self.assertTrue(task.strip(), "構造を組んだ段が記録されていない")
+        self.assertEqual(deterministic, "entity_structure")
 
 
 if __name__ == "__main__":

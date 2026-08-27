@@ -836,3 +836,23 @@ Diagnostics はリクエスト単位で消えるので、**残る側**に無い�
 
 GPU / VRAM は**性能・遅延・載るモデルの大きさ**の Evidence として
 別に報告する（`scripts/forge_doctor.py` の `gpu_accelerated`）。
+
+### 実機で測った（2026-08-27、020A3）
+
+Ollama `qwen2.5:7b-instruct` を**実際に動かして** production 経路を
+測った（Windows 実機、`docs/evidence/level0/`）。
+
+**それでも Level 0 は通っていない。**
+
+HTTP 200 が返り、Validator も通り、`generation_source=local_ai` にも
+なった。しかし**構造を作ったのは決定的な fallback** だったので、
+`INVALID_PROBE` として拒否した。
+
+```
+level0_outcome: invalid_probe
+why_not_counted: Software structureをLocal Modelが作っていない（curated）
+real_local_model_runs: 0
+```
+
+**これがこの層を作った理由である。** 「Local を指定して 200 が返った」
+だけで数えていたら、ここで 1 が立っていた。

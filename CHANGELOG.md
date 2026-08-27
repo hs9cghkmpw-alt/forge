@@ -76,6 +76,52 @@ GPU / VRAM は性能・遅延・載るモデルの大きさの Evidence とし�
 ### Real Local Model runs
 
 **0。** 実 Local Model は動かしていないので増やしていない。
+### 020A3 との統合（同じ branch で2つの実装が走っていた）
+
+020A2/020A3 を ChatGPT 側も並行して実装しており、merge 時に**同じものが
+2系統**になっていた。1つへ寄せた。
+
+| 重複していたもの | 寄せ先 |
+|---|---|
+| Semantic Capability の表（`data.*` と `record.*`） | `forge_ai/core/semantics/capabilities.py`（`data.*`） |
+| `StructureSource` 等の型が3箇所 | `forge_ai/core/semantics/structure_provenance.py`（backend は**別名**） |
+| `GenerationRecord` の構造欄が2組 | `structure_source` / `structure_provider` / `structure_task` の1組 |
+| `RealLocalModelRun` の `structure_provenance` と `structure_source` | 欄は1つ、旧名は property |
+| `_capability_usage()` が2つ | 生成物の widget と突き合わせる側（020A2） |
+
+**同じ値の enum を2つ置かない**——`is` 比較が常に False になる
+（TD85 で実際に踏んだ）。別名にすれば**同じ物**なのでずれようがない。
+
+採らなかったもの: 020A3 の「不足 Capability があれば `needs_confirmation`
+で生成を止める」。指示は「会話の中で普通に伝える。**wizard 化しない**」で
+あり、判定も `unsupported` 全部（「地図で見たい」が欠けただけで釣果記録も
+止まる）だった。代わりに `capability_gap` を必ず返し、本質が欠けていれば
+`release_ready` を false にする。**理由は report に書いた。**
+
+---
+
+## 2026-08-27 — FORGE-020A3 / Capability Composition and Typed Provenance
+
+- Typed structure source/provider/task from CognitiveContext to durable Evidence.
+- Canonical semantic catalog plus runtime adapter integrity checks.
+- Composable StructuralMode and independent multi-view capability plan.
+- Typed capability usage and entity synthesis rejection Evidence.
+- Honest existing confirmation outcome for critical missing capabilities.
+- CPU Level 0.5 benchmarks are valid; GPU/VRAM are Evidence rather than prerequisites.
+
+## 2026-08-27 — FORGE-020A2 / GENERATED-UI-QG-V2-R5
+
+### Local AI Structure Provenance / Level 0 Integrity
+
+- `GenerationRecord.structure_provenance`を追加し、Providerが応答した事実と
+  Software structureを決めた主体を分離した。
+- deterministic Capability Plan / Curated fallbackが構造を作った実行は、
+  HTTP 200・Validator PASS・`generation_source=local_ai`でもLevel 0へ数えない。
+- 偽PASS mutationはguardを緩めると対象テストがFAILすることを確認。
+- Ollama `qwen2.5:7b-instruct`を実測。3回の公式計測はFAILED 1回、
+  INVALID_PROBE 2回。**Real Local Model runs = 0**のまま。
+- Windows CP932起動失敗と、script 180秒 / Provider 120秒のtimeout不一致を修正。
+- GitHub Actions run `33033252955`: **success**（4 jobsすべてgreen）。
 
 ## 2026-08-26 — FORGE-020A1 / QG-V2-R4: Evidence Integrity + Generative Capability Planning
 

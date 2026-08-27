@@ -19,16 +19,27 @@
 （Source / Test / 文書 / ログのいずれにも無い）。
 **まだ失効させていないなら失効させてほしい。**
 
-### 2. Local Model を実行できるPCがあれば教えてほしい
+### 2. 実機での Level 0 を、もう1度お願いしたい
 
-Level 0（実 Local Model の E2E）と Level 0.5（Baseline Benchmark）は、
-**この container では測れない**（`huggingface.co` / `ollama.com` が 403、
-Runtime 無し）。
+**実機での計測はもう始まっている。** ChatGPT 側が Windows 実機
+（Ollama 0.32.15 / `qwen2.5:7b-instruct`）で4回測った
+（`docs/evidence/level0/`）。
+
+**結果は Level 0 未達である。** ただし「Local Model が駄目だった」ので
+はない——**測定が成立していない**（`INVALID_PROBE`）。
+HTTP 200 も Validator も通ったが、**構造を作ったのが決定的な fallback**
+だったので数えていない。
+
+```
+why_not_counted: Software structureをLocal Modelが作っていない（curated）
+real_local_model_runs: 0
+```
+
+次に測るときは、**curated へ落ちない need** で走らせてほしい
+（script が自動で選ぶようになっている）。
 
 **GPU は要らない。** CPU で小型モデルが動けば Level 0 も Level 0.5 も
 成立する（`docs/MACHINE-INDEPENDENT-POLICY.md` §6.1、020A2 §8 で訂正）。
-GPU / VRAM は「性能・遅延・載るモデルの大きさ」の Evidence であって、
-Benchmark の前提条件ではない。
 
 手順（そのPCで）:
 
@@ -47,7 +58,26 @@ python scripts/verify_local_model_level0.py
 そのPCで何が通せるかは `python scripts/forge_doctor.py` が答える
 （**読むだけ。install しない**）。
 
-### 3. CI runner の割当（**継続確認**）
+### 3. 同じ branch で2つのAIが同時に実装していた（**方針の確認**）
+
+020A2/020A3 を **Claude と ChatGPT が並行して実装**しており、merge 時に
+同じものが2系統になっていた（Capability の表、`StructureSource` の型、
+`GenerationRecord` の欄、`_capability_usage()` など）。
+
+**1つへ寄せた**（`CHANGELOG.md` / report §13 に対応表）。
+1件だけ**採らなかった**判断があるので、そこだけ見てほしい:
+
+> 020A3 は「不足 Capability があれば `needs_confirmation` を返して
+> **生成を止める**」を入れていた。指示は「会話の中で普通に伝える。
+> **wizard 化しない**」であり、判定も「欠けたもの全部」だった
+> （「地図で見たい」が欠けただけで釣果記録も止まる）。
+> 代わりに `capability_gap` を必ず返し、本質が欠けていれば
+> `release_ready` を false にする形にした。
+
+作業を分ける（別 branch にする / 担当領域を分ける）かどうかは、
+CEO の判断をもらえると助かる。
+
+### 4. CI runner の割当（**継続確認**）
 
 `run 32983961000`（HEAD `87991ef`）は failure だが**コードが1行も
 実行されていない**（4 jobs すべて queued / steps 0 / runner 未割当、
@@ -206,8 +236,8 @@ Playwright で実際にタブを押してから撮る。
 
 | 対象 | 結果 |
 |---|---|
-| `backend` 全件 | **1840 passed / 16 skipped** |
-| `forge_ai` 全件 | **582 passed** |
+| `backend` 全件 | **1845 passed / 16 skipped**（020A3 との merge 後） |
+| `forge_ai` 全件 | **585 passed**（同上） |
 | `flutter analyze` | **No issues found!** |
 | `flutter test` | **516 passed** |
 | `flutter build web`（撮影ハーネス） | 成功 |
@@ -256,7 +286,7 @@ M1–M12 は 020A2 の実装時に確認済み。今回追加分:
 
 | 項目 | 状態 |
 |---|---|
-| Real Local Model の E2E（Level 0） | **UNVERIFIED**。runs = 0 |
+| Real Local Model の E2E（Level 0） | **未達**。実機で4回測ったが `INVALID_PROBE`（構造が決定的 fallback 由来）。runs = 0 |
 | Baseline Benchmark（Level 0.5） | **UNVERIFIED**。Runtime が無い |
 | 実機（iOS / Android）での描画 | 未検証。web のみ |
 | 実データを入れた後の一覧・グラフ | 未検証。空状態のみ撮影 |

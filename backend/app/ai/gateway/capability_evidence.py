@@ -46,42 +46,35 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from forge_ai.core.semantics.structure_provenance import (
+    StructureProvider,
+    StructureSource,
+)
+
 __all__ = [
     "CapabilityUsage",
     "CapabilityUsageSource",
     "CapabilityUsageStatus",
     "GenerationStructureSource",
+    "StructureProvider",
+    "StructureSource",
     "structure_source_is_ai",
 ]
 
 
-class GenerationStructureSource(str, Enum):
-    """**その文書の構造を誰が作ったか。**
-
-    `GenerationSource`（誰が「生成した」か）とは別の軸である。
-    後者は Provider の話であり、こちらは**どの段が構造を決めたか**。
-    """
-
-    CURATED = "curated"
-    """Curated Domain Library の手書き定義。AI は1回も呼ばれていない。"""
-
-    DETERMINISTIC_CAPABILITY_PLAN = "deterministic_capability_plan"
-    """**役から決まった Capability Plan。** Forge の決定的な処理である。
-
-    Design Intent で AI を呼んでいても、**構造を作ったのは AI ではない。**
-    """
-
-    AI_ENTITY_SYNTHESIS = "ai_entity_synthesis"
-    """**AI が記録するデータ構造を設計した。** ここが「AI が構造を作った」。"""
-
-    AI_GENERATED_EXTENSION = "ai_generated_extension"
-    """AI が既存の構造を拡張した（Self-Extension 経路。まだ発生しない）。"""
-
-    COMPOSED = "composed"
-    """複数の段が構造へ寄与した。"""
-
-    UNKNOWN = "unknown"
-    """**既定値。** 記録し損ねたものを AI 側へ倒さない。"""
+#: **その文書の構造を誰が作ったか。**
+#:
+#: `GenerationSource`（誰が「生成した」か）とは別の軸である。後者は
+#: Provider の話であり、こちらは**どの段が構造を決めたか**。
+#:
+#: 定義は `forge_ai` 側にあり、ここは**別名を置くだけ**である
+#: （020A2 と 020A3 の merge、2026-08-27）。
+#:
+#: 以前は backend にも同じ値の enum を書き、テストで値の一致を見て
+#: いた。**同じ値の enum が2つあると `is` 比較が常に False になる**
+#: ——TD85（`Deployment` enum が2つ）で実際に踏んだ形である。
+#: 別名なら**同じ物**なので、ずれようがない。
+GenerationStructureSource = StructureSource
 
 
 #: **AI が構造を作ったと言ってよいもの。**

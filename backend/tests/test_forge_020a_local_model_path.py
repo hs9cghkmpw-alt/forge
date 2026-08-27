@@ -50,7 +50,10 @@ os.environ.setdefault("FORGE_FEATURE_WORKSPACE", "true")
 os.environ.setdefault("FORGE_FEATURE_FOLDER", "true")
 
 from app.ai.gateway.benchmark_evidence import Verification  # noqa: E402
-from app.ai.gateway.generation_evidence import GenerationSource  # noqa: E402
+from app.ai.gateway.generation_evidence import (  # noqa: E402
+    GenerationSource,
+    StructureProvenance,
+)
 from app.ai.gateway.learning_events import Deployment  # noqa: E402
 from app.ai.gateway.provider_registry import (  # noqa: E402
     Deployment as RegistryDeployment,
@@ -398,6 +401,21 @@ class TestProbeIntegrity(unittest.TestCase):
         run = self._passing_run(generation_source=GenerationSource.CLOUD_AI)
         self.assertFalse(run.counts_as_real_local)
 
+    def test_deterministic_capability_plan_is_invalid_probe(self) -> None:
+        """Local providerが応答しても構造を作らなければ測定不成立。"""
+        run = self._passing_run(
+            structure_source=StructureProvenance.DETERMINISTIC_CAPABILITY_PLAN,
+        )
+        self.assertFalse(run.counts_as_real_local)
+        self.assertIs(run.level0_outcome, Level0Outcome.INVALID_PROBE)
+        # **理由を1行で言う。** 文言は 020A2 側へ寄せた（merge で欄を
+        # 1つにしたので、同じことを2度言わない）。
+        self.assertTrue(
+            any("Local Model が構造生成を担当していない" in reason
+                for reason in run.why_not_counted()),
+            run.why_not_counted(),
+        )
+
     def test_a_test_double_document_is_not_counted(self) -> None:
         run = self._passing_run(generation_source=GenerationSource.TEST_DOUBLE)
         self.assertFalse(run.counts_as_real_local)
@@ -437,6 +455,12 @@ class TestRealLocalModelRunLog(unittest.TestCase):
     def test_no_runs_means_not_attempted(self) -> None:
         """**「まだ試していない」と「試して失敗した」を混ぜない。**"""
         self.assertIs(self.log.level0(), Level0Outcome.NOT_ATTEMPTED)
+
+    def test_only_deterministic_structure_runs_mean_invalid_probe(self) -> None:
+        self.log.record(self._run(
+            structure_source=StructureProvenance.DETERMINISTIC_CAPABILITY_PLAN,
+        ))
+        self.assertIs(self.log.level0(), Level0Outcome.INVALID_PROBE)
 
     def test_a_rejected_run_makes_level0_failed_not_not_attempted(self) -> None:
         self.log.record(self._run(provider="mock"))
@@ -525,6 +549,16 @@ class TestLevel0ProbeIsActuallyNonCurated(unittest.TestCase):
 
     def test_the_level0_probe_requires_synthesis(self) -> None:
         self.assertEqual(self._resolution(self.script.LEVEL0_PROBE), "generated")
+
+        from forge_ai.core.ir.capability_ir import entity_spec_from_plan
+        from forge_ai.core.semantics.capability_plan import plan_capabilities
+
+        plan = plan_capabilities(self.script.LEVEL0_PROBE)
+        self.assertIsNone(
+            entity_spec_from_plan(plan),
+            "Level 0 probeをdeterministic Capability Planだけで構造化できる。"
+            "このprobeではLocal Modelのstructure generationを測れない。",
+        )
 
     def test_the_old_default_probe_really_was_curated(self) -> None:
         """**その罠が実在したことを固定する。**
