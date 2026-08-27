@@ -215,16 +215,24 @@ void main() {
   });
 
   group('bar_chart', () {
-    testWidgets('titleが表示され、Recordが無い間はクラッシュしない', (tester) async {
+    testWidgets('Recordが無い間は、理由を出す(クラッシュしない)', (tester) async {
       await tester.pumpWidget(_wrap(_budgetDoc()));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('家計簿記録一覧'));
       await tester.pumpAndSettle();
 
-      // Recordが0件の間、bar_chartは何も描画しない(SizedBox.shrink)
-      // 設計のため、タイトルは出ない。
-      expect(find.text('支出内訳'), findsNothing);
+      // **方針を変えた**(Quality Gate v2 Round 5、020A2 §7)。
+      //
+      // 以前は0件のとき `SizedBox.shrink()` を返し、タイトルも出さない
+      // 設計だった。ところが `style_role: card.summary` の見た目は
+      // `applyForgeRole()` が外側から被せるので、中が空でも
+      // **card の padding だけが残った無言の灰色の箱**が描かれる。
+      // 実際に撮った絵で見つかった(`round-5/manifest.md`)。
+      //
+      // 何も描かないのではなく、**何の箱で、なぜ空なのかを言う。**
+      expect(find.text('支出内訳'), findsOneWidget);
+      expect(find.text('グラフに出せる記録がまだありません'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

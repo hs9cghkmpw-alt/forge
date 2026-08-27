@@ -60,12 +60,87 @@
         "type": "tab_view",
         "id": "root_tabs",
         "tab_titles": [
-          "家計簿記録を追加",
           "家計簿記録一覧",
+          "家計簿記録を追加",
           "家計簿記録を編集"
         ],
         "style_role": "density.normal",
         "children": [
+          {
+            "type": "column",
+            "id": "list_tab",
+            "children": [
+              {
+                "type": "metric_view",
+                "id": "records_balance_metric",
+                "style_role": "metric.primary",
+                "state_ref": "records",
+                "value_field": "amount",
+                "aggregate": "sum",
+                "label": "残高",
+                "empty_text": "まだ記録がありません",
+                "sign_field": "entry_type",
+                "negative_when": "支出"
+              },
+              {
+                "type": "metric_view",
+                "id": "records_income_metric",
+                "style_role": "finance.income",
+                "state_ref": "records",
+                "value_field": "amount",
+                "aggregate": "sum",
+                "label": "収入の合計",
+                "empty_text": "まだ記録がありません",
+                "filter_field": "entry_type",
+                "filter_value": "収入"
+              },
+              {
+                "type": "metric_view",
+                "id": "records_expense_metric",
+                "style_role": "finance.expense",
+                "state_ref": "records",
+                "value_field": "amount",
+                "aggregate": "sum",
+                "label": "支出の合計",
+                "empty_text": "まだ記録がありません",
+                "filter_field": "entry_type",
+                "filter_value": "支出"
+              },
+              {
+                "type": "record_list_view",
+                "id": "records_list_view",
+                "state_ref": "records",
+                "layout": "card",
+                "display_fields": [
+                  "entry_type",
+                  "category",
+                  "amount",
+                  "date",
+                  "payment_method"
+                ],
+                "empty_state_text": "まだ家計簿記録がありません",
+                "selectable": true,
+                "selected_state_ref": "selected",
+                "select_field_bindings": {
+                  "entry_type": "edit_field_entry_type",
+                  "category": "edit_field_category",
+                  "amount": "edit_field_amount",
+                  "date": "edit_field_date",
+                  "payment_method": "edit_field_payment_method"
+                },
+                "style_role": "surface.card"
+              },
+              {
+                "type": "bar_chart",
+                "id": "records_bar_chart",
+                "style_role": "card.summary",
+                "state_ref": "records",
+                "value_field": "amount",
+                "label_field": "category",
+                "title": "家計簿記録の金額"
+              }
+            ]
+          },
           {
             "type": "column",
             "id": "create_tab",
@@ -173,81 +248,6 @@
                     "placeholder": "支払方法"
                   }
                 ]
-              }
-            ]
-          },
-          {
-            "type": "column",
-            "id": "list_tab",
-            "children": [
-              {
-                "type": "metric_view",
-                "id": "records_balance_metric",
-                "style_role": "metric.primary",
-                "state_ref": "records",
-                "value_field": "amount",
-                "aggregate": "sum",
-                "label": "残高",
-                "empty_text": "まだ記録がありません",
-                "sign_field": "entry_type",
-                "negative_when": "支出"
-              },
-              {
-                "type": "metric_view",
-                "id": "records_income_metric",
-                "style_role": "finance.income",
-                "state_ref": "records",
-                "value_field": "amount",
-                "aggregate": "sum",
-                "label": "収入の合計",
-                "empty_text": "まだ記録がありません",
-                "filter_field": "entry_type",
-                "filter_value": "収入"
-              },
-              {
-                "type": "metric_view",
-                "id": "records_expense_metric",
-                "style_role": "finance.expense",
-                "state_ref": "records",
-                "value_field": "amount",
-                "aggregate": "sum",
-                "label": "支出の合計",
-                "empty_text": "まだ記録がありません",
-                "filter_field": "entry_type",
-                "filter_value": "支出"
-              },
-              {
-                "type": "record_list_view",
-                "id": "records_list_view",
-                "state_ref": "records",
-                "layout": "card",
-                "display_fields": [
-                  "entry_type",
-                  "category",
-                  "amount",
-                  "date",
-                  "payment_method"
-                ],
-                "empty_state_text": "まだ家計簿記録がありません",
-                "selectable": true,
-                "selected_state_ref": "selected",
-                "select_field_bindings": {
-                  "entry_type": "edit_field_entry_type",
-                  "category": "edit_field_category",
-                  "amount": "edit_field_amount",
-                  "date": "edit_field_date",
-                  "payment_method": "edit_field_payment_method"
-                },
-                "style_role": "surface.card"
-              },
-              {
-                "type": "bar_chart",
-                "id": "records_bar_chart",
-                "style_role": "card.summary",
-                "state_ref": "records",
-                "value_field": "amount",
-                "label_field": "category",
-                "title": "家計簿記録の金額"
               }
             ]
           },

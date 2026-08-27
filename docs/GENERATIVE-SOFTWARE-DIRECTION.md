@@ -272,3 +272,41 @@ missing capability → Capability Spec → generated implementation
 
 Direction が禁じている「作れないものを、作れる形に見せる」は、
 **半分しか直っていない。**
+
+---
+
+## 実装状況の追記（FORGE-020A2 / QG-V2-R5、2026-08-27）
+
+### 「作れないものを、作れる形に見せる」を1つ潰した
+
+この文書が最も強く禁じている形が、R4 まで実際に残っていた。
+「植物を育てながら音を組み合わせるゲーム」は、`CapabilityPlan` が
+`simulate.loop` と `effect.media_compose` を**正しく名指ししていた**のに、
+返っていたのは植物と音を記録する CRUD だった。**知っていて黙っていた。**
+
+R5 で `capability_gap` を本番の成功応答へ載せた。
+
+> 「音や画像を合成する・時間を進める・ゲームとして動かすは、
+> いまの Forge ではまだ作れません。植物・音を記録するところまでなら
+> 作れます。」`blocks_completion: true`
+
+`SIMULATE` / `EFFECT` が欠けたときは `release_ready` を false にする——
+**求められたことの本質が出来ていないなら「仕上がっている」と言わない。**
+
+### 有限 Widget Builder にしないための実装（R5 時点）
+
+| 原則 | 実装 |
+|---|---|
+| 専用 Template を増やさない | 生成は `Need → Semantic Role → Capability Plan → IR`。domain 専用 UI は0件 |
+| Capability を1箇所で定義する | 正典は `forge_ai/core/semantics/capabilities.py`。Runtime 側は widget binding だけ |
+| 要求を落とさない | `CapabilityPlan` は直交。**`requested` にあるものは必ずどこかに現れる**（不変条件をテストで固定） |
+| 同じ Renderer で違って見せる | `LayoutEmphasis` が並べ方を変える。photo/study/analytics 専用 UI は作らない |
+
+### **まだ守れていない**（TD95）
+
+「日付ごとに」「月別に集計」「出題して」は `requested` に**載らない**。
+載らないので、落ちても `capability_gap` に出ない。
+
+**告知の仕組みは正しく動くが、Plan に載らないものは告知もされない。**
+これは「黙って落ちる」であり、この文書が禁じている形である。
+次に直すのは語彙側（Semantic Role → Capability）。

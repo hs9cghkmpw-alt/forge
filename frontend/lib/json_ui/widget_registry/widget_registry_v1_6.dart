@@ -119,7 +119,35 @@ Widget buildBarChart(
       }
 
       if (bars.isEmpty) {
-        return const SizedBox.shrink();
+        // **何も描かないと、代わりに空の箱が残る**
+        // (Quality Gate v2 Round 5 で実際に見えた)。
+        //
+        // `style_role: card.summary` は `applyForgeRole()` が外側から
+        // 被せるので、ここで `SizedBox.shrink()` を返しても
+        // **card の padding だけが残った灰色の箱**が描かれる。
+        // 利用者から見ると「何かが壊れている」箱である。
+        //
+        // 被せる側はここが空だと知らない(状態を読むのはこの中だけ)ので、
+        // **中から名乗る。** 見出しと、なぜ空なのかを1行書く。
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (n.title != null) ...[
+                Text(n.title!, style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 4),
+              ],
+              Text(
+                'グラフに出せる記録がまだありません',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+              ),
+            ],
+          ),
+        );
       }
 
       final maxValue = bars.map((b) => b.value.abs()).reduce((a, b) => a > b ? a : b);

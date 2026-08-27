@@ -36,12 +36,55 @@
         "type": "tab_view",
         "id": "root_tabs",
         "tab_titles": [
-          "売上記録を追加",
           "売上記録一覧",
+          "売上記録を追加",
           "売上記録を編集"
         ],
         "style_role": "density.normal",
         "children": [
+          {
+            "type": "column",
+            "id": "list_tab",
+            "children": [
+              {
+                "type": "metric_view",
+                "id": "records_hero_metric",
+                "style_role": "metric.primary",
+                "state_ref": "records",
+                "value_field": "amount",
+                "aggregate": "sum",
+                "label": "金額の合計",
+                "empty_text": "まだ記録がありません"
+              },
+              {
+                "type": "record_list_view",
+                "id": "records_list_view",
+                "state_ref": "records",
+                "layout": "card",
+                "display_fields": [
+                  "department",
+                  "amount"
+                ],
+                "empty_state_text": "まだ売上記録がありません",
+                "selectable": true,
+                "selected_state_ref": "selected",
+                "select_field_bindings": {
+                  "department": "edit_field_department",
+                  "amount": "edit_field_amount"
+                },
+                "style_role": "surface.card"
+              },
+              {
+                "type": "bar_chart",
+                "id": "records_bar_chart",
+                "style_role": "card.summary",
+                "state_ref": "records",
+                "value_field": "amount",
+                "label_field": "department",
+                "title": "売上記録の金額"
+              }
+            ]
+          },
           {
             "type": "column",
             "id": "create_tab",
@@ -110,49 +153,6 @@
                     }
                   }
                 ]
-              }
-            ]
-          },
-          {
-            "type": "column",
-            "id": "list_tab",
-            "children": [
-              {
-                "type": "metric_view",
-                "id": "records_hero_metric",
-                "style_role": "metric.primary",
-                "state_ref": "records",
-                "value_field": "amount",
-                "aggregate": "sum",
-                "label": "金額の合計",
-                "empty_text": "まだ記録がありません"
-              },
-              {
-                "type": "record_list_view",
-                "id": "records_list_view",
-                "state_ref": "records",
-                "layout": "card",
-                "display_fields": [
-                  "department",
-                  "amount"
-                ],
-                "empty_state_text": "まだ売上記録がありません",
-                "selectable": true,
-                "selected_state_ref": "selected",
-                "select_field_bindings": {
-                  "department": "edit_field_department",
-                  "amount": "edit_field_amount"
-                },
-                "style_role": "surface.card"
-              },
-              {
-                "type": "bar_chart",
-                "id": "records_bar_chart",
-                "style_role": "card.summary",
-                "state_ref": "records",
-                "value_field": "amount",
-                "label_field": "department",
-                "title": "売上記録の金額"
               }
             ]
           },

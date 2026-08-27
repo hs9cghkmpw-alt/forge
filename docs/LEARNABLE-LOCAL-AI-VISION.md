@@ -789,3 +789,50 @@ probe が Curated へ落ちていた（AI を1回も呼ばずに 200 が返る�
 `INVALID_PROBE` を新設し、Level 0 と Level 0.5 を分けた。
 
 **Level 0 は UNVERIFIED のまま。Real Local Model runs = 0。**
+
+---
+
+## 実装状況の追記（FORGE-020A2 / QG-V2-R5、2026-08-27）
+
+### Level 0 は **UNVERIFIED のまま**。Real Local Model runs = 0
+
+実 Local Model を1度も動かしていないので、数えていない。
+**勝手に増やさない。**
+
+### 「Local AI が構造を作った」を型で判定するようにした
+
+R4 までは、deterministic な Capability Plan で組んだ構造を
+**Local AI の生成物と誤認できる**状態だった（provider 名から推測して
+いたため）。
+
+`GenerationStructureSource` を新設した:
+
+```
+CURATED / DETERMINISTIC_CAPABILITY_PLAN /
+AI_ENTITY_SYNTHESIS / AI_GENERATED_EXTENSION / COMPOSED / UNKNOWN
+```
+
+`structure_source_is_ai()` が真になるのは **AI_* の2つだけ**。
+`CognitiveContext` に構造化された値として持ち、
+**Decision Trace の文字列を parse しない**（書式が変われば黙って壊れる）。
+
+これが無いと、Level 0 が「AI が構造を作った」ことの証明にならない。
+
+### Local AI が後から突き合わせられる Evidence
+
+`GenerationRecord` に、Capability ごとの
+`capability_id / requested / used / status / source` が残る。
+Diagnostics はリクエスト単位で消えるので、**残る側**に無いと
+「どういう Capability の組み合わせが受け入れられたか」を学べない。
+
+**値も利用者の文も入れない。**
+
+### GPU は Level 0.5 の前提条件ではない（020A2 §8 の訂正）
+
+020A1 は Baseline Benchmark の前提に GPU を入れていた。
+**CPU で Real Model が動いて実測できるなら Benchmark 自体は有効である**
+（遅くても、出た数字は実測）。GPU を絶対条件にすると、CPU で回せる
+小型モデルの実測が永久に取れない。
+
+GPU / VRAM は**性能・遅延・載るモデルの大きさ**の Evidence として
+別に報告する（`scripts/forge_doctor.py` の `gpu_accelerated`）。

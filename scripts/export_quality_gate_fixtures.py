@@ -207,6 +207,12 @@ def main() -> int:
             "provider_used": diagnostics.get("provider_used", ""),
             "screen_count": len(document.get("screens", [])),
             "widget_types": types,
+            # **作れなかったものを manifest へ残す**（020A2 §4/§5）。
+            #
+            # 撮った絵だけを見ると「一覧と入力がある普通のアプリ」に
+            # 見える。**求められたのに出せなかったもの**が並んで
+            # 初めて、その絵が合格なのか不合格なのか判断できる。
+            "capability_gap": result.get("capability_gap"),
         })
         print(f"  ✓ {key:10s} {label:10s} {template:24s} widgets={len(types)}")
 

@@ -439,13 +439,18 @@ def _capability_usage(context, forge_document: dict):  # noqa: ANN001, ANN201
             status = CapabilityUsageStatus.IMPLEMENTED
         add(capability_id, status, CapabilityUsageSource.SEMANTIC_PLAN)
 
-    # Field の Capability は Plan の `requested` に入っているが、
-    # **構造上必ず要るもの**（`data.entity` 等）は決定的に足している。
-    for planned in getattr(plan, "fields", ()) or ():
-        add(
-            planned.capability, CapabilityUsageStatus.IMPLEMENTED,
-            CapabilityUsageSource.DETERMINISTIC,
-        )
+    # **Field の Capability を二度足さない。**
+    #
+    # 配線破壊試験（M10）で分かったこと: ここに「Field の Capability を
+    # 足す」ループを書いていたが、**外しても何も落ちなかった**。
+    # `plan.requested` が既に `data.text` / `data.date` を含んでいるので、
+    # 上の for が先に入れてしまう——**死んだコード**だった。
+    #
+    # 死んだコードを残して「二重に守っている」と思うのが一番危ない。
+    # 消して、守っている場所を1つにする。Field の Capability が
+    # Evidence へ届くことは `test_field_capabilities_are_recorded` が
+    # 見ており、`plan_capabilities()` 側で `requested.add()` を外すと
+    # そちらが落ちる。
     return tuple(usage)
 
 

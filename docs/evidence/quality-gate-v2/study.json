@@ -36,12 +36,55 @@
         "type": "tab_view",
         "id": "root_tabs",
         "tab_titles": [
-          "単語を追加",
           "単語一覧",
+          "単語を追加",
           "単語を編集"
         ],
         "style_role": "density.normal",
         "children": [
+          {
+            "type": "column",
+            "id": "list_tab",
+            "children": [
+              {
+                "type": "metric_view",
+                "id": "records_hero_metric",
+                "style_role": "metric.primary",
+                "state_ref": "records",
+                "value_field": "accuracy",
+                "aggregate": "average",
+                "label": "正解率の平均",
+                "empty_text": "まだ記録がありません"
+              },
+              {
+                "type": "record_list_view",
+                "id": "records_list_view",
+                "state_ref": "records",
+                "layout": "card",
+                "display_fields": [
+                  "word",
+                  "accuracy"
+                ],
+                "empty_state_text": "まだ単語がありません",
+                "selectable": true,
+                "selected_state_ref": "selected",
+                "select_field_bindings": {
+                  "word": "edit_field_word",
+                  "accuracy": "edit_field_accuracy"
+                },
+                "style_role": "surface.card"
+              },
+              {
+                "type": "bar_chart",
+                "id": "records_bar_chart",
+                "style_role": "card.summary",
+                "state_ref": "records",
+                "value_field": "accuracy",
+                "label_field": "word",
+                "title": "単語の正解率"
+              }
+            ]
+          },
           {
             "type": "column",
             "id": "create_tab",
@@ -110,49 +153,6 @@
                     }
                   }
                 ]
-              }
-            ]
-          },
-          {
-            "type": "column",
-            "id": "list_tab",
-            "children": [
-              {
-                "type": "metric_view",
-                "id": "records_hero_metric",
-                "style_role": "metric.primary",
-                "state_ref": "records",
-                "value_field": "accuracy",
-                "aggregate": "average",
-                "label": "正解率の平均",
-                "empty_text": "まだ記録がありません"
-              },
-              {
-                "type": "record_list_view",
-                "id": "records_list_view",
-                "state_ref": "records",
-                "layout": "card",
-                "display_fields": [
-                  "word",
-                  "accuracy"
-                ],
-                "empty_state_text": "まだ単語がありません",
-                "selectable": true,
-                "selected_state_ref": "selected",
-                "select_field_bindings": {
-                  "word": "edit_field_word",
-                  "accuracy": "edit_field_accuracy"
-                },
-                "style_role": "surface.card"
-              },
-              {
-                "type": "bar_chart",
-                "id": "records_bar_chart",
-                "style_role": "card.summary",
-                "state_ref": "records",
-                "value_field": "accuracy",
-                "label_field": "word",
-                "title": "単語の正解率"
               }
             ]
           },

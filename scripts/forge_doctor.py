@@ -180,7 +180,7 @@ def collect() -> list[Finding]:
     findings.append(Finding(
         "gpu:nvidia", bool(_which("nvidia-smi")),
         _version_of("nvidia-smi", "--query-gpu=name", "--format=csv,noheader"),
-        "実用的な速度での Level 0.5（Baseline Benchmark）",
+        "Benchmark の**性能**評価（Benchmark 自体の前提ではない）",
     ))
 
     # -- 設定（**名前だけ**） -----------------------------------------
@@ -210,7 +210,17 @@ def verdict(findings: list[Finding]) -> dict[str, bool]:
         "model_download": have.get("net:huggingface.co", False)
         or have.get("net:ollama.com", False),
         "level0_local_model": runtime_present and have.get("runtime:listening", False),
-        "level0_5_baseline": runtime_present and have.get("gpu:nvidia", False),
+        # **GPU は Benchmark の前提条件ではない**（020A2 §8 で訂正）。
+        #
+        # 020A1 はここに GPU を入れていた。CPU で Real Model が動き実測
+        # できるなら Benchmark 自体は有効である——遅くても、出た数字は
+        # 実測である。「GPU 無し = Benchmark 不能」と固定すると、CPU で
+        # 回せる小型モデルの実測が永久に取れない。
+        #
+        # GPU / VRAM は**性能・遅延・載るモデルの大きさ**の Evidence で
+        # あり、別に報告する（`gpu_accelerated`）。
+        "level0_5_baseline": runtime_present and have.get("runtime:listening", False),
+        "gpu_accelerated": have.get("gpu:nvidia", False),
     }
 
 
@@ -249,7 +259,8 @@ def main() -> int:
         "github_sync": "GitHub 同期（push / fetch）",
         "model_download": "open-weight model の取得",
         "level0_local_model": "Level 0（実 Local Model の E2E）",
-        "level0_5_baseline": "Level 0.5（Baseline Benchmark）",
+        "level0_5_baseline": "Level 0.5（Baseline Benchmark。GPU は不要）",
+        "gpu_accelerated": "GPU での実行（性能・遅延・載るモデルの大きさ）",
     }
     for key, label in labels.items():
         print(f"  {'✓ 可' if can[key] else '✗ 不可'}  {label}")

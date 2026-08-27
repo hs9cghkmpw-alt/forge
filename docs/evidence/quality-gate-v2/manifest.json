@@ -32,7 +32,8 @@
         "tab_view",
         "text_field",
         "update_record"
-      ]
+      ],
+      "capability_gap": null
     },
     {
       "key": "worklog",
@@ -52,7 +53,8 @@
         "row",
         "string",
         "text_field"
-      ]
+      ],
+      "capability_gap": null
     },
     {
       "key": "kids",
@@ -72,7 +74,8 @@
         "row",
         "string",
         "text_field"
-      ]
+      ],
+      "capability_gap": null
     },
     {
       "key": "photo",
@@ -102,7 +105,16 @@
         "tab_view",
         "text_field",
         "update_record"
-      ]
+      ],
+      "capability_gap": {
+        "missing": [],
+        "partial": [
+          "data.photo"
+        ],
+        "critical": [],
+        "blocks_completion": false,
+        "message": "写真そのものは扱えません。ファイル名やメモを文字として残します。写真・日付・メモを記録するところまでなら作れます。"
+      }
     },
     {
       "key": "map",
@@ -135,7 +147,8 @@
         "tab_view",
         "text_field",
         "update_record"
-      ]
+      ],
+      "capability_gap": null
     },
     {
       "key": "game",
@@ -164,7 +177,22 @@
         "tab_view",
         "text_field",
         "update_record"
-      ]
+      ],
+      "capability_gap": {
+        "missing": [
+          "effect.media_compose",
+          "simulate.loop"
+        ],
+        "partial": [
+          "data.audio"
+        ],
+        "critical": [
+          "effect.media_compose",
+          "simulate.loop"
+        ],
+        "blocks_completion": true,
+        "message": "音や画像を合成する・時間を進める・ゲームとして動かすは、いまの Forge ではまだ作れません。音そのものは扱えません。名前やメモを文字として残します。植物・音を記録するところまでなら作れます。"
+      }
     },
     {
       "key": "analytics",
@@ -196,7 +224,8 @@
         "tab_view",
         "text_field",
         "update_record"
-      ]
+      ],
+      "capability_gap": null
     },
     {
       "key": "study",
@@ -228,7 +257,16 @@
         "tab_view",
         "text_field",
         "update_record"
-      ]
+      ],
+      "capability_gap": {
+        "missing": [],
+        "partial": [
+          "view.trend"
+        ],
+        "critical": [],
+        "blocks_completion": false,
+        "message": "時系列のグラフはまだ描けません。日付順の一覧と合計で近似します。単語・正解率を記録するところまでなら作れます。"
+      }
     }
   ],
   "rendered": 8,

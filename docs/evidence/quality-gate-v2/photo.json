@@ -291,15 +291,15 @@
   },
   "design_tokens": {
     "color_scheme": {
-      "primary": "#5B7C99",
-      "secondary": "#8FA8BD",
-      "success": "#6B9080",
+      "primary": "#D68C45",
+      "secondary": "#E8B37A",
+      "success": "#7A9D6F",
       "error": "#C1666B"
     },
     "corner_radius": {
-      "small": 8,
-      "medium": 12,
-      "large": 16
+      "small": 10,
+      "medium": 16,
+      "large": 24
     },
     "spacing_scale": {
       "xs": 4,

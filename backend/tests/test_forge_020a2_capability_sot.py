@@ -31,11 +31,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 os.environ.setdefault("FORGE_FEATURE_WORKSPACE", "true")
 os.environ.setdefault("FORGE_FEATURE_FOLDER", "true")
 
+from fastapi.testclient import TestClient  # noqa: E402
+
 from app.ai.runtime.capability import (  # noqa: E402
     CAPABILITY_REGISTRY,
     _RUNTIME_BINDINGS,
 )
 from app.ai.validators.schema_validator import WIDGET_TYPES_ALL  # noqa: E402
+from app.main import app  # noqa: E402
 from forge_ai.core.semantics.capabilities import (  # noqa: E402
     SEMANTIC_CAPABILITIES,
     SafetyClass,
@@ -184,3 +187,92 @@ class TestTheAdapterHoldsNoSemantics(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBindingsAreVerifiedAgainstRealOutput(unittest.TestCase):
+    """**Widget の結び付きが「正しい」ことを、生成物で確かめる。**
+
+    ---
+
+    ## 配線破壊試験で見つけた穴（M2b）
+
+    `view.metric` の結び付きを `metric_view` から `text` へ差し替えても、
+    **どのテストも落ちなかった**。既存の検査は「実在する Widget 型か」
+    しか見ておらず、**その能力を実現する Widget かどうか**は見ていな
+    かった。
+
+    別 Widget へ差し替えても通るなら、Adapter の表は事実を保証していない。
+
+    ## 生成物で照合する
+
+    その Capability を要求した Need を本番で生成し、
+    `CapabilityUsage.used`（= 結び付いた Widget が実際に文書へ現れたか）
+    が `True` であることを見る。**間違った Widget を書けば `False` に
+    なる。**
+    """
+
+    def setUp(self) -> None:
+        self.client = TestClient(app)
+
+    def _usage(self, need: str) -> dict:
+        from app.ai.gateway.generation_evidence import default_generation_store
+
+        store = default_generation_store()
+        response = self.client.post(
+            "/api/v1/ai/generate",
+            json={"input": {"natural_language": need,
+                            "generation_options": {"provider": "mock"}}},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        return {u.capability_id: u for u in store.all_records()[-1].capability_usage}
+
+    def test_the_bindings_actually_appear_in_what_is_generated(self) -> None:
+        cases = (
+            ("毎日の収入と支出を記録して残高を見たい",
+             ("view.metric", "view.list", "data.number", "data.entity")),
+            ("部署ごとの売上を月別に集計してグラフで比べたい",
+             ("view.group_compare", "view.bar_chart", "data.text")),
+            ("旅行の写真を日付ごとに残してメモを付けたい",
+             ("data.date", "data.photo", "view.list")),
+        )
+        for need, capabilities in cases:
+            usage = self._usage(need)
+            for capability_id in capabilities:
+                with self.subTest(need=need, capability=capability_id):
+                    self.assertIn(capability_id, usage)
+                    self.assertTrue(
+                        usage[capability_id].used,
+                        f"{capability_id} の Widget が生成物に現れていない"
+                        "（Runtime binding が間違っている可能性）",
+                    )
+
+
+class TestTheRuntimeAdapterIsUsedByProduction(unittest.TestCase):
+    """**Adapter が本番から使われていること。**
+
+    「作ったが本番から呼ばれない」を作らない。
+    """
+
+    def test_the_conversation_layer_reads_the_registry(self) -> None:
+        from app.ai.runtime.capability import detect_capabilities
+
+        found = {c.id for c in detect_capabilities("写真を残して通知してほしい")}
+        self.assertIn("data.photo", found)
+        self.assertIn("effect.notify", found)
+
+    def test_generation_evidence_carries_catalog_ids(self) -> None:
+        from app.ai.gateway.generation_evidence import default_generation_store
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/ai/generate",
+            json={"input": {
+                "natural_language": "旅行の写真を日付ごとに残してメモを付けたい",
+                "generation_options": {"provider": "mock"}}},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        record = default_generation_store().all_records()[-1]
+        self.assertTrue(record.capability_usage)
+        for usage in record.capability_usage:
+            with self.subTest(capability=usage.capability_id):
+                self.assertIn(usage.capability_id, SEMANTIC_CAPABILITIES)

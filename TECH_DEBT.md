@@ -1,5 +1,62 @@
 # TECH_DEBT.md
 
+## FORGE-020A2 / QG-V2-R5 で解消したもの・増えたもの（2026-08-27）
+
+### ~~TD90. 作れないと分かっているのに、利用者へ言わない~~ → **解消**
+
+`capability_gap`（missing / partial / critical / blocks_completion /
+message）を、成功レスポンスを組む**唯一の場所** `_result_dto()` へ
+載せた。新しい経路を足した人が呼び忘れても載る。
+
+wizard にしていない。会話へそのまま流せる日本語で、内部 ID を出さない。
+`SIMULATE` / `EFFECT` が欠けたときだけ critical とし、既存の
+`release_ready` を false にする（**新しい状態 Enum は作っていない**）。
+
+### ~~TD91. record_log 系アプリの入口が似ている~~ → **解消**
+
+`LayoutEmphasis` を `CapabilityPlan` から導出し、タブ順と強調を変える。
+finance/analytics/study は一覧が先頭、photo は入力が先頭になった。
+**専用 photo UI / study UI / analytics UI は作っていない。**
+
+### ~~TD92. 撮影ハーネスが第1タブしか写せない~~ → **解消**
+
+`scripts/capture_quality_gate_r5.py` が実際にタブを押してから撮る。
+14 state × 4 viewport = 56枚、押せなかった操作 0件。
+
+### TD93. card 同士が隙間なく接する（2026-08-27、新規）
+
+一覧 card の下端とグラフ card の上端が接し、角が衝突して見える。
+`round-5/finance-initial-mobile-390x844.png`。
+`column` の子同士の間隔を role 側で決める余地がある。
+
+### TD94. 320px でタブ名が見分けられない（2026-08-27、新規）
+
+`家計簿記録一覧 / 家計簿記録を… / 家計簿記録を…`——**追加と編集が
+区別できない**。entity 名を全タブの接頭辞にしているのが原因。
+analytics（売上記録）は同じ 320px で切れないので、長さの問題である。
+
+### TD95. 「〜ごと」「月別」「出題」が Plan に載らない（2026-08-27、新規）
+
+**今回見つかった中で一番重い。**
+
+| need の語 | 起きること |
+|---|---|
+| 「日付ごとに」（photo） | grouping が `requested` に載らない |
+| 「月別に集計」（analytics） | 日付 field すら作られない |
+| 「出題して」（study） | quiz が `requested` に載らない |
+
+`requested` に載らないので、**落ちても `capability_gap` に出ない**。
+TD90 で作った告知の仕組みは正しく動くが、**Plan に載らないものは
+告知もされない**。「黙って落ちる」は
+`GENERATIVE-SOFTWARE-DIRECTION.md` が禁じている形そのものである。
+
+直す場所は語彙側（Semantic Role → Capability）である。
+
+### TD96. 入力欄のラベルが placeholder 兼用（2026-08-27、新規）
+
+「金額」「日付」等が枠内の placeholder なので、**入力すると項目名が
+消える**。何を入れている欄か分からなくなる。
+
 ## FORGE-020A1 / QG-V2-R4 で解消したもの・増えたもの（2026-08-26）
 
 ### ~~TD87. 8アプリが3種類の画面にしかならない~~ → **解消**

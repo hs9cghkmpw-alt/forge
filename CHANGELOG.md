@@ -1,5 +1,82 @@
 # CHANGELOG
 
+## 2026-08-27 — FORGE-020A2 / QG-V2-R5: Capability SoT統一 + 直交Plan + Structure Provenance + 操作して撮る
+
+Reviewer 判定は 020A1/R4 に対して **NO-GO** だった。その3件（HIGH）を含む
+§1–§12 を実施した。詳細は `docs/reports/FORGE-020A2-QG-V2-R5-report.md`。
+
+### §1 Capability Registry の SoT を1つにした
+
+正典は `forge_ai/core/semantics/capabilities.py`（31件）。
+`backend/app/ai/runtime/capability.py` は **Runtime Capability Adapter**
+になり、持つのは `_RUNTIME_BINDINGS`（capability id → widget type）だけ。
+`supported` は `SupportLevel` から、`requires_confirmation` は
+`SafetyClass` から**導出**する（2箇所で手書きしない）。
+`forge_ai` は `backend` を import しない。整合は機械が検査する。
+
+### §2 PlanShape を直交成分へ
+
+排他的な Shape 1値では「比較 + 合計 + 推移」のうち2つが黙って落ちていた。
+`structure × views × interactions × effects` の直交構成へ置き換え、
+**`requested` にあるものは必ずどこかに現れる**という不変条件を
+テストで固定した。合成名（`RECORD_LOG_WITH_TOTAL_AND_TREND` 等）は
+作っていない。
+
+### §3 Structure Provenance
+
+`GenerationStructureSource`（CURATED / DETERMINISTIC_CAPABILITY_PLAN /
+AI_ENTITY_SYNTHESIS / AI_GENERATED_EXTENSION / COMPOSED / UNKNOWN）を
+`CognitiveContext` に**構造化された値として**持つ。
+**Decision Trace の文字列を parse しない。**
+deterministic な構造が Local AI の生成物と誤認されなくなった。
+
+### §4 CapabilityUsageEvidence
+
+`GenerationRecord` へ `capability_id / requested / used / status / source`
+を型で記録する。値も利用者の文も入れない。
+
+### §5 TD90 — 作れないことを伝える
+
+`capability_gap` を `_result_dto()`（成功応答を組む唯一の場所）へ載せた。
+ゲームは `blocks_completion: true` になり `release_ready` が false になる。
+**新しい状態 Enum は作っていない。**
+
+### §6 TD91 — Semantic Layout Composition
+
+`LayoutEmphasis` を Plan から導出してタブ順と強調を変える。
+専用 photo UI / study UI / analytics UI は作っていない。
+
+### §7 TD92 — 操作して撮る（Round 5）
+
+Playwright で実際にタブを押してから撮る。56枚 / 押せなかった操作 0件。
+`docs/visual-evidence/QUALITY-GATE-V2/round-5/`。
+
+**2回「押したつもり」を踏んだ。** (1) 本文は `maxWidth: 720` なので
+desktop では画面幅を割った座標が余白へ落ちる。(2) hover でも絵は変わる／
+初期タブは押しても変わらない——カーソルを外し、別タブを経由して戻る形へ。
+
+**古い build を撮っていたことに気付いて52枚を捨て、build し直した。**
+
+**実バグを1件見つけて直した。** 空の `bar_chart` が
+`applyForgeRole()` の card に包まれ、**文字の無い灰色の箱**になっていた。
+空のときは見出しと理由を出す。戻したら落ちるテストを置いた。
+
+### §8 機械非依存の方針
+
+**GPU は Baseline Benchmark の前提条件ではない**（CPU で出た数字も実測）。
+GPU / VRAM は性能・遅延・載るモデルの大きさの Evidence として別に報告する。
+実行機は固定しない——**その時 Local Model を実行できるPCが、そのセッション
+の Execution Host** である。`scripts/forge_doctor.py` も同じ判断に直した。
+
+### Golden Quality Gate
+
+**FAIL のまま。** ゲームは今も「植物」「音」を記録する CRUD フォームである。
+作れないことは正しく言うようになったが、作れてはいない。
+
+### Real Local Model runs
+
+**0。** 実 Local Model は動かしていないので増やしていない。
+
 ## 2026-08-26 — FORGE-020A1 / QG-V2-R4: Evidence Integrity + Generative Capability Planning
 
 ### CI（最優先1）

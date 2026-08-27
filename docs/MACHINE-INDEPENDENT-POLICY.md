@@ -12,7 +12,13 @@ Forge の検証は、**そのときに使えるPCで行う。**
 * **常設の実行PCを仮定しない**
 * 開発 container / CEO の手元 / Reviewer の環境 / 将来の別マシン——
   どれも「一時的な Execution Host」である
-* **Local Model が動く任意のPCが、そのときだけ Execution Host になる**
+* **その時 Local Model を実行できるPCが、そのセッションの
+  Execution Host になる**
+
+> **「別実機」という固定された1台は存在しない**（020A2 §8 で表現を
+> 訂正した）。020A の HANDOFF は「Claude container vs 別実機」と書いて
+> いたが、これは常設 Host が在るかのような読み方を生む。
+> 在るのは**そのときのセッションの Execution Host**だけである。
 
 「あのマシンで測った」という記憶に依存する運用は成立しない。
 記憶は共有されないからである。
@@ -64,7 +70,7 @@ python scripts/forge_doctor.py
 | GitHub 同期 | git + github.com |
 | open-weight model の取得 | huggingface.co / ollama.com |
 | **Level 0**（実 Local Model の E2E） | Runtime が起動していること |
-| **Level 0.5**（Baseline Benchmark） | Runtime + GPU + 重みの digest |
+| **Level 0.5**（Baseline Benchmark） | Runtime + 重みの digest（**GPU は必須ではない**） |
 
 ## 5. 実行できない項目は UNVERIFIED
 
@@ -90,8 +96,26 @@ python scripts/forge_doctor.py
 ✓ GitHub 同期
 ✗ open-weight model の取得      （huggingface.co / ollama.com が到達不能）
 ✗ Level 0（実 Local Model の E2E）（Runtime が無い）
-✗ Level 0.5（Baseline Benchmark） （GPU が無い）
+✗ Level 0.5（Baseline Benchmark） （Runtime が無い。GPU の有無は条件ではない）
 ```
+
+## 6.1 GPU は Benchmark の前提条件ではない（020A2 §8 で訂正）
+
+020A1 の `forge_doctor.py` は `level0_5_baseline` の条件に GPU を
+入れていた。**これは誤りである。**
+
+CPU で Real Model が動き、実測できるなら **Benchmark 自体は有効**で
+ある。遅くても、出た数字は実測である。
+
+GPU / VRAM は別の意味を持つ:
+
+| | 何の Evidence か |
+|---|---|
+| Runtime + 重みの digest | **Benchmark が成立するか** |
+| GPU / VRAM | **性能・遅延・現実的に載るモデルの大きさ** |
+
+「GPU 無し = Benchmark 不能」と固定すると、CPU で回せる小型モデルの
+実測が永久に取れない。`forge_doctor.py` は両方を別々に報告する。
 
 したがって **Real Local Model runs = 0 のまま**であり、
 `LEARNABLE-LOCAL-AI-VISION.md` の Level 0 は **UNVERIFIED** を維持する。
