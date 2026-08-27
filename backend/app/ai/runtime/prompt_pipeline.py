@@ -55,6 +55,7 @@ from app.ai.gateway.generation_evidence import (
     DesignRoleDecision,
     GenerationRecord,
     GenerationSource,
+    StructureProvenance,
     default_generation_store,
     source_for_generated,
 )
@@ -181,6 +182,26 @@ def _generation_source(decision_trace, provider_used: str | None) -> GenerationS
     return source_for_generated(provider_used)
 
 
+def _structure_provenance(decision_trace, provider_used: str | None) -> StructureProvenance:  # noqa: ANN001
+    """構造を作ったstageをProvider呼出しとは独立に分類する。"""
+    decision = ""
+    for entry in decision_trace or ():
+        if entry.get("stage") == "entity_source":
+            decision = str(entry.get("decision", "")).strip().lower()
+            break
+    if decision.startswith("curated("):
+        return StructureProvenance.CURATED
+    if decision.startswith("capability_plan("):
+        return StructureProvenance.DETERMINISTIC_CAPABILITY_PLAN
+    if decision.startswith("synthesized("):
+        return {
+            GenerationSource.LOCAL_AI: StructureProvenance.LOCAL_AI,
+            GenerationSource.CLOUD_AI: StructureProvenance.CLOUD_AI,
+            GenerationSource.TEST_DOUBLE: StructureProvenance.TEST_DOUBLE,
+        }.get(source_for_generated(provider_used), StructureProvenance.UNKNOWN)
+    return StructureProvenance.UNKNOWN
+
+
 def _design_decisions(context, forge_document: dict):  # noqa: ANN001, ANN201
     """軸ごとの「どのroleが、誰の判断で選ばれたか」(§4)。
 
@@ -267,6 +288,9 @@ def _record_generation(
     stored = store.record(
         GenerationRecord(
             source=_generation_source(decision_trace, getattr(bound, "last_provider_used", None)),
+            structure_provenance=_structure_provenance(
+                decision_trace, getattr(bound, "last_provider_used", None)
+            ),
             domain=_domain_identifier(context),
             validator_passed=validator_passed,
             forge_language_version=str(forge_document.get("version", "") or ""),

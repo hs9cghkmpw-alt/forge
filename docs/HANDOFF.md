@@ -1,5 +1,30 @@
 # Forge Handoff
 
+## 2026-08-27 FORGE-020A2 / GENERATED-UI-QG-V2-R5 update
+
+- Start HEAD: `29d7c0aa3bff2231bed9e67496f8c9331a40a766`
+- Final HEAD: **UNCOMMITTED**（commit/push/CIは利用者承認待ち）
+- Local AI Structure Provenanceをproduction `GenerationRecord`へ配線。
+- Level 0は`structure_provenance=local_ai`を必須化。Capability Planだけが
+  構造を作った場合は`INVALID_PROBE`であり、偽PASSしない。
+- Ollama 0.32.15 / `qwen2.5:7b-instruct` / digest
+  `845dbda0ea48...0b697e`を確認。`bge-m3`は生成に使用していない。
+- 実測: FAILED 1回（Provider timeout不一致、修正済み）、INVALID_PROBE 2回。
+  HTTP 200・Validator PASS・`generation_source=local_ai`でも、構造がfallback
+  由来だったため拒否。**Real Local Model runs: 0**。
+- Tests: backend `1779 passed, 17 skipped`; forge_ai `567 passed`;
+  focused `105 passed`; ruff green。
+  mutationは偽PASS guardを緩めると対象1件FAIL、復元後green。
+- Evidence: `docs/evidence/level0/level0-20260827-103251.json`,
+  `level0-20260827-103709.json`, `level0-20260827-104126.json`,
+  `level0-20260827-104538.json`。PASS Evidenceはまだ無い。
+- 未検証: commit/push/CI。次TaskはTD91（Entity synthesis応答の採否を
+  privacy-safeなreason codeでdurable観測し、実モデルfallbackを改善）。
+- Task report: `docs/reports/FORGE-020A2-QG-V2-R5-report.md`。
+  UI変更なし。R5 visual quality改善は**INCOMPLETE**、新規captureは対象外。
+
+---
+
 - Branch: `claude/forge-master-handoff-k46jns`
 - Start HEAD: `63ad43403606c9731f76c98248a9b0e9149e94bf`
 - Implementation Agent: **Claude Code**
@@ -7,7 +32,7 @@
 - Current task: **FORGE-020A1 / QG-V2-R4**（Evidence Integrity +
   Generative Capability Planning）。**TD87・TD89 は解消**、
   Golden Gate は **FAIL**（理由が変わった）
-- **Real Local Model runs: 0**（Level 0 は別実機で測る。下記「環境判断」）
+- **Real Local Model runs: 0**（2026-08-27にこのPCで実測したが、厳密判定は未PASS）
 
 ---
 

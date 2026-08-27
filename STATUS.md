@@ -3,7 +3,7 @@
 現在のForgeが「どこまで動くか」を一枚で示す。詳細な履歴は`CHANGELOG.md`、
 未解消の課題は`TECH_DEBT.md`・`KNOWN_ISSUES.md`を参照。
 
-**最終更新**: 2026-08-26(FORGE-020A1 / QG-V2-R4。TD87・TD89 は解消、Golden Gate は **FAIL**)
+**最終更新**: 2026-08-27(FORGE-020A2。Level 0 Integrity実機確認、runs 0)
 
 > このファイルはFORGE-CONVERSATION-READY-001指示書15章の要請で新設した。
 > それ以前は同等の役割を`KNOWN_ISSUES.md`と各`*-report.md`が分担しており、
@@ -60,7 +60,7 @@
 | └ AIによるrole選択 | **動作** | `design_intent`段。軸ごとの択一をAIへ提示し、**軸ごとに検証**して外れたら既定値+記録。語彙はbackendから**注入**(forge_aiはbackendを知らない)。Curatedでも1回AIを呼ぶ(**TD70**、推奨解を記録済み) |
 | Model fallback(Provider内) | 動作 | 一時的失敗・Model廃止・PER_MODEL枠切れのとき、同じProviderの別Modelへ進む。Provider Identityは増やさない(011 §1) |
 | **Gemini無料枠** | **観測1 Modelで20** | 実測は429本文の`quotaValue=20`・`quotaId=PerProjectPerModel`のみ。合計値と枠の単位(Project/鍵)は**未検証**(TD66)。検証作業だけで上限到達したので実運用には足りない |
-| Local Provider | 実装済/未実測 | OpenAI互換。**実モデル未実行**(環境制約、TD51)。runtimeもmodel取得先も無い(2026-08-25実測) |
+| Local Provider | **実モデル応答確認済/Level 0未PASS** | Ollama 0.32.15 + `qwen2.5:7b-instruct`。production HTTP 200/Validator PASSまで実測したが、構造が決定的fallback由来のためINVALID_PROBE |
 | 2つ目のCloud枠 | **配線は実測/実API未検証** | `FORGE_EXTRA_PROVIDERS`+環境変数3つで載ることを、localhostの偽OpenAI互換サーバで確認(TD67)。**実エンドポイントは未検証**——この環境はegress禁止 |
 | Provider Benchmark | 動作 | Impact分類16ケース。harness実行確認済み |
 | Benchmark → Routing接続 | **配線済/データ待ち** | 実測(REAL)が2 Provider揃えば品質順になる。今は記録が無く宣言順 |
@@ -75,9 +75,9 @@
 | Web Capability(search/fetch/browser) | **契約のみ** | 実Web往復は**UNVERIFIED**。Web本文は命令として扱わない |
 | Teacher / Gym / Novel Benchmark / Dataset | **契約のみ** | run 0件・比較0件(TD84) |
 | Adapter / Training pipeline / Self-Extension | **未実装** | 契約のみ |
-| **Level 0 の計測契約** | **動作** | probeがCuratedへ落ちたら`INVALID_PROBE`(FAILと別)。実際に通ったTaskを観測。`model_id`と`model_digest`を分離 |
+| **Level 0 の計測契約** | **動作/実機で偽PASS拒否確認** | `structure_provenance=local_ai`必須。Capability Plan/Curated fallbackならHTTP 200・Validator PASSでも`INVALID_PROBE` |
 | **このPCで何が測れるか** | **動作** | `scripts/forge_doctor.py`(読むだけ)。`docs/MACHINE-INDEPENDENT-POLICY.md` |
-| **Real Local Model** | **未実行(runs 0)** | Ollama/llama.cpp/torch未インストール、GPU無し、かつ`huggingface.co`/`ollama.com`がnetwork policyで拒否(実測)。**Mockを数えていない** |
+| **Real Local Model** | **実行済/Level 0未PASS(runs 0)** | `qwen2.5:7b-instruct`をproduction pathで実測。FAILED 1、INVALID_PROBE 2。`bge-m3`はembedding専用で生成未使用 |
 | Local AI 学習基盤 | **記録開始** | R0で`/converse`・`/generate`・`/update`から実際に記録。実Geminiで確認済み。学習・永続化は未着手 |
 | └ 生成物のEvidence | 動作 | 013で`GenerationRecord`を追加。**AIを呼ばないCurated生成も**`source=curated`として残る(TD65解決) |
 | └ Experience記録 | 動作 | 記録地点は`AIRouter.generate()`の1箇所。Validatorの合否・利用者の承認/訂正を後から書き足す |

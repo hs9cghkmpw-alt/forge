@@ -1,0 +1,66 @@
+{
+  "task": "FORGE-020A Level 0",
+  "level0_scope": "Runtime → LocalModelProvider → Provider Registry → AIRouter → production /generate → Validator → GenerationRecord(source=local_ai)",
+  "level0_outcome": "invalid_probe",
+  "real_local_model_runs": 0,
+  "baseline_ready_runs": 0,
+  "probe": {
+    "need": "盆栽の水やりの記録をつけたい",
+    "domain_resolution_before": "generated",
+    "domain_resolution_after": "generated",
+    "is_curated_trap": false,
+    "level0_probe_recommended": "盆栽の水やりの記録をつけたい",
+    "known_curated_trap": "毎日の支出を記録して合計を見たい"
+  },
+  "host": {
+    "host_id": "DESKTOP-1JNGG6N",
+    "platform": "Windows-11-10.0.22621-SP0",
+    "python": "3.12.10",
+    "ram_total_mb": 0,
+    "vram_total_mb": 0
+  },
+  "runtime_probe": {
+    "backend": "ollama",
+    "version": "0.32.15",
+    "model_id": "qwen2.5:7b-instruct",
+    "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+    "quantization": "Q4_K_M",
+    "reachable": true,
+    "error": ""
+  },
+  "generation_failure": "",
+  "run": {
+    "provider": "local",
+    "model": "qwen2.5:7b-instruct",
+    "model_id": "qwen2.5:7b-instruct",
+    "model_digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+    "weight_identity": "verified_digest",
+    "domain_resolution": "generated",
+    "observed_tasks": [
+      "cognitive_stage"
+    ],
+    "ready_for_baseline": false,
+    "quantization": "Q4_K_M",
+    "runtime_backend": "ollama",
+    "runtime_version": "0.32.15",
+    "deployment": "local",
+    "task": "cognitive_stage",
+    "latency_ms": 143096.9,
+    "structured_output_ok": true,
+    "validator_passed": true,
+    "generation_evidence_uid": "c11ec67408c74744a98e69ce4e37c564",
+    "generation_source": "local_ai",
+    "structure_provenance": "curated",
+    "host_id": "DESKTOP-1JNGG6N",
+    "ram_total_mb": 0,
+    "vram_total_mb": 0,
+    "verification": "real",
+    "counts_as_real_local": false,
+    "why_not_counted": [
+      "Software structureをLocal Modelが作っていない（curated）"
+    ],
+    "level0_outcome": "invalid_probe",
+    "recorded_at": 1787794629.8588717
+  },
+  "recorded_at": 1787794629.8588717
+}

@@ -57,7 +57,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from app.ai.gateway.benchmark_evidence import Verification
-from app.ai.gateway.generation_evidence import GenerationSource
+from app.ai.gateway.generation_evidence import GenerationSource, StructureProvenance
 from app.ai.gateway.learning_events import Deployment
 from app.ai.gateway.tasks import ForgeTask
 
@@ -267,6 +267,9 @@ class RealLocalModelRun:
     「Forge が決定的に組んだ」であって Local Model の成果ではない。
     """
 
+    structure_provenance: StructureProvenance = StructureProvenance.UNKNOWN
+    """Software structureを実際に決めた主体。Level 0の中核条件。"""
+
     host_id: str = ""
     """**どの実機で測ったか。** 開発 container と実機を混ぜない。"""
 
@@ -349,6 +352,11 @@ class RealLocalModelRun:
                 f"文書を作ったのが Local Model ではない"
                 f"（{self.generation_source.value}）"
             )
+        if self.structure_provenance is not StructureProvenance.LOCAL_AI:
+            reasons.append(
+                "Software structureをLocal Modelが作っていない"
+                f"（{self.structure_provenance.value}）"
+            )
         if not self.structured_output_ok:
             reasons.append("構造化出力が得られていない")
         if not self.validator_passed:
@@ -375,10 +383,18 @@ class RealLocalModelRun:
         return self.domain_resolution.strip().lower() == CURATED_DOMAIN_RESOLUTION
 
     @property
+    def probe_bypassed_model_structure_generation(self) -> bool:
+        """決定的経路が構造を作り、Level 0を測れていないか。"""
+        return self.structure_provenance in {
+            StructureProvenance.CURATED,
+            StructureProvenance.DETERMINISTIC_CAPABILITY_PLAN,
+        }
+
+    @property
     def level0_outcome(self) -> Level0Outcome:
         if self.counts_as_real_local:
             return Level0Outcome.PASSED
-        if self.probe_was_curated:
+        if self.probe_was_curated or self.probe_bypassed_model_structure_generation:
             # **Local Model の失敗ではない。測定が成立していない。**
             return Level0Outcome.INVALID_PROBE
         return Level0Outcome.FAILED
@@ -415,6 +431,7 @@ class RealLocalModelRun:
             "validator_passed": self.validator_passed,
             "generation_evidence_uid": self.generation_evidence_uid,
             "generation_source": self.generation_source.value,
+            "structure_provenance": self.structure_provenance.value,
             "host_id": self.host_id,
             "ram_total_mb": self.ram_total_mb,
             "vram_total_mb": self.vram_total_mb,
@@ -472,7 +489,10 @@ class RealLocalModelRunLog:
         if self.count() > 0:
             return Level0Outcome.PASSED
         rejected = self.rejected_runs()
-        if rejected and all(r.probe_was_curated for r in rejected):
+        if rejected and all(
+            r.probe_was_curated or r.probe_bypassed_model_structure_generation
+            for r in rejected
+        ):
             return Level0Outcome.INVALID_PROBE
         return Level0Outcome.FAILED
 

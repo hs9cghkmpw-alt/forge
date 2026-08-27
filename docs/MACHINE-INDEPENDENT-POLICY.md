@@ -96,7 +96,9 @@ python scripts/forge_doctor.py
 したがって **Real Local Model runs = 0 のまま**であり、
 `LEARNABLE-LOCAL-AI-VISION.md` の Level 0 は **UNVERIFIED** を維持する。
 
-これは失敗ではない。**このPCでは測れない**というだけである。
+2026-08-27に当該PCへOllama/Qwen 7Bが用意され、実測可能になった。
+ただし公式実測はFAILED 1回、INVALID_PROBE 2回で、PASSはまだ無い。
+したがってReal Local Model runsは0のままである。
 
 ## 7. Execution Host になったPCでやること
 

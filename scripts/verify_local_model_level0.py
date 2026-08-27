@@ -61,13 +61,9 @@ Validator も通る。
 ## 使い方（実機側）
 
 ```
-# 1. Runtime を起動しておく（例）
-ollama serve
-ollama pull qwen2.5:1.5b-instruct
-
-# 2. Forge の repository で
-export FORGE_LOCAL_BASE_URL=http://127.0.0.1:11434/v1
-export FORGE_LOCAL_MODEL=qwen2.5:1.5b-instruct
+# Forge の repositoryで（PowerShell）
+$env:FORGE_LOCAL_BASE_URL="http://127.0.0.1:11434/v1"
+$env:FORGE_LOCAL_MODEL="qwen2.5:7b-instruct"
 python scripts/verify_local_model_level0.py
 
 # 結果は docs/evidence/level0/<timestamp>.json へ書かれる
@@ -126,16 +122,15 @@ os.environ.setdefault("FORGE_FEATURE_FOLDER", "true")
 #: 満たすべき条件:
 #:
 #: * どの Curated Domain にも当たらない（`domain_resolution=generated`）
-#: * Entity を合成しないと作れない（条件・結果・成功率という語彙は
-#:   Curated 5 Domain のどれにも無い）
-#: * 集計・比較まで含む——構造を考える仕事が実際に発生する
+#: * Entity をAI合成しないと作れない
+#: * deterministic Capability PlanだけではEntity/Fieldを組めない
 #:
 #: 実測（`provider=mock` で確認）:
-#: `domain_resolution=generated` / `domain=generic`。
+#: `domain_resolution=generated` / `entity_source=synthesized(generic)`。
 #:
 #: **「毎日の支出を…」を使ってはならない。** `household_budget` の
 #: Curated へ落ち、AI が1回も呼ばれないまま HTTP 200 が返る。
-LEVEL0_PROBE = "実験の条件と結果を残して、条件ごとに成功率を比べたい"
+LEVEL0_PROBE = "盆栽の水やりの記録をつけたい"
 
 #: 使ってはいけない probe。**理由ごと残す**——消すと同じ罠を踏む。
 CURATED_TRAP_PROBE = "毎日の支出を記録して合計を見たい"
@@ -270,14 +265,24 @@ def _host_facts() -> dict[str, object]:
 
 
 def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを優先する
+    # Windows PowerShellの既定CP932で、説明文中のem dash等が原因になって
+    # Runtime probeより前に停止しないようにする。Evidence JSONはUTF-8。
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(description="FORGE Local AI Level 0 実測")
     parser.add_argument("--need", default=LEVEL0_PROBE)
     parser.add_argument("--out", default="")
     parser.add_argument("--timeout", type=float, default=180.0)
     args = parser.parse_args()
+    # Runtime probeとproduction Providerで同じ待ち時間を使う。既定Provider
+    # 120秒だけ先に切れると、scriptの--timeout=180が名目値になる。
+    os.environ.setdefault("FORGE_LOCAL_TIMEOUT_SECONDS", str(args.timeout))
 
     from app.ai.gateway.benchmark_evidence import Verification
-    from app.ai.gateway.generation_evidence import GenerationSource
+    from app.ai.gateway.generation_evidence import GenerationSource, StructureProvenance
     from app.ai.gateway.learning_events import Deployment
     from app.ai.gateway.local_model_evidence import (
         CURATED_DOMAIN_RESOLUTION,
@@ -290,7 +295,7 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
     from app.ai.gateway.tasks import ForgeTask
 
     base_url = os.environ.get("FORGE_LOCAL_BASE_URL", "http://127.0.0.1:11434/v1")
-    model = os.environ.get("FORGE_LOCAL_MODEL", "qwen2.5:1.5b-instruct")
+    model = os.environ.get("FORGE_LOCAL_MODEL", "qwen2.5:7b-instruct")
     host = _host_facts()
 
     print("=" * 66)
@@ -335,6 +340,7 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
     print("[3/4] Forge の本番経路で生成（provider=local）")
     generation_uid = ""
     generation_source = None
+    structure_provenance = None
     validator_passed = False
     structured_ok = False
     latency_ms = 0.0
@@ -384,12 +390,16 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
                 # **決定的な検査。** 200 が返っても、作ったのが Curated なら
                 # Local Model の成果ではない（実測でそうなった）。
                 generation_source = records[-1].source
+                structure_provenance = records[-1].structure_provenance
             print(f"      ✓ HTTP 200  ({latency_ms:.0f} ms)")
             print(f"        validator_passed={validator_passed}"
                   f" evidence_uid={generation_uid or '(無し)'}")
             print(f"        generation_source="
                   f"{generation_source.value if generation_source else '(無し)'}"
                   "   ← local_ai でなければ Local Model は動いていない")
+            print(f"        structure_provenance="
+                  f"{structure_provenance.value if structure_provenance else '(無し)'}"
+                  "   ← local_ai でなければ構造生成の実績ではない")
             print(f"        domain_resolution={post_resolution or '(観測できず)'}"
                   "   ← curated なら測定不成立")
             print("        observed_tasks="
@@ -439,6 +449,9 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
         validator_passed=validator_passed,
         generation_evidence_uid=generation_uid,
         generation_source=generation_source or GenerationSource.UNKNOWN,
+        structure_provenance=(
+            structure_provenance or StructureProvenance.UNKNOWN
+        ),
         host_id=str(host["host_id"]),
         ram_total_mb=int(host["ram_total_mb"]),
         vram_total_mb=int(host["vram_total_mb"]),
@@ -467,7 +480,8 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
         "task": "FORGE-020A Level 0",
         "level0_scope": (
             "Runtime → LocalModelProvider → Provider Registry → AIRouter → "
-            "production /generate → Validator → GenerationRecord(source=local_ai)"
+            "production /generate → Validator → GenerationRecord("
+            "source=local_ai, structure_provenance=local_ai)"
         ),
         "level0_outcome": outcome.value,
         "real_local_model_runs": default_real_local_run_log().count(),
@@ -507,8 +521,8 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
     if outcome is Level0Outcome.INVALID_PROBE:
         print()
         print("  **測定が成立していない。** Local Model の失敗ではない。")
-        print("  probe が Curated Domain Library へ落ちており、AI は1回も")
-        print("  呼ばれていない。Level 0 は UNVERIFIED のまま据え置く。")
+        print("  Software structureをCurated/決定的経路が作ったため、Local Model")
+        print("  のstructure generationを測れていない。Level 0は据え置く。")
         print(f"  Level 0 用の probe: {LEVEL0_PROBE}")
     elif outcome is not Level0Outcome.PASSED:
         print()

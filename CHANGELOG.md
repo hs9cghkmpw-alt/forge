@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 2026-08-27 — FORGE-020A2 / GENERATED-UI-QG-V2-R5
+
+### Local AI Structure Provenance / Level 0 Integrity
+
+- `GenerationRecord.structure_provenance`を追加し、Providerが応答した事実と
+  Software structureを決めた主体を分離した。
+- deterministic Capability Plan / Curated fallbackが構造を作った実行は、
+  HTTP 200・Validator PASS・`generation_source=local_ai`でもLevel 0へ数えない。
+- 偽PASS mutationはguardを緩めると対象テストがFAILすることを確認。
+- Ollama `qwen2.5:7b-instruct`を実測。3回の公式計測はFAILED 1回、
+  INVALID_PROBE 2回。**Real Local Model runs = 0**のまま。
+- Windows CP932起動失敗と、script 180秒 / Provider 120秒のtimeout不一致を修正。
+
 ## 2026-08-26 — FORGE-020A1 / QG-V2-R4: Evidence Integrity + Generative Capability Planning
 
 ### CI（最優先1）

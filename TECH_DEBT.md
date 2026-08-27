@@ -3854,3 +3854,13 @@ blocked。UNKNOWNを許可へ倒さない。
 Projector障害でEvidence/生成成功を壊さない`SafeLearningObserver`相当の境界と
 failure count/error typeを実装した。ただしdurable監視、alert、再処理queueは
 未実装。raw Evidenceや秘密をerror recordへ保存しない制約は維持する。
+
+## TD91. Entity synthesis不採用のreason codeがdurable Evidenceに無い（2026-08-27）
+
+`qwen2.5:7b-instruct`は単独stageとproduction診断で有効なEntity構造を返し、
+`entity_source=synthesized(generic)`へ到達できた。一方、公式Level 0実測2回は
+HTTP 200/Validator PASSまで進んだが、Entity synthesisが採用されずCurated
+fallbackとなった。現在Evidenceには最終`structure_provenance`しかなく、空応答・
+identifier不正・field不採用等のどのsanitizer条件で落ちたかを後から区別できない。
+raw model outputを保存せず、閉じたreason codeとstage attempt/acceptedをdurableに
+残し、再現性と改善判断を得る必要がある。Level 0判定を緩めてはならない。

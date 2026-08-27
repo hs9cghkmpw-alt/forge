@@ -44,6 +44,7 @@ from app.ai.gateway.generation_evidence import (  # noqa: E402
     GenerationEvidenceStore,
     GenerationRecord,
     GenerationSource,
+    StructureProvenance,
     RuntimeOutcome,
     default_generation_store,
 )
@@ -169,6 +170,16 @@ class TestCuratedGenerationsLeaveEvidence(unittest.TestCase):
                 self.assertNotIn(
                     record.source, {GenerationSource.CLOUD_AI, GenerationSource.LOCAL_AI},
                 )
+
+    def test_capability_plan_structure_is_not_attributed_to_provider(self) -> None:
+        """後段でProviderが呼ばれても、構造は決定的Planの成果。"""
+        self._generate("実験の条件と結果を残して、条件ごとに成功率を比べたい")
+        record = self.store.all_records()[-1]
+        self.assertIs(
+            record.structure_provenance,
+            StructureProvenance.DETERMINISTIC_CAPABILITY_PLAN,
+        )
+        self.assertIsNot(record.structure_provenance, StructureProvenance.LOCAL_AI)
 
     def test_a_test_double_is_not_a_training_candidate(self) -> None:
         """Mockの出力を教師にすると、Mockの癖を学ぶことになる。"""

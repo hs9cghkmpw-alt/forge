@@ -789,3 +789,8 @@ probe が Curated へ落ちていた（AI を1回も呼ばずに 200 が返る�
 `INVALID_PROBE` を新設し、Level 0 と Level 0.5 を分けた。
 
 **Level 0 は UNVERIFIED のまま。Real Local Model runs = 0。**
+
+2026-08-27追記: Ollama `qwen2.5:7b-instruct`でproduction実測した。
+HTTP 200、Validator PASS、`generation_source=local_ai`だけでは数えず、
+Software structureが決定的fallback由来だった2回を`INVALID_PROBE`として
+拒否した。`GenerationRecord.structure_provenance=local_ai`が追加の必須条件。

@@ -117,6 +117,7 @@ __all__ = [
     "GenerationEvidenceStore",
     "GenerationRecord",
     "GenerationSource",
+    "StructureProvenance",
     "source_for_generated",
     "RuntimeOutcome",
     "default_generation_store",
@@ -177,6 +178,17 @@ class GenerationSource(str, Enum):
             GenerationSource.LOCAL_AI,
             GenerationSource.COMPOSITION,
         }
+
+
+class StructureProvenance(str, Enum):
+    """生成物のSoftware structureを実際に決めた主体。"""
+
+    CURATED = "curated"
+    DETERMINISTIC_CAPABILITY_PLAN = "deterministic_capability_plan"
+    LOCAL_AI = "local_ai"
+    CLOUD_AI = "cloud_ai"
+    TEST_DOUBLE = "test_double"
+    UNKNOWN = "unknown"
 
 
 def source_for_generated(provider_used: str | None) -> GenerationSource:
@@ -349,6 +361,14 @@ class GenerationRecord:
 
     validator_passed: bool
     """Forge Language Validatorを通ったか。"""
+
+    structure_provenance: StructureProvenance = StructureProvenance.UNKNOWN
+    """Entity/Field/View等の構造を決めた主体。
+
+    Providerが応答した事実とは分離する。deterministic Capability Planが
+    構造を作り、AIがDesign Intentだけを選んだ生成物をLocal AIの構造生成
+    として数えないための境界である。
+    """
 
     capabilities: tuple[str, ...] = ()
     """使われたCapabilityの識別子。**値ではなく名前**。"""
