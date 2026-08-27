@@ -3,7 +3,7 @@
 ## 2026-08-27 FORGE-020A2 / GENERATED-UI-QG-V2-R5 update
 
 - Start HEAD: `29d7c0aa3bff2231bed9e67496f8c9331a40a766`
-- Final HEAD: **UNCOMMITTED**（commit/push/CIは利用者承認待ち）
+- Implementation HEAD: `a796481724cb61abae50831ec99de30ebe86d6a2`
 - Local AI Structure Provenanceをproduction `GenerationRecord`へ配線。
 - Level 0は`structure_provenance=local_ai`を必須化。Capability Planだけが
   構造を作った場合は`INVALID_PROBE`であり、偽PASSしない。
@@ -18,8 +18,10 @@
 - Evidence: `docs/evidence/level0/level0-20260827-103251.json`,
   `level0-20260827-103709.json`, `level0-20260827-104126.json`,
   `level0-20260827-104538.json`。PASS Evidenceはまだ無い。
-- 未検証: commit/push/CI。次TaskはTD91（Entity synthesis応答の採否を
-  privacy-safeなreason codeでdurable観測し、実モデルfallbackを改善）。
+- GitHub Actions: run `33033252955` **success**。frontend Flutter、backend
+  smoke、backend+forge_ai Python 3.11/3.12の4 jobsすべてgreen。
+- 次TaskはTD91（Entity synthesis応答の採否をprivacy-safeなreason codeで
+  durable観測し、実モデルfallbackを改善）。
 - Task report: `docs/reports/FORGE-020A2-QG-V2-R5-report.md`。
   UI変更なし。R5 visual quality改善は**INCOMPLETE**、新規captureは対象外。
 

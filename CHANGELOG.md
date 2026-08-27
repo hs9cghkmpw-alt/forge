@@ -12,6 +12,7 @@
 - Ollama `qwen2.5:7b-instruct`を実測。3回の公式計測はFAILED 1回、
   INVALID_PROBE 2回。**Real Local Model runs = 0**のまま。
 - Windows CP932起動失敗と、script 180秒 / Provider 120秒のtimeout不一致を修正。
+- GitHub Actions run `33033252955`: **success**（4 jobsすべてgreen）。
 
 ## 2026-08-26 — FORGE-020A1 / QG-V2-R4: Evidence Integrity + Generative Capability Planning
 
