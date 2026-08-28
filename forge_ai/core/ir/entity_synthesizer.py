@@ -62,6 +62,10 @@ _IDENTIFIER_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 # している。理由は技術的制約ではなくUXであり、Prompt側でも「3〜6個」と
 # 指示している——毎回20項目を入力させるフォームは、そもそも使われない。
 _MAX_FIELDS = 8
+# Prompt contract is intentionally stricter than the product sanitizer: the
+# model is instructed to return no more than 6 fields. Product robustness may
+# accept 7-8 fields, but that is not strict model-contract success.
+_STRICT_CONTRACT_MAX_FIELDS = 6
 # choice型1件が持てる選択肢の上限(Prompt側の指示は2〜6個)。
 _MAX_CHOICES = 12
 _MIN_CHOICES = 2
@@ -178,8 +182,12 @@ def _entity_contract_evidence(
         required = raw.get("required")
         if required is True:
             any_required = True
-        elif required is not False:
-            # Non-bool is silently treated as False and can later cause injection.
+        elif required is False or required is None:
+            # `required` is optional per field. Omission is valid as long as
+            # at least one accepted field explicitly has required=true.
+            pass
+        else:
+            # A supplied non-bool is repaired to False by the sanitizer.
             note(EntitySynthesisRepair.REQUIRED_INJECTED)
 
         raw_choices = raw.get("choices")
@@ -218,8 +226,10 @@ def _entity_contract_evidence(
     if valid_field_count and not any_required:
         note(EntitySynthesisRepair.REQUIRED_INJECTED)
 
+    within_prompt_field_limit = fields_received <= _STRICT_CONTRACT_MAX_FIELDS
     raw_schema_valid = (
         entity_name is not None
+        and within_prompt_field_limit
         and isinstance(raw_entity_label, str) and bool(raw_entity_label.strip())
         and isinstance(visual_style, str) and visual_style in _VALID_VISUAL_STYLES
         and valid_field_count > 0

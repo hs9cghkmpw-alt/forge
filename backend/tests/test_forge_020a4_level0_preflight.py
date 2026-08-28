@@ -239,6 +239,11 @@ class TestProductionProbePreflight(unittest.TestCase):
         self.assertTrue(record.entity_synthesis_attempted)
         self.assertTrue(record.entity_synthesis_accepted)
         self.assertIsNone(record.entity_synthesis_rejection_reason)
+        # Mock nested-schema repair makes the production route executable,
+        # but the resulting Entity still needs Forge's required-field repair.
+        # Therefore Mock is a wiring proof, never a model-quality proof.
+        self.assertFalse(record.entity_synthesis_strict_contract_passed)
+        self.assertIn("required_injected", record.entity_synthesis_repairs)
         self.assertTrue(record.validator_passed)
         self.assertTrue(record.uid)
 

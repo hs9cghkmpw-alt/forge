@@ -269,6 +269,9 @@ class TestRealLocalModelRunCounting(unittest.TestCase):
             # 作った」の証拠なので、Provider と stage を独立に要求する。
             "structure_provider": StructureProvider.LOCAL,
             "structure_task": ForgeTask.ENTITY_SYNTHESIS.value,
+            "entity_synthesis_strict_contract_passed": True,
+            "entity_synthesis_repairs": (),
+            "structured_output_mode": "json_schema",
             "runtime_backend": LocalRuntimeBackend.OLLAMA,
             "runtime_version": "0.5.0",
             "model_id": "qwen2.5:1.5b-instruct",

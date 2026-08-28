@@ -305,12 +305,16 @@ class TestTheRecordCannotHoldContent(unittest.TestCase):
             # 落とした理由の enum 値であり、利用者の言葉も生成物の本文も
             # 入らない。判断した上で足した。
             #
+            # `entity_synthesis_structured_output_mode` (020A4C) is also a
+            # closed identifier copied from StructuredOutputMode.value; it is
+            # neither model content nor user content.
             # `structure_provider` は enum になったので、文字列を入れられる
             # 欄ではなくなった（merge で 020A3 側の型へ寄せた）。
             text_fields,
             {
                 "domain", "forge_language_version", "uid",
                 "structure_task", "entity_synthesis_rejection_reason",
+                "entity_synthesis_structured_output_mode",
             },
             f"内容を入れられるフィールドが増えている: {text_fields}",
         )

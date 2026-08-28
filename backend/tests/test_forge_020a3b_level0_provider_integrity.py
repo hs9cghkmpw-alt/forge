@@ -74,6 +74,11 @@ def _passing_run(**overrides) -> RealLocalModelRun:  # noqa: ANN003
         "structure_source": GenerationStructureSource.AI_ENTITY_SYNTHESIS,
         "structure_provider": StructureProvider.LOCAL,
         "structure_task": ForgeTask.ENTITY_SYNTHESIS.value,
+        # 020A4C: a truly passing fixture must explicitly prove that the
+        # model met the Entity contract without Forge repair, under schema mode.
+        "entity_synthesis_strict_contract_passed": True,
+        "entity_synthesis_repairs": (),
+        "structured_output_mode": "json_schema",
         "runtime_backend": LocalRuntimeBackend.OLLAMA,
         "runtime_version": "0.5.0",
         "model_id": "qwen2.5:1.5b-instruct",
