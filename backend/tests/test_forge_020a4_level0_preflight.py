@@ -85,6 +85,25 @@ class TestLevel0PreflightEvaluator(unittest.TestCase):
             result.reasons,
         )
 
+    def test_synthesis_rejection_cause_wins_over_later_fallback(self) -> None:
+        """attempted→rejected→fallback の原因を fallback分類で隠さない。"""
+        result = evaluate_level0_probe_preflight(
+            self._eligible(
+                structure_source=GenerationStructureSource.CURATED,
+                structure_provider=StructureProvider.NONE,
+                structure_task="entity_synthesis_fallback",
+                observed_tasks=(ForgeTask.COGNITIVE_STAGE,),
+                entity_synthesis_accepted=False,
+                entity_synthesis_rejection_reason="no_valid_fields",
+            )
+        )
+        self.assertFalse(result.eligible_for_real_run)
+        self.assertIs(result.outcome, Level0PreflightOutcome.SYNTHESIS_REJECTED)
+        self.assertTrue(
+            any("no_valid_fields" in reason for reason in result.reasons),
+            result.reasons,
+        )
+
     def test_cloud_or_local_provider_cannot_masquerade_as_mock_preflight(self) -> None:
         for provider in (StructureProvider.CLOUD, StructureProvider.LOCAL):
             with self.subTest(provider=provider):
@@ -196,14 +215,38 @@ class TestProductionProbePreflight(unittest.TestCase):
         )
         return facts, record
 
-    def test_default_probe_reaches_mock_entity_synthesis_before_real_run(self) -> None:
+    def test_default_probe_exposes_current_mock_synthesis_rejection(self) -> None:
+        """020A4 CIで発見した現在のproduction事実を固定する。
+
+        ``MockLLMAdapter`` は entity_synthesis schema の ``fields``
+        (array<object>) を schema-faithful に合成できず、文字列配列へ倒すため、
+        EntitySynthesizer が ``no_valid_fields`` で拒否する。これは
+        preflight の失敗ではなく、preflight が実モデル実行前に発見すべき
+        blockerである。
+
+        このテストを「eligible」に戻すには、Test Double側が本当にnested
+        structured schemaを満たし、AIRouterのstage task attributionも実経路で
+        正しくなる必要がある。判定だけを緩めてgreenにしてはならない。
+        """
         facts, record = self._run(self.DEFAULT_PROBE)
         result = evaluate_level0_probe_preflight(facts)
-        self.assertTrue(result.eligible_for_real_run, result.to_dict())
-        self.assertEqual(record.source.value, "test_double")
-        self.assertIs(record.structure_provider, StructureProvider.TEST_DOUBLE)
+
+        self.assertFalse(result.eligible_for_real_run)
+        self.assertIs(result.outcome, Level0PreflightOutcome.SYNTHESIS_REJECTED)
         self.assertTrue(record.entity_synthesis_attempted)
-        self.assertTrue(record.entity_synthesis_accepted)
+        self.assertFalse(record.entity_synthesis_accepted)
+        self.assertEqual(record.entity_synthesis_rejection_reason, "no_valid_fields")
+        self.assertTrue(
+            any("no_valid_fields" in reason for reason in result.reasons),
+            result.to_dict(),
+        )
+
+        # さらに、現時点のproduction RouterはCognitive Pipeline全体を
+        # COGNITIVE_STAGEへbindしているため、Entity Synthesisを呼んでも
+        # Experience上はENTITY_SYNTHESISとして観測されない。この事実も
+        # Level 0を偽PASSさせず、次taskで直すべき配線として残す。
+        self.assertNotIn(ForgeTask.ENTITY_SYNTHESIS, facts.observed_tasks)
+        self.assertIn(ForgeTask.COGNITIVE_STAGE, facts.observed_tasks)
 
     def test_known_curated_trap_is_rejected_by_preflight(self) -> None:
         facts, _ = self._run(self.CURATED_TRAP)
