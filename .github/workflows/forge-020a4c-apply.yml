@@ -21,9 +21,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
       - name: Verify expected base is ancestor
         shell: bash
         run: git merge-base --is-ancestor e659181427224242458561a06a32af01b8295023 HEAD
+      - name: Install backend test dependencies
+        run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
       - name: Repair staging-script quoting
         shell: bash
         run: |
