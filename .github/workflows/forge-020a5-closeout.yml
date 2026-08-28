@@ -20,42 +20,24 @@ jobs:
           fetch-depth: 0
 
       - name: Record changelog and technical-debt closure
-        shell: bash
+        env:
+          CHANGELOG_SECTION_B64: IyMgMjAyNi0wOC0yOSDigJQgRk9SR0UtMDIwQTU6IEdlbnVpbmUgUmVhbCBMb2NhbCBMZXZlbCAwIFBBU1MKCi0gUHJvbXB0IC8gcHJvdmlkZXIgSlNPTiBzY2hlbWEgLyBzdHJpY3QgRW50aXR5IGV2aWRlbmNlIG5vdyBkZXJpdmUgc3RydWN0dXJhbCBsaW1pdHMgZnJvbSB0aGUgY2Fub25pY2FsIGBmb3JnZV9haS9jb3JlL3NlbWFudGljcy9lbnRpdHlfY29udHJhY3QucHlgIGNvbnRyYWN0LgotIENhbm9uaWNhbCBtb2RlbCBjb250cmFjdDogaWRlbnRpZmllciBgXlthLXpdW2EtejAtOV9dKiRgLCBmaWVsZHMgMeKAkzYsIGNob2ljZXMgMuKAkzYuCi0gVGhlIGZpcnN0IHJlYWwgcXdlbiBydW4gd2FzIGNvcnJlY3RseSByZWplY3RlZCBiZWNhdXNlIEZvcmdlIGhhZCB0byBhcHBseSBgaWRlbnRpZmllcl9ub3JtYWxpemVkYDsgcmVwYWlyZWQgb3V0cHV0IGRpZCBub3QgYmVjb21lIHBvc2l0aXZlIG1vZGVsIGV2aWRlbmNlLgotIFByb2R1Y3QgZml4IGNvbW1pdDogYDllNTE1YzAzZjU2Y2Q0OWViNGIwYTZkMDQ0MGE1M2UxNTUwMWFkYzVgLgotIFJlYWwgcmVydW46IEdpdEh1YiBBY3Rpb25zIGAzMzIxOTE5NTYyN2AsIE9sbGFtYSBgMC4zMy4yYCwgYHF3ZW4yLjU6N2ItaW5zdHJ1Y3RgIFE0X0tfTSwgZGlnZXN0IGA4NDVkYmRhMGVhNDhlZDc0OWNhYWZkOWU2MDM3MDQ3YWExOWFjZmNmZDgyZTcwNDdjYTk3ZDYzMWEwYjY5N2VgLgotIFByb2R1Y3Rpb24gZXZpZGVuY2UgcHJvdmVkIGBnZW5lcmF0aW9uX3NvdXJjZT1sb2NhbF9haWAsIGBzdHJ1Y3R1cmVfc291cmNlPWFpX2VudGl0eV9zeW50aGVzaXNgLCBgc3RydWN0dXJlX3Byb3ZpZGVyPWxvY2FsYCwgYHN0cnVjdHVyZV90YXNrPWVudGl0eV9zeW50aGVzaXNgLCBhY2NlcHRlZCBzY2hlbWEgbW9kZSwgcmF3IHN0cmljdC1jb250cmFjdCBQQVNTLCBubyBFbnRpdHkgcmVwYWlycywgVmFsaWRhdG9yIFBBU1MsIHByb2R1Y3Rpb24gRXZpZGVuY2UgVUlEIGFuZCBSRUFMIHZlcmlmaWNhdGlvbi4KLSBMZXZlbCAwID0gKipQQVNTKio7IFJlYWwgTG9jYWwgTW9kZWwgcnVucyAqKjAg4oaSIDEqKjsgYmFzZWxpbmUtcmVhZHkgcnVucyAqKjEqKi4KLSBQYXNzaW5nIGV2aWRlbmNlIGNvbW1pdHRlZCBhdCBgZG9jcy9ldmlkZW5jZS9sZXZlbDAvbGV2ZWwwLTIwMjYwODI4LTIzMDkyMi5qc29uYC4KLSBOb3JtYWwgQ0kgcnVuIGAzMzIxOTE5NTcxM2Agb24gdGhlIHJlYWwtcnVuIHRyaWdnZXIgY29tbWl0IHdhcyAqKlNVQ0NFU1MqKiB3aXRoIGFsbCBmb3VyIGpvYnMgZ3JlZW4uCi0gR2VuZXJhdGVkIEFwcCBRdWFsaXR5IEdvbGRlbiBHYXRlIHJlbWFpbnMgKipGQUlMKio7IHRoaXMgTGV2ZWwgMCBtaWxlc3RvbmUgZG9lcyBub3Qgb3ZlcnJpZGUgdmlzdWFsL3Byb2R1Y3QtcXVhbGl0eSBldmlkZW5jZS4KLSBOZXh0IGFyY2hpdGVjdHVyZSBzdGFnZTogKipGT1JHRS0wMjBCIFRvb2wtVXNpbmcgTG9jYWwgQWdlbnQgcHJvZHVjdGlvbiB3aXJpbmcqKi4KCg==
+          TECH_DEBT_SECTION_B64: IyBURDAyMEE1IOKAlCBSZWFsIExvY2FsIExldmVsIDAgZXhlY3V0aW9uIGdhdGUKCioqUmVzb2x2ZWQgaW4gRk9SR0UtMDIwQTUuKiogQSBnZW51aW5lIGBxd2VuMi41OjdiLWluc3RydWN0YCAvIE9sbGFtYSBwcm9kdWN0aW9uLXBhdGggcnVuIG5vdyBzYXRpc2ZpZXMgdGhlIGZhaWwtY2xvc2VkIHN0cnVjdHVyZS1pbnRlZ3JpdHkgZ2F0ZSB3aXRob3V0IEZvcmdlIEVudGl0eSByZXBhaXIuIEV2aWRlbmNlOiBgZG9jcy9ldmlkZW5jZS9sZXZlbDAvbGV2ZWwwLTIwMjYwODI4LTIzMDkyMi5qc29uYDsgd29ya2Zsb3cgcnVuIGAzMzIxOTE5NTYyN2A7IFJlYWwgTG9jYWwgTW9kZWwgcnVucyA9IDEuIFRoaXMgY2xvc2VzIG9ubHkgdGhlIExldmVsIDAgcmVhbC1ydW50aW1lIGdhdGUuIEl0IGRvZXMgKipub3QqKiBjbG9zZSBHZW5lcmF0ZWQgQXBwIFF1YWxpdHksIGJyb3dzZXIvUGxheXdyaWdodCB2aXN1YWwgdmVyaWZpY2F0aW9uLCBHUFUgcGVyZm9ybWFuY2UgYmFzZWxpbmVzLCBUb29sLVVzaW5nIEFnZW50IHdpcmluZywgR2VuZXJhdGlvbiBFcGlzb2RlcywgRGF0YXNldCBCdWlsZGVyLCB0cmFpbmluZy9hZGFwdGVycyBvciBTZWxmLUV4dGVuc2lvbi4KCg==
         run: |
           python - <<'PY'
+          import base64
+          import os
           from pathlib import Path
-
-          changelog = Path('CHANGELOG.md')
-          ch = changelog.read_text(encoding='utf-8')
-          marker = '## 2026-08-29 — FORGE-020A5: Genuine Real Local Level 0 PASS'
-          section = '''## 2026-08-29 — FORGE-020A5: Genuine Real Local Level 0 PASS
-
-- Prompt / provider JSON schema / strict Entity evidence now derive structural limits from the canonical `forge_ai/core/semantics/entity_contract.py` contract.
-- Canonical model contract: identifier `^[a-z][a-z0-9_]*$`, fields 1–6, choices 2–6.
-- The first real qwen run was correctly rejected because Forge had to apply `identifier_normalized`; repaired output did not become positive model evidence.
-- Product fix commit: `9e515c03f56cd49eb4b0a6d0440a53e15501adc5`.
-- Real rerun: GitHub Actions `33219195627`, Ollama `0.33.2`, `qwen2.5:7b-instruct` Q4_K_M, digest `845dbda0ea48ed749caafd9e6037047aa19acfcfd82e7047ca97d631a0b697e`.
-- Production evidence proved `generation_source=local_ai`, `structure_source=ai_entity_synthesis`, `structure_provider=local`, `structure_task=entity_synthesis`, accepted schema mode, raw strict-contract PASS, no Entity repairs, Validator PASS, production Evidence UID and REAL verification.
-- Level 0 = **PASS**; Real Local Model runs **0 → 1**; baseline-ready runs **1**.
-- Passing evidence committed at `docs/evidence/level0/level0-20260828-230922.json`.
-- Normal CI run `33219195713` on the real-run trigger commit was **SUCCESS** with all four jobs green.
-- Generated App Quality Golden Gate remains **FAIL**; this Level 0 milestone does not override visual/product-quality evidence.
-- Next architecture stage: **FORGE-020B Tool-Using Local Agent production wiring**.
-
-'''
-          if marker not in ch:
-              changelog.write_text(section + ch, encoding='utf-8')
-
-          debt = Path('TECH_DEBT.md')
-          td = debt.read_text(encoding='utf-8')
-          td_marker = '# TD020A5 — Real Local Level 0 execution gate'
-          td_section = '''# TD020A5 — Real Local Level 0 execution gate
-
-**Resolved in FORGE-020A5.** A genuine `qwen2.5:7b-instruct` / Ollama production-path run now satisfies the fail-closed structure-integrity gate without Forge Entity repair. Evidence: `docs/evidence/level0/level0-20260828-230922.json`; workflow run `33219195627`; Real Local Model runs = 1. This closes only the Level 0 real-runtime gate. It does **not** close Generated App Quality, browser/Playwright visual verification, GPU performance baselines, Tool-Using Agent wiring, Generation Episodes, Dataset Builder, training/adapters or Self-Extension.
-
-'''
-          if td_marker not in td:
-              debt.write_text(td_section + td, encoding='utf-8')
+          updates = [
+              ('CHANGELOG.md', '## 2026-08-29 — FORGE-020A5: Genuine Real Local Level 0 PASS', 'CHANGELOG_SECTION_B64'),
+              ('TECH_DEBT.md', '# TD020A5 — Real Local Level 0 execution gate', 'TECH_DEBT_SECTION_B64'),
+          ]
+          for path, marker, env_name in updates:
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if marker not in text:
+                  section = base64.b64decode(os.environ[env_name]).decode('utf-8')
+                  p.write_text(section + text, encoding='utf-8')
           PY
 
       - name: Verify durable closeout files exist
@@ -68,7 +50,7 @@ jobs:
           grep -q 'Resolved in FORGE-020A5' TECH_DEBT.md
           git diff --check
 
-      - name: Remove one-off real-run and closeout workflows
+      - name: Remove one-off workflows
         shell: bash
         run: |
           git rm -f .github/workflows/forge-020a-real-level0.yml
@@ -79,7 +61,7 @@ jobs:
         run: |
           git config user.name 'forge-020a5-closeout-bot'
           git config user.email 'forge-020a5-closeout-bot@users.noreply.github.com'
-          git add CHANGELOG.md TECH_DEBT.md docs/HANDOFF.md docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md docs/evidence/level0/level0-20260828-230922.json
+          git add CHANGELOG.md TECH_DEBT.md
           git add -u .github/workflows
           git status --short
           git diff --cached --check
