@@ -31,6 +31,18 @@ jobs:
         run: python -m py_compile scripts/_finalize_forge_020a4c.py
       - name: Apply skeptical-review fixes
         run: python scripts/_finalize_forge_020a4c.py
+      - name: Normalize generated text EOFs
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for name in (
+              'docs/reports/FORGE-020A4C-REAL-STRUCTURE-INTEGRITY-report.md',
+              'forge_ai/tests/test_forge_020a4c_entity_contract_evidence.py',
+          ):
+              p = Path(name)
+              p.write_text(p.read_text(encoding='utf-8').rstrip() + '\n', encoding='utf-8')
+          PY
       - name: Syntax and diff checks
         run: |
           python -m compileall -q forge_ai backend/app scripts/verify_local_model_level0.py
