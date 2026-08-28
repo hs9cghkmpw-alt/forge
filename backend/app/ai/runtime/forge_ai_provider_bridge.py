@@ -28,11 +28,7 @@ from forge_ai.provider.provider_interface import ProviderResponse
 from app.ai.foundation.interfaces import LLMAdapter
 from app.ai.gateway.tasks import ForgeTask
 
-# stageごとに期待する構造化出力の最小スキーマ。MockProvider
-# (forge_ai/provider/mock_provider.py)が実際に返す`structured`の形に
-# 合わせている。将来実LLMを接続する際、このスキーマを渡すことで
-# Structured Outputを要求する想定(LLMAdapter.complete_structuredの
-# 契約)。
+
 _RESPONSE_SCHEMAS: dict[str, dict[str, Any]] = {
     "meaning": {
         "type": "object",
@@ -63,23 +59,15 @@ _RESPONSE_SCHEMAS: dict[str, dict[str, Any]] = {
         },
         "required": ["title", "screens", "data_entities", "primary_flow"],
     },
-    # FORGE-PRODUCT-VISION-002(2026-08-12)新規。「このアプリが繰り返し
-    # 記録する1件分のデータ」の構造をAIに設計させる段階
-    # (`forge_ai/core/ir/entity_synthesizer.py`)。
-    #
-    # **このスキーマの登録は必須である**(省略してはならない): 未登録の
-    # stageは下の`_UNKNOWN_STAGE_SCHEMA`(`{"type": "object"}`、
-    # propertiesを持たない)へ落ちるが、TD40で実機確認したとおり、
-    # Geminiは`properties`の無い`"type": "object"`をresponseSchemaとして
-    # 渡されると**黙って空オブジェクト`{}`を返す**。その場合、合成は
-    # 常に失敗し、全Domainが従来のChecklistへフォールバックし続ける
-    # ——しかもエラーにはならないため、気付けない。
     "entity_synthesis": {
         "type": "object",
         "properties": {
             "entity_name": {"type": "string"},
             "entity_label": {"type": "string"},
-            "visual_style": {"type": "string", "enum": ["calm", "warm", "vibrant", "neutral"]},
+            "visual_style": {
+                "type": "string",
+                "enum": ["calm", "warm", "vibrant", "neutral"],
+            },
             "fields": {
                 "type": "array",
                 "items": {
@@ -95,15 +83,15 @@ _RESPONSE_SCHEMAS: dict[str, dict[str, Any]] = {
                         "choices": {"type": "array", "items": {"type": "string"}},
                         "min_value": {"type": "number"},
                         "max_value": {"type": "number"},
-                        # FORGE-R1-CLOSURE-015。数値が**どういう量か**。
-                        # ここはenumで閉じてよい——選択肢が6つで固定で
-                        # あり、Design Roleのように増減しないため。
-                        # forge_ai側でも必ず検証し直す(`_sanitize_measure`)。
                         "measure": {
                             "type": "string",
                             "enum": [
-                                "additive", "averageable", "level",
-                                "extremum", "identifier", "unknown",
+                                "additive",
+                                "averageable",
+                                "level",
+                                "extremum",
+                                "identifier",
+                                "unknown",
                             ],
                         },
                     },
@@ -113,12 +101,6 @@ _RESPONSE_SCHEMAS: dict[str, dict[str, Any]] = {
         },
         "required": ["entity_name", "entity_label", "visual_style", "fields"],
     },
-    # FORGE-R1(2026-08-17)。Design Languageの意味的役割をAIに選ばせる段。
-    #
-    # **enumを持たせない**のは、選択肢がProviderへ渡るcontext側にあり、
-    # Forge側で必ず検証し直すためである(`design_intent.py`)。schemaで
-    # enumを固定すると、語彙を1つ増やすたびに2箇所を直すことになり、
-    # そのうちずれる——ずれたときに黙って通る方が危ない。
     "design_intent": {
         "type": "object",
         "properties": {
@@ -131,9 +113,6 @@ _RESPONSE_SCHEMAS: dict[str, dict[str, Any]] = {
         "type": "object",
         "properties": {
             "title": {"type": "string"},
-            # FORGE-AI-QUALITY-001(2026-08-11): 依頼内容に即した初期データ
-            # 例。任意項目(旧Mock応答・旧テストとの後方互換のためrequired
-            # には含めない、`compiler.py`側も未指定を正しく許容する)。
             "example_items": {"type": "array", "items": {"type": "string"}},
         },
         "required": ["title"],
@@ -149,12 +128,7 @@ _UNKNOWN_STAGE_SCHEMA: dict[str, Any] = {"type": "object"}
 
 
 def _flatten_prompt_to_string(prompt: Prompt) -> str:
-    """`Prompt`(system/instruction/context)を1本の文字列へ整形する。
-
-    文字列連結を行うのはforge_ai/の外側、このBridge内部だけである
-    (forge_ai/自体は文字列連結を禁止している。ADAPTER_CONTRACT_V1.md
-    4.2節のコメント参照)。
-    """
+    """`Prompt`(system/instruction/context)を1本の文字列へ整形する。"""
     lines = [
         f"[SYSTEM]\n{prompt.system}",
         f"[INSTRUCTION]\n{prompt.instruction}",
@@ -175,12 +149,15 @@ def _task_for_stage(stage: str) -> ForgeTask:
 
 
 def _repair_test_double_value(value: Any, schema: dict[str, Any]) -> Any:
-    """Test Doubleの値をJSON Schemaの型の形へ決定的に合わせる。
+    """Entity Synthesis Test Doubleのnested schema形状を決定的に補う。
 
-    020A4で実測した`array<object>`→文字列配列の崩れだけでなく、
-    nested object/arrayの同種事故を再発させないため再帰的に扱う。
+    FORGE-020A4でproduction preflightが実測した
+    `fields: array<object>`→文字列配列というMock固有の不整合を、
+    **Entity SynthesisのTest Double controlだけ**で補正するための関数。
 
-    **mock以外には呼ばない。** これは実LLMの失敗を隠すRepairではない。
+    実LLM出力には使わない。また他のMock stageへも広げない。020A4B初版で
+    全Mock stageへ適用したところ、既存の命名意味論を変えてしまいCIが
+    回帰を検出したため、測定された欠陥の境界へ絞った。
     """
     schema_type = schema.get("type")
 
@@ -217,8 +194,6 @@ def _repair_test_double_value(value: Any, schema: dict[str, Any]) -> Any:
                     _repair_test_double_value(item, item_schema)
                     for item in dict_items
                 ]
-            # Entity Synthesisのfieldsで実際に踏んだ形。
-            # 文字列をobjectへ意味変換せず、Schemaのrequiredから1件作る。
             return [_test_double_default(item_schema)]
 
         return [
@@ -319,11 +294,12 @@ class ForgeAIProviderBridge:
             if task_was_switched:
                 self._llm_adapter.task = original_task
 
-        # Test Doubleだけは、既存Mockがnested schemaを平坦化する既知の制限を
-        # Bridge境界で補う。実Provider(Local/Cloud)の出力は絶対に補正しない。
-        # Real Local Level 0を「Forgeが作った値」で偽装しないための境界である。
         provider_id = str(getattr(self._llm_adapter, "last_provider_used", "") or "")
-        if provider_id == "mock":
+        # 020A4B初版でこの補正を全Mock stageへ広げたところ、compile等の
+        # Mock意味論まで変えてしまい生成アプリ名が「買い物リスト」に汚染された。
+        # 測定済みの欠陥はEntity Synthesisのnested fieldsだけなので、
+        # **そのstage + Test Doubleだけ**へ限定する。
+        if provider_id == "mock" and prompt.stage == "entity_synthesis":
             structured = _repair_test_double_value(structured, schema)
 
         return ProviderResponse(
