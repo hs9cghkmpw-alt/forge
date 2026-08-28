@@ -6,12 +6,16 @@
 - Current completed task: **FORGE-020A5 — Real Local Level 0 Closeout**
 - 020A5 product fix SHA: `9e515c03f56cd49eb4b0a6d0440a53e15501adc5`
 - Real-run trigger SHA: `b0a9fe64c18bf264bbb7c199336aafa913d5460d`
-- Normal CI: run `33219195713` = **SUCCESS**, all four jobs green
+- Normal CI on real-run trigger: run `33219195713` = **SUCCESS**, all four jobs green
 - Genuine real Local Level 0: run `33219195627` = **SUCCESS / PASS**
 - Durable passing evidence: `docs/evidence/level0/level0-20260828-230922.json`
 - GitHub Actions evidence artifact: id `9704599776`, digest `sha256:b25e85df4b0115db0b824cb83f71b05bd493dabfad9a2038c69d84984b8d9e17`
 - Real Local Model runs: **1**
 - Baseline-ready runs: **1**
+- 020A5 cleanup workflow: run `33219996032` = **SUCCESS**
+- Cleanup commit: `3bcf1a5683f4f06d66b80f9de1d3c55f6d6ad997`
+- One-off 020A5 apply/repair/real-run/closeout workflow machinery: **removed**
+- `.github/workflows/` after cleanup: only normal `ci.yml`
 - Golden Generated App Quality Gate: **FAIL** from the latest visual review. No new visual-quality run was performed in 020A5; do not rewrite it to PASS.
 
 Detailed closeout report: `docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md`
@@ -94,6 +98,8 @@ Cloud structure, Test Double structure, deterministic structure, curated fallbac
 - The real runner recorded 0 MB VRAM; no GPU performance claim is supported by this run.
 - One successful Level 0 episode is not enough to promote an SFT/QLoRA/preference dataset sample or adapter without future eligibility, privacy/training-rights and benchmark gates.
 - The full Local software agent loop `think -> search/retrieve -> build -> run -> inspect -> repair` is not yet production-wired.
+
+These are **next-stage product capabilities**, not unfinished 020A5 cleanup.
 
 ## Source of Truth to read first
 
