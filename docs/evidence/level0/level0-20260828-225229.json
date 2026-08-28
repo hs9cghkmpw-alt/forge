@@ -1,0 +1,80 @@
+{
+  "task": "FORGE-020A Level 0",
+  "level0_scope": "Runtime → LocalModelProvider → Provider Registry → AIRouter → production /generate → Validator → GenerationRecord(source=local_ai, structure_provenance=local_ai)",
+  "level0_outcome": "invalid_probe",
+  "real_local_model_runs": 0,
+  "baseline_ready_runs": 0,
+  "probe": {
+    "need": "盆栽の水やりの記録をつけたい",
+    "domain_resolution_before": "generated",
+    "domain_resolution_after": "generated",
+    "is_curated_trap": false,
+    "structure_source_after": "curated",
+    "level0_probe_recommended": "盆栽の水やりの記録をつけたい",
+    "known_curated_trap": "毎日の支出を記録して合計を見たい"
+  },
+  "host": {
+    "host_id": "runnervmgx7h7",
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "python": "3.12.14",
+    "ram_total_mb": 15989,
+    "vram_total_mb": 0
+  },
+  "runtime_probe": {
+    "backend": "ollama",
+    "version": "0.33.2",
+    "model_id": "qwen2.5:7b-instruct",
+    "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+    "quantization": "Q4_K_M",
+    "reachable": true,
+    "error": ""
+  },
+  "generation_failure": "",
+  "run": {
+    "provider": "local",
+    "model": "qwen2.5:7b-instruct",
+    "model_id": "qwen2.5:7b-instruct",
+    "model_digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+    "weight_identity": "verified_digest",
+    "domain_resolution": "generated",
+    "structure_source": "curated",
+    "structure_provider": "none",
+    "structure_task": "entity_synthesis_fallback",
+    "entity_synthesis_strict_contract_passed": false,
+    "entity_synthesis_repairs": [
+      "identifier_normalized"
+    ],
+    "structured_output_mode": "json_schema",
+    "observed_tasks": [
+      "entity_synthesis",
+      "cognitive_stage"
+    ],
+    "ready_for_baseline": false,
+    "quantization": "Q4_K_M",
+    "runtime_backend": "ollama",
+    "runtime_version": "0.33.2",
+    "deployment": "local",
+    "task": "entity_synthesis",
+    "latency_ms": 182064.4,
+    "structured_output_ok": true,
+    "validator_passed": true,
+    "generation_evidence_uid": "cb43adddb7814fc9adfec849b06f620f",
+    "generation_source": "composition",
+    "host_id": "runnervmgx7h7",
+    "ram_total_mb": 15989,
+    "vram_total_mb": 0,
+    "verification": "real",
+    "counts_as_real_local": false,
+    "why_not_counted": [
+      "Local Model が構造生成を担当していない（structure_source=curated）",
+      "構造を作ったのが Local Provider ではない（structure_provider=none）",
+      "構造生成を担当した stage がentity_synthesis ではない（structure_task=entity_synthesis_fallback）",
+      "Entity Synthesis の生出力が strict contract を満たしていない",
+      "Forge の Entity sanitizer による補正が必要だった（identifier_normalized）",
+      "文書を作ったのが Local Model ではない（composition）"
+    ],
+    "level0_outcome": "invalid_probe",
+    "recorded_at": 1787957549.4928496
+  },
+  "recorded_at": 1787957549.493009
+}
