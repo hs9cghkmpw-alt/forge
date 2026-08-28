@@ -1,4 +1,4 @@
-# rerun after patcher quoting fix
+# rerun after diff normalization fix
 name: FORGE-020A5 entity schema contract apply
 
 on:
@@ -32,6 +32,14 @@ jobs:
           python -m py_compile scripts/_apply_forge_020a5_entity_schema.py
       - name: Apply canonical schema contract patch
         run: python scripts/_apply_forge_020a5_entity_schema.py
+      - name: Normalize generated test EOF
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('forge_ai/tests/test_forge_020a4c_entity_contract_evidence.py')
+          p.write_text(p.read_text(encoding='utf-8').rstrip() + '\n', encoding='utf-8')
+          PY
       - name: Syntax and diff checks
         run: |
           python -m compileall -q forge_ai backend/app backend/tests
