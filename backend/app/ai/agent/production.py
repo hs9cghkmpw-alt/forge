@@ -7,8 +7,7 @@ is never a success signal.
 
 The production agent receives no raw conversation and no server-repository access.
 Its context is identifiers/counts/evidence only. Build/test/runtime/visual are not
-claimed unless actually measured; in this stage build/test are SKIPPED and
-runtime/visual remain UNKNOWN.
+claimed unless actually measured; in this stage they remain UNKNOWN.
 """
 
 from __future__ import annotations
@@ -161,15 +160,21 @@ def run_local_agent_verification(
     router=None,
     episode_store=None,
 ) -> AgentRunSummary:
-    """Run one bounded, production-wired Local tool-use verification episode."""
+    """Run one bounded, production-wired Local tool-use verification episode.
+
+    Provenance is fail-closed: the Episode starts as UNKNOWN and is promoted to
+    LOCAL/LOCAL_AI_OUTPUT only *after* AIRouter reports a successful Local response.
+    A provider resolution/timeout failure therefore cannot become positive Local-AI
+    trajectory evidence merely because the caller intended to use Local.
+    """
     record = _generation_record(result)
     store = episode_store or default_episode_store()
     evidence_uid = str(getattr(record, "uid", "") or "") if record is not None else ""
     episode = store.start(GenerationEpisode(
         task_id="forge.local_agent.verify",
         intent_reference=(f"generation:{evidence_uid}" if evidence_uid else ""),
-        deployment=Deployment.LOCAL,
-        provenance=LearningDataProvenance.LOCAL_AI_OUTPUT,
+        deployment=Deployment.UNKNOWN,
+        provenance=LearningDataProvenance.UNKNOWN,
         training_use=TrainingUse.UNKNOWN,
         generation_evidence_uid=evidence_uid,
     ))
@@ -205,8 +210,14 @@ def run_local_agent_verification(
         nonlocal plan_generated
         plan = bound.complete_structured(_agent_prompt(result, record), _AGENT_PLAN_SCHEMA)
         plan_generated = True
-        episode.provider = bound.last_provider_used or ""
+
+        actual_provider = bound.last_provider_used or ""
+        if actual_provider != "local":
+            raise RuntimeError("agent_provider_not_local")
+        episode.provider = actual_provider
         episode.model = str(getattr(bound, "last_model_used", "") or "")
+        episode.deployment = Deployment.LOCAL
+        episode.provenance = LearningDataProvenance.LOCAL_AI_OUTPUT
         episode.record_step(EpisodeStep(
             kind=StepKind.GENERATE,
             name="agent_tool_plan",
@@ -233,9 +244,6 @@ def run_local_agent_verification(
             if bool(getattr(fresh_validation, "valid", False))
             else VerificationOutcome.FAILED
         )
-        critical_gap = bool(
-            getattr(getattr(result, "capability_gap", None), "blocks_completion", False)
-        )
         tools_ok = all(item.ok for item in tool_results)
 
         failure_code = ""
@@ -243,15 +251,15 @@ def run_local_agent_verification(
             failure_code = "tool_failure"
         elif validator_outcome is VerificationOutcome.FAILED:
             failure_code = "validator_failed"
-        elif critical_gap:
-            failure_code = "critical_capability_gap"
 
         return AttemptResult(
             succeeded=not failure_code,
             failure_code=failure_code,
             validator=validator_outcome,
-            build=VerificationOutcome.SKIPPED,
-            test=VerificationOutcome.SKIPPED,
+            # Build/test/runtime/visual were not executed in 020B. UNKNOWN is the
+            # truthful value; SKIPPED means "not applicable" in the Episode contract.
+            build=VerificationOutcome.UNKNOWN,
+            test=VerificationOutcome.UNKNOWN,
             runtime=VerificationOutcome.UNKNOWN,
             visual=VerificationOutcome.UNKNOWN,
         )
@@ -280,16 +288,32 @@ def run_local_agent_verification(
             stopped_because="provider_or_agent_error",
         )
 
-    store.finish(episode.episode_id, report.outcome)
+    # The verification task itself can succeed while the generated application is
+    # known to be incomplete. Preserve that distinction as PARTIAL rather than
+    # pretending the artifact completed the user's request or calling it a repair
+    # budget exhaustion.
+    critical_gap = bool(
+        getattr(getattr(result, "capability_gap", None), "blocks_completion", False)
+    )
+    final_outcome = (
+        EpisodeOutcome.PARTIAL
+        if report.outcome is EpisodeOutcome.SUCCEEDED and critical_gap
+        else report.outcome
+    )
+    store.finish(episode.episode_id, final_outcome)
     return AgentRunSummary(
         requested=True,
         executed=True,
-        outcome=report.outcome,
+        outcome=final_outcome,
         episode_id=episode.episode_id,
         provider=episode.provider,
         model=episode.model,
         tool_calls=report.tool_calls,
         tools_used=tuple(call.tool for call in broker.calls),
         validator_outcome=episode.validator_outcome,
-        stopped_because=report.stopped_because,
+        stopped_because=(
+            "critical_capability_gap"
+            if final_outcome is EpisodeOutcome.PARTIAL
+            else report.stopped_because
+        ),
     )
