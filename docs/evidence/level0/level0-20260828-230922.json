@@ -1,0 +1,71 @@
+{
+  "task": "FORGE-020A Level 0",
+  "level0_scope": "Runtime → LocalModelProvider → Provider Registry → AIRouter → production /generate → Validator → GenerationRecord(source=local_ai, structure_provenance=local_ai)",
+  "level0_outcome": "passed",
+  "real_local_model_runs": 1,
+  "baseline_ready_runs": 1,
+  "probe": {
+    "need": "盆栽の水やりの記録をつけたい",
+    "domain_resolution_before": "generated",
+    "domain_resolution_after": "generated",
+    "is_curated_trap": false,
+    "structure_source_after": "ai_entity_synthesis",
+    "level0_probe_recommended": "盆栽の水やりの記録をつけたい",
+    "known_curated_trap": "毎日の支出を記録して合計を見たい"
+  },
+  "host": {
+    "host_id": "runnervmgx7h7",
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "python": "3.12.14",
+    "ram_total_mb": 15989,
+    "vram_total_mb": 0
+  },
+  "runtime_probe": {
+    "backend": "ollama",
+    "version": "0.33.2",
+    "model_id": "qwen2.5:7b-instruct",
+    "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+    "quantization": "Q4_K_M",
+    "reachable": true,
+    "error": ""
+  },
+  "generation_failure": "",
+  "run": {
+    "provider": "local",
+    "model": "qwen2.5:7b-instruct",
+    "model_id": "qwen2.5:7b-instruct",
+    "model_digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+    "weight_identity": "verified_digest",
+    "domain_resolution": "generated",
+    "structure_source": "ai_entity_synthesis",
+    "structure_provider": "local",
+    "structure_task": "entity_synthesis",
+    "entity_synthesis_strict_contract_passed": true,
+    "entity_synthesis_repairs": [],
+    "structured_output_mode": "json_schema",
+    "observed_tasks": [
+      "entity_synthesis",
+      "cognitive_stage"
+    ],
+    "ready_for_baseline": true,
+    "quantization": "Q4_K_M",
+    "runtime_backend": "ollama",
+    "runtime_version": "0.33.2",
+    "deployment": "local",
+    "task": "entity_synthesis",
+    "latency_ms": 165214.7,
+    "structured_output_ok": true,
+    "validator_passed": true,
+    "generation_evidence_uid": "04cb5545745940e8a4d85be4a674deb8",
+    "generation_source": "local_ai",
+    "host_id": "runnervmgx7h7",
+    "ram_total_mb": 15989,
+    "vram_total_mb": 0,
+    "verification": "real",
+    "counts_as_real_local": true,
+    "why_not_counted": [],
+    "level0_outcome": "passed",
+    "recorded_at": 1787958562.2775934
+  },
+  "recorded_at": 1787958562.2776854
+}
