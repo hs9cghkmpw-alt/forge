@@ -168,5 +168,24 @@ class TestConfirmationStore(unittest.TestCase):
             default_confirmation_store.get(record.request_id)
 
 
+class TestAgentModePersistence(unittest.TestCase):
+    def test_agent_mode_survives_confirmation_round_trip(self) -> None:
+        store = ConfirmationStore()
+        pending = store.create(
+            original_natural_language="x",
+            engine="forge_ai",
+            provider="local",
+            reached_stage="ambiguity",
+            reason="missing",
+            agent_mode="verify",
+        )
+        record, original, answer = store.consume_and_advance(
+            pending.request_id, answer="y"
+        )
+        self.assertEqual(original, "x")
+        self.assertEqual(answer, "y")
+        self.assertEqual(record.agent_mode, "verify")
+
+
 if __name__ == "__main__":
     unittest.main()

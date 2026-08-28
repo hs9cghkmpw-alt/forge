@@ -40,6 +40,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.ai.agent.production import AgentRunSummary, run_local_agent_verification
 from app.ai.runtime.confirmation_store import (
     MAX_CONFIRMATION_ROUNDS,
     ConfirmationNotFoundError,
@@ -73,6 +74,7 @@ from app.ai.runtime.pipeline_errors import (
 from app.ai.runtime.prompt_pipeline import PipelineNeedsConfirmationResult, PromptPipeline
 from app.ai.runtime.provider_router import ProviderRouter
 from app.schemas.ai import (
+    AgentRunDTO,
     ArtifactRefDTO,
     ConfirmationAnswerRequest,
     ConfirmationDTO,
@@ -213,7 +215,13 @@ def _artifact_ref(result, *, session_id: str | None) -> ArtifactRefDTO | None:  
     )
 
 
-def _result_dto(result, *, session_id: str | None = None) -> GenerateResultDTO:  # noqa: ANN001 — PipelineRunResult
+def _agent_dto(summary: AgentRunSummary | None) -> AgentRunDTO | None:
+    return AgentRunDTO(**summary.to_dict()) if summary is not None else None
+
+
+def _result_dto(
+    result, *, session_id: str | None = None, agent_summary: AgentRunSummary | None = None
+) -> GenerateResultDTO:  # noqa: ANN001 — PipelineRunResult
     return GenerateResultDTO(
         artifact=_artifact_ref(result, session_id=session_id),
         forge_document=result.forge_document,
@@ -233,6 +241,7 @@ def _result_dto(result, *, session_id: str | None = None) -> GenerateResultDTO: 
             else None
         ),
         diagnostics=_diagnostics_dto(result.diagnostics),
+        agent=_agent_dto(agent_summary),
         # **作れないと分かっていることを返す**（TD90 / 020A2 §5）。
         # `_result_dto()` は成功レスポンスを組む3経路すべてが通る唯一の
         # 場所なので、新しい経路を足した人が呼び忘れても載る。
@@ -245,8 +254,13 @@ def _result_dto(result, *, session_id: str | None = None) -> GenerateResultDTO: 
     )
 
 
-def _success_response(result) -> GenerateSuccessResponse:  # noqa: ANN001 — PipelineRunResult
-    return GenerateSuccessResponse(result=_result_dto(result))
+def _success_response(
+    result, *, agent_mode: str = "off"
+) -> GenerateSuccessResponse:  # noqa: ANN001 — PipelineRunResult
+    agent_summary = (
+        run_local_agent_verification(result) if agent_mode == "verify" else None
+    )
+    return GenerateSuccessResponse(result=_result_dto(result, agent_summary=agent_summary))
 
 
 def _run_pipeline_and_build_response(
@@ -258,6 +272,7 @@ def _run_pipeline_and_build_response(
     round_count: int,
     clarification_answer: str | None = None,
     previous_answers: tuple[str, ...] = (),
+    agent_mode: str = "off",
 ):
     pipeline_kwargs: dict = {}
     if max_repair_attempts is not None:
@@ -291,9 +306,13 @@ def _run_pipeline_and_build_response(
         # answers`として引き継ぎ、次回はこれに次の回答を加えた全件が
         # 渡るようにする(上記のバグ修正と対になる設計)。
         return _needs_confirmation_response_with_input(
-            result, natural_language, round_count=round_count, previous_answers=all_answers
+            result,
+            natural_language,
+            round_count=round_count,
+            previous_answers=all_answers,
+            agent_mode=agent_mode,
         )
-    return _success_response(result)
+    return _success_response(result, agent_mode=agent_mode)
 
 
 def _needs_confirmation_response_with_input(
@@ -302,6 +321,7 @@ def _needs_confirmation_response_with_input(
     *,
     round_count: int,
     previous_answers: tuple[str, ...] = (),
+    agent_mode: str = "off",
 ) -> GenerateNeedsConfirmationResponse:
     # FORGE v0.2 Final Gate P0.7対応: 前回到達時点のdiagnosticsを
     # ConfirmationStoreへ保持し、再確認時に前回状態を追跡できるようにする。
@@ -320,6 +340,7 @@ def _needs_confirmation_response_with_input(
         domain_classification=result.domain_classification,
         decision_trace=result.decision_trace,
         previous_answers=previous_answers,
+        agent_mode=agent_mode,
     )
     return GenerateNeedsConfirmationResponse(
         confirmation=ConfirmationDTO(
@@ -352,6 +373,7 @@ def generate(request: GenerateRequest):
     engine = (options.engine if options else None) or "forge_ai"
     provider = options.provider if options else None
     max_repair_attempts = options.max_repair_attempts if options else None
+    agent_mode = options.agent_mode if options else "off"
 
     return _run_pipeline_and_build_response(
         request.input.natural_language,
@@ -359,6 +381,7 @@ def generate(request: GenerateRequest):
         provider=provider,
         max_repair_attempts=max_repair_attempts,
         round_count=1,
+        agent_mode=agent_mode,
     )
 
 
@@ -413,6 +436,7 @@ def confirm(request: ConfirmationAnswerRequest):
         round_count=record.round_count + 1,
         clarification_answer=answer,
         previous_answers=record.previous_answers,
+        agent_mode=record.agent_mode,
     )
 
 
@@ -662,7 +686,9 @@ def converse(request: ConverseRequest):
         # Cognitive Pipeline側が確認を求めた場合は、既存の
         # `/generate/confirm`契約へそのまま委ねる(無変更)。
         record_conversation_event(session.session_id, "pipeline_needs_confirmation")
-        return _needs_confirmation_response_with_input(result, build_brief, round_count=1)
+        return _needs_confirmation_response_with_input(
+            result, build_brief, round_count=1, agent_mode=request.agent_mode
+        )
 
     record_conversation_event(
         session.session_id, "build", readiness=step_result.readiness.value,
@@ -674,9 +700,16 @@ def converse(request: ConverseRequest):
     # 生成本体を実行したProviderを報告する(会話ステップとは別のProviderに
     # なりうる——Routerは各Taskで独立にfallbackする)。
     build_provider_name = result.diagnostics.provider_used or provider_name
+    agent_summary = (
+        run_local_agent_verification(result)
+        if request.agent_mode == "verify"
+        else None
+    )
     return ConverseBuildResponse(
         session_id=session.session_id, need_model=need_model_dto, build_brief=build_brief,
-        result=_result_dto(result, session_id=session.session_id), readiness=step_result.readiness.value,
+        result=_result_dto(
+            result, session_id=session.session_id, agent_summary=agent_summary
+        ), readiness=step_result.readiness.value,
         provider=build_provider_name, simulated=router.is_simulated(build_provider_name),
     )
 

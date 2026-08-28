@@ -873,6 +873,7 @@ class _BoundAdapter:
     provider_name: str = "router"
 
     last_provider_used: str | None = field(default=None, init=False)
+    last_model_used: str = field(default="", init=False)
     last_structured_output_mode: str = field(default="", init=False)
     """直近の`complete_structured()`で**実際に**応答を返したProvider名。
     まだ呼ばれていなければ`None`。"""
@@ -892,6 +893,14 @@ class _BoundAdapter:
             self.task, prompt, response_schema, provider=self.provider
         )
         self.last_provider_used = result.provider_used
+        self.last_model_used = next(
+            (
+                attempt.model
+                for attempt in reversed(result.attempts)
+                if attempt.ok and attempt.provider == result.provider_used
+            ),
+            "",
+        )
         self.last_structured_output_mode = result.structured_output_mode
         if result.experience_ref:
             self.experience_refs = (*self.experience_refs, result.experience_ref)

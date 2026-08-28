@@ -47,6 +47,10 @@ class ForgeTask(str, Enum):
     """「このアプリが繰り返し記録する1件分のデータ」の設計。
     `forge_ai/core/ir/entity_synthesizer.py`が呼ぶ。"""
 
+    AGENT_STEP = "agent_step"
+    """FORGE-020B。Local Agent が生成物を道具で検証する1手。
+    `app.ai.agent.production` が本番の生成経路から実際に呼ぶ。"""
+
     FORGE_LANGUAGE_UPDATE = "forge_language_update"
     """既存Forge Documentの更新(Forming)。`forge_operation.py`が呼ぶ。"""
 

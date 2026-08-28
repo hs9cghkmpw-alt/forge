@@ -108,6 +108,7 @@ class ToolResult:
 
     tool: str
     outcome: ToolOutcome
+    call_id: str = ""
     content: str = ""
     error: str = ""
     permission: PermissionDecision | None = None
@@ -122,6 +123,7 @@ class ToolResult:
         return {
             "tool": self.tool,
             "outcome": self.outcome.value,
+            "call_id": self.call_id,
             "error": self.error,
             "duration_ms": round(self.duration_ms, 2),
             "truncated": self.truncated,
@@ -202,13 +204,15 @@ class ToolBroker:
         spec = self._specs.get(call.tool)
         if spec is None:
             return ToolResult(
-                call.tool, ToolOutcome.UNKNOWN_TOOL,
+                call.tool, ToolOutcome.UNKNOWN_TOOL, call_id=call.call_id,
                 error="登録されていない道具",
             )
 
         invalid = spec.validate(call.arguments)
         if invalid:
-            return ToolResult(call.tool, ToolOutcome.INVALID_ARGUMENTS, error=invalid)
+            return ToolResult(
+                call.tool, ToolOutcome.INVALID_ARGUMENTS, call_id=call.call_id, error=invalid
+            )
 
         decision = self._permissions.evaluate(
             call.tool, in_sandbox=self._in_sandbox,
@@ -216,7 +220,7 @@ class ToolBroker:
         )
         if not decision.allowed:
             return ToolResult(
-                call.tool, ToolOutcome.DENIED,
+                call.tool, ToolOutcome.DENIED, call_id=call.call_id,
                 error=decision.reason, permission=decision,
             )
 
@@ -225,7 +229,7 @@ class ToolBroker:
             raw = spec.run(**dict(call.arguments))
         except Exception as error:  # noqa: BLE001 — 道具の失敗で Loop を殺さない
             return ToolResult(
-                call.tool, ToolOutcome.FAILED,
+                call.tool, ToolOutcome.FAILED, call_id=call.call_id,
                 error=redact_secrets(f"{type(error).__name__}: {error}"),
                 permission=decision,
                 duration_ms=(time.perf_counter() - started) * 1000,
@@ -236,6 +240,7 @@ class ToolBroker:
         if truncated:
             content = content[: self._MAX_OUTPUT]
         return ToolResult(
-            call.tool, ToolOutcome.OK, content=content, permission=decision,
+            call.tool, ToolOutcome.OK, call_id=call.call_id,
+            content=content, permission=decision,
             duration_ms=(time.perf_counter() - started) * 1000, truncated=truncated,
         )

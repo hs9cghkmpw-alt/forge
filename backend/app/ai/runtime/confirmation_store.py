@@ -88,6 +88,8 @@ class PendingConfirmation:
     # このセッション内で今までにユーザーが送った回答の履歴
     # (再確認が複数回続いた場合、過去の回答も追跡できるようにする)。
     previous_answers: tuple[str, ...] = ()
+    agent_mode: str = "off"
+    """FORGE-020B。確認往復で opt-in Agent 設定を失わない。"""
 
     def is_expired(self, *, now: float | None = None) -> bool:
         current = now if now is not None else time.time()
@@ -114,6 +116,7 @@ class ConfirmationStore:
         domain_classification: dict[str, Any] | None = None,
         decision_trace: tuple[dict[str, Any], ...] = (),
         previous_answers: tuple[str, ...] = (),
+        agent_mode: str = "off",
     ) -> PendingConfirmation:
         record = PendingConfirmation(
             request_id=str(uuid.uuid4()),
@@ -127,6 +130,7 @@ class ConfirmationStore:
             previous_domain_classification=domain_classification,
             previous_decision_trace=decision_trace,
             previous_answers=previous_answers,
+            agent_mode=agent_mode,
         )
         with self._lock:
             self._pending[record.request_id] = record

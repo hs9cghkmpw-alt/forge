@@ -21,6 +21,7 @@ Forge が5回繰り返した「作ったが本番から呼ばれない」の親�
 
 from __future__ import annotations
 
+import json
 import shlex
 import subprocess
 from collections.abc import Mapping
@@ -32,7 +33,11 @@ from app.ai.agent.tools import ToolBroker, ToolSpec
 from app.ai.agent.untrusted import UntrustedContent
 from app.ai.agent.web import WebFetcher, WebFetchError, WebSearchTool
 
-__all__ = ["CommandRunner", "build_default_toolset"]
+__all__ = [
+    "CommandRunner",
+    "build_default_toolset",
+    "build_generation_inspection_toolset",
+]
 
 
 @dataclass
@@ -179,3 +184,100 @@ def _render_fetch(fetcher: WebFetcher, url: str) -> str:
         return f"[fetch_failed:{error.kind}] {url}"
     # **必ず包みを通す。** 素の本文をここから返さない。
     return content.as_reference_material()
+
+
+
+def build_generation_inspection_toolset(
+    *,
+    forge_document: dict,
+    capability_gap: object,
+    validator,
+    permissions: PermissionBroker | None = None,
+) -> ToolBroker:
+    """FORGE-020B production toolset.
+
+    The Local Agent does not receive the Forge server repository or arbitrary shell.
+    It can inspect only structural facts about the generated document, capability
+    identifiers, and a fresh deterministic Validator result. Tool outputs deliberately
+    exclude document values, user text, prompts, and validation messages.
+    """
+    broker = ToolBroker(permissions=permissions, in_sandbox=False)
+    broker.register(ToolSpec(
+        name="inspect_forge_document",
+        description="生成済みForge Documentの構造件数だけを調べる",
+        run=lambda: json.dumps(_document_structure_summary(forge_document), sort_keys=True),
+    ))
+    broker.register(ToolSpec(
+        name="validate_forge_document",
+        description="Forge Validatorを再実行し、合否と分類件数だけを見る",
+        run=lambda: json.dumps(_validation_summary(validator(forge_document)), sort_keys=True),
+    ))
+    broker.register(ToolSpec(
+        name="inspect_capability_gap",
+        description="不足・部分対応CapabilityのIDと完了阻害フラグだけを見る",
+        run=lambda: json.dumps(_capability_gap_summary(capability_gap), sort_keys=True),
+    ))
+    return broker
+
+
+def _document_structure_summary(document: dict) -> dict[str, object]:
+    widget_types: dict[str, int] = {}
+    action_count = 0
+    state_count = 0
+
+    def walk(value: object) -> None:
+        nonlocal action_count, state_count
+        if isinstance(value, dict):
+            kind = value.get("type")
+            if isinstance(kind, str):
+                widget_types[kind] = widget_types.get(kind, 0) + 1
+            if "action" in value or "actions" in value:
+                action_count += 1
+            for key, child in value.items():
+                if key == "state":
+                    if isinstance(child, dict):
+                        state_count += len(child)
+                    elif isinstance(child, list):
+                        state_count += len(child)
+                walk(child)
+        elif isinstance(value, list):
+            for child in value:
+                walk(child)
+
+    walk(document)
+    screens = document.get("screens", ())
+    return {
+        "forge_language_version": str(document.get("version", "") or ""),
+        "screen_count": len(screens) if isinstance(screens, list) else 0,
+        "widget_count": sum(widget_types.values()),
+        "widget_types": dict(sorted(widget_types.items())),
+        "action_container_count": action_count,
+        "state_entry_count": state_count,
+    }
+
+
+def _validation_summary(validation: object) -> dict[str, object]:
+    errors = tuple(getattr(validation, "errors", ()) or ())
+    warnings = tuple(getattr(validation, "warnings", ()) or ())
+    return {
+        "valid": bool(getattr(validation, "valid", False)),
+        "error_count": len(errors),
+        "warning_count": len(warnings),
+        "error_categories": sorted({
+            str(getattr(item, "category", "") or "") for item in errors
+            if getattr(item, "category", "")
+        }),
+        "warning_categories": sorted({
+            str(getattr(item, "category", "") or "") for item in warnings
+            if getattr(item, "category", "")
+        }),
+    }
+
+
+def _capability_gap_summary(gap: object) -> dict[str, object]:
+    return {
+        "missing": list(getattr(gap, "missing", ()) or ()),
+        "partial": list(getattr(gap, "partial", ()) or ()),
+        "critical": list(getattr(gap, "critical", ()) or ()),
+        "blocks_completion": bool(getattr(gap, "blocks_completion", False)),
+    }

@@ -148,6 +148,7 @@ class AgentLoop:
         self._episode.record_step(EpisodeStep(
             kind=StepKind.TOOL_CALL, name=call.tool,
             succeeded=result.ok, detail_code=result.outcome.value,
+            references=((call.call_id,) if call.call_id else ()),
             duration_ms=result.duration_ms, at=time.time(),
         ))
         return result

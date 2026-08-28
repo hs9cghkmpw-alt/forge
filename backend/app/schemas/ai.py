@@ -79,6 +79,14 @@ class GenerationOptionsDTO(BaseModel):
     # CEO実物監査対応: M005契約「Repair最大2回・Validator最大3回」と
     # 矛盾しないよう、HTTP入力層でも上限を2に制限する(以前はle=10だった)。
     max_repair_attempts: int | None = Field(default=None, ge=0, le=2)
+    agent_mode: Literal["off", "verify"] = Field(
+        default="off",
+        description=(
+            "FORGE-020B Local Tool Agent。off=従来経路、verify=生成後にLocal Agentが"
+            "read-only Tool Broker経由で客観検証する。現段階では品質/遅延の実測前なので"
+            "既定では有効化しない。"
+        ),
+    )
 
 
 class GenerateInputDTO(BaseModel):
@@ -185,6 +193,25 @@ class ArtifactRefDTO(BaseModel):
     version_token: str = Field(..., description="この世代を表すランダムなtoken。古い世代へ評価を書かないための照合用。**内容から作らない**ので、同じDocumentでも毎回違う値になる(FORGE-017A §4)")
 
 
+
+
+class AgentRunDTO(BaseModel):
+    """FORGE-020B Local Tool Agent の外部向け要約。
+
+    Tool本文、Prompt、ユーザー発話、Generation Evidence UIDは返さない。
+    """
+
+    requested: bool = True
+    executed: bool = False
+    outcome: Literal["succeeded", "partial", "failed", "abandoned", "unknown"] = "unknown"
+    episode_id: str = ""
+    provider: str = ""
+    model: str = ""
+    tool_calls: int = 0
+    tools_used: list[str] = Field(default_factory=list)
+    validator_outcome: Literal["passed", "failed", "skipped", "unsupported", "unknown"] = "unknown"
+    stopped_because: str = ""
+
 class GenerateResultDTO(BaseModel):
     forge_document: dict[str, Any] = Field(..., description="Forge Language準拠のJSON。Validator合格済みのもののみ(ADR 2.3節)")
     validation: ValidationResultDTO
@@ -201,6 +228,7 @@ class GenerateResultDTO(BaseModel):
     「仕上がった」と言わない。
     """
     diagnostics: DiagnosticsDTO
+    agent: AgentRunDTO | None = None
     artifact: ArtifactRefDTO | None = Field(
         default=None,
         description="この生成物のID(FORGE-016A §3)。Evidenceを記録していない場合はnull",
@@ -310,6 +338,10 @@ class ConverseRequest(BaseModel):
     provider: Literal["mock", "gemini", "local"] | None = Field(
         default=None,
         description="ConversationEngineが使うLLM Provider。既定は'mock'。",
+    )
+    agent_mode: Literal["off", "verify"] = Field(
+        default="off",
+        description="BUILD後にFORGE-020B Local Tool Agent検証を行うか。",
     )
     """`local` は FORGE-020A で開けた。**会話がForgeの本線である**ので、
     ここが塞がったままだと Local Model は本線を1度も通れない。"""

@@ -190,8 +190,9 @@ class TestLocalPromotionIsWiredButEmpty(unittest.TestCase):
 class TestContractOnlyLayersAreNotClaimedAsWired(unittest.TestCase):
     """**配線していないものを「配線した」と書かない。**
 
-    Agent / Web / Teacher / Gym / Novel Benchmark / Dataset / Adapter は
-    今回**契約とテストだけ**である。実 Local Model が無い状態で本番の
+    FORGE-020Bで Agent / Tool は本番へ接続した。Web / Teacher / Gym /
+    Novel Benchmark / Dataset / Adapter はまだ**契約とテストだけ**である。
+    実 Local Model が無い状態で未測定の層を本番へ差し込むと、
     生成経路へ差し込むと、Promotion Gate を迂回して未測定の Local を
     使うことになる（017A §7 が退けた形）。
 
@@ -209,10 +210,19 @@ class TestContractOnlyLayersAreNotClaimedAsWired(unittest.TestCase):
             if "ai/agent" not in path.as_posix() and "ai/learning" not in path.as_posix()
         )
 
-    def test_the_agent_layer_has_no_production_caller(self) -> None:
+    def test_the_agent_layer_has_a_production_caller(self) -> None:
         sources = self._production_sources()
-        for module in ("app.ai.agent.loop", "app.ai.agent.toolset", "app.ai.agent.web"):
-            self.assertNotIn(module, sources, f"{module} が本番から参照されている")
+        self.assertIn(
+            "app.ai.agent.production", sources,
+            "020B Agent production runner がHTTP本線から参照されていない",
+        )
+
+    def test_web_layer_is_still_not_claimed_as_wired(self) -> None:
+        sources = self._production_sources()
+        self.assertNotIn(
+            "app.ai.agent.web", sources,
+            "Webは020D。020Bで本番接続したことにしない",
+        )
 
     def test_the_teacher_and_benchmark_layers_have_no_production_caller(self) -> None:
         sources = self._production_sources()
