@@ -215,37 +215,36 @@ class TestProductionProbePreflight(unittest.TestCase):
         )
         return facts, record
 
-    def test_default_probe_exposes_current_mock_synthesis_rejection(self) -> None:
-        """020A4 CIで発見した現在のproduction事実を固定する。
+    def test_default_probe_is_eligible_only_after_real_production_wiring(self) -> None:
+        """020A4Bの2つのblockerをProduction E2Eで同時に固定する。
 
-        ``MockLLMAdapter`` は entity_synthesis schema の ``fields``
-        (array<object>) を schema-faithful に合成できず、文字列配列へ倒すため、
-        EntitySynthesizer が ``no_valid_fields`` で拒否する。これは
-        preflight の失敗ではなく、preflight が実モデル実行前に発見すべき
-        blockerである。
+        - Test Doubleはnested `fields: array<object>`を壊さない。
+        - Entity SynthesisはAIRouter上で`ENTITY_SYNTHESIS`として観測される。
 
-        このテストを「eligible」に戻すには、Test Double側が本当にnested
-        structured schemaを満たし、AIRouterのstage task attributionも実経路で
-        正しくなる必要がある。判定だけを緩めてgreenにしてはならない。
+        片方でも配線を外すとこのテストが落ちる。preflight evaluatorの判定を
+        緩めてPASSさせるのは禁止。
         """
         facts, record = self._run(self.DEFAULT_PROBE)
         result = evaluate_level0_probe_preflight(facts)
 
-        self.assertFalse(result.eligible_for_real_run)
-        self.assertIs(result.outcome, Level0PreflightOutcome.SYNTHESIS_REJECTED)
-        self.assertTrue(record.entity_synthesis_attempted)
-        self.assertFalse(record.entity_synthesis_accepted)
-        self.assertEqual(record.entity_synthesis_rejection_reason, "no_valid_fields")
-        self.assertTrue(
-            any("no_valid_fields" in reason for reason in result.reasons),
-            result.to_dict(),
-        )
+        self.assertTrue(result.eligible_for_real_run, result.to_dict())
+        self.assertIs(result.outcome, Level0PreflightOutcome.ELIGIBLE_FOR_REAL_RUN)
 
-        # さらに、現時点のproduction RouterはCognitive Pipeline全体を
-        # COGNITIVE_STAGEへbindしているため、Entity Synthesisを呼んでも
-        # Experience上はENTITY_SYNTHESISとして観測されない。この事実も
-        # Level 0を偽PASSさせず、次taskで直すべき配線として残す。
-        self.assertNotIn(ForgeTask.ENTITY_SYNTHESIS, facts.observed_tasks)
+        self.assertIs(
+            record.structure_source,
+            GenerationStructureSource.AI_ENTITY_SYNTHESIS,
+        )
+        self.assertIs(record.structure_provider, StructureProvider.TEST_DOUBLE)
+        self.assertEqual(record.structure_task, ForgeTask.ENTITY_SYNTHESIS.value)
+        self.assertTrue(record.entity_synthesis_attempted)
+        self.assertTrue(record.entity_synthesis_accepted)
+        self.assertIsNone(record.entity_synthesis_rejection_reason)
+        self.assertTrue(record.validator_passed)
+        self.assertTrue(record.uid)
+
+        # Stage-aware routing: entity_synthesisだけ独立Taskへ出し、
+        # 他のCognitive stageは従来のCOGNITIVE_STAGEへ戻る。
+        self.assertIn(ForgeTask.ENTITY_SYNTHESIS, facts.observed_tasks)
         self.assertIn(ForgeTask.COGNITIVE_STAGE, facts.observed_tasks)
 
     def test_known_curated_trap_is_rejected_by_preflight(self) -> None:
