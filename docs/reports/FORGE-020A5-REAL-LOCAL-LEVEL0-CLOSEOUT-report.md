@@ -54,7 +54,7 @@ Runtime evidence:
 - backend: `ollama`
 - runtime version: `0.33.2`
 - model: `qwen2.5:7b-instruct`
-- model digest: `845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e`
+- model digest: `845dbda0ea48ed749caafd9e6037047aa19acfcfd82e7047ca97d631a0b697e`
 - quantization: `Q4_K_M`
 - model family from Ollama metadata: `qwen2`
 - parameter size from Ollama metadata: `7.6B`
@@ -148,4 +148,12 @@ Target production loop:
 
 ## Cleanup
 
-The temporary 020A5 apply/repair workflows and helper scripts were removed by the successful apply workflow. The one-off real-model GitHub workflow used to obtain this closure evidence should also be removed after this report/evidence is committed; reusable verification tools such as `scripts/preflight_local_model_level0.py` and `scripts/verify_local_model_level0.py` remain part of the repository.
+Cleanup is complete.
+
+- Temporary 020A5 apply/repair workflows and helper scripts are absent.
+- The one-off real-model workflow `.github/workflows/forge-020a-real-level0.yml` is removed after durable evidence was committed.
+- The one-shot closeout workflow removed itself after success.
+- Closeout workflow run `33219996032` = **SUCCESS**.
+- Cleanup commit: `3bcf1a5683f4f06d66b80f9de1d3c55f6d6ad997`.
+- `.github/workflows/` now contains only the normal `ci.yml` workflow.
+- Reusable verification tools `scripts/preflight_local_model_level0.py` and `scripts/verify_local_model_level0.py` remain intentionally; they are verification infrastructure, not temporary machinery.
