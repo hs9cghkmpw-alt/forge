@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from forge_ai.core.semantics.capability_plan import plan_capabilities
 from forge_ai.prompt.prompt_builder import Prompt
 from forge_ai.provider.provider_interface import ProviderResponse
 
@@ -259,6 +260,32 @@ def _test_double_default(schema: dict[str, Any]) -> Any:
     return None
 
 
+def _repair_entity_synthesis_test_double_semantics(
+    structured: dict[str, Any], prompt: Prompt,
+) -> dict[str, Any]:
+    """MockのSystem例文をEntity labelとして誤採用させない。
+
+    既存`MockLLMAdapter`は`entity_label`生成時にflatten済みPrompt全体を
+    topic判定へ渡す。Entity SynthesisのSystem文には説明例として
+    「買い物」が含まれるため、実際のNeedに関係なく
+    `買い物リスト`が返ることを020A4B CIで実測した。
+
+    Test Doubleは意味理解能力を主張するものではない。そこで、同じNeedへ
+    production pipelineが後段で使うCanonical Capability Planを再利用し、
+    役から主題が取れる場合だけそのlabelを使う。何も取れない場合は
+    internal identifierへ戻し、`decide_app_name()`がそれを人向け名称として
+    採用しないようにする。専用アプリ名テーブルは増やさない。
+    """
+    fixed = dict(structured)
+    need = str(prompt.context.get("user_text", "") or "")
+    semantic_label = plan_capabilities(need).entity_label
+    if semantic_label:
+        fixed["entity_label"] = semantic_label
+    else:
+        fixed["entity_label"] = str(fixed.get("entity_name") or "mock_result")
+    return fixed
+
+
 class ForgeAIProviderBridge:
     """forge_ai.AIProvider Protocolを満たす、LLMAdapterへの委譲実装。"""
 
@@ -295,12 +322,11 @@ class ForgeAIProviderBridge:
                 self._llm_adapter.task = original_task
 
         provider_id = str(getattr(self._llm_adapter, "last_provider_used", "") or "")
-        # 020A4B初版でこの補正を全Mock stageへ広げたところ、compile等の
-        # Mock意味論まで変えてしまい生成アプリ名が「買い物リスト」に汚染された。
-        # 測定済みの欠陥はEntity Synthesisのnested fieldsだけなので、
-        # **そのstage + Test Doubleだけ**へ限定する。
         if provider_id == "mock" and prompt.stage == "entity_synthesis":
             structured = _repair_test_double_value(structured, schema)
+            structured = _repair_entity_synthesis_test_double_semantics(
+                structured, prompt,
+            )
 
         return ProviderResponse(
             text=f"[{prompt.stage}] 応答を受け取りました。",
