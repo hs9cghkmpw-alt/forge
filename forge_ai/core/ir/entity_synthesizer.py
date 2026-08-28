@@ -48,6 +48,12 @@ from forge_ai.core.orchestration.cognitive_context import (
     EntitySynthesisAttempt,
     EntitySynthesisRejectionReason,
 )
+from forge_ai.core.semantics.entity_contract import (
+    ENTITY_IDENTIFIER_PATTERN,
+    ENTITY_STRICT_MAX_CHOICES,
+    ENTITY_STRICT_MAX_FIELDS,
+    ENTITY_STRICT_MIN_CHOICES,
+)
 from forge_ai.core.semantics.structure_provenance import (
     EntitySynthesisContractEvidence,
     EntitySynthesisRepair,
@@ -55,20 +61,17 @@ from forge_ai.core.semantics.structure_provenance import (
 
 # Forge Language の `record_schemas` キー・`identifier`パターンに揃える
 # (`ir_types.Entity`のdocstring参照)。
-_IDENTIFIER_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
+_IDENTIFIER_PATTERN = re.compile(ENTITY_IDENTIFIER_PATTERN)
 
 # 1 Entityが持てるFieldの上限。Validator側の上限(MAX_RECORD_FIELDS=20・
 # MAX_RECORD_SCHEMA_FIELDS=30、`schema_validator.py`)より意図的に厳しく
 # している。理由は技術的制約ではなくUXであり、Prompt側でも「3〜6個」と
 # 指示している——毎回20項目を入力させるフォームは、そもそも使われない。
 _MAX_FIELDS = 8
-# Prompt contract is intentionally stricter than the product sanitizer: the
-# model is instructed to return no more than 6 fields. Product robustness may
-# accept 7-8 fields, but that is not strict model-contract success.
-_STRICT_CONTRACT_MAX_FIELDS = 6
-# choice型1件が持てる選択肢の上限(Prompt側の指示は2〜6個)。
+# Product robustness intentionally accepts more than the model contract.
+# Strict evidence uses the canonical contract imported above.
 _MAX_CHOICES = 12
-_MIN_CHOICES = 2
+_MIN_CHOICES = ENTITY_STRICT_MIN_CHOICES
 
 _VALID_FIELD_TYPES: dict[str, FieldType] = {
     "string": FieldType.STRING,
@@ -152,6 +155,7 @@ def _entity_contract_evidence(
     seen: set[str] = set()
     valid_field_count = 0
     any_required = False
+    within_prompt_choice_limits = True
     for index, raw in enumerate(raw_fields):
         if index >= _MAX_FIELDS:
             note(EntitySynthesisRepair.FIELD_DROPPED)
@@ -192,6 +196,8 @@ def _entity_contract_evidence(
 
         raw_choices = raw.get("choices")
         sanitized_choices = _sanitize_choices(raw_choices)
+        if isinstance(raw_choices, list) and len(raw_choices) > ENTITY_STRICT_MAX_CHOICES:
+            within_prompt_choice_limits = False
         if isinstance(raw_choices, list):
             exact_choices = tuple(
                 x for x in raw_choices if isinstance(x, str) and x.strip()
@@ -226,10 +232,11 @@ def _entity_contract_evidence(
     if valid_field_count and not any_required:
         note(EntitySynthesisRepair.REQUIRED_INJECTED)
 
-    within_prompt_field_limit = fields_received <= _STRICT_CONTRACT_MAX_FIELDS
+    within_prompt_field_limit = fields_received <= ENTITY_STRICT_MAX_FIELDS
     raw_schema_valid = (
         entity_name is not None
         and within_prompt_field_limit
+        and within_prompt_choice_limits
         and isinstance(raw_entity_label, str) and bool(raw_entity_label.strip())
         and isinstance(visual_style, str) and visual_style in _VALID_VISUAL_STYLES
         and valid_field_count > 0

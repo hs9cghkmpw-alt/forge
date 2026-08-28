@@ -94,3 +94,12 @@ def test_more_than_six_fields_violates_prompt_contract_even_if_product_accepts_t
     # This is a model-contract violation, not a claimed Forge repair: the broader
     # product sanitizer can still accept the seven fields.
     assert EntitySynthesisRepair.FIELD_DROPPED not in ev.repairs_applied
+
+def test_seven_choices_cannot_masquerade_as_strict_model_success():
+    raw = _valid()
+    raw["fields"][0].update({
+        "type": "choice",
+        "choices": ["a", "b", "c", "d", "e", "f", "g"],
+    })
+    ev = _entity_contract_evidence(raw, structured_output_mode="json_schema")
+    assert ev.strict_contract_passed is False

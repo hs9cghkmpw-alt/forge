@@ -23,6 +23,13 @@ from __future__ import annotations
 from typing import Any
 
 from forge_ai.core.semantics.capability_plan import plan_capabilities
+from forge_ai.core.semantics.entity_contract import (
+    ENTITY_IDENTIFIER_PATTERN,
+    ENTITY_STRICT_MAX_CHOICES,
+    ENTITY_STRICT_MAX_FIELDS,
+    ENTITY_STRICT_MIN_CHOICES,
+    ENTITY_STRICT_MIN_FIELDS,
+)
 from forge_ai.prompt.prompt_builder import Prompt
 from forge_ai.provider.provider_interface import ProviderResponse
 
@@ -63,7 +70,7 @@ _RESPONSE_SCHEMAS: dict[str, dict[str, Any]] = {
     "entity_synthesis": {
         "type": "object",
         "properties": {
-            "entity_name": {"type": "string"},
+            "entity_name": {"type": "string", "pattern": ENTITY_IDENTIFIER_PATTERN},
             "entity_label": {"type": "string"},
             "visual_style": {
                 "type": "string",
@@ -71,17 +78,24 @@ _RESPONSE_SCHEMAS: dict[str, dict[str, Any]] = {
             },
             "fields": {
                 "type": "array",
+                "minItems": ENTITY_STRICT_MIN_FIELDS,
+                "maxItems": ENTITY_STRICT_MAX_FIELDS,
                 "items": {
                     "type": "object",
                     "properties": {
-                        "name": {"type": "string"},
+                        "name": {"type": "string", "pattern": ENTITY_IDENTIFIER_PATTERN},
                         "label": {"type": "string"},
                         "type": {
                             "type": "string",
                             "enum": ["string", "number", "boolean", "date", "choice"],
                         },
                         "required": {"type": "boolean"},
-                        "choices": {"type": "array", "items": {"type": "string"}},
+                        "choices": {
+                            "type": "array",
+                            "minItems": ENTITY_STRICT_MIN_CHOICES,
+                            "maxItems": ENTITY_STRICT_MAX_CHOICES,
+                            "items": {"type": "string"},
+                        },
                         "min_value": {"type": "number"},
                         "max_value": {"type": "number"},
                         "measure": {

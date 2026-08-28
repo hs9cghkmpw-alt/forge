@@ -14,6 +14,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from forge_ai.core.semantics.entity_contract import (
+    ENTITY_STRICT_MAX_CHOICES,
+    ENTITY_STRICT_MAX_FIELDS,
+    ENTITY_STRICT_MIN_CHOICES,
+)
+
 
 @dataclass(frozen=True)
 class Prompt:
@@ -108,7 +114,7 @@ class PromptBuilder:
                 "「1件」に相当するものを選ぶ(例: 買い物なら『買う品物』1件、"
                 "通院記録なら『受診1回』、勤怠なら『1日の勤務』)。\n"
                 "2. 項目(fields)は、**その困りごとに本当に必要な数だけ**にする。\n"
-                "   多くても6個まで。そして**1個で足りるなら1個にすること**。\n"
+                f"   多くても{ENTITY_STRICT_MAX_FIELDS}個まで。そして**1個で足りるなら1個にすること**。\n"
                 "   毎回入力する項目が増えるほど、その道具は使われなくなる。\n"
                 "   - 「買うものを忘れる」→ 品名だけで足りる(金額も店も要らない)。\n"
                 "   - 「やることを忘れる」→ やることだけで足りる。\n"
@@ -123,7 +129,7 @@ class PromptBuilder:
                 "   - 日付はdate。\n"
                 "   - 『済んだか』『行ったか』のような二択はboolean。\n"
                 "   - 分類・状態のように**選択肢を具体的に列挙できる**場合だけchoice。\n"
-                "5. choiceを選んだ場合、choicesには実際にありえる選択肢を2〜6個"
+                f"5. choiceを選んだ場合、choicesには実際にありえる選択肢を{ENTITY_STRICT_MIN_CHOICES}〜{ENTITY_STRICT_MAX_CHOICES}個"
                 "入れること。**根拠なく選択肢を発明してはならない**。"
                 "ユーザーの依頼から自然に導けない場合は、choiceではなくstringにすること。\n"
                 "6. min_value/max_valueは、5段階評価・10点満点のように"
