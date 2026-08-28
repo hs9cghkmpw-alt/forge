@@ -58,14 +58,18 @@ class TestForgeAIProviderBridgeStageRouting(unittest.TestCase):
         self.assertIsInstance(fields[0], dict)
         self.assertEqual(fields[0]["type"], "string")
 
-    def test_non_structure_stage_stays_cognitive_stage(self) -> None:
+    def test_non_structure_stage_stays_cognitive_and_mock_output_is_unchanged(self) -> None:
         adapter = _RecordingBoundAdapter(provider="mock")
         bridge = ForgeAIProviderBridge(adapter)
 
-        bridge.complete(_prompt("compile"))
+        response = bridge.complete(_prompt("compile"))
 
         self.assertEqual(adapter.seen_tasks, [ForgeTask.COGNITIVE_STAGE])
         self.assertIs(adapter.task, ForgeTask.COGNITIVE_STAGE)
+        # compile schema requires title. A global Mock schema repair would invent
+        # {"title": "mock_result"} here and change existing naming semantics.
+        # 020A4B repair is deliberately entity_synthesis-only.
+        self.assertEqual(response.structured, {})
 
     def test_real_provider_output_is_never_repaired_by_test_double_guard(self) -> None:
         adapter = _RecordingBoundAdapter(provider="local")
