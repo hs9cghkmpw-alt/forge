@@ -6,6 +6,9 @@ on:
       - claude/forge-master-handoff-k46jns
     paths:
       - .github/workflows/forge-020a-real-level0.yml
+      - backend/app/ai/runtime/forge_ai_provider_bridge.py
+      - backend/tests/test_forge_020a5_entity_schema_contract.py
+      - forge_ai/prompt/prompt_builder.py
 
 permissions:
   contents: read
