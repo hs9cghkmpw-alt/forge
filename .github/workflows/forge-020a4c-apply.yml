@@ -24,6 +24,17 @@ jobs:
       - name: Verify expected base is ancestor
         shell: bash
         run: git merge-base --is-ancestor e659181427224242458561a06a32af01b8295023 HEAD
+      - name: Repair staging-script quoting
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/_apply_forge_020a4c.py')
+          lines = p.read_text(encoding='utf-8').splitlines()
+          lines[487:489] = ['    "                \\"厳格な schema mode で受理された応答ではない\\"\\n"']
+          lines[481:483] = ['    "                \\"Forge の Entity sanitizer による補正が必要だった\\"\\n"']
+          p.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
       - name: Compile applier
         run: python -m py_compile scripts/_apply_forge_020a4c.py
       - name: Apply reviewed source transformations
