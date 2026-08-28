@@ -9,10 +9,13 @@ forge_ai/自体はこのBridgeの存在を知らない(forge_ai/はMockProvider�
 このBridgeか、将来の別実装かを区別しない。forge_ai.AIProvider Protocolを
 満たすオブジェクトなら何でも渡せる、という既存の設計をそのまま活かす)。
 
-今回実装するのはBridgeの変換ロジックのみ。実際に接続されるLLMAdapterは
-Mockのみであり(禁止事項「実LLM接続禁止」)、OpenAI/Claude/Gemini/OSSは
-`backend/app/ai/foundation/providers.py`の既存Stub(NotImplementedError)
-のままである。
+FORGE-020A4Bでは、Cognitive Pipeline全体を一律に
+`ForgeTask.COGNITIVE_STAGE`として記録していた穴を閉じた。
+`entity_synthesis` stageだけは request-local なBoundAdapterのTaskを
+`ForgeTask.ENTITY_SYNTHESIS`へ一時的に切り替え、呼び出し後に必ず元へ戻す。
+これにより、構造生成の仕事が本当にAIRouterのENTITY_SYNTHESISとして
+観測される。Provider選択・Quota・Circuit Breaker自体は引き続きAIRouterが
+唯一の出口である。
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from forge_ai.prompt.prompt_builder import Prompt
 from forge_ai.provider.provider_interface import ProviderResponse
 
 from app.ai.foundation.interfaces import LLMAdapter
+from app.ai.gateway.tasks import ForgeTask
 
 # stageごとに期待する構造化出力の最小スキーマ。MockProvider
 # (forge_ai/provider/mock_provider.py)が実際に返す`structured`の形に
@@ -159,6 +163,127 @@ def _flatten_prompt_to_string(prompt: Prompt) -> str:
     return "\n\n".join(lines)
 
 
+def _task_for_stage(stage: str) -> ForgeTask:
+    """Cognitive内部stageをAIRouterのTaskへ落とす。
+
+    現時点で独立した品質・Level 0測定単位を持つのはEntity Synthesisだけ。
+    他stageは従来どおりCOGNITIVE_STAGEへ残す。存在しないTaskを先に増やさない。
+    """
+    if stage == "entity_synthesis":
+        return ForgeTask.ENTITY_SYNTHESIS
+    return ForgeTask.COGNITIVE_STAGE
+
+
+def _repair_test_double_value(value: Any, schema: dict[str, Any]) -> Any:
+    """Test Doubleの値をJSON Schemaの型の形へ決定的に合わせる。
+
+    020A4で実測した`array<object>`→文字列配列の崩れだけでなく、
+    nested object/arrayの同種事故を再発させないため再帰的に扱う。
+
+    **mock以外には呼ばない。** これは実LLMの失敗を隠すRepairではない。
+    """
+    schema_type = schema.get("type")
+
+    if schema_type == "object":
+        current = dict(value) if isinstance(value, dict) else {}
+        properties = schema.get("properties")
+        properties = properties if isinstance(properties, dict) else {}
+        required = schema.get("required")
+        required_names = set(required) if isinstance(required, list) else set()
+
+        repaired: dict[str, Any] = {}
+        for name, item_schema in properties.items():
+            if not isinstance(item_schema, dict):
+                continue
+            if name in current:
+                repaired[name] = _repair_test_double_value(current[name], item_schema)
+            elif name in required_names:
+                repaired[name] = _test_double_default(item_schema)
+
+        for name, item in current.items():
+            repaired.setdefault(name, item)
+        return repaired
+
+    if schema_type == "array":
+        item_schema = schema.get("items")
+        if not isinstance(item_schema, dict):
+            return value if isinstance(value, list) else []
+
+        current = value if isinstance(value, list) else []
+        if item_schema.get("type") == "object":
+            dict_items = [item for item in current if isinstance(item, dict)]
+            if dict_items:
+                return [
+                    _repair_test_double_value(item, item_schema)
+                    for item in dict_items
+                ]
+            # Entity Synthesisのfieldsで実際に踏んだ形。
+            # 文字列をobjectへ意味変換せず、Schemaのrequiredから1件作る。
+            return [_test_double_default(item_schema)]
+
+        return [
+            _repair_test_double_value(item, item_schema)
+            for item in current
+        ]
+
+    if schema_type == "string":
+        enum = schema.get("enum")
+        if isinstance(enum, list) and enum:
+            if isinstance(value, str) and value in enum:
+                return value
+            return str(enum[0])
+        return value if isinstance(value, str) else "mock_result"
+
+    if schema_type == "boolean":
+        return value if isinstance(value, bool) else False
+
+    if schema_type == "integer":
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    if schema_type == "number":
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return value
+        return 0.0
+
+    return value
+
+
+def _test_double_default(schema: dict[str, Any]) -> Any:
+    """SchemaからTest Double用の最小値を作る。意味品質は主張しない。"""
+    schema_type = schema.get("type")
+
+    if schema_type == "object":
+        properties = schema.get("properties")
+        properties = properties if isinstance(properties, dict) else {}
+        required = schema.get("required")
+        required_names = required if isinstance(required, list) else []
+        return {
+            name: _test_double_default(properties[name])
+            for name in required_names
+            if name in properties and isinstance(properties[name], dict)
+        }
+
+    if schema_type == "array":
+        return []
+
+    if schema_type == "string":
+        enum = schema.get("enum")
+        if isinstance(enum, list) and enum:
+            return str(enum[0])
+        return "mock_result"
+
+    if schema_type == "boolean":
+        return False
+
+    if schema_type == "integer":
+        return 0
+
+    if schema_type == "number":
+        return 0.0
+
+    return None
+
+
 class ForgeAIProviderBridge:
     """forge_ai.AIProvider Protocolを満たす、LLMAdapterへの委譲実装。"""
 
@@ -171,10 +296,36 @@ class ForgeAIProviderBridge:
         return str(getattr(self._llm_adapter, "last_provider_used", "") or "")
 
     def complete(self, prompt: Prompt) -> ProviderResponse:
-        """forge_ai.AIProvider Protocolの実装本体。"""
+        """forge_ai.AIProvider Protocolの実装本体。
+
+        `PromptPipeline`が渡すBoundAdapterはrequest-localであるため、
+        entity_synthesisの1呼び出しだけTaskを差し替えても別requestとは
+        競合しない。それでも例外時にTaskが残留しないよう`finally`で復元する。
+        """
         flat_prompt = _flatten_prompt_to_string(prompt)
         schema = _RESPONSE_SCHEMAS.get(prompt.stage, _UNKNOWN_STAGE_SCHEMA)
-        structured = self._llm_adapter.complete_structured(flat_prompt, schema)
+
+        original_task = getattr(self._llm_adapter, "task", None)
+        target_task = _task_for_stage(prompt.stage)
+        task_was_switched = (
+            isinstance(original_task, ForgeTask) and original_task is not target_task
+        )
+        if task_was_switched:
+            self._llm_adapter.task = target_task
+
+        try:
+            structured = self._llm_adapter.complete_structured(flat_prompt, schema)
+        finally:
+            if task_was_switched:
+                self._llm_adapter.task = original_task
+
+        # Test Doubleだけは、既存Mockがnested schemaを平坦化する既知の制限を
+        # Bridge境界で補う。実Provider(Local/Cloud)の出力は絶対に補正しない。
+        # Real Local Level 0を「Forgeが作った値」で偽装しないための境界である。
+        provider_id = str(getattr(self._llm_adapter, "last_provider_used", "") or "")
+        if provider_id == "mock":
+            structured = _repair_test_double_value(structured, schema)
+
         return ProviderResponse(
             text=f"[{prompt.stage}] 応答を受け取りました。",
             structured=structured,
