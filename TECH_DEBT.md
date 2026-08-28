@@ -1,3 +1,7 @@
+# TD020A5 — Real Local Level 0 execution gate
+
+**Resolved in FORGE-020A5.** A genuine `qwen2.5:7b-instruct` / Ollama production-path run now satisfies the fail-closed structure-integrity gate without Forge Entity repair. Evidence: `docs/evidence/level0/level0-20260828-230922.json`; workflow run `33219195627`; Real Local Model runs = 1. This closes only the Level 0 real-runtime gate. It does **not** close Generated App Quality, browser/Playwright visual verification, GPU performance baselines, Tool-Using Agent wiring, Generation Episodes, Dataset Builder, training/adapters or Self-Extension.
+
 # TD020A4C — Model contract vs Forge repair provenance
 
 **Resolved in FORGE-020A4C.** Previously Entity Synthesis could sanitize a real model's invalid structure and then satisfy Validator/Level0 evidence, conflating product robustness with model ability. Contract evidence and repair provenance now fail closed for Real Local Level 0. Structured-output fallback mode is also recorded. Future datasets must preserve model-output / Forge-repair / final-artifact separation.

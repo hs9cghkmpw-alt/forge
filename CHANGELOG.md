@@ -1,3 +1,17 @@
+## 2026-08-29 — FORGE-020A5: Genuine Real Local Level 0 PASS
+
+- Prompt / provider JSON schema / strict Entity evidence now derive structural limits from the canonical `forge_ai/core/semantics/entity_contract.py` contract.
+- Canonical model contract: identifier `^[a-z][a-z0-9_]*$`, fields 1–6, choices 2–6.
+- The first real qwen run was correctly rejected because Forge had to apply `identifier_normalized`; repaired output did not become positive model evidence.
+- Product fix commit: `9e515c03f56cd49eb4b0a6d0440a53e15501adc5`.
+- Real rerun: GitHub Actions `33219195627`, Ollama `0.33.2`, `qwen2.5:7b-instruct` Q4_K_M, digest `845dbda0ea48ed749caafd9e6037047aa19acfcfd82e7047ca97d631a0b697e`.
+- Production evidence proved `generation_source=local_ai`, `structure_source=ai_entity_synthesis`, `structure_provider=local`, `structure_task=entity_synthesis`, accepted schema mode, raw strict-contract PASS, no Entity repairs, Validator PASS, production Evidence UID and REAL verification.
+- Level 0 = **PASS**; Real Local Model runs **0 → 1**; baseline-ready runs **1**.
+- Passing evidence committed at `docs/evidence/level0/level0-20260828-230922.json`.
+- Normal CI run `33219195713` on the real-run trigger commit was **SUCCESS** with all four jobs green.
+- Generated App Quality Golden Gate remains **FAIL**; this Level 0 milestone does not override visual/product-quality evidence.
+- Next architecture stage: **FORGE-020B Tool-Using Local Agent production wiring**.
+
 # FORGE-020A4C — Real Structure Integrity Gate
 
 - Separate raw Entity model-contract success from Forge sanitizer repairs.
