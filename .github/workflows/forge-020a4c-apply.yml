@@ -27,10 +27,14 @@ jobs:
         run: git merge-base --is-ancestor 4bb9702d2df495bdda06892704b174ed061388ef HEAD
       - name: Install backend test dependencies
         run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
-      - name: Compile closeout transformer
-        run: python -m py_compile scripts/_finalize_forge_020a4c.py
+      - name: Compile closeout transformers
+        run: |
+          python -m py_compile scripts/_finalize_forge_020a4c.py
+          python -m py_compile scripts/_fix_forge_020a4c_fullsuite.py
       - name: Apply skeptical-review fixes
         run: python scripts/_finalize_forge_020a4c.py
+      - name: Apply full-suite fixture and privacy fixes
+        run: python scripts/_fix_forge_020a4c_fullsuite.py
       - name: Normalize generated text EOFs
         shell: bash
         run: |
@@ -55,6 +59,8 @@ jobs:
           python -m pytest -q backend/tests/test_forge_020a4c_real_structure_integrity.py
           python -m pytest -q backend/tests/test_forge_020a_local_model_path.py
           python -m pytest -q backend/tests/test_forge_020a4_level0_preflight.py
+          python -m pytest -q backend/tests/test_forge_020a3b_level0_provider_integrity.py
+          python -m pytest -q backend/tests/test_generation_evidence.py
       - name: Full forge_ai suite
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/backend
@@ -68,6 +74,7 @@ jobs:
           git rm .github/workflows/forge-020a4c-apply.yml
           git rm scripts/_apply_forge_020a4c.py
           git rm scripts/_finalize_forge_020a4c.py
+          git rm scripts/_fix_forge_020a4c_fullsuite.py
       - name: Commit and push closeout
         shell: bash
         run: |
