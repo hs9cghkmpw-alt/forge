@@ -3,52 +3,97 @@
 ## Current state
 
 - Branch: `claude/forge-master-handoff-k46jns`
-- Current completed task: **FORGE-020A4C — Real Structure Integrity Gate**
-- Final implementation SHA: `b29d7504b184edaac4944eb42fffec4ab8587c7b`
-- 020A4C closeout workflow: **run `33217747922` = SUCCESS**
-- Closeout verification:
-  - focused 020A4C / production-path tests: PASS
-  - `forge_ai`: **592 passed**
-  - backend: **1906 passed, 17 skipped, 1 warning**
-  - syntax / `git diff --check`: PASS
-  - one-shot apply/finalize/fix workflow and helper scripts: **removed before final implementation commit**
-- Golden Quality Gate: **FAIL** for the previously recorded Generated App Quality reasons; do not rewrite this to PASS without a new visual-quality run.
-- Real Local Model runs: **0**
-- Real `qwen2.5:7b-instruct` Level 0: **NOT YET EXECUTED**. Do not claim success until real production-path evidence says so.
+- Current completed task: **FORGE-020A5 — Real Local Level 0 Closeout**
+- 020A5 product fix SHA: `9e515c03f56cd49eb4b0a6d0440a53e15501adc5`
+- Real-run trigger SHA: `b0a9fe64c18bf264bbb7c199336aafa913d5460d`
+- Normal CI: run `33219195713` = **SUCCESS**, all four jobs green
+- Genuine real Local Level 0: run `33219195627` = **SUCCESS / PASS**
+- Durable passing evidence: `docs/evidence/level0/level0-20260828-230922.json`
+- GitHub Actions evidence artifact: id `9704599776`, digest `sha256:b25e85df4b0115db0b824cb83f71b05bd493dabfad9a2038c69d84984b8d9e17`
+- Real Local Model runs: **1**
+- Baseline-ready runs: **1**
+- Golden Generated App Quality Gate: **FAIL** from the latest visual review. No new visual-quality run was performed in 020A5; do not rewrite it to PASS.
 
-Detailed report: `docs/reports/FORGE-020A4C-REAL-STRUCTURE-INTEGRITY-report.md`
+Detailed closeout report: `docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md`
 
-## What 020A4C now guarantees
+## What is now proven
 
-Real Local Level 0 is a claim about **model structural ability**, not merely final app validity.
-The evidence path now separates:
+A real open-weight Local model has generated software structure through Forge's production path without a curated/deterministic structural substitute and without Forge repairing the model's Entity structure before capability evidence was counted.
 
-`raw model contract -> Forge repairs -> final artifact`
+Real execution evidence:
 
-A Local structural run may count only when all required provenance is present and the raw Entity Synthesis output:
+- runtime: Ollama `0.33.2`
+- model: `qwen2.5:7b-instruct`
+- model digest: `845dbda0ea48ed749caafd9e6037047aa19acfcfd82e7047ca97d631a0b697e`
+- quantization: `Q4_K_M`
+- probe Need remained `domain_resolution=generated`
+- `generation_source=local_ai`
+- `structure_source=ai_entity_synthesis`
+- `structure_provider=local`
+- `structure_task=entity_synthesis`
+- observed tasks include `entity_synthesis` and `cognitive_stage`
+- `structured_output_mode=json_schema`
+- raw Entity strict contract PASS
+- Entity sanitizer repairs: none
+- Forge Validator PASS
+- production Generation Evidence UID: `04cb5545745940e8a4d85be4a674deb8`
+- verification: REAL
+- `counts_as_real_local=true`
+- `ready_for_baseline=true`
+- Level 0 verifier exit code: 0
 
-1. came from the Local provider on the actual `ENTITY_SYNTHESIS` task;
-2. used an accepted schema mode (`strict_json_schema` or `json_schema`);
-3. satisfied the Entity model contract before Forge repair;
-4. required no Forge Entity sanitizer repair;
-5. traversed the production generation path and Validator;
-6. has durable Generation Evidence and REAL verification.
+This closes the prior state that said “Real Local Model runs = 0 / NOT YET EXECUTED”.
 
-`JSON_OBJECT`, prompt-only JSON, unknown mode, repaired output, deterministic structure, Cloud structure, Test Double structure, curated output, and Design-Intent-only Local calls cannot be promoted to a Real Local Level 0 PASS.
+## 020A5 contract alignment
 
-Product robustness remains separate: Forge may still repair a model result to produce a usable app. That repaired artifact is **not** positive model-training evidence.
+The first real GitHub-hosted qwen run failed closed because its raw Entity output needed `identifier_normalized`. That was correctly not counted as model ability. The run exposed that Prompt, provider JSON schema and strict evidence were not deriving all structural limits from one contract.
 
-## Independent skeptical-closeout findings already fixed
+020A5 added the canonical provider-independent contract at:
 
-The first 020A4C implementation was not accepted merely because focused tests were green. Full review found and closed:
+`forge_ai/core/semantics/entity_contract.py`
 
-- optional `required` omission being misclassified as a repair;
-- Prompt max-6-fields vs sanitizer max-8-fields allowing 7/8 fields to masquerade as strict model success;
-- legacy RealLocal passing fixtures lacking the new fail-closed contract evidence;
-- Privacy guard not yet classifying structured-output mode as a closed identifier;
-- mechanical Markdown quoting damage in `CHANGELOG.md` / `TECH_DEBT.md`.
+Current structural limits:
 
-The final closeout then ran the full suites successfully before committing `b29d7504...`.
+- identifier: `^[a-z][a-z0-9_]*$`
+- fields: 1–6
+- choice values: 2–6
+
+PromptBuilder, provider schema and strict evidence consume the same contract. Product-side sanitization may be more permissive for robustness, but repaired outputs do not become positive raw-model evidence.
+
+020A5 verification before the real rerun:
+
+- provider-schema focused tests: 7 passed
+- Entity-contract evidence tests: 8 passed
+- real-structure integrity tests: 6 passed
+- Level 0 preflight tests: 13 passed
+- Local model path tests: 51 passed
+- full `forge_ai`: 593 passed
+- full backend: 1913 passed, 17 skipped, 1 warning
+
+## Level 0 integrity rule remains fail-closed
+
+A Local structural run counts only when the evidence proves all required facts, including:
+
+1. a real Local deployment/model was used;
+2. the actual structure provider was Local;
+3. the actual structural stage was `entity_synthesis`;
+4. the structure source was AI Entity Synthesis rather than curated/deterministic fallback;
+5. an accepted structured-output mode was recorded;
+6. the raw model Entity contract passed;
+7. no Forge Entity sanitizer repair was needed;
+8. the generation traversed the production path and Validator;
+9. durable Generation Evidence exists;
+10. verification is REAL.
+
+Cloud structure, Test Double structure, deterministic structure, curated fallback, unknown output mode, repaired model structure, missing Evidence, or provider/source/task mismatches must continue to fail this gate.
+
+## What is not proven yet
+
+- The latest Generated App Quality Golden Gate remains **FAIL**; Level 0 success does not override visual/product-quality evidence.
+- Browser/Playwright visual inspection was not part of this real-model run.
+- The real runner recorded 0 MB VRAM; no GPU performance claim is supported by this run.
+- One successful Level 0 episode is not enough to promote an SFT/QLoRA/preference dataset sample or adapter without future eligibility, privacy/training-rights and benchmark gates.
+- The full Local software agent loop `think -> search/retrieve -> build -> run -> inspect -> repair` is not yet production-wired.
 
 ## Source of Truth to read first
 
@@ -56,55 +101,41 @@ The final closeout then ran the full suites successfully before committing `b29d
 2. `docs/GENERATIVE-SOFTWARE-DIRECTION.md`
 3. `docs/LEARNABLE-LOCAL-AI-VISION.md`
 4. `docs/MACHINE-INDEPENDENT-POLICY.md`
-5. `docs/reports/FORGE-020A4C-REAL-STRUCTURE-INTEGRITY-report.md`
-6. latest GitHub HEAD / diff / CI
+5. `docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md`
+6. `docs/evidence/level0/level0-20260828-230922.json`
+7. latest GitHub HEAD / diff / CI
 
 Chat-only status is never the Source of Truth when GitHub has newer evidence.
 
-## Next execution gate — real Local Level 0
+## Next task — FORGE-020B Tool-Using Local Agent production wiring
 
-On whichever machine currently has a real Local runtime and model, first update this branch safely and preserve unknown local changes. Then run:
-
-```text
-python scripts/forge_doctor.py
-python scripts/preflight_local_model_level0.py
-```
-
-Preflight must be `eligible_for_real_run`. Only then configure the real runtime/model for that session, for example:
-
-```text
-FORGE_LOCAL_BASE_URL=http://127.0.0.1:11434/v1
-FORGE_LOCAL_MODEL=qwen2.5:7b-instruct
-```
-
-and run:
-
-```text
-python scripts/verify_local_model_level0.py
-```
-
-Only a genuine unrepaired schema-contract Local structural PASS may change **Real Local Model runs 0 -> 1**. If it fails, retain the failure evidence and fix the observed model/prompt/retrieval problem. Do not weaken the gate or add a Local-output repair merely to manufacture PASS.
-
-## What follows after genuine Level 0
-
-After independently reviewing the real-model evidence, proceed to **FORGE-020B — Tool-Using Local Agent production wiring**.
-
-Target loop:
+Do not create a disconnected agent demo. Wire the existing Local provider into a production agent loop:
 
 `Need -> plan -> retrieve/tool -> generate -> build/test -> inspect -> repair`
 
-This remains a **Generative Software Engine** path. Widgets/components/templates are primitives, not the ceiling of software generation.
+020B implementation must preserve the existing evidence/provenance boundary and prepare the trajectory for Generation Episodes:
+
+- typed tool request / result / error contracts;
+- permission/safety boundary before side-effecting tools;
+- production wiring through existing provider/router paths;
+- deterministic build/test/runtime observations as objective evidence;
+- explicit repair attempt lineage;
+- no model self-confidence as success truth;
+- no dedicated app/game widgets as the generative ceiling;
+- future web/browser tools must treat retrieved pages as untrusted data, not instructions.
+
+The long-term target remains a **Generative Software Engine**, not a finite widget/template selector.
 
 ## Persistent product / AI rules
 
 - No permanent development PC or permanent agent assumption. GitHub + committed Markdown are the baton.
 - Environment-specific checks that cannot run are `UNVERIFIED`, never fabricated PASS.
-- Cloud/teacher output is a candidate, not truth. Objective Validator/build/test/runtime/visual/user evidence decides eligibility.
+- Cloud/teacher output is a candidate, not truth. Validator/build/test/runtime/visual/user evidence determines eligibility.
 - Generation Episodes / Dataset JSONL must preserve model output, Forge repairs, final artifact, provider/model/tool provenance, objective scores, consent/training-rights and lineage.
-- Forge-repaired outputs must not be labeled as positive SFT/preference/QLoRA examples for the model behavior that failed.
+- Forge-repaired outputs must not be labeled positive SFT/preference/QLoRA examples for model behavior that failed.
 - No uncontrolled online weight update from one user event.
 - Missing capability must eventually flow through controlled Self-Extension: spec -> sandbox process -> generate -> build -> test -> security/runtime/visual verification -> temporary capability -> evidence-backed promotion.
 
 ## Completion / handoff rule
 
-For implementation tasks, completion requires code + focused/full tests + relevant frontend checks + GitHub Actions + task report + this handoff + pushed remote state. Exact evidence and `UNVERIFIED` items must be recorded; do not leave chat as the only record.
+Implementation completion requires code + focused/full tests + relevant frontend checks + GitHub Actions + task report + this handoff + pushed remote state. Exact evidence and `UNVERIFIED` items must be recorded. Do not leave chat as the only record.
