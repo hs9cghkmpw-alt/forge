@@ -28,7 +28,9 @@ from enum import Enum
 
 __all__ = [
     "EntitySynthesisAttempt",
+    "EntitySynthesisContractEvidence",
     "EntitySynthesisRejectionReason",
+    "EntitySynthesisRepair",
     "StructureProvenance",
     "StructureProvider",
     "StructureSource",
@@ -75,6 +77,37 @@ class EntitySynthesisRejectionReason(str, Enum):
     UNKNOWN = "unknown"
 
 
+class EntitySynthesisRepair(str, Enum):
+    """Forge が AI の Entity 出力へ加えた構造的補正。本文は持たない。"""
+
+    IDENTIFIER_NORMALIZED = "identifier_normalized"
+    UNKNOWN_TYPE_TO_STRING = "unknown_type_to_string"
+    CHOICE_TO_STRING = "choice_to_string"
+    REQUIRED_INJECTED = "required_injected"
+    LABEL_FALLBACK = "label_fallback"
+    VISUAL_STYLE_FALLBACK = "visual_style_fallback"
+    FIELD_DROPPED = "field_dropped"
+    CHOICE_DROPPED = "choice_dropped"
+    BOUNDS_DROPPED = "bounds_dropped"
+    MEASURE_DOWNGRADED = "measure_downgraded"
+
+
+@dataclass(frozen=True)
+class EntitySynthesisContractEvidence:
+    """生の Model 出力が Entity contract を自力で満たしたかの証拠。
+
+    Prompt・利用者本文・Model 生出力は保持しない。構造的な事実だけを持つ。
+    `strict_contract_passed` は fail-closed で、観測できなければ False。
+    """
+
+    raw_schema_valid: bool = False
+    repairs_applied: tuple[EntitySynthesisRepair, ...] = ()
+    fields_received: int = 0
+    fields_accepted: int = 0
+    strict_contract_passed: bool = False
+    structured_output_mode: str = ""
+
+
 @dataclass(frozen=True)
 class StructureProvenance:
     """**構造を誰が作ったか**を、1つの値として持つ。
@@ -100,6 +133,7 @@ class EntitySynthesisAttempt:
     attempted: bool = False
     accepted: bool = False
     rejection_reason: EntitySynthesisRejectionReason | None = None
+    contract: EntitySynthesisContractEvidence = EntitySynthesisContractEvidence()
 
 
 #: **AI が構造を作ったと言ってよい source。** ここだけを見る。

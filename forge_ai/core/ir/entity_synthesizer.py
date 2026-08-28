@@ -48,6 +48,10 @@ from forge_ai.core.orchestration.cognitive_context import (
     EntitySynthesisAttempt,
     EntitySynthesisRejectionReason,
 )
+from forge_ai.core.semantics.structure_provenance import (
+    EntitySynthesisContractEvidence,
+    EntitySynthesisRepair,
+)
 
 # Forge Language の `record_schemas` キー・`identifier`パターンに揃える
 # (`ir_types.Entity`のdocstring参照)。
@@ -98,6 +102,140 @@ _DEFAULT_VISUAL_STYLE = "calm"
 _RESERVED_FIELD_NAMES = frozenset({"records", "selected", "id"})
 
 
+def _entity_contract_evidence(
+    structured: object, *, structured_output_mode: str = ""
+) -> EntitySynthesisContractEvidence:
+    """AI 生出力と canonical Entity contract の差を privacy-safe に測る。
+
+    Product sanitizer はこの後そのまま動く。ここでは「最終的に使えたか」
+    ではなく「Model 自身が修復なしで契約を満たしたか」を測る。
+    """
+    if not isinstance(structured, dict) or not structured:
+        return EntitySynthesisContractEvidence(structured_output_mode=structured_output_mode)
+
+    repairs: list[EntitySynthesisRepair] = []
+
+    def note(repair: EntitySynthesisRepair) -> None:
+        if repair not in repairs:
+            repairs.append(repair)
+
+    raw_entity_name = structured.get("entity_name")
+    entity_name = _sanitize_identifier(raw_entity_name)
+    if entity_name is None or raw_entity_name != entity_name:
+        note(EntitySynthesisRepair.IDENTIFIER_NORMALIZED)
+
+    raw_entity_label = structured.get("entity_label")
+    if _sanitize_label(raw_entity_label) != raw_entity_label:
+        note(EntitySynthesisRepair.LABEL_FALLBACK)
+
+    visual_style = structured.get("visual_style")
+    if not isinstance(visual_style, str) or visual_style not in _VALID_VISUAL_STYLES:
+        note(EntitySynthesisRepair.VISUAL_STYLE_FALLBACK)
+
+    raw_fields = structured.get("fields")
+    fields_received = len(raw_fields) if isinstance(raw_fields, list) else 0
+    if not isinstance(raw_fields, list) or not raw_fields:
+        note(EntitySynthesisRepair.FIELD_DROPPED)
+        return EntitySynthesisContractEvidence(
+            raw_schema_valid=False,
+            repairs_applied=tuple(repairs),
+            fields_received=fields_received,
+            fields_accepted=0,
+            strict_contract_passed=False,
+            structured_output_mode=structured_output_mode,
+        )
+
+    seen: set[str] = set()
+    valid_field_count = 0
+    any_required = False
+    for index, raw in enumerate(raw_fields):
+        if index >= _MAX_FIELDS:
+            note(EntitySynthesisRepair.FIELD_DROPPED)
+            continue
+        if not isinstance(raw, dict):
+            note(EntitySynthesisRepair.FIELD_DROPPED)
+            continue
+
+        raw_name = raw.get("name")
+        name = _sanitize_identifier(raw_name)
+        if name is None or name in seen or name in _RESERVED_FIELD_NAMES:
+            note(EntitySynthesisRepair.FIELD_DROPPED)
+            continue
+        if raw_name != name:
+            note(EntitySynthesisRepair.IDENTIFIER_NORMALIZED)
+        seen.add(name)
+        valid_field_count += 1
+
+        raw_label = raw.get("label")
+        if _sanitize_label(raw_label) != raw_label:
+            note(EntitySynthesisRepair.LABEL_FALLBACK)
+
+        raw_type = raw.get("type")
+        field_type = _VALID_FIELD_TYPES.get(raw_type) if isinstance(raw_type, str) else None
+        if field_type is None:
+            note(EntitySynthesisRepair.UNKNOWN_TYPE_TO_STRING)
+
+        required = raw.get("required")
+        if required is True:
+            any_required = True
+        elif required is not False:
+            # Non-bool is silently treated as False and can later cause injection.
+            note(EntitySynthesisRepair.REQUIRED_INJECTED)
+
+        raw_choices = raw.get("choices")
+        sanitized_choices = _sanitize_choices(raw_choices)
+        if isinstance(raw_choices, list):
+            exact_choices = tuple(
+                x for x in raw_choices if isinstance(x, str) and x.strip()
+            )
+            if sanitized_choices != exact_choices:
+                note(EntitySynthesisRepair.CHOICE_DROPPED)
+        elif raw_choices not in (None, ()):
+            note(EntitySynthesisRepair.CHOICE_DROPPED)
+
+        if field_type == FieldType.CHOICE and len(sanitized_choices) < _MIN_CHOICES:
+            note(EntitySynthesisRepair.CHOICE_TO_STRING)
+        elif field_type != FieldType.CHOICE and sanitized_choices:
+            note(EntitySynthesisRepair.CHOICE_DROPPED)
+
+        if field_type == FieldType.NUMBER:
+            raw_min, raw_max = raw.get("min_value"), raw.get("max_value")
+            sanitized_bounds = _sanitize_bounds(raw_min, raw_max, field_type=field_type)
+            if raw_min is not None or raw_max is not None:
+                raw_pair = (
+                    float(raw_min) if isinstance(raw_min, (int, float)) and not isinstance(raw_min, bool) else None,
+                    float(raw_max) if isinstance(raw_max, (int, float)) and not isinstance(raw_max, bool) else None,
+                )
+                if sanitized_bounds != raw_pair:
+                    note(EntitySynthesisRepair.BOUNDS_DROPPED)
+
+            raw_measure = raw.get("measure")
+            if not isinstance(raw_measure, str) or raw_measure.strip().lower() not in _VALID_MEASURES:
+                note(EntitySynthesisRepair.MEASURE_DOWNGRADED)
+        elif raw.get("measure") not in (None, "unknown"):
+            note(EntitySynthesisRepair.MEASURE_DOWNGRADED)
+
+    if valid_field_count and not any_required:
+        note(EntitySynthesisRepair.REQUIRED_INJECTED)
+
+    raw_schema_valid = (
+        entity_name is not None
+        and isinstance(raw_entity_label, str) and bool(raw_entity_label.strip())
+        and isinstance(visual_style, str) and visual_style in _VALID_VISUAL_STYLES
+        and valid_field_count > 0
+        and any_required
+        and not repairs
+    )
+    return EntitySynthesisContractEvidence(
+        raw_schema_valid=raw_schema_valid,
+        repairs_applied=tuple(repairs),
+        fields_received=fields_received,
+        fields_accepted=0,
+        strict_contract_passed=raw_schema_valid and not repairs,
+        structured_output_mode=structured_output_mode,
+    )
+
+
 class EntitySynthesizer:
     """`AIProvider`を注入して使う。状態を持たない。"""
 
@@ -143,14 +281,23 @@ class EntitySynthesizer:
         )
         response = self._provider.complete(prompt)
         structured = response.structured
+        mode = str(getattr(self._provider, "last_structured_output_mode", "") or "")
+        contract = _entity_contract_evidence(structured, structured_output_mode=mode)
         if not isinstance(structured, dict) or not structured:
-            return None, EntitySynthesisAttempt(True, False, EntitySynthesisRejectionReason.EMPTY_OUTPUT)
+            return None, EntitySynthesisAttempt(
+                True, False, EntitySynthesisRejectionReason.EMPTY_OUTPUT, contract
+            )
         if _sanitize_identifier(structured.get("entity_name")) is None:
-            return None, EntitySynthesisAttempt(True, False, EntitySynthesisRejectionReason.INVALID_IDENTIFIER)
+            return None, EntitySynthesisAttempt(
+                True, False, EntitySynthesisRejectionReason.INVALID_IDENTIFIER, contract
+            )
         spec = self._spec_from_structured(structured)
         if spec is None:
-            return None, EntitySynthesisAttempt(True, False, EntitySynthesisRejectionReason.NO_VALID_FIELDS)
-        return spec, EntitySynthesisAttempt(True, True, None)
+            return None, EntitySynthesisAttempt(
+                True, False, EntitySynthesisRejectionReason.NO_VALID_FIELDS, contract
+            )
+        contract = replace(contract, fields_accepted=len(spec.field_specs))
+        return spec, EntitySynthesisAttempt(True, True, None, contract)
 
     # -- 以下、AI応答の決定的な検証・サニタイズ -------------------------
 

@@ -1,3 +1,14 @@
+# FORGE-020A4C — Real Structure Integrity Gate
+
+"
+    "- Separate raw Entity model-contract success from Forge sanitizer repairs.
+"
+    "- Propagate actual structured-output mode provenance.
+"
+    "- Real Local Level 0 now rejects repaired/unknown/non-schema-mode structural outputs.
+"
+    "- Serialize privacy-safe Entity Synthesis diagnosis for durable learning evidence.
+
 # CHANGELOG
 
 ## 2026-08-27 — FORGE-020A3B: CLOSEOUT INTEGRITY AND CI RECOVERY

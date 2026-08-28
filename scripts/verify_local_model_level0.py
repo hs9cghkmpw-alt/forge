@@ -365,6 +365,9 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
     structure_provenance = None
     structure_provider = None
     structure_task = ""
+    entity_synthesis_strict_contract_passed = False
+    entity_synthesis_repairs: tuple[str, ...] = ()
+    structured_output_mode = ""
     validator_passed = False
     structured_ok = False
     latency_ms = 0.0
@@ -422,6 +425,13 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
                 # 言っていない——Cloud が作った実行も同じ値である。
                 structure_provider = records[-1].structure_provider
                 structure_task = records[-1].structure_task
+                entity_synthesis_strict_contract_passed = (
+                    records[-1].entity_synthesis_strict_contract_passed
+                )
+                entity_synthesis_repairs = records[-1].entity_synthesis_repairs
+                structured_output_mode = (
+                    records[-1].entity_synthesis_structured_output_mode
+                )
             print(f"      ✓ HTTP 200  ({latency_ms:.0f} ms)")
             print(f"        validator_passed={validator_passed}"
                   f" evidence_uid={generation_uid or '(無し)'}")
@@ -498,6 +508,11 @@ def main() -> int:  # noqa: PLR0915 — 手順書としての読みやすさを�
         # 「記録し損ね」を「Local だった」へ倒さない。
         structure_provider=structure_provider or StructureProvider.NONE,
         structure_task=structure_task,
+        entity_synthesis_strict_contract_passed=(
+            entity_synthesis_strict_contract_passed
+        ),
+        entity_synthesis_repairs=entity_synthesis_repairs,
+        structured_output_mode=structured_output_mode,
         host_id=str(host["host_id"]),
         ram_total_mb=int(host["ram_total_mb"]),
         vram_total_mb=int(host["vram_total_mb"]),

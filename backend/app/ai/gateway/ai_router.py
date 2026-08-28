@@ -180,6 +180,7 @@ class RouteAttempt:
     になるため、値を持ち運ぶ場所が要る。"""
 
     model: str = ""
+    structured_output_mode: str = ""
     """実際に呼んだModel名。**Adapterが名乗った場合のみ**入る。
 
     R0(2026-08-17)で追加。Experienceは「geminiが答えた」ではなく
@@ -206,6 +207,14 @@ class RoutedResult:
     利用者が承認したか訂正したか——をこの番号へ書き足す。
     ここで返さないと、記録は残るが**一番価値のある信号だけが
     永久に付かない**。"""
+
+    @property
+    def structured_output_mode(self) -> str:
+        """成功した試行が実際に使った構造化出力 mode。"""
+        for attempt in reversed(self.attempts):
+            if attempt.ok:
+                return attempt.structured_output_mode
+        return ""
 
     @property
     def used_fallback(self) -> bool:
@@ -731,7 +740,12 @@ class AIRouter:
                 detail=f"dictではなく{type(value).__name__}が返った", model=model,
             ), None
 
-        return RouteAttempt(provider=provider, ok=True, latency_ms=latency, model=model), value
+        return RouteAttempt(
+            provider=provider, ok=True, latency_ms=latency, model=model,
+            structured_output_mode=str(
+                getattr(bound, "last_structured_output_mode", "") or ""
+            ),
+        ), value
 
     def _another_model_may_work(self, provider: str, kind: ErrorKind) -> bool:
         """この失敗のあと、同じProviderの別Modelを試す意味があるか。
@@ -859,6 +873,7 @@ class _BoundAdapter:
     provider_name: str = "router"
 
     last_provider_used: str | None = field(default=None, init=False)
+    last_structured_output_mode: str = field(default="", init=False)
     """直近の`complete_structured()`で**実際に**応答を返したProvider名。
     まだ呼ばれていなければ`None`。"""
 
@@ -877,6 +892,7 @@ class _BoundAdapter:
             self.task, prompt, response_schema, provider=self.provider
         )
         self.last_provider_used = result.provider_used
+        self.last_structured_output_mode = result.structured_output_mode
         if result.experience_ref:
             self.experience_refs = (*self.experience_refs, result.experience_ref)
         return result.value

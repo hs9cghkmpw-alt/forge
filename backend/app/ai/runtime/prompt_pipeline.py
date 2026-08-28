@@ -307,6 +307,7 @@ def _record_generation(
     store = default_generation_store()
     ai_calls = len(getattr(bound, "experience_refs", ()) or ())
     synthesis_attempt = getattr(context, "entity_synthesis_attempt", None)
+    synthesis_contract = getattr(synthesis_attempt, "contract", None)
     stored = store.record(
         GenerationRecord(
             source=_generation_source(
@@ -343,6 +344,25 @@ def _record_generation(
             entity_synthesis_accepted=bool(getattr(synthesis_attempt, "accepted", False)),
             entity_synthesis_rejection_reason=(
                 getattr(getattr(synthesis_attempt, "rejection_reason", None), "value", None)
+            ),
+            entity_synthesis_raw_schema_valid=bool(
+                getattr(synthesis_contract, "raw_schema_valid", False)
+            ),
+            entity_synthesis_repairs=tuple(
+                getattr(item, "value", str(item))
+                for item in (getattr(synthesis_contract, "repairs_applied", ()) or ())
+            ),
+            entity_synthesis_fields_received=int(
+                getattr(synthesis_contract, "fields_received", 0) or 0
+            ),
+            entity_synthesis_fields_accepted=int(
+                getattr(synthesis_contract, "fields_accepted", 0) or 0
+            ),
+            entity_synthesis_strict_contract_passed=bool(
+                getattr(synthesis_contract, "strict_contract_passed", False)
+            ),
+            entity_synthesis_structured_output_mode=str(
+                getattr(synthesis_contract, "structured_output_mode", "") or ""
             ),
         )
     )

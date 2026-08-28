@@ -297,6 +297,13 @@ class ForgeAIProviderBridge:
         """Actual provider selected by the adapter, for typed provenance."""
         return str(getattr(self._llm_adapter, "last_provider_used", "") or "")
 
+    @property
+    def last_structured_output_mode(self) -> str:
+        """直近の呼び出しで実際に受理された構造化出力 mode。"""
+        return str(
+            getattr(self._llm_adapter, "last_structured_output_mode", "") or ""
+        )
+
     def complete(self, prompt: Prompt) -> ProviderResponse:
         """forge_ai.AIProvider Protocolの実装本体。
 

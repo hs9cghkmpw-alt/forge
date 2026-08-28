@@ -346,6 +346,7 @@ class OpenAICompatibleAdapter:
         self._api_key_env = api_key_env
         self._timeout = timeout_seconds
         self._extra_headers = dict(extra_headers or {})
+        self._last_structured_output_mode = ""
 
     @property
     def model(self) -> str:
@@ -362,6 +363,11 @@ class OpenAICompatibleAdapter:
     def base_url(self) -> str:
         """接続先。空文字なら未設定(Auto Discoveryが候補から外す)。"""
         return self._base_url
+
+    @property
+    def last_structured_output_mode(self) -> str:
+        """実際に受理された応答を生成した mode。未実行/失敗は空。"""
+        return self._last_structured_output_mode
 
     # -- Deadline(011 §4) -------------------------------------------------
 
@@ -414,6 +420,7 @@ class OpenAICompatibleAdapter:
         どちらも**1回だけ**である。2種類あるからといって2回緩めない
         ——無限に粘ると、待ち時間だけが伸びる。
         """
+        self._last_structured_output_mode = ""
         store = default_capability_store()
         mode = store.preferred_mode(
             self.provider_name, self.model,
@@ -451,7 +458,11 @@ class OpenAICompatibleAdapter:
         store.note_worked(self.provider_name, self.model, mode)
 
         try:
-            return extract_json_object(content, error_type=self._response_format_error_type())
+            parsed = extract_json_object(
+                content, error_type=self._response_format_error_type()
+            )
+            self._last_structured_output_mode = mode.value
+            return parsed
         except Exception:
             if not response_schema:
                 raise
@@ -459,7 +470,11 @@ class OpenAICompatibleAdapter:
             # 小さいモデルでは頻繁に起きるため即失敗にせず、緩い
             # `json_object`で取り直す。2回目は無い。
             retried = self._chat(prompt, {}, StructuredOutputMode.JSON_OBJECT)
-            return extract_json_object(retried, error_type=self._response_format_error_type())
+            parsed = extract_json_object(
+                retried, error_type=self._response_format_error_type()
+            )
+            self._last_structured_output_mode = StructuredOutputMode.JSON_OBJECT.value
+            return parsed
 
     # -- 差し替え点 --------------------------------------------------------
 

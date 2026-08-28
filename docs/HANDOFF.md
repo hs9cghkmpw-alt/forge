@@ -1,3 +1,25 @@
+# HANDOFF UPDATE — FORGE-020A4C Real Structure Integrity Gate
+
+**Current task:** FORGE-020A4C — separate raw Local model contract ability from Forge repair ability.
+
+- Base SHA: `e659181427224242458561a06a32af01b8295023`.
+- Base CI run `33175691427`: SUCCESS / 4 jobs green.
+- Implementation: contract-repair evidence + structured-output mode provenance + fail-closed Level 0 gate + serializer diagnosis + mutation-oriented tests.
+- Mock preflight proves wiring only. It is not semantic/model-quality evidence.
+- Normal product sanitization remains; repaired output can still make a usable app, but **cannot count as Real Local Level 0**.
+- Real Local Model runs: **0** until a genuine unrepaired strict-contract Local structural run passes.
+- **Do not run real Qwen Level 0 until this task's exact-SHA CI is green.**
+- Detailed report: `docs/reports/FORGE-020A4C-REAL-STRUCTURE-INTEGRITY-report.md`.
+
+### Next operator checklist
+1. Read this HANDOFF and the 020A4C report before editing.
+2. Verify branch HEAD and exact-SHA CI; do not trust chat-only claims.
+3. If green, use a real Local runtime machine for preflight, then Qwen Level 0.
+4. Preserve the distinction: model contract -> Forge repairs -> final artifact.
+5. Never promote Forge-repaired output as an AI positive in future Dataset/JSONL/SFT/preference/QLoRA work.
+
+---
+
 # Forge Handoff
 
 ## Current state

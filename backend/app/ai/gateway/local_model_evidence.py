@@ -255,6 +255,11 @@ class RealLocalModelRun:
     AI が構造を作っていないので Level 0 ではない。
     """
 
+    entity_synthesis_strict_contract_passed: bool = False
+    entity_synthesis_repairs: tuple[str, ...] = ()
+    structured_output_mode: str = ""
+    """020A4C: Model 自身の契約成功と Forge repair / mode provenance。"""
+
     domain_resolution: str = ""
     """`decision_trace` の `domain_resolution` 段が返した判断（020A1）。
 
@@ -428,6 +433,19 @@ class RealLocalModelRun:
                 f"（観測: {', '.join(t.value for t in self.observed_tasks) or 'なし'}）"
             )
 
+        if not self.entity_synthesis_strict_contract_passed:
+            reasons.append("Entity Synthesis の生出力が strict contract を満たしていない")
+        if self.entity_synthesis_repairs:
+            reasons.append(
+                "Forge の Entity sanitizer による補正が必要だった"
+                f"（{', '.join(self.entity_synthesis_repairs)}）"
+            )
+        if self.structured_output_mode not in {"strict_json_schema", "json_schema"}:
+            reasons.append(
+                "厳格な schema mode で受理された応答ではない"
+                f"（structured_output_mode={self.structured_output_mode or '(記録なし)'}）"
+            )
+
         if not self.observed_tasks:
             reasons.append("AIRouter を通った Task を観測できていない")
         elif self.task not in self.observed_tasks:
@@ -529,6 +547,9 @@ class RealLocalModelRun:
             "structure_source": self.structure_source.value,
             "structure_provider": self.structure_provider.value,
             "structure_task": self.structure_task,
+            "entity_synthesis_strict_contract_passed": self.entity_synthesis_strict_contract_passed,
+            "entity_synthesis_repairs": list(self.entity_synthesis_repairs),
+            "structured_output_mode": self.structured_output_mode,
             "observed_tasks": [t.value for t in self.observed_tasks],
             "ready_for_baseline": self.ready_for_baseline,
             "quantization": self.quantization,

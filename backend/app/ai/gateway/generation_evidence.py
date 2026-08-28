@@ -416,6 +416,17 @@ class GenerationRecord:
     「試したが落とした」と「そもそも試していない」を区別できないと、
     Local Model が伸びているのかどうかが分からない。"""
 
+    entity_synthesis_raw_schema_valid: bool = False
+    entity_synthesis_repairs: tuple[str, ...] = ()
+    entity_synthesis_fields_received: int = 0
+    entity_synthesis_fields_accepted: int = 0
+    entity_synthesis_strict_contract_passed: bool = False
+    entity_synthesis_structured_output_mode: str = ""
+    """020A4C: Model 自身の契約能力と Forge repair を分離した構造 Evidence。
+
+    生 Prompt / 生 Model 出力 / 利用者本文は持たない。未知は fail-closed。
+    """
+
     design_language_roles: tuple[str, ...] = ()
     """選ばれたDesign Languageの役割(`metric.primary`等)。
 
@@ -564,6 +575,15 @@ class GenerationRecord:
             "domain": self.domain,
             "validator_passed": self.validator_passed,
             "capabilities": list(self.capabilities),
+            "entity_synthesis_attempted": self.entity_synthesis_attempted,
+            "entity_synthesis_accepted": self.entity_synthesis_accepted,
+            "entity_synthesis_rejection_reason": self.entity_synthesis_rejection_reason,
+            "entity_synthesis_raw_schema_valid": self.entity_synthesis_raw_schema_valid,
+            "entity_synthesis_repairs": list(self.entity_synthesis_repairs),
+            "entity_synthesis_fields_received": self.entity_synthesis_fields_received,
+            "entity_synthesis_fields_accepted": self.entity_synthesis_fields_accepted,
+            "entity_synthesis_strict_contract_passed": self.entity_synthesis_strict_contract_passed,
+            "entity_synthesis_structured_output_mode": self.entity_synthesis_structured_output_mode,
             "design_language_roles": list(self.design_language_roles),
             "design_decisions": [d.to_dict() for d in self.design_decisions],
             "structure_source": self.structure_source.value,

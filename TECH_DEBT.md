@@ -1,3 +1,8 @@
+# TD020A4C — Model contract vs Forge repair provenance
+
+"
+    "**Resolved in FORGE-020A4C.** Previously Entity Synthesis could sanitize a real model's invalid structure and then satisfy Validator/Level0 evidence, conflating product robustness with model ability. Contract evidence and repair provenance now fail closed for Real Local Level 0. Structured-output fallback mode is also recorded. Future datasets must preserve model-output / Forge-repair / final-artifact separation.
+
 # TECH_DEBT.md
 
 ## FORGE-020A3B で解消したもの（2026-08-27）
