@@ -112,9 +112,19 @@ def evaluate_level0_probe_preflight(
 ) -> Level0PreflightResult:
     """mock production run の typed Evidence から probe 適格性を判定する。
 
-    判定順には意味がある。Curated / deterministic bypass は「モデルが弱い」の
-    ではなく「測る仕事がモデルへ回っていない」ので、synthesis failure より先に
-   分類する。
+    判定順には意味がある。
+
+    * Domain 自体が Curated なら、Entity Synthesisへ仕事が来ないので
+      ``CURATED_BYPASS``。
+    * ``generated`` まで来て Entity Synthesis を**実際に試した**のに
+      sanitize/rejectionで落ち、その後 Curated/決定的fallbackが勝った場合は、
+      fallbackだけを見て ``DETERMINISTIC_BYPASS`` と分類しない。
+      原因は ``SYNTHESIS_REJECTED`` と closed reason code で残す。
+    * Entity Synthesis自体を試していない決定的構造だけを
+      ``DETERMINISTIC_BYPASS`` とする。
+
+    これにより「最終構造はfallbackだった」という結果と「なぜそうなったか」を
+    混同しない。
     """
 
     resolution = facts.domain_resolution.strip().lower()
@@ -131,6 +141,17 @@ def evaluate_level0_probe_preflight(
             facts,
         )
 
+    # 020A4 CI実測で、generated → Entity Synthesis attempted → no_valid_fields
+    # → curated fallback という経路が確認された。最終fallbackだけを先に見ると
+    # 本当の改善点（synthesis rejection）が隠れるため、attempt事実を優先する。
+    if facts.entity_synthesis_attempted and not facts.entity_synthesis_accepted:
+        reason = facts.entity_synthesis_rejection_reason or "unknown"
+        return Level0PreflightResult(
+            Level0PreflightOutcome.SYNTHESIS_REJECTED,
+            (f"Entity Synthesis は試したが採用されなかった: {reason}",),
+            facts,
+        )
+
     if facts.structure_source in {
         GenerationStructureSource.CURATED,
         GenerationStructureSource.DETERMINISTIC_CAPABILITY_PLAN,
@@ -138,16 +159,8 @@ def evaluate_level0_probe_preflight(
         return Level0PreflightResult(
             Level0PreflightOutcome.DETERMINISTIC_BYPASS,
             (
-                "Entity Synthesis より前の決定的経路が software structure を決める",
+                "Entity Synthesis を採用せず決定的経路が software structure を決める",
             ),
-            facts,
-        )
-
-    if facts.entity_synthesis_attempted and not facts.entity_synthesis_accepted:
-        reason = facts.entity_synthesis_rejection_reason or "unknown"
-        return Level0PreflightResult(
-            Level0PreflightOutcome.SYNTHESIS_REJECTED,
-            (f"Entity Synthesis は試したが採用されなかった: {reason}",),
             facts,
         )
 
