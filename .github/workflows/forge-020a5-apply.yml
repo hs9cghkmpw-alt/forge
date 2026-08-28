@@ -25,6 +25,44 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Install backend dependencies
         run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
+      - name: Repair patcher test insertion for pytest-style file
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/_apply_forge_020a5_entity_schema.py')
+          text = p.read_text(encoding='utf-8')
+          marker = '# Extend existing 020A4C contract tests with the same-category hole discovered'
+          if marker not in text:
+              raise SystemExit('patcher marker missing')
+          prefix = text.split(marker, 1)[0]
+          tail = r'''# Extend existing 020A4C contract tests with the same-category hole discovered
+          # by skeptical review: 7 choices is inside the product sanitizer ceiling but
+          # outside the strict model contract.
+          contract_test = ROOT / "forge_ai/tests/test_forge_020a4c_entity_contract_evidence.py"
+          text = contract_test.read_text(encoding="utf-8")
+          extra = r'''
+
+
+def test_seven_choices_cannot_masquerade_as_strict_model_success():
+    raw = _valid()
+    raw["fields"][0].update({
+        "type": "choice",
+        "choices": ["a", "b", "c", "d", "e", "f", "g"],
+    })
+    ev = _entity_contract_evidence(raw, structured_output_mode="json_schema")
+    assert ev.strict_contract_passed is False
+'''
+          if 'test_seven_choices_cannot_masquerade_as_strict_model_success' in text:
+              raise SystemExit('choice-cardinality test already present unexpectedly')
+          contract_test.write_text(text.rstrip() + extra + "\n", encoding="utf-8")
+
+          print("FORGE-020A5 entity schema contract patch applied")
+          '''
+          # Remove indentation introduced by the YAML heredoc's Python source.
+          tail = '\n'.join(line[10:] if line.startswith('          ') else line for line in tail.splitlines()) + '\n'
+          p.write_text(prefix + tail, encoding='utf-8')
+          PY
       - name: Compile patcher
         run: python -m py_compile scripts/_apply_forge_020a5_entity_schema.py
       - name: Apply canonical schema contract patch
