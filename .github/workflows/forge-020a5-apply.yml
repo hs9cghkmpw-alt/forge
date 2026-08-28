@@ -1,4 +1,4 @@
-# rerun after diff normalization fix
+# rerun after cleanup force-removal fix
 name: FORGE-020A5 entity schema contract apply
 
 on:
@@ -63,9 +63,9 @@ jobs:
         run: python -m pytest -q backend/tests
       - name: Remove one-shot patch machinery
         run: |
-          git rm .github/workflows/forge-020a5-apply.yml
-          git rm scripts/_apply_forge_020a5_entity_schema.py
-          git rm scripts/_repair_forge_020a5_patcher.py
+          git rm -f .github/workflows/forge-020a5-apply.yml
+          git rm -f scripts/_apply_forge_020a5_entity_schema.py
+          git rm -f scripts/_repair_forge_020a5_patcher.py
       - name: Commit and push product fix
         shell: bash
         run: |
