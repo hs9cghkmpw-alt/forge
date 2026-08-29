@@ -10,6 +10,7 @@ CommandRunner exit codes decide.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import shutil
 import sys
@@ -57,6 +58,16 @@ void main() {
   });
 }
 """
+
+
+def _write_evidence(evidence: dict[str, object]) -> None:
+    rendered = json.dumps(evidence, ensure_ascii=False, sort_keys=True, indent=2)
+    print(rendered)
+    raw_path = os.getenv("FORGE_020D_EVIDENCE_PATH", "").strip()
+    if raw_path:
+        path = pathlib.Path(raw_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(rendered + "\n", encoding="utf-8")
 
 
 def main() -> int:
@@ -142,7 +153,7 @@ def main() -> int:
             "repair_succeeded": episode.repair_succeeded,
             "repair_rounds": [item.to_dict() for item in episode.repair_rounds],
         }
-        print(json.dumps(evidence, ensure_ascii=False, sort_keys=True, indent=2))
+        _write_evidence(evidence)
 
         passed = (
             result.report.outcome is EpisodeOutcome.SUCCEEDED
