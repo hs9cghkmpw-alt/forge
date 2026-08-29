@@ -34,15 +34,31 @@ void main() {
 
     await tester.tap(pulse);
     await tester.pump(const Duration(milliseconds: 800));
-    expect(tester.widget<FilterChip>(pulse).selected, isTrue,
-        reason: 'pulse must become active only after AudioPlayer.play succeeds');
-    expect(find.text('音を再生できませんでした'), findsNothing);
+    final pulseException = tester.takeException();
+    if (pulseException != null) {
+      fail('pulse web-audio exception: $pulseException');
+    }
+    final pulseChip = tester.widget<FilterChip>(pulse);
+    if (!pulseChip.selected) {
+      final userErrorVisible = find.text('音を再生できませんでした').evaluate().isNotEmpty;
+      fail('pulse playback did not activate; userErrorVisible=$userErrorVisible');
+    }
 
     await tester.tap(chime);
     await tester.pump(const Duration(milliseconds: 800));
+    final chimeException = tester.takeException();
+    if (chimeException != null) {
+      fail('chime web-audio exception: $chimeException');
+    }
     expect(tester.widget<FilterChip>(pulse).selected, isTrue);
-    expect(tester.widget<FilterChip>(chime).selected, isTrue,
-        reason: 'two local AudioPlayers must be able to run simultaneously');
+    final chimeChip = tester.widget<FilterChip>(chime);
+    if (!chimeChip.selected) {
+      final userErrorVisible = find.text('音を再生できませんでした').evaluate().isNotEmpty;
+      fail('chime playback did not activate; userErrorVisible=$userErrorVisible');
+    }
     expect(find.text('音を再生できませんでした'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
   });
 }
