@@ -1,18 +1,17 @@
-"""Local Agent — Forge の Local AI が**道具を使って仕事をする**ための層
-(FORGE-020B、2026-08-25)。
+"""Forge local Agent safety/execution primitives."""
 
-```
-Local AI（Base Model は交換可能）
-   ↓  structured tool call
-Agent Loop            生成 → 検証 → build/test → 診断 → 修正 → 再検証
-   ↓
-Tool Broker           どの道具が在るか / 呼び出しの形を守らせる
-   ↓
-Permission Broker     AUTO / SANDBOX / CONFIRM / FORBIDDEN
-   ↓
-Tool                  file / search / build / test / web / browser
-```
+from app.ai.agent.generated_workspace import (
+    GeneratedFileContent,
+    GeneratedWorkspace,
+    GeneratedWorkspaceError,
+    materialize_generated_workspace,
+)
+from app.ai.agent.flutter_generated_workspace import materialize_flutter_generated_workspace
 
-**Modelへ直接OS権限を渡さない。** Model が言えるのは「この道具を、
-この引数で使いたい」までであり、実行してよいかを決めるのは Forge である。
-"""
+__all__ = [
+    "GeneratedFileContent",
+    "GeneratedWorkspace",
+    "GeneratedWorkspaceError",
+    "materialize_generated_workspace",
+    "materialize_flutter_generated_workspace",
+]
