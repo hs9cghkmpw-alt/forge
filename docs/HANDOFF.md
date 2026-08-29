@@ -3,77 +3,79 @@
 ## Current state
 
 - Branch: `claude/forge-master-handoff-k46jns`
-- Current task: **FORGE-020B — Tool-Using Local Agent production wiring**
+- Current task: **FORGE-020B — Tool-Using Local Agent production wiring / dual-environment closeout**
 - 020B production wiring commit: `763fa326ad8b497db5d0fdb9a56bd57ed7d49710`
 - 020B evidence-integrity hardening: `1780adcebcbde34bfbb145d924826b9c603520c3`
 - 020B provenance / production-entry hardening: `4a09d71a850b322e9ba0f77a6ee01486c734d413`
 - Learning-contract fix for `ForgeTask.AGENT_STEP`: `6dab22f27a1007b67438cf9ce91f207ae129d274`
-- Normal CI for `6dab22f...`: run `33222716256` = **SUCCESS**, all four jobs green
-  - backend + forge_ai Python 3.11: SUCCESS
-  - backend + forge_ai Python 3.12: SUCCESS
-  - backend smoke (startup + CORS): SUCCESS
-  - frontend Flutter analyze/test/web build: SUCCESS
-- `.github/workflows/` remains normal `ci.yml` only.
-- **Real Ollama + qwen2.5:7b-instruct Tool-Using Agent episode: UNVERIFIED / NOT YET EXECUTED for 020B.**
-- Golden Generated App Quality Gate remains **FAIL** from the latest visual review. 020B CI success does not change that result.
+- Shared real-agent verifier: `scripts/verify_local_agent_020b.py`
+- Normal CI run `33222716256` = **SUCCESS**, all four jobs green.
+- Genuine GitHub-hosted real Tool-Using Local Agent run `33227448429` = **SUCCESS / PASS**.
+- Durable GitHub-runner evidence: `docs/evidence/agent020b/agent020b-20260829-015345.json`.
+- GitHub Actions artifact: id `9707382693`, digest `sha256:b76d0184c3eac34a3c801a8382c716e8fc530622c731d7d406eef35a2b6cd469`.
+- **Physical/user PC real-agent run: UNVERIFIED / NOT YET EXECUTED.**
+- Golden Generated App Quality Gate remains **FAIL** from the latest visual review. 020B success does not rewrite that evidence.
 
-Detailed 020B status report: `docs/reports/FORGE-020B-TOOL-USING-LOCAL-AGENT-report.md`
+Detailed 020B report: `docs/reports/FORGE-020B-TOOL-USING-LOCAL-AGENT-report.md`
 
-## What 020B now proves in code/CI
+## What the genuine GitHub-runner episode proved
 
-The production branch now contains a Tool-Using Local Agent path rather than a disconnected demo. The implementation sequence includes:
+The one-off runner installed/used a real Ollama runtime and real `qwen2.5:7b-instruct` weights, then executed the shared verifier through Forge's production HTTP generation path with `provider=local` and `agent_mode=verify`.
 
-- production local agent runner;
-- production agent test coverage;
-- production generation wiring;
-- agent evidence-integrity hardening;
-- provenance and production-entry-path hardening;
-- `ForgeTask.AGENT_STEP` registered in the Learning Contract so Agent-step Learning Events do not silently disappear.
+Exact evidence:
 
-The normal repository CI passes after the Learning Contract correction. Therefore the repository-level implementation and regression surface are currently green at SHA `6dab22f...`.
+- Ollama `0.33.2`
+- model `qwen2.5:7b-instruct`
+- digest `845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e`
+- quantization `Q4_K_M`
+- HTTP status 200 / Forge status `success`
+- Agent requested: true
+- Agent executed: true
+- Agent provider: `local`
+- Agent model: `qwen2.5:7b-instruct`
+- Agent outcome: `succeeded`
+- tool calls: 2
+- tools used: `inspect_forge_document`, `validate_forge_document`
+- fresh Validator outcome: `passed`
+- Episode deployment: `local`
+- Episode provenance: `local_ai_output`
+- Generation Evidence UID: `70bd148d54744e47a63f13743b5968fb`
+- verifier `passed=true`, failures=[]
 
-## What is still not proven
+This is genuine 020B evidence of a real Local model producing an Agent tool plan and Forge executing the selected read-only inspection tools through the production Agent path. It is not a test-double substitute.
 
-020B is **not yet a full real-model closeout**. The following remains environment-dependent and must stay `UNVERIFIED` until executed against a real Ollama runtime:
+## Important boundary — what this episode did NOT prove
 
-1. Real `qwen2.5:7b-instruct` selects/uses the intended tools through the production Agent path.
-2. Tool request/result/error provenance is captured from a genuine model episode.
-3. Build/test/runtime observations from that episode are preserved as objective evidence.
-4. Repair-attempt lineage is preserved if a repair is required.
-5. No deterministic/test-double substitute is incorrectly counted as model capability.
-6. Durable evidence/reporting is saved for the real episode.
+The bounded 020B verifier intentionally leaves `build`, `test`, `runtime`, and `visual` outcomes as `unknown`; those stages were not executed in this Agent episode. `repair_rounds` is empty because no repair was required. Therefore do not claim the full future loop `build/test/runtime/visual/repair` has been proven by this run.
 
-Do not mark those facts PASS based only on unit/integration CI.
+The runner log also shows a second `ollama serve` process could not bind because port 11434 was already occupied. The verifier independently confirmed the reachable Ollama runtime and exact model digest before counting the run; the duplicate-start log is not evidence of a failed inference run, but future one-off workflows should avoid launching a redundant server process when the installer already started one.
 
-## Prior real Local Level 0 remains proven
+## Dual-environment closeout still pending
 
-FORGE-020A5 already proved a genuine Local model structural-generation episode through Forge's production path:
+The user elected to validate in both environments:
 
-- runtime: Ollama `0.33.2`
-- model: `qwen2.5:7b-instruct`
-- model digest: `845dbda0ea48ed749caafd9e6037047aa19acfcfd82e7047ca97d631a0b697e`
-- quantization: `Q4_K_M`
-- normal CI run `33219195713`: SUCCESS
-- genuine Local Level 0 run `33219195627`: SUCCESS / PASS
-- durable evidence: `docs/evidence/level0/level0-20260828-230922.json`
+1. GitHub-hosted clean runner — **PASS**.
+2. Physical/user PC with Ollama + the same shared verifier — **UNVERIFIED**.
 
-That proves the Local model/provider baseline, but it does **not** substitute for a genuine 020B Tool-Using Agent run.
+On the physical PC, run from the repository root:
 
-## Next execution — real 020B episode
+```powershell
+$env:FORGE_LOCAL_BASE_URL="http://127.0.0.1:11434/v1"
+$env:FORGE_LOCAL_MODEL="qwen2.5:7b-instruct"
+python scripts/verify_local_agent_020b.py
+```
 
-On a machine with Ollama and `qwen2.5:7b-instruct`, execute one genuine production-path Tool-Using Agent episode and preserve evidence. The target loop remains:
+Commit the resulting `docs/evidence/agent020b/*.json`, then update this handoff/report with the physical-host facts. Do not label the PC leg PASS until that evidence exists.
 
-`Need -> plan -> retrieve/tool -> generate -> build/test -> inspect -> repair`
+## Cleanup / completion rule
 
-Fail closed if model/tool/provider/source/provenance facts are missing or if a deterministic/test substitute is used.
+The GitHub one-off real-agent workflow is temporary execution machinery and must not remain as permanent architecture after its evidence is preserved. Final closeout requires:
 
-After the real episode:
-
-1. save durable evidence;
-2. update this handoff and the 020B report with exact runtime/model/provenance/result facts;
-3. record remaining technical debt without rewriting `UNVERIFIED` as PASS;
-4. remove any one-off execution machinery if one was temporarily introduced;
-5. require final normal CI GREEN before declaring 020B closed.
+1. durable real-run evidence committed;
+2. temporary workflow removed;
+3. final normal CI GREEN after cleanup;
+4. physical-PC real-agent evidence added;
+5. remaining unmeasured build/test/runtime/visual/repair capabilities kept explicitly separate from 020B's bounded verification scope.
 
 ## Source of Truth to read first
 
@@ -82,7 +84,7 @@ After the real episode:
 3. `docs/LEARNABLE-LOCAL-AI-VISION.md`
 4. `docs/MACHINE-INDEPENDENT-POLICY.md`
 5. `docs/reports/FORGE-020B-TOOL-USING-LOCAL-AGENT-report.md`
-6. `docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md`
+6. `docs/evidence/agent020b/agent020b-20260829-015345.json`
 7. latest GitHub HEAD / diff / CI
 
 Chat-only status is never the Source of Truth when GitHub has newer evidence.

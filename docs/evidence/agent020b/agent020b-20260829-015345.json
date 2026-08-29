@@ -1,0 +1,114 @@
+{
+  "schema": "forge.real_local_agent.020b.v1",
+  "created_at": 1787968337.7001805,
+  "host": {
+    "hostname": "runnervmgx7h7",
+    "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "python": "3.12.14"
+  },
+  "runtime": {
+    "reachable": true,
+    "backend": "ollama",
+    "version": "0.33.2",
+    "model": "qwen2.5:7b-instruct",
+    "digest": "845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e",
+    "quantization": "Q4_K_M",
+    "error": ""
+  },
+  "probe": "盆栽の水やりの記録をつけたい",
+  "request": {
+    "generation_provider": "local",
+    "agent_mode": "verify"
+  },
+  "http": {
+    "status_code": 200,
+    "status": "success"
+  },
+  "agent": {
+    "requested": true,
+    "executed": true,
+    "outcome": "succeeded",
+    "episode_id": "853ac06f67694826b8569eb8fecdcde6",
+    "provider": "local",
+    "model": "qwen2.5:7b-instruct",
+    "tool_calls": 2,
+    "tools_used": [
+      "inspect_forge_document",
+      "validate_forge_document"
+    ],
+    "validator_outcome": "passed",
+    "stopped_because": ""
+  },
+  "episode": {
+    "episode_id": "853ac06f67694826b8569eb8fecdcde6",
+    "task_id": "forge.local_agent.verify",
+    "intent_reference": "generation:70bd148d54744e47a63f13743b5968fb",
+    "provider": "local",
+    "model": "qwen2.5:7b-instruct",
+    "deployment": "local",
+    "teacher_candidate": false,
+    "knowledge_references": [],
+    "retrieval_references": [],
+    "web_source_references": [],
+    "steps": [
+      {
+        "kind": "generate",
+        "name": "agent_tool_plan",
+        "succeeded": true,
+        "detail_code": "structured_plan",
+        "references": [],
+        "duration_ms": 0.0,
+        "at": 1787968425.2828772
+      },
+      {
+        "kind": "tool_call",
+        "name": "inspect_forge_document",
+        "succeeded": true,
+        "detail_code": "ok",
+        "references": [
+          "27698f33dc0e41fe8425b19ad4d4f707"
+        ],
+        "duration_ms": 0.17,
+        "at": 1787968425.283095
+      },
+      {
+        "kind": "tool_call",
+        "name": "validate_forge_document",
+        "succeeded": true,
+        "detail_code": "ok",
+        "references": [
+          "95d7c43c024a421c97df18f734d4a197"
+        ],
+        "duration_ms": 0.23,
+        "at": 1787968425.2833571
+      },
+      {
+        "kind": "validate",
+        "name": "attempt",
+        "succeeded": true,
+        "detail_code": "",
+        "references": [],
+        "duration_ms": 0.0,
+        "at": 1787968425.2835286
+      }
+    ],
+    "repair_rounds": [],
+    "generation_evidence_uid": "70bd148d54744e47a63f13743b5968fb",
+    "revision_evidence_uids": [],
+    "outcomes": {
+      "validator": "passed",
+      "build": "unknown",
+      "test": "unknown",
+      "runtime": "unknown",
+      "visual": "unknown"
+    },
+    "final_outcome": "succeeded",
+    "user_acceptance": "unknown",
+    "provenance": "local_ai_output",
+    "training_use": "unknown",
+    "started_at": 1787968417.0893998,
+    "finished_at": 1787968425.2835402
+  },
+  "passed": true,
+  "failures": []
+}
