@@ -40,7 +40,7 @@ class ForgeSimulationEngine {
   final Duration step;
   final int maxTicksPerAdvance;
 
-  const ForgeSimulationEngine({
+  ForgeSimulationEngine({
     this.step = const Duration(milliseconds: 250),
     this.maxTicksPerAdvance = 40,
   })  : assert(step > Duration.zero),
@@ -62,7 +62,8 @@ class ForgeSimulationEngine {
 
     final accumulated = state.elapsed + delta;
     final rawTicks = accumulated.inMicroseconds ~/ step.inMicroseconds;
-    final emittedTicks = rawTicks > maxTicksPerAdvance ? maxTicksPerAdvance : rawTicks;
+    final emittedTicks =
+        rawTicks > maxTicksPerAdvance ? maxTicksPerAdvance : rawTicks;
     final consumed = step * emittedTicks;
 
     return ForgeSimulationState(
