@@ -1,0 +1,32 @@
+name: FORGE real Chrome audio mixer probe
+
+on:
+  push:
+    branches:
+      - claude/forge-master-handoff-k46jns
+    paths:
+      - .github/workflows/forge_audio_web_probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  chrome-audio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve Flutter dependencies
+        working-directory: frontend
+        run: flutter pub get
+      - name: Verify Chrome is available
+        run: google-chrome --version || chromium --version
+      - name: Run real browser audio mixer probe
+        working-directory: frontend
+        run: flutter test --platform chrome test/json_ui/forge_audio_mixer_web_test.dart --reporter expanded
