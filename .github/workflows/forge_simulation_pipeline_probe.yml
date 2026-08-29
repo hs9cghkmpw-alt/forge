@@ -1,0 +1,27 @@
+name: FORGE simulation pipeline probe
+
+on:
+  push:
+    branches:
+      - claude/forge-master-handoff-k46jns
+    paths:
+      - .github/workflows/forge_simulation_pipeline_probe.yml
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+      - name: Locate capability-plan generation path
+        run: |
+          echo '--- plan_capabilities ---'
+          rg -n "plan_capabilities|entity_spec_from_plan|compose_layout|layout_emphasis" forge_ai backend || true
+          echo '--- ForgeLanguageCompiler calls ---'
+          rg -n "ForgeLanguageCompiler|\.compile\(" forge_ai backend | head -n 250 || true
+          echo '--- simulation_loop ---'
+          rg -n "simulation_loop|simulate\.loop|simulations" forge_ai backend frontend | head -n 300 || true
