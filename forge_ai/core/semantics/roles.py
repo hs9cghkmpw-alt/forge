@@ -161,6 +161,7 @@ _ROLE_LEXICON: tuple[tuple[str, SemanticRole, str], ...] = (
     ("育て", SemanticRole.ACTIVITY, "grow"),
     ("栽培", SemanticRole.ACTIVITY, "grow"),
     ("組み合わせ", SemanticRole.ACTIVITY, "combine"),
+    ("合成", SemanticRole.ACTIVITY, "combine"),
     ("実験", SemanticRole.ACTIVITY, "experiment"),
     ("釣", SemanticRole.ACTIVITY, "fishing"),
     ("通院", SemanticRole.ACTIVITY, "clinic_visit"),
