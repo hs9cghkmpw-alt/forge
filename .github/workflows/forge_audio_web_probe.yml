@@ -40,4 +40,5 @@ jobs:
           CHROME_EXECUTABLE: /tmp/forge-chrome
         run: flutter test --platform chrome test/json_ui/forge_audio_mixer_web_test.dart --reporter expanded
 
-# One-shot diagnostic rerun: test now emits the exact failed activation state/exception.
+# Dedicated browser-plugin probe. The default VM suite explicitly excludes the
+# web-plugin tag so MissingPluginException there cannot masquerade as a product bug.
