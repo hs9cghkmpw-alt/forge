@@ -88,6 +88,7 @@ String _typeNameOf(ForgeWidgetNode node) => switch (node) {
       // v1.13: deterministic simulation driver. Keep this deliberately
       // duplicated black-box contract exhaustive when the sealed vocabulary grows.
       ForgeSimulationLoopWidgetNode() => 'simulation_loop',
+      ForgeAudioMixerWidgetNode() => 'audio_mixer',
       ForgeUnknownWidgetNode() => 'unknown',
     };
 

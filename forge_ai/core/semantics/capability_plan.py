@@ -196,9 +196,7 @@ _EFFECT_CAPABILITIES: dict[str, str] = {
 }
 
 #: 行い → 「Forge が持っていない振る舞い」の Canonical ID。
-_ACTIVITY_CAPABILITIES: dict[str, tuple[str, ...]] = {
-    "combine": ("effect.media_compose",),
-}
+_ACTIVITY_CAPABILITIES: dict[str, tuple[str, ...]] = {}
 
 #: `MANAGED_OBJECT` / `ACTIVITY` → Entity の名前と表示名。
 _SUBJECT_LABELS: dict[str, tuple[str, str]] = {
@@ -400,10 +398,16 @@ def plan_capabilities(text: str) -> CapabilityPlan:  # noqa: PLR0912 — 段の�
         return CapabilityPlan(roles=roles, structure=StructuralMode.UNKNOWN)
 
     requested: set[str] = set()
+    activities = set(roles.of(SemanticRole.ACTIVITY))
 
     # -- 1件ごとに残す値 ------------------------------------------------
     fields: list[PlannedField] = []
     for value in roles.of(SemanticRole.RECORDED_DATA):
+        # 「音を組み合わせる」の音は記録Fieldではなくミキサーの素材。
+        # 同じ表層語を無条件にdata.audioへ落とすと、ゲームに意味のない
+        # 音声ファイル名入力欄が生える。役の組み合わせで権限を限定する。
+        if value == "sound" and "combine" in activities:
+            continue
         blueprint = _FIELD_BLUEPRINT.get(value)
         if blueprint is None:
             continue
@@ -485,8 +489,16 @@ def plan_capabilities(text: str) -> CapabilityPlan:  # noqa: PLR0912 — 段の�
         for capability_id in _ACTIVITY_CAPABILITIES.get(value, ()):
             requested.add(capability_id)
 
+    if "combine" in activities:
+        recorded_values = set(roles.of(SemanticRole.RECORDED_DATA))
+        if "sound" in recorded_values:
+            requested.add("interact.audio_mix")
+        else:
+            # Object of "combine" is not resolved to sound. Do not pretend the
+            # narrower audio mixer satisfies generic image/media composition.
+            requested.add("effect.media_compose")
+
     # **ゲームは「育てる」と「組み合わせる」が揃ったときに要求される。**
-    activities = set(roles.of(SemanticRole.ACTIVITY))
     if "grow" in activities and "combine" in activities:
         requested.add("simulate.loop")
 

@@ -271,6 +271,7 @@ class ForgeLanguageCompiler:
         design_intent: "DesignIntent | None" = None,
         layout_emphasis: str = "",
         simulation_capabilities: tuple[str, ...] = (),
+        interaction_capabilities: tuple[str, ...] = (),
     ) -> ForgeIRDocument:
         errors = ir.referential_integrity_errors()
         if errors:
@@ -332,7 +333,45 @@ class ForgeLanguageCompiler:
 
         if "simulate.loop" in simulation_capabilities:
             document = self._attach_simulation_loop(document)
+        if "interact.audio_mix" in interaction_capabilities:
+            document = self._attach_audio_mixer(document)
         return document
+
+    @staticmethod
+    def _attach_audio_mixer(document: ForgeIRDocument) -> ForgeIRDocument:
+        widget_id = "audio_mixer"
+
+        def contains_id(node: ForgeIRWidget) -> bool:
+            return node.id == widget_id or any(contains_id(child) for child in node.children)
+
+        screens: list[ForgeIRScreen] = []
+        for screen in document.screens:
+            if contains_id(screen.body):
+                raise ForgeLanguageCompilationError(f"audio mixer widget id collision: {widget_id}")
+            mixer = ForgeIRWidget(
+                type="audio_mixer", id=widget_id,
+                properties={
+                    "title": "サウンドミックス",
+                    "tracks": ["pulse", "chime", "bass"],
+                },
+            )
+            if screen.body.type == "column":
+                body = ForgeIRWidget(
+                    type=screen.body.type, id=screen.body.id,
+                    properties=dict(screen.body.properties),
+                    children=(*screen.body.children, mixer),
+                )
+            else:
+                body = ForgeIRWidget(type="column", id="audio_root", children=(screen.body, mixer))
+            screens.append(ForgeIRScreen(
+                id=screen.id, title=screen.title, state=dict(screen.state), body=body,
+            ))
+        return ForgeIRDocument(
+            version="1.14", initial_screen_id=document.initial_screen_id,
+            screens=tuple(screens), app_title=document.app_title,
+            record_schemas=dict(document.record_schemas),
+            design_tokens=dict(document.design_tokens),
+        )
 
     @staticmethod
     def _attach_simulation_loop(document: ForgeIRDocument) -> ForgeIRDocument:

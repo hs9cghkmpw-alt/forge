@@ -68,7 +68,8 @@ class TestTheUserIsToldWhatCannotBeBuilt(unittest.TestCase):
         gap = _generate(self.client, GAME).get("capability_gap")
         self.assertIsNotNone(gap, "作れないと分かっているのに何も言っていない")
         self.assertNotIn("simulate.loop", gap["missing"])
-        self.assertIn("effect.media_compose", gap["missing"])
+        self.assertNotIn("effect.media_compose", gap["missing"])
+        self.assertIn("interact.audio_mix", gap["partial"])
         self.assertTrue(gap["message"].strip())
 
     def test_the_message_uses_words_not_identifiers(self) -> None:
@@ -100,15 +101,15 @@ class TestCriticalGapsBlockCompletion(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(app)
 
-    def test_a_game_is_not_release_ready(self) -> None:
+    def test_a_game_has_no_critical_capability_gap(self) -> None:
         result = _generate(self.client, GAME)
-        self.assertTrue(result["capability_gap"]["blocks_completion"])
-        self.assertFalse(result["quality"]["release_ready"])
+        self.assertFalse(result["capability_gap"]["blocks_completion"])
 
-    def test_the_reason_appears_in_required_fixes(self) -> None:
+    def test_partial_audio_mix_is_disclosed(self) -> None:
         result = _generate(self.client, GAME)
-        joined = " ".join(result["quality"]["required_fixes"])
-        self.assertIn("まだ作れません", joined)
+        gap = result["capability_gap"]
+        self.assertIn("interact.audio_mix", gap["partial"])
+        self.assertTrue(gap["message"].strip())
 
     def test_a_partial_only_gap_does_not_block_completion(self) -> None:
         """**写真が文字になるだけで「未完成」にしない。** 道具は使える。"""
@@ -143,7 +144,7 @@ class TestTheGapAlsoReachesLearningEvidence(unittest.TestCase):
             if usage.status is CapabilityUsageStatus.MISSING
         }
         self.assertNotIn("simulate.loop", missing)
-        self.assertIn("effect.media_compose", missing)
+        self.assertNotIn("effect.media_compose", missing)
 
     def test_the_evidence_distinguishes_used_from_merely_requested(self) -> None:
         """**求められた / 実際に使われた**を区別する（020A2 §4）。"""

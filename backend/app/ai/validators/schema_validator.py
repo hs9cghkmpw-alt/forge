@@ -77,7 +77,7 @@ MAX_RECORD_LIST_ITEMS = 500  # checklist/string_listと同じ上限に揃える
 MAX_RECORD_FIELDS = 20  # 1Recordが持てるFieldの上限(既存state.maxProperties: 30より保守的)
 MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)
 
-SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13"}
+SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14"}
 
 # バージョン文字列同士を数値として比較するための順序付きタプル。
 # **設計上の注記(このセッションで実際に発見・修正した再発バグへの
@@ -92,7 +92,7 @@ SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1
 # **文字列の大小比較ではなく、この並びの位置で比較する**(`_at_least()`)。
 # "1.10" < "1.9" になる文字列比較を避けるためであり、ここへ追記する
 # 順序がそのままバージョンの前後関係になる。
-_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13")
+_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14")
 
 
 def _version_at_least(version: str, minimum: str) -> bool:
@@ -204,6 +204,7 @@ WIDGET_TYPES_V1_11_ADDITIONS = {"metric_view"}
 
 # v1.13: runtime-backed deterministic simulation loop for semantic capability simulate.loop.
 WIDGET_TYPES_V1_13_ADDITIONS = {"simulation_loop"}
+WIDGET_TYPES_V1_14_ADDITIONS = {"audio_mixer"}
 
 WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.0": WIDGET_TYPES_V1_0,
@@ -276,11 +277,18 @@ WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
         | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
         | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS | WIDGET_TYPES_V1_13_ADDITIONS
     ),
+    "1.14": (
+        WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
+        | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
+        | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS | WIDGET_TYPES_V1_13_ADDITIONS
+        | WIDGET_TYPES_V1_14_ADDITIONS
+    ),
 }
 WIDGET_TYPES_ALL = (
     WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
     | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
     | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS | WIDGET_TYPES_V1_13_ADDITIONS
+    | WIDGET_TYPES_V1_14_ADDITIONS
 )  # 未知Widget判定用
 
 # `tab_view`はchildren[i]が「1タブ分の中身」に対応する、column/row/card/
@@ -325,6 +333,7 @@ ACTION_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.11": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
     "1.12": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
     "1.13": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
+    "1.14": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
 }
 ACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS  # 全バージョン合計(未知typeの判定用)
 
@@ -366,6 +375,7 @@ STATE_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.11": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
     "1.12": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
     "1.13": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
+    "1.14": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
 }
 STATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS
 
@@ -1066,6 +1076,20 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
         if isinstance(max_ticks, bool) or not isinstance(max_ticks, int) or not (1 <= max_ticks <= 1000):
             errors.append(_err(f"{path}/max_ticks_per_advance", Category.RUNTIME_SAFETY, "range",
                                "simulation_loop.max_ticks_per_advanceは1〜1000の整数です。"))
+
+    elif t == "audio_mixer":
+        errors.extend(_check_additional_properties(widget, {"type", "id", "title", "tracks"}, path))
+        if "title" in widget and not _is_nonempty_str(widget.get("title"), 80):
+            errors.append(_err(f"{path}/title", Category.SCHEMA, "string_length",
+                               "audio_mixer.titleは1〜80文字です。"))
+        tracks = widget.get("tracks")
+        allowed_tracks = {"pulse", "chime", "bass"}
+        if not isinstance(tracks, list) or not (1 <= len(tracks) <= 3):
+            errors.append(_err(f"{path}/tracks", Category.SCHEMA, "array_bounds",
+                               "audio_mixer.tracksは1〜3件です。"))
+        elif len(set(tracks)) != len(tracks) or any(track not in allowed_tracks for track in tracks):
+            errors.append(_err(f"{path}/tracks", Category.SCHEMA, "enum",
+                               "audio_mixer.tracksはpulse/chime/bassの重複なし配列です。"))
 
     elif t == "divider":
         errors.extend(_check_additional_properties(widget, {"type", "id"}, path))

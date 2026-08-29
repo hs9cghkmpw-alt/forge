@@ -235,7 +235,7 @@ class TestBindingsAreVerifiedAgainstRealOutput(unittest.TestCase):
             ("旅行の写真を日付ごとに残してメモを付けたい",
              ("data.date", "data.photo", "view.list")),
             ("植物を育てながら音を組み合わせるゲームを作りたい",
-             ("simulate.loop",)),
+             ("simulate.loop", "interact.audio_mix")),
         )
         for need, capabilities in cases:
             usage = self._usage(need)

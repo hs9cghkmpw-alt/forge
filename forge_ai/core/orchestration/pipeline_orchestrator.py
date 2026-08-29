@@ -520,6 +520,7 @@ class CognitiveOrchestrator:
                     # 集計の方を先に見せる。
                     layout_emphasis=compose_layout(capability_plan).value,
                     simulation_capabilities=capability_plan.simulations,
+                    interaction_capabilities=capability_plan.interactions,
                 )
             else:
                 # FORGE-AI-QUALITY-001(2026-08-11): 以前はここで

@@ -955,6 +955,16 @@ sealed class ForgeWidgetNode {
           min: rawMin.toDouble(),
           max: rawMax.toDouble(),
         );
+      case 'audio_mixer':
+        final rawTracks = json['tracks'];
+        if (rawTracks is! List || rawTracks.isEmpty) {
+          throw ForgeParseException('$path/tracks', 'audio_mixer.tracks is required');
+        }
+        return ForgeAudioMixerWidgetNode(
+          id,
+          title: json['title'] as String? ?? 'サウンドミックス',
+          tracks: rawTracks.cast<String>(),
+        );
       case 'simulation_loop':
         // v1.13: deterministic fixed-step simulation lifecycle. The widget owns
         // scheduling only; arithmetic remains in runtime/forge_simulation.dart.
@@ -1272,6 +1282,16 @@ class ForgeSliderWidgetNode extends ForgeWidgetNode {
   final double min;
   final double max;
   const ForgeSliderWidgetNode(super.id, {required this.stateRef, required this.label, required this.min, required this.max});
+}
+
+/// v1.14: user-driven local sound-layer mixer. Track identifiers are a closed
+/// Forge vocabulary and never arbitrary paths or URLs.
+class ForgeAudioMixerWidgetNode extends ForgeWidgetNode {
+  final String title;
+  final List<String> tracks;
+  const ForgeAudioMixerWidgetNode(
+    super.id, {required this.title, required this.tracks}
+  );
 }
 
 /// v1.13: behavior-only fixed-step simulation loop. The referenced state must

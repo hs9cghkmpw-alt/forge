@@ -297,7 +297,8 @@ class TestTheCapabilityPlanReachesDurableEvidence(unittest.TestCase):
         """
         record = self._record_for(GAME_NEED)
         self.assertIn("simulate.loop", record.capabilities)
-        self.assertIn("unsupported:effect.media_compose", record.capabilities)
+        self.assertIn("partial:interact.audio_mix", record.capabilities)
+        self.assertNotIn("unsupported:effect.media_compose", record.capabilities)
 
     def test_partial_support_is_distinguished_from_full_support(self) -> None:
         """020A2: `record.photo` は廃止。Canonical は `data.photo`。"""

@@ -23,6 +23,9 @@ dependencies:
   # 解決できるか・Chromeで動くかは未検証。`lib/features/app_generation/
   # presentation/providers/voice_input_provider.dart`のdocstring参照)。
   speech_to_text: ^7.0.0
+  # v1.14 local audio mixer. Multiple players may run simultaneously; no network
+  # source is accepted by Forge Language. Version verified on pub.dev 2026-08-29.
+  audioplayers: ^6.8.1
 
 dev_dependencies:
   flutter_test:
@@ -37,3 +40,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/forge_f_mark.png
+    - assets/sounds/
