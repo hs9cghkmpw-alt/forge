@@ -1,8 +1,8 @@
-"""FORGE-020C — objective build/test verification for generated workspaces.
+"""FORGE-020C/020D — objective verification for generated workspaces.
 
 Only CommandRunner observations from the generated-artifact workspace can promote
-build/test outcomes. Model text, Forge's repository CI, or log interpretation are not
-accepted as verification truth here.
+build/test/runtime outcomes. Model text, Forge's repository CI, or log interpretation
+are not accepted as verification truth here.
 """
 
 from __future__ import annotations
@@ -26,11 +26,7 @@ __all__ = [
 
 def observation_outcome(observation: CommandObservation) -> VerificationOutcome:
     """Map an OS observation to Forge verification truth without reading model text."""
-    return (
-        VerificationOutcome.PASSED
-        if observation.passed
-        else VerificationOutcome.FAILED
-    )
+    return VerificationOutcome.PASSED if observation.passed else VerificationOutcome.FAILED
 
 
 @dataclass(frozen=True)
@@ -41,6 +37,7 @@ class GeneratedVerification:
     prepare: CommandObservation | None = None
     test: CommandObservation | None = None
     build: CommandObservation | None = None
+    runtime: CommandObservation | None = None
 
 
 @dataclass
@@ -68,7 +65,7 @@ class GeneratedWorkspaceVerifier:
         return f"{stage}_timeout" if observation.timed_out else f"{stage}_failed"
 
     def verify(self) -> GeneratedVerification:
-        """Prepare, test, then build; later stages stay UNKNOWN when never executed."""
+        """Prepare -> test -> build -> optional runtime, preserving unrun UNKNOWNs."""
         runner = self._runner()
 
         prepare: CommandObservation | None = None
@@ -82,6 +79,7 @@ class GeneratedWorkspaceVerifier:
                         validator=VerificationOutcome.PASSED,
                         build=VerificationOutcome.UNKNOWN,
                         test=VerificationOutcome.UNKNOWN,
+                        runtime=VerificationOutcome.UNKNOWN,
                     ),
                     prepare=prepare,
                 )
@@ -96,6 +94,7 @@ class GeneratedWorkspaceVerifier:
                     validator=VerificationOutcome.PASSED,
                     build=VerificationOutcome.UNKNOWN,
                     test=test_outcome,
+                    runtime=VerificationOutcome.UNKNOWN,
                 ),
                 prepare=prepare,
                 test=test,
@@ -103,19 +102,58 @@ class GeneratedWorkspaceVerifier:
 
         build = runner.observe("run_build")
         build_outcome = observation_outcome(build)
+        if not build.passed:
+            return GeneratedVerification(
+                attempt=AttemptResult(
+                    succeeded=False,
+                    failure_code=self._failure_code("build", build),
+                    validator=VerificationOutcome.PASSED,
+                    build=build_outcome,
+                    test=test_outcome,
+                    runtime=VerificationOutcome.UNKNOWN,
+                    visual=VerificationOutcome.UNKNOWN,
+                ),
+                prepare=prepare,
+                test=test,
+                build=build,
+            )
+
+        runtime: CommandObservation | None = None
+        runtime_outcome = VerificationOutcome.UNKNOWN
+        if "run_runtime" in self.commands:
+            runtime = runner.observe("run_runtime")
+            runtime_outcome = observation_outcome(runtime)
+            if not runtime.passed:
+                return GeneratedVerification(
+                    attempt=AttemptResult(
+                        succeeded=False,
+                        failure_code=self._failure_code("runtime", runtime),
+                        validator=VerificationOutcome.PASSED,
+                        build=build_outcome,
+                        test=test_outcome,
+                        runtime=runtime_outcome,
+                        visual=VerificationOutcome.UNKNOWN,
+                    ),
+                    prepare=prepare,
+                    test=test,
+                    build=build,
+                    runtime=runtime,
+                )
+
         return GeneratedVerification(
             attempt=AttemptResult(
-                succeeded=build.passed,
-                failure_code=("" if build.passed else self._failure_code("build", build)),
+                succeeded=True,
+                failure_code="",
                 validator=VerificationOutcome.PASSED,
                 build=build_outcome,
                 test=test_outcome,
-                runtime=VerificationOutcome.UNKNOWN,
+                runtime=runtime_outcome,
                 visual=VerificationOutcome.UNKNOWN,
             ),
             prepare=prepare,
             test=test,
             build=build,
+            runtime=runtime,
         )
 
 
@@ -126,10 +164,10 @@ def run_generated_verification_episode(
 ) -> tuple[GeneratedVerification, LoopReport]:
     """Record one objective generated-workspace attempt into a GenerationEpisode.
 
-    This is deliberately verification-only: repair budget is zero. A failed build/test
-    is therefore recorded by AgentLoop and the report stops as ABANDONED because no
-    repair was attempted in this stage. A later 020D repair stage can use the same
-    verifier as its `attempt` function with a non-zero repair budget.
+    This is deliberately verification-only: repair budget is zero. A failed stage is
+    therefore recorded by AgentLoop and the report stops as ABANDONED because no repair
+    was attempted in this stage. A repair stage can reuse this verifier with non-zero
+    repair budget.
     """
     captured: GeneratedVerification | None = None
 
@@ -144,7 +182,7 @@ def run_generated_verification_episode(
         budget=AgentBudget(
             max_repair_rounds=0,
             max_tool_calls=0,
-            time_budget_seconds=max(verifier.timeout_seconds * 3.0, 1.0),
+            time_budget_seconds=max(verifier.timeout_seconds * 4.0, 1.0),
         ),
     )
     report = loop.run(attempt=attempt, repair=lambda current: current)
