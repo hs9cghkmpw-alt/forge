@@ -1,0 +1,47 @@
+name: FORGE exact Golden visual probe
+
+on:
+  push:
+    branches: [claude/forge-master-handoff-k46jns]
+    paths: [.github/workflows/forge_golden_visual_probe.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Generate exact current Golden document through production API wiring
+        run: python scripts/generate_golden_game_fixture.py /tmp/forge_golden_game.json
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve Flutter dependencies
+        working-directory: frontend
+        run: flutter pub get
+      - name: Render phone viewport and capture evidence
+        working-directory: frontend
+        env:
+          FORGE_GOLDEN_DOC_PATH: /tmp/forge_golden_game.json
+          FORGE_GOLDEN_SCREENSHOT_PATH: ${{ github.workspace }}/golden_game_phone.png
+        run: flutter test test/json_ui/forge_golden_game_render_probe_test.dart --reporter expanded
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-golden-game-visual-evidence
+          path: |
+            golden_game_phone.png
+            /tmp/forge_golden_game.json
+          if-no-files-found: error
