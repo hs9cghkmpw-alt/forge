@@ -10,7 +10,9 @@ both forms.
 
 020D additionally makes the artifact/document binding executable rather than merely
 recorded: every workspace carries a canonical `.forge/document.json` plus metadata,
-and verification can fail closed if either is changed before commands run.
+and verification can fail closed if either is changed before commands run. Generated
+source revisions are fingerprinted separately so repair rounds can be attributed to the
+exact source tree that was objectively tested/built.
 """
 
 from __future__ import annotations
@@ -45,6 +47,28 @@ class GeneratedWorkspace:
 
     def sandbox(self) -> ToolSandbox:
         return ToolSandbox.at(self.root)
+
+    def source_fingerprint(self) -> str:
+        """Hash the current generated-file revision without conflating document ID.
+
+        Repairs are allowed to mutate files in `self.files`, so this value is expected
+        to change across a real repair. Path and byte lengths are framed explicitly to
+        avoid ambiguous concatenation. Missing/unreadable files fail closed.
+        """
+        digest = hashlib.sha256()
+        for relative in self.files:
+            path_bytes = relative.encode("utf-8")
+            try:
+                content = (self.root / pathlib.PurePosixPath(relative)).read_bytes()
+            except OSError as exc:
+                raise GeneratedWorkspaceError(
+                    f"generated source unreadable: {relative}"
+                ) from exc
+            digest.update(len(path_bytes).to_bytes(8, "big"))
+            digest.update(path_bytes)
+            digest.update(len(content).to_bytes(8, "big"))
+            digest.update(content)
+        return digest.hexdigest()
 
     def verify_integrity(self) -> None:
         """Verify materialized metadata/document still match this workspace object."""
@@ -155,7 +179,6 @@ def materialize_generated_workspace(
             encoding="utf-8",
         )
     except Exception:
-        # Do not leave a half-materialized workspace that could accidentally be run.
         import shutil
 
         shutil.rmtree(root, ignore_errors=True)
@@ -167,4 +190,5 @@ def materialize_generated_workspace(
         files=tuple(sorted(seen)),
     )
     workspace.verify_integrity()
+    workspace.source_fingerprint()
     return workspace
