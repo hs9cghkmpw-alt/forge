@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""FORGE-020D real Flutter repair probe.
+"""FORGE-020D/020E real Flutter repair + runtime probe.
 
 Materialize an isolated generated Flutter app, inject one deterministic failing test,
-repair only that generated workspace, then require a fresh Flutter test and Web build
-to pass. The repair callback cannot declare success; CommandRunner exit codes decide.
+repair only that generated workspace, then require fresh Flutter test, Web build, and
+Flutter runtime-smoke observations to pass. Repair/model text cannot declare success;
+CommandRunner exit codes decide.
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 # Backend imports live under ROOT/backend while forge_ai is a top-level package at ROOT.
-# Keep both explicit so the standalone probe behaves the same on a clean GitHub runner.
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
 
@@ -41,6 +41,19 @@ _PASSING_TEST = """import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('FORGE-020D repaired generated workspace', () {
     expect(1, 1);
+  });
+}
+"""
+
+_RUNTIME_TEST = """import 'package:flutter_test/flutter_test.dart';
+import 'package:forge_app/main.dart';
+
+void main() {
+  testWidgets('generated app entrypoint runs in Flutter widget runtime', (tester) async {
+    await tester.pumpWidget(const GeneratedForgeApp());
+    await tester.pump();
+    expect(find.byType(GeneratedForgeApp), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
 """
@@ -70,7 +83,9 @@ def main() -> int:
             forge_document=document,
         )
         probe_path = "test/forge_020d_repair_probe_test.dart"
+        runtime_probe_path = "test/forge_020e_runtime_probe_test.dart"
         workspace.sandbox().write_text(probe_path, _FAILING_TEST)
+        workspace.sandbox().write_text(runtime_probe_path, _RUNTIME_TEST)
 
         verifier = GeneratedWorkspaceVerifier(
             workspace=workspace,
@@ -84,6 +99,13 @@ def main() -> int:
                     "compact",
                 ),
                 "run_build": ("flutter", "build", "web", "--debug"),
+                "run_runtime": (
+                    "flutter",
+                    "test",
+                    runtime_probe_path,
+                    "--reporter",
+                    "compact",
+                ),
             },
             timeout_seconds=600.0,
         )
@@ -104,14 +126,17 @@ def main() -> int:
         )
 
         evidence = {
-            "schema": "forge.generated_flutter_repair.020d.v1",
+            "schema": "forge.generated_flutter_repair.020e.v1",
             "artifact_fingerprint": workspace.artifact_fingerprint,
             "verification_count": len(result.verifications),
             "initial_failure_code": result.initial.attempt.failure_code,
             "initial_test": result.initial.attempt.test.value,
             "initial_build": result.initial.attempt.build.value,
+            "initial_runtime": result.initial.attempt.runtime.value,
             "final_test": result.final.attempt.test.value,
             "final_build": result.final.attempt.build.value,
+            "final_runtime": result.final.attempt.runtime.value,
+            "final_visual": result.final.attempt.visual.value,
             "outcome": result.report.outcome.value,
             "rounds": result.report.rounds,
             "repair_succeeded": episode.repair_succeeded,
@@ -125,8 +150,11 @@ def main() -> int:
             and len(result.verifications) == 2
             and result.initial.attempt.failure_code == "test_failed"
             and result.initial.attempt.build.value == "unknown"
+            and result.initial.attempt.runtime.value == "unknown"
             and result.final.attempt.test.value == "passed"
             and result.final.attempt.build.value == "passed"
+            and result.final.attempt.runtime.value == "passed"
+            and result.final.attempt.visual.value == "unknown"
             and episode.repair_succeeded
         )
         return 0 if passed else 1
