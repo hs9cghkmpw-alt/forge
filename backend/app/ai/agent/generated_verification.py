@@ -25,15 +25,15 @@ __all__ = [
 
 
 def observation_outcome(observation: CommandObservation) -> VerificationOutcome:
-    """Map an OS observation to Forge verification truth without reading model text."""
     return VerificationOutcome.PASSED if observation.passed else VerificationOutcome.FAILED
 
 
 @dataclass(frozen=True)
 class GeneratedVerification:
-    """One generated-app verification attempt plus objective command observations."""
+    """One generated-app verification attempt plus objective observations/provenance."""
 
     attempt: AttemptResult
+    source_fingerprint: str = ""
     prepare: CommandObservation | None = None
     test: CommandObservation | None = None
     build: CommandObservation | None = None
@@ -42,12 +42,7 @@ class GeneratedVerification:
 
 @dataclass
 class GeneratedWorkspaceVerifier:
-    """Run a fixed command plan only inside one generated-artifact workspace.
-
-    The command argv values are owned by Forge/caller configuration, never by the
-    model. `CommandRunner` sets cwd to `workspace.root`, so a successful Forge repo
-    build cannot accidentally become generated-app evidence.
-    """
+    """Run a fixed command plan only inside one generated-artifact workspace."""
 
     workspace: GeneratedWorkspace
     commands: Mapping[str, tuple[str, ...]]
@@ -65,13 +60,11 @@ class GeneratedWorkspaceVerifier:
         return f"{stage}_timeout" if observation.timed_out else f"{stage}_failed"
 
     def verify(self) -> GeneratedVerification:
-        """Integrity -> prepare -> test -> build -> runtime, preserving UNKNOWNs."""
+        """Integrity -> source revision -> prepare -> test -> build -> runtime."""
         try:
             self.workspace.verify_integrity()
+            source_fingerprint = self.workspace.source_fingerprint()
         except GeneratedWorkspaceError:
-            # Do not execute even a prepare command against an artifact whose identity
-            # can no longer be proven. UNKNOWN is more truthful than pretending the
-            # previously validated document is still the one being exercised.
             return GeneratedVerification(
                 attempt=AttemptResult(
                     succeeded=False,
@@ -99,6 +92,7 @@ class GeneratedWorkspaceVerifier:
                         test=VerificationOutcome.UNKNOWN,
                         runtime=VerificationOutcome.UNKNOWN,
                     ),
+                    source_fingerprint=source_fingerprint,
                     prepare=prepare,
                 )
 
@@ -114,6 +108,7 @@ class GeneratedWorkspaceVerifier:
                     test=test_outcome,
                     runtime=VerificationOutcome.UNKNOWN,
                 ),
+                source_fingerprint=source_fingerprint,
                 prepare=prepare,
                 test=test,
             )
@@ -131,6 +126,7 @@ class GeneratedWorkspaceVerifier:
                     runtime=VerificationOutcome.UNKNOWN,
                     visual=VerificationOutcome.UNKNOWN,
                 ),
+                source_fingerprint=source_fingerprint,
                 prepare=prepare,
                 test=test,
                 build=build,
@@ -152,6 +148,7 @@ class GeneratedWorkspaceVerifier:
                         runtime=runtime_outcome,
                         visual=VerificationOutcome.UNKNOWN,
                     ),
+                    source_fingerprint=source_fingerprint,
                     prepare=prepare,
                     test=test,
                     build=build,
@@ -168,6 +165,7 @@ class GeneratedWorkspaceVerifier:
                 runtime=runtime_outcome,
                 visual=VerificationOutcome.UNKNOWN,
             ),
+            source_fingerprint=source_fingerprint,
             prepare=prepare,
             test=test,
             build=build,
@@ -180,13 +178,6 @@ def run_generated_verification_episode(
     episode: GenerationEpisode,
     verifier: GeneratedWorkspaceVerifier,
 ) -> tuple[GeneratedVerification, LoopReport]:
-    """Record one objective generated-workspace attempt into a GenerationEpisode.
-
-    This is deliberately verification-only: repair budget is zero. A failed stage is
-    therefore recorded by AgentLoop and the report stops as ABANDONED because no repair
-    was attempted in this stage. A repair stage can reuse this verifier with non-zero
-    repair budget.
-    """
     captured: GeneratedVerification | None = None
 
     def attempt() -> AttemptResult:
@@ -204,6 +195,6 @@ def run_generated_verification_episode(
         ),
     )
     report = loop.run(attempt=attempt, repair=lambda current: current)
-    if captured is None:  # pragma: no cover - verifier returns or raises before here
+    if captured is None:  # pragma: no cover
         raise RuntimeError("generated verification produced no observation")
     return captured, report
