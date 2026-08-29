@@ -15,6 +15,9 @@ import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+# Backend imports live under ROOT/backend while forge_ai is a top-level package at ROOT.
+# Keep both explicit so the standalone probe behaves the same on a clean GitHub runner.
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.ai.agent.flutter_generated_workspace import (  # noqa: E402
