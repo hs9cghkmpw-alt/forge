@@ -77,7 +77,7 @@ MAX_RECORD_LIST_ITEMS = 500  # checklist/string_listと同じ上限に揃える
 MAX_RECORD_FIELDS = 20  # 1Recordが持てるFieldの上限(既存state.maxProperties: 30より保守的)
 MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)
 
-SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12"}
+SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13"}
 
 # バージョン文字列同士を数値として比較するための順序付きタプル。
 # **設計上の注記(このセッションで実際に発見・修正した再発バグへの
@@ -92,7 +92,7 @@ SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1
 # **文字列の大小比較ではなく、この並びの位置で比較する**(`_at_least()`)。
 # "1.10" < "1.9" になる文字列比較を避けるためであり、ここへ追記する
 # 順序がそのままバージョンの前後関係になる。
-_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12")
+_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13")
 
 
 def _version_at_least(version: str, minimum: str) -> bool:
@@ -202,6 +202,9 @@ WIDGET_TYPES_V1_8_ADDITIONS = {"slider"}
 #   のと同じ形で、2番目の利用者になる。
 WIDGET_TYPES_V1_11_ADDITIONS = {"metric_view"}
 
+# v1.13: runtime-backed deterministic simulation loop for semantic capability simulate.loop.
+WIDGET_TYPES_V1_13_ADDITIONS = {"simulation_loop"}
+
 WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.0": WIDGET_TYPES_V1_0,
     "1.1": WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS,
@@ -268,11 +271,16 @@ WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
         | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
         | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS
     ),
+    "1.13": (
+        WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
+        | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
+        | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS | WIDGET_TYPES_V1_13_ADDITIONS
+    ),
 }
 WIDGET_TYPES_ALL = (
     WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
     | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
-    | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS
+    | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS | WIDGET_TYPES_V1_13_ADDITIONS
 )  # 未知Widget判定用
 
 # `tab_view`はchildren[i]が「1タブ分の中身」に対応する、column/row/card/
@@ -316,6 +324,7 @@ ACTION_TYPES_BY_VERSION: dict[str, set[str]] = {
     # v1.11。metric_viewは表示専用なので新しいAction型を追加しない。
     "1.11": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
     "1.12": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
+    "1.13": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
 }
 ACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS  # 全バージョン合計(未知typeの判定用)
 
@@ -356,6 +365,7 @@ STATE_TYPES_BY_VERSION: dict[str, set[str]] = {
     # 新しいState型を追加しない(bar_chartと同じ)。
     "1.11": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
     "1.12": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
+    "1.13": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
 }
 STATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS
 
@@ -1040,6 +1050,22 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
                     if not _is_identifier(field_name) or not _is_identifier(source_ref):
                         errors.append(_err(f"{path}/select_field_bindings/{field_name}", Category.SCHEMA,
                                             "identifier_format", f"select_field_bindingsの'{field_name}'が不正です。"))
+
+    elif t == "simulation_loop":
+        errors.extend(_check_additional_properties(
+            widget, {"type", "id", "state_ref", "step_ms", "max_ticks_per_advance"}, path
+        ))
+        if not _is_identifier(widget.get("state_ref")):
+            errors.append(_err(f"{path}/state_ref", Category.SCHEMA, "required",
+                               "simulation_loop.state_refは必須です。"))
+        step_ms = widget.get("step_ms", 250)
+        if isinstance(step_ms, bool) or not isinstance(step_ms, int) or not (16 <= step_ms <= 60_000):
+            errors.append(_err(f"{path}/step_ms", Category.RUNTIME_SAFETY, "range",
+                               "simulation_loop.step_msは16〜60000の整数です。"))
+        max_ticks = widget.get("max_ticks_per_advance", 40)
+        if isinstance(max_ticks, bool) or not isinstance(max_ticks, int) or not (1 <= max_ticks <= 1000):
+            errors.append(_err(f"{path}/max_ticks_per_advance", Category.RUNTIME_SAFETY, "range",
+                               "simulation_loop.max_ticks_per_advanceは1〜1000の整数です。"))
 
     elif t == "divider":
         errors.extend(_check_additional_properties(widget, {"type", "id"}, path))

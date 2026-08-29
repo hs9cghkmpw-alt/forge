@@ -19,6 +19,7 @@ import 'widget_registry_v1_6.dart';
 import 'widget_registry_v1_7.dart';
 import 'widget_registry_v1_8.dart';
 import 'widget_registry_v1_11.dart';
+import 'widget_registry_v1_13.dart';
 
 export 'widget_registry_core.dart' show ForgeWidgetRegistry, ForgeWidgetBuilder, ForgeFallbackWidget, buildForgeWidget;
 
@@ -54,6 +55,8 @@ ForgeWidgetRegistry buildDefaultForgeRegistry() {
   // v1.11で追加された1種(Hero KPI、FORGE-R1 / TD69、2026-08-17)。
   // v1.9/v1.10はWidgetを増やしていないので、ファイルも無い。
   registerV1_11Widgets(registry);
+  // v1.13: deterministic simulation lifecycle (`simulate.loop`).
+  registerV1_13Widgets(registry);
   return registry;
 }
 

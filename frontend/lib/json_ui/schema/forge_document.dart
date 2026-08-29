@@ -955,6 +955,24 @@ sealed class ForgeWidgetNode {
           min: rawMin.toDouble(),
           max: rawMax.toDouble(),
         );
+      case 'simulation_loop':
+        // v1.13: deterministic fixed-step simulation lifecycle. The widget owns
+        // scheduling only; arithmetic remains in runtime/forge_simulation.dart.
+        final simulationStateRef = json['state_ref'];
+        if (simulationStateRef is! String || simulationStateRef.isEmpty) {
+          throw ForgeParseException(
+            '$path/state_ref',
+            'simulation_loop.state_ref is required',
+          );
+        }
+        final rawStepMs = json['step_ms'];
+        final rawMaxTicks = json['max_ticks_per_advance'];
+        return ForgeSimulationLoopWidgetNode(
+          id,
+          stateRef: simulationStateRef,
+          stepMilliseconds: rawStepMs is num ? rawStepMs.toInt() : 250,
+          maxTicksPerAdvance: rawMaxTicks is num ? rawMaxTicks.toInt() : 40,
+        );
       default:
         // 未知Widget: 例外を投げず、専用のFallbackノードとして扱う。
         // (Validatorが既に弾いているはずだが、クライアント側も多重防御する)
@@ -1254,6 +1272,21 @@ class ForgeSliderWidgetNode extends ForgeWidgetNode {
   final double min;
   final double max;
   const ForgeSliderWidgetNode(super.id, {required this.stateRef, required this.label, required this.min, required this.max});
+}
+
+/// v1.13: behavior-only fixed-step simulation loop. The referenced state must
+/// be a number and stores the deterministic emitted tick count.
+class ForgeSimulationLoopWidgetNode extends ForgeWidgetNode {
+  final String stateRef;
+  final int stepMilliseconds;
+  final int maxTicksPerAdvance;
+
+  const ForgeSimulationLoopWidgetNode(
+    super.id, {
+    required this.stateRef,
+    this.stepMilliseconds = 250,
+    this.maxTicksPerAdvance = 40,
+  });
 }
 
 /// Validatorをすり抜けた未知typeに対する、クライアント側の最終防衛線。

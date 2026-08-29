@@ -57,6 +57,7 @@ String typeNameOf(ForgeWidgetNode node) => switch (node) {
       ForgeTabViewWidgetNode() => 'tab_view',
       ForgeSliderWidgetNode() => 'slider',
       ForgeMetricViewWidgetNode() => 'metric_view',
+      ForgeSimulationLoopWidgetNode() => 'simulation_loop',
       ForgeUnknownWidgetNode() => 'unknown',
     };
 
