@@ -238,6 +238,7 @@ class LearningTaskId:
 _FORGE_TASK_MAPPING: dict[ForgeTask, LearningTaskId] = {
     ForgeTask.CONVERSATION_STEP: LearningTaskId("forge", "conversation_step"),
     ForgeTask.ENTITY_SYNTHESIS: LearningTaskId("forge", "entity_synthesis"),
+    ForgeTask.AGENT_STEP: LearningTaskId("forge", "agent_step"),
     ForgeTask.FORGE_LANGUAGE_UPDATE: LearningTaskId("forge", "forge_language_update"),
     ForgeTask.COGNITIVE_STAGE: LearningTaskId("forge", "cognitive_stage"),
 }
