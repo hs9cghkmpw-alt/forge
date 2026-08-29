@@ -62,7 +62,7 @@ class ForgeSimulationEngine {
 
     final accumulated = state.elapsed + delta;
     final rawTicks = accumulated.inMicroseconds ~/ step.inMicroseconds;
-    final emittedTicks = rawTicks.clamp(0, maxTicksPerAdvance);
+    final emittedTicks = rawTicks > maxTicksPerAdvance ? maxTicksPerAdvance : rawTicks;
     final consumed = step * emittedTicks;
 
     return ForgeSimulationState(
