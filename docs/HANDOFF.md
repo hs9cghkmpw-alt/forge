@@ -3,63 +3,67 @@
 ## Current state
 
 - Branch: `claude/forge-master-handoff-k46jns`
-- Current task: **FORGE-020B — Tool-Using Local Agent production wiring / dual-environment closeout**
+- Current task: **FORGE-020D/020E — objective generated-app verification + bounded repair + runtime evidence closeout**
 - 020B production wiring commit: `763fa326ad8b497db5d0fdb9a56bd57ed7d49710`
-- 020B evidence-integrity hardening: `1780adcebcbde34bfbb145d924826b9c603520c3`
-- 020B provenance / production-entry hardening: `4a09d71a850b322e9ba0f77a6ee01486c734d413`
-- Learning-contract fix for `ForgeTask.AGENT_STEP`: `6dab22f27a1007b67438cf9ce91f207ae129d274`
-- Shared real-agent verifier: `scripts/verify_local_agent_020b.py`
-- Normal CI run `33222716256` = **SUCCESS**, all four jobs green.
+- Shared 020B real-agent verifier: `scripts/verify_local_agent_020b.py`
 - Genuine GitHub-hosted real Tool-Using Local Agent run `33227448429` = **SUCCESS / PASS**.
-- Durable GitHub-runner evidence: `docs/evidence/agent020b/agent020b-20260829-015345.json`.
-- GitHub Actions artifact: id `9707382693`, digest `sha256:b76d0184c3eac34a3c801a8382c716e8fc530622c731d7d406eef35a2b6cd469`.
-- Evidence/cleanup commit: `b60edbe20966a9c458c51c713c6e06c552659ebe`.
-- Final normal cleanup CI run `33227912897` = **SUCCESS**, all four jobs green.
-- **Physical/user PC real-agent run: UNVERIFIED / NOT YET EXECUTED.**
-- Golden Generated App Quality Gate remains **FAIL** from the latest visual review. 020B success does not rewrite that evidence.
+- Durable 020B evidence: `docs/evidence/agent020b/agent020b-20260829-015345.json`.
+- 020B artifact id `9707382693`, digest `sha256:b76d0184c3eac34a3c801a8382c716e8fc530622c731d7d406eef35a2b6cd469`.
+- Physical/user-PC 020B real-agent leg: **UNVERIFIED / NOT YET EXECUTED**.
+- Generated-artifact workspace isolation/materialization is implemented.
+- Objective `CommandObservation` exit-code/timeout mapping into GenerationEpisode is implemented.
+- Bounded generated-app repair loop is implemented; repair cannot self-assert PASS and must reverify.
+- Real GitHub-hosted generated Flutter repair/runtime run `33236863659` = **SUCCESS / PASS**.
+- Durable 020D/020E evidence: `docs/evidence/agent020d/forge-020d-real-evidence-20260829.json`.
+- 020D/020E artifact id `9710186190`, digest `sha256:bb66c4b1fb38dec4f70783b813b15f16fd7d82f20adee98687d80cded89f6bd9`.
+- Evidence-bearing head SHA: `ad4cea4579c788fb573d72cb21645973eb7f39c7`.
+- Golden Generated App Quality Gate remains **FAIL**. Visual outcome in the real repair episode is `unknown` and must not be rewritten as PASS.
 
-Detailed 020B report: `docs/reports/FORGE-020B-TOOL-USING-LOCAL-AGENT-report.md`
+Detailed reports:
 
-## What the genuine GitHub-runner episode proved
+- `docs/reports/FORGE-020B-TOOL-USING-LOCAL-AGENT-report.md`
+- `docs/reports/FORGE-020D-GENERATED-REPAIR-LOOP-report.md`
 
-The one-off runner installed/used a real Ollama runtime and real `qwen2.5:7b-instruct` weights, then executed the shared verifier through Forge's production HTTP generation path with `provider=local` and `agent_mode=verify`.
+## What the genuine 020D/020E GitHub-runner episode proved
 
-Exact evidence:
+A clean GitHub-hosted runner materialized an isolated generated Flutter app around a Forge Document, injected a deterministic failing Flutter test, observed the failure objectively, applied one bounded Forge-side repair, and re-ran the same generated-workspace verifier.
 
-- Ollama `0.33.2`
-- model `qwen2.5:7b-instruct`
-- digest `845dbda0ea48ed749caafd9e6037047aa19acfcfd82e704d7ca97d631a0b697e`
-- quantization `Q4_K_M`
-- HTTP status 200 / Forge status `success`
-- Agent requested: true
-- Agent executed: true
-- Agent provider: `local`
-- Agent model: `qwen2.5:7b-instruct`
-- Agent outcome: `succeeded`
-- tool calls: 2
-- tools used: `inspect_forge_document`, `validate_forge_document`
-- fresh Validator outcome: `passed`
-- Episode deployment: `local`
-- Episode provenance: `local_ai_output`
-- Generation Evidence UID: `70bd148d54744e47a63f13743b5968fb`
-- verifier `passed=true`, failures=[]
+Exact durable evidence:
 
-This is genuine 020B evidence of a real Local model producing an Agent tool plan and Forge executing the selected read-only inspection tools through the production Agent path. It is not a test-double substitute.
+- schema `forge.generated_flutter_repair.020e.v1`
+- generated artifact fingerprint `bbbb683514b53261eebe2ff9af3837a1ab3b12d16f926ce80dd3f08c9ec93db5`
+- verification count `2`
+- initial failure code `test_failed`
+- initial test `failed`
+- initial build `unknown`
+- initial runtime `unknown`
+- repair rounds `1`
+- repair round 1 `resolved=true`
+- final test `passed`
+- final build `passed`
+- final runtime `passed`
+- final visual `unknown`
+- final outcome `succeeded`
+- `repair_succeeded=true`
 
-## Important boundary — what this episode did NOT prove
+This proves the objective generated-artifact trajectory `test fail -> repair -> test pass -> build pass -> runtime pass` on a real Flutter runner. Success comes from Forge-observed command exit codes/timeouts, not model claims or log interpretation.
 
-The bounded 020B verifier intentionally leaves `build`, `test`, `runtime`, and `visual` outcomes as `unknown`; those stages were not executed in this Agent episode. `repair_rounds` is empty because no repair was required. Therefore do not claim the full future loop `build/test/runtime/visual/repair` has been proven by this run.
+## Important boundary — what is still not proved
 
-The runner log also shows a second `ollama serve` process could not bind because port 11434 was already occupied. The verifier independently confirmed the reachable Ollama runtime and exact model digest before counting the run; the duplicate-start log is not evidence of a failed inference run, but future one-off workflows should avoid launching a redundant server process when the installer already started one.
+- Visual quality remains unmeasured in this episode (`visual=unknown`).
+- The latest Golden Generated App Quality Gate remains **FAIL** until a genuine visual/behavioral rerun passes.
+- The 020D real-run repair mutation is trusted Forge-side and bounded; it is not evidence that a local model autonomously chose a good repair.
+- Physical/user-PC execution of the shared 020B local-agent verifier remains unverified.
+- Production API DTO exposure of all build/test/runtime/repair details is not yet the same as internal Episode evidence.
+- Capability gaps such as real simulation/media semantics must not be papered over by registry names without renderer/runtime support.
 
-## Dual-environment closeout still pending
+## Initial real-repair probe failure
 
-The user elected to validate in both environments:
+An earlier GitHub real-repair attempt failed before entering the repair loop with `ModuleNotFoundError: forge_ai`. The standalone probe did not have the repository root on Python's import path and the workflow had not provisioned backend dependencies. Those environment defects were corrected. Only successful run `33236863659` is the evidence-bearing repair/runtime run.
 
-1. GitHub-hosted clean runner — **PASS**.
-2. Physical/user PC with Ollama + the same shared verifier — **UNVERIFIED**.
+## Physical-PC 020B leg still pending
 
-On the physical PC, run from the repository root:
+From the repository root on the physical PC:
 
 ```powershell
 $env:FORGE_LOCAL_BASE_URL="http://127.0.0.1:11434/v1"
@@ -67,20 +71,15 @@ $env:FORGE_LOCAL_MODEL="qwen2.5:7b-instruct"
 python scripts/verify_local_agent_020b.py
 ```
 
-Commit the resulting `docs/evidence/agent020b/*.json`, then update this handoff/report with the physical-host facts. Do not label the PC leg PASS until that evidence exists.
+Do not label the physical leg PASS until its evidence JSON exists and is preserved.
 
-## Cleanup / completion rule
+## Next work
 
-GitHub-hosted closeout prerequisites are now satisfied:
-
-1. durable real-run evidence committed — **DONE**;
-2. temporary real-agent workflow removed — **DONE**;
-3. final normal CI after cleanup — **GREEN / DONE** (`33227912897`).
-
-Dual-environment closeout still requires:
-
-4. physical-PC real-agent evidence added;
-5. remaining unmeasured build/test/runtime/visual/repair capabilities kept explicitly separate from 020B's bounded verification scope.
+1. Remove the one-off `FORGE-020D real generated Flutter repair` workflow after durable evidence preservation.
+2. Require normal persistent CI to pass after that cleanup.
+3. Move to the actual Golden Generated App Quality Gate blockers: semantic/runtime support first, then genuine runtime/visual rerun.
+4. Keep `visual=unknown` and Golden Gate FAIL until directly measured.
+5. After objective generated-app verification is stable, wire model/agent diagnosis and controlled repair selection without weakening the same verifier boundary.
 
 ## Source of Truth to read first
 
@@ -89,8 +88,10 @@ Dual-environment closeout still requires:
 3. `docs/LEARNABLE-LOCAL-AI-VISION.md`
 4. `docs/MACHINE-INDEPENDENT-POLICY.md`
 5. `docs/reports/FORGE-020B-TOOL-USING-LOCAL-AGENT-report.md`
-6. `docs/evidence/agent020b/agent020b-20260829-015345.json`
-7. latest GitHub HEAD / diff / CI
+6. `docs/reports/FORGE-020D-GENERATED-REPAIR-LOOP-report.md`
+7. `docs/evidence/agent020b/agent020b-20260829-015345.json`
+8. `docs/evidence/agent020d/forge-020d-real-evidence-20260829.json`
+9. latest GitHub HEAD / diff / CI
 
 Chat-only status is never the Source of Truth when GitHub has newer evidence.
 
