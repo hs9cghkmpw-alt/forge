@@ -30,3 +30,5 @@ jobs:
       - name: Run real browser audio mixer probe
         working-directory: frontend
         run: flutter test --platform chrome test/json_ui/forge_audio_mixer_web_test.dart --reporter expanded
+
+# One-shot evidence trigger refreshed 2026-08-30 JST. Remove this workflow after the probe is green.
