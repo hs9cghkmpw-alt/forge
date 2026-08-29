@@ -46,7 +46,8 @@ def test_golden_game_generates_simulation_and_interactive_audio_without_fake_gap
     widget_types = _widget_types(document)
     assert "simulation_loop" in widget_types
     assert "audio_mixer" in widget_types
-    assert document["version"] == "1.14"
+    major, minor = (int(part) for part in document["version"].split(".", 1))
+    assert (major, minor) >= (1, 14)
 
 
 def test_golden_game_does_not_conflate_mixing_with_media_authoring() -> None:

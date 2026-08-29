@@ -493,6 +493,11 @@ def plan_capabilities(text: str) -> CapabilityPlan:  # noqa: PLR0912 — 段の�
         recorded_values = set(roles.of(SemanticRole.RECORDED_DATA))
         if "sound" in recorded_values:
             requested.add("interact.audio_mix")
+            # Interactive layer mixing is a runtime interaction. Asking Forge to
+            # render/export a newly composed media asset is a distinct authoring
+            # capability and must not be silently satisfied by the mixer.
+            if any(keyword in text for keyword in ("書き出", "エクスポート", "ファイルに保存")):
+                requested.add("effect.media_compose")
         else:
             # Object of "combine" is not resolved to sound. Do not pretend the
             # narrower audio mixer satisfies generic image/media composition.
