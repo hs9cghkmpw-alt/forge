@@ -152,9 +152,6 @@ class TestHTTPProductionWiring(unittest.TestCase):
         self.assertIn("validate_forge_document", result["agent"]["tools_used"])
 
     def test_unregistered_side_effecting_tool_cannot_execute(self) -> None:
-        # The test double intentionally ignores the JSON Schema enum so that the
-        # ToolBroker boundary itself is exercised. Real structured providers are
-        # expected to reject this even earlier at the model-contract boundary.
         result, _ = self._generate({
             "tools": ["write_file"],
             "reason_code": "try_write",
@@ -165,11 +162,14 @@ class TestHTTPProductionWiring(unittest.TestCase):
         self.assertEqual(agent["stopped_because"], "max_repair_rounds")
 
     def test_critical_capability_gap_is_partial_not_complete(self) -> None:
+        # Interactive audio mixing + simulation are now real capabilities. Use a
+        # genuinely unsupported authoring/export request to preserve this boundary.
         result, _ = self._generate(
             {"tools": ["validate_forge_document"], "reason_code": "verify"},
-            text="植物を育てながら音を組み合わせるゲームを作りたい",
+            text="植物を育てながら新しい音を合成して書き出すゲームを作りたい",
         )
         self.assertTrue(result["capability_gap"]["blocks_completion"])
+        self.assertIn("effect.media_compose", result["capability_gap"]["missing"])
         self.assertEqual(result["agent"]["outcome"], "partial")
         self.assertEqual(
             result["agent"]["stopped_because"], "critical_capability_gap"
