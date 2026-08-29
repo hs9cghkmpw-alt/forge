@@ -85,6 +85,9 @@ String _typeNameOf(ForgeWidgetNode node) => switch (node) {
       // Runtime本体の`typeNameOf()`だけ直しても、テスト側のこの複製が
       // sealed classの非網羅switchとしてコンパイルエラーになる。
       ForgeMetricViewWidgetNode() => 'metric_view',
+      // v1.13: deterministic simulation driver. Keep this deliberately
+      // duplicated black-box contract exhaustive when the sealed vocabulary grows.
+      ForgeSimulationLoopWidgetNode() => 'simulation_loop',
       ForgeUnknownWidgetNode() => 'unknown',
     };
 

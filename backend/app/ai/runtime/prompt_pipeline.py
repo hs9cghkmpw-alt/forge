@@ -550,6 +550,7 @@ def _capabilities_used(context) -> tuple[str, ...]:  # noqa: ANN001
     names.extend(getattr(plan, "views", ()) or ())
     names.extend(getattr(plan, "interactions", ()) or ())
     names.extend(getattr(plan, "effects", ()) or ())
+    names.extend(getattr(plan, "simulations", ()) or ())
     names.extend(f"partial:{name}" for name in getattr(plan, "partial", ()) or ())
     names.extend(
         f"unsupported:{name}" for name in getattr(plan, "unsupported", ()) or ()
