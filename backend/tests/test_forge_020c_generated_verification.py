@@ -11,9 +11,17 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from app.ai.agent.generated_verification import GeneratedWorkspaceVerifier  # noqa: E402
+from app.ai.agent.generated_verification import (  # noqa: E402
+    GeneratedWorkspaceVerifier,
+    run_generated_verification_episode,
+)
 from app.ai.agent.generated_workspace import materialize_generated_workspace  # noqa: E402
-from app.ai.learning.episode import VerificationOutcome  # noqa: E402
+from app.ai.learning.episode import (  # noqa: E402
+    EpisodeOutcome,
+    GenerationEpisode,
+    StepKind,
+    VerificationOutcome,
+)
 
 
 class TestGeneratedWorkspaceVerification(unittest.TestCase):
@@ -104,6 +112,51 @@ class TestGeneratedWorkspaceVerification(unittest.TestCase):
             },
         ).verify()
         self.assertTrue(result.attempt.succeeded)
+
+    def test_objective_results_are_recorded_into_episode_steps(self) -> None:
+        workspace = self._workspace()
+        episode = GenerationEpisode(task_id="forge.generated.verify")
+        verification, report = run_generated_verification_episode(
+            episode=episode,
+            verifier=GeneratedWorkspaceVerifier(
+                workspace=workspace,
+                commands={
+                    "run_test": (sys.executable, "-c", "raise SystemExit(0)"),
+                    "run_build": (sys.executable, "-c", "raise SystemExit(0)"),
+                },
+            ),
+        )
+        self.assertTrue(verification.attempt.succeeded)
+        self.assertEqual(report.outcome, EpisodeOutcome.SUCCEEDED)
+        self.assertEqual(episode.test_outcome, VerificationOutcome.PASSED)
+        self.assertEqual(episode.build_outcome, VerificationOutcome.PASSED)
+        typed = {(step.kind, step.name): step for step in episode.steps}
+        self.assertTrue(typed[(StepKind.TEST, "test")].succeeded)
+        self.assertTrue(typed[(StepKind.BUILD, "build")].succeeded)
+        self.assertNotIn((StepKind.RUN, "runtime"), typed)
+        self.assertNotIn((StepKind.VISUAL, "visual"), typed)
+
+    def test_failed_test_is_episode_failed_fact_but_unrun_build_stays_unknown(self) -> None:
+        workspace = self._workspace()
+        episode = GenerationEpisode(task_id="forge.generated.verify")
+        verification, report = run_generated_verification_episode(
+            episode=episode,
+            verifier=GeneratedWorkspaceVerifier(
+                workspace=workspace,
+                commands={
+                    "run_test": (sys.executable, "-c", "raise SystemExit(12)"),
+                    "run_build": (sys.executable, "-c", "raise SystemExit(0)"),
+                },
+            ),
+        )
+        self.assertEqual(verification.attempt.test, VerificationOutcome.FAILED)
+        self.assertEqual(verification.attempt.build, VerificationOutcome.UNKNOWN)
+        self.assertEqual(report.outcome, EpisodeOutcome.ABANDONED)
+        self.assertEqual(episode.test_outcome, VerificationOutcome.FAILED)
+        self.assertEqual(episode.build_outcome, VerificationOutcome.UNKNOWN)
+        typed = {(step.kind, step.name) for step in episode.steps}
+        self.assertIn((StepKind.TEST, "test"), typed)
+        self.assertNotIn((StepKind.BUILD, "build"), typed)
 
 
 if __name__ == "__main__":  # pragma: no cover
