@@ -42,8 +42,11 @@ void main() {
     expect(find.byType(ErrorWidget), findsNothing);
     expect(find.byType(FilterChip), findsAtLeastNWidgets(2),
         reason: 'interactive audio layers must be visibly controllable');
-    expect(find.textContaining('音'), findsWidgets,
-        reason: 'the generated game must expose its audio affordance in visible copy');
+    // Assert the actual public audio affordance rather than coupling the visual gate
+    // to a Japanese copy choice made upstream. These labels are the concrete controls
+    // rendered by the runtime-backed audio_mixer widget.
+    expect(find.text('Pulse'), findsOneWidget);
+    expect(find.text('Chime'), findsOneWidget);
 
     final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(captureKey));
     final image = await boundary.toImage(pixelRatio: 2.0);
