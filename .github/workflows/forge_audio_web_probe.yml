@@ -31,4 +31,4 @@ jobs:
         working-directory: frontend
         run: flutter test --platform chrome test/json_ui/forge_audio_mixer_web_test.dart --reporter expanded
 
-# One-shot evidence trigger refreshed after v1.14 compile repair, 2026-08-30 JST. Remove after green evidence.
+# One-shot evidence trigger refreshed after lint/diagnostic repair, 2026-08-30 JST. Remove after green evidence.
