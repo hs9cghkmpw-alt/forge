@@ -218,17 +218,57 @@ class AgentLoop:
         if self._now() - self._started > self._budget.time_budget_seconds:
             raise BudgetExhausted("time_budget_seconds")
 
+    def _record_verification_step(
+        self,
+        *,
+        kind: StepKind,
+        name: str,
+        outcome: VerificationOutcome,
+    ) -> None:
+        """実際に観測された検証だけを Episode の手順として残す。
+
+        UNKNOWN は「実施したが結果を記録し忘れた」と誤読されうるため手順を
+        作らない。PASSED/FAILED/SKIPPED/UNSUPPORTED はいずれも観測された事実
+        なので、種類と結果を分離して記録する。
+        """
+        if outcome is VerificationOutcome.UNKNOWN:
+            return
+        self._episode.record_step(EpisodeStep(
+            kind=kind,
+            name=name,
+            succeeded=outcome is VerificationOutcome.PASSED,
+            detail_code=outcome.value,
+            at=time.time(),
+        ))
+
     def _note_attempt(self, result: AttemptResult) -> None:
         self._episode.validator_outcome = result.validator
         self._episode.build_outcome = result.build
         self._episode.test_outcome = result.test
         self._episode.runtime_outcome = result.runtime
         self._episode.visual_outcome = result.visual
+
+        # 後方互換の attempt 要約。個々の検証の真偽は下の typed step を見る。
         self._episode.record_step(EpisodeStep(
             kind=StepKind.VALIDATE, name="attempt",
             succeeded=result.succeeded,
             detail_code=result.failure_code, at=time.time(),
         ))
+        self._record_verification_step(
+            kind=StepKind.VALIDATE, name="validator", outcome=result.validator,
+        )
+        self._record_verification_step(
+            kind=StepKind.BUILD, name="build", outcome=result.build,
+        )
+        self._record_verification_step(
+            kind=StepKind.TEST, name="test", outcome=result.test,
+        )
+        self._record_verification_step(
+            kind=StepKind.RUN, name="runtime", outcome=result.runtime,
+        )
+        self._record_verification_step(
+            kind=StepKind.VISUAL, name="visual", outcome=result.visual,
+        )
 
     def _abandon(
         self, report: LoopReport, why: str, result: AttemptResult | None = None
