@@ -367,7 +367,8 @@ class ForgeLanguageCompiler:
                 id=screen.id, title=screen.title, state=dict(screen.state), body=body,
             ))
         return ForgeIRDocument(
-            version="1.14", initial_screen_id=document.initial_screen_id,
+            version=("1.15" if document.version == "1.15" else "1.14"),
+            initial_screen_id=document.initial_screen_id,
             screens=tuple(screens), app_title=document.app_title,
             record_schemas=dict(document.record_schemas),
             design_tokens=dict(document.design_tokens),
@@ -409,17 +410,27 @@ class ForgeLanguageCompiler:
                     "max_ticks_per_advance": 40,
                 },
             )
+            progress = ForgeIRWidget(
+                type="simulation_progress",
+                id="simulation_progress",
+                properties={
+                    "state_ref": state_ref,
+                    "title": "進行",
+                    "stages": ["はじまり", "成長中", "育ってきた", "完成"],
+                    "ticks_per_stage": 8,
+                },
+            )
             if screen.body.type == "column":
                 body = ForgeIRWidget(
                     type=screen.body.type,
                     id=screen.body.id,
                     properties=dict(screen.body.properties),
-                    children=(driver, *screen.body.children),
+                    children=(driver, progress, *screen.body.children),
                 )
             else:
                 body = ForgeIRWidget(
                     type="column", id="simulation_root",
-                    children=(driver, screen.body),
+                    children=(driver, progress, screen.body),
                 )
             screens.append(ForgeIRScreen(
                 id=screen.id,
@@ -432,7 +443,7 @@ class ForgeLanguageCompiler:
             ))
 
         return ForgeIRDocument(
-            version="1.13",
+            version="1.15",
             initial_screen_id=document.initial_screen_id,
             screens=tuple(screens),
             app_title=document.app_title,

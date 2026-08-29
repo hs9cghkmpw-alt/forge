@@ -21,6 +21,7 @@ import 'widget_registry_v1_8.dart';
 import 'widget_registry_v1_11.dart';
 import 'widget_registry_v1_13.dart';
 import 'widget_registry_v1_14.dart';
+import 'widget_registry_v1_15.dart';
 
 export 'widget_registry_core.dart' show ForgeWidgetRegistry, ForgeWidgetBuilder, ForgeFallbackWidget, buildForgeWidget;
 
@@ -59,6 +60,7 @@ ForgeWidgetRegistry buildDefaultForgeRegistry() {
   // v1.13: deterministic simulation lifecycle (`simulate.loop`).
   registerV1_13Widgets(registry);
   registerV1_14Widgets(registry);
+  registerV1_15Widgets(registry);
   return registry;
 }
 

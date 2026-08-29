@@ -29,7 +29,8 @@ def test_audio_mix_materializes_real_v114_widget():
         simulation_capabilities=plan.simulations,
         interaction_capabilities=plan.interactions,
     ).to_json_dict()
-    assert doc["version"] == "1.14"
+    assert doc["version"] == "1.15"
     widgets = [w for screen in doc["screens"] for w in _walk(screen["body"])]
     assert sum(w.get("type") == "simulation_loop" for w in widgets) == 1
+    assert sum(w.get("type") == "simulation_progress" for w in widgets) == 1
     assert sum(w.get("type") == "audio_mixer" for w in widgets) == 1

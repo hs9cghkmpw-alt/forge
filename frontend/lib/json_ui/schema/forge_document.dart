@@ -955,6 +955,26 @@ sealed class ForgeWidgetNode {
           min: rawMin.toDouble(),
           max: rawMax.toDouble(),
         );
+      case 'simulation_progress':
+        final progressStateRef = json['state_ref'];
+        if (progressStateRef is! String || progressStateRef.isEmpty) {
+          throw ForgeParseException('$path/state_ref', 'simulation_progress.state_ref is required');
+        }
+        final rawStages = json['stages'];
+        if (rawStages is! List || rawStages.isEmpty) {
+          throw ForgeParseException('$path/stages', 'simulation_progress.stages is required');
+        }
+        final ticksPerStage = json['ticks_per_stage'];
+        if (ticksPerStage is! num || ticksPerStage.toInt() <= 0) {
+          throw ForgeParseException('$path/ticks_per_stage', 'simulation_progress.ticks_per_stage must be positive');
+        }
+        return ForgeSimulationProgressWidgetNode(
+          id,
+          stateRef: progressStateRef,
+          title: json['title'] as String? ?? '進行',
+          stages: rawStages.cast<String>(),
+          ticksPerStage: ticksPerStage.toInt(),
+        );
       case 'audio_mixer':
         final rawTracks = json['tracks'];
         if (rawTracks is! List || rawTracks.isEmpty) {
@@ -1282,6 +1302,23 @@ class ForgeSliderWidgetNode extends ForgeWidgetNode {
   final double min;
   final double max;
   const ForgeSliderWidgetNode(super.id, {required this.stateRef, required this.label, required this.min, required this.max});
+}
+
+/// v1.15: visible projection of deterministic simulation state. The widget
+/// never advances time itself; it only renders the number state driven by
+/// simulation_loop, keeping scheduling and presentation separate.
+class ForgeSimulationProgressWidgetNode extends ForgeWidgetNode {
+  final String stateRef;
+  final String title;
+  final List<String> stages;
+  final int ticksPerStage;
+  const ForgeSimulationProgressWidgetNode(
+    super.id, {
+    required this.stateRef,
+    required this.title,
+    required this.stages,
+    required this.ticksPerStage,
+  });
 }
 
 /// v1.14: user-driven local sound-layer mixer. Track identifiers are a closed

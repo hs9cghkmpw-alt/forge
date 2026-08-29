@@ -89,6 +89,7 @@ String _typeNameOf(ForgeWidgetNode node) => switch (node) {
       // duplicated black-box contract exhaustive when the sealed vocabulary grows.
       ForgeSimulationLoopWidgetNode() => 'simulation_loop',
       ForgeAudioMixerWidgetNode() => 'audio_mixer',
+      ForgeSimulationProgressWidgetNode() => 'simulation_progress',
       ForgeUnknownWidgetNode() => 'unknown',
     };
 

@@ -24,9 +24,12 @@ def test_game_plan_materializes_real_simulation_loop():
         simulation_capabilities=plan.simulations,
     ).to_json_dict()
 
-    assert doc["version"] == "1.13"
+    assert doc["version"] == "1.15"
     for screen in doc["screens"]:
         assert screen["state"]["simulation_tick"] == {"type": "number", "value": 0}
         loops = [n for n in _walk(screen["body"]) if n.get("type") == "simulation_loop"]
+        progress = [n for n in _walk(screen["body"]) if n.get("type") == "simulation_progress"]
         assert len(loops) == 1
+        assert len(progress) == 1
         assert loops[0]["state_ref"] == "simulation_tick"
+        assert progress[0]["state_ref"] == "simulation_tick"
