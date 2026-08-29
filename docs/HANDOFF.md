@@ -13,6 +13,8 @@
 - Genuine GitHub-hosted real Tool-Using Local Agent run `33227448429` = **SUCCESS / PASS**.
 - Durable GitHub-runner evidence: `docs/evidence/agent020b/agent020b-20260829-015345.json`.
 - GitHub Actions artifact: id `9707382693`, digest `sha256:b76d0184c3eac34a3c801a8382c716e8fc530622c731d7d406eef35a2b6cd469`.
+- Evidence/cleanup commit: `b60edbe20966a9c458c51c713c6e06c552659ebe`.
+- Final normal cleanup CI run `33227912897` = **SUCCESS**, all four jobs green.
 - **Physical/user PC real-agent run: UNVERIFIED / NOT YET EXECUTED.**
 - Golden Generated App Quality Gate remains **FAIL** from the latest visual review. 020B success does not rewrite that evidence.
 
@@ -69,11 +71,14 @@ Commit the resulting `docs/evidence/agent020b/*.json`, then update this handoff/
 
 ## Cleanup / completion rule
 
-The GitHub one-off real-agent workflow is temporary execution machinery and must not remain as permanent architecture after its evidence is preserved. Final closeout requires:
+GitHub-hosted closeout prerequisites are now satisfied:
 
-1. durable real-run evidence committed;
-2. temporary workflow removed;
-3. final normal CI GREEN after cleanup;
+1. durable real-run evidence committed — **DONE**;
+2. temporary real-agent workflow removed — **DONE**;
+3. final normal CI after cleanup — **GREEN / DONE** (`33227912897`).
+
+Dual-environment closeout still requires:
+
 4. physical-PC real-agent evidence added;
 5. remaining unmeasured build/test/runtime/visual/repair capabilities kept explicitly separate from 020B's bounded verification scope.
 
