@@ -34,10 +34,36 @@ from app.ai.agent.untrusted import UntrustedContent
 from app.ai.agent.web import WebFetcher, WebFetchError, WebSearchTool
 
 __all__ = [
+    "CommandObservation",
     "CommandRunner",
     "build_default_toolset",
     "build_generation_inspection_toolset",
 ]
+
+
+@dataclass(frozen=True)
+class CommandObservation:
+    """Forge自身が観測したコマンド結果。
+
+    FORGE-020C の objective-observation 基盤。Model にログ本文を読ませて
+    「成功したと思う」と判定させず、exit code / timeout を Forge 側の
+    構造化された事実として保持する。
+    """
+
+    name: str
+    argv: tuple[str, ...]
+    exit_code: int | None
+    timed_out: bool
+    output: str = ""
+
+    @property
+    def passed(self) -> bool:
+        return not self.timed_out and self.exit_code == 0
+
+    def render(self) -> str:
+        if self.timed_out:
+            return f"[timeout] {shlex.join(self.argv)} は完了しなかった"
+        return f"[exit {self.exit_code}]\n{self.output}"
 
 
 @dataclass
@@ -53,10 +79,14 @@ class CommandRunner:
     timeout_seconds: float = 300.0
     max_output_chars: int = 20_000
 
-    def run(self, name: str) -> str:
+    def observe(self, name: str) -> CommandObservation:
+        """登録済みコマンドを実行し、機械判定可能な結果を返す。
+
+        `run()` は Tool 出力との後方互換用。build/test/runtime の成功判定は
+        将来この構造化結果を使い、Model の自己申告や文字列推測に依存しない。
+        """
         argv = self.commands.get(name)
         if argv is None:
-            # **知らないコマンドは走らせない。** Model が名前を作っても届かない。
             msg = f"未登録のコマンド: {name}"
             raise ValueError(msg)
         try:
@@ -65,9 +95,29 @@ class CommandRunner:
                 text=True, timeout=self.timeout_seconds, check=False,
             )
         except subprocess.TimeoutExpired:
-            return f"[timeout] {shlex.join(argv)} は {self.timeout_seconds}s で終わらなかった"
+            return CommandObservation(
+                name=name,
+                argv=tuple(argv),
+                exit_code=None,
+                timed_out=True,
+            )
         output = (completed.stdout + completed.stderr)[: self.max_output_chars]
-        return f"[exit {completed.returncode}]\n{output}"
+        return CommandObservation(
+            name=name,
+            argv=tuple(argv),
+            exit_code=completed.returncode,
+            timed_out=False,
+            output=output,
+        )
+
+    def run(self, name: str) -> str:
+        observation = self.observe(name)
+        if observation.timed_out:
+            return (
+                f"[timeout] {shlex.join(observation.argv)} は "
+                f"{self.timeout_seconds}s で終わらなかった"
+            )
+        return observation.render()
 
 
 def build_default_toolset(
@@ -184,7 +234,6 @@ def _render_fetch(fetcher: WebFetcher, url: str) -> str:
         return f"[fetch_failed:{error.kind}] {url}"
     # **必ず包みを通す。** 素の本文をここから返さない。
     return content.as_reference_material()
-
 
 
 def build_generation_inspection_toolset(
