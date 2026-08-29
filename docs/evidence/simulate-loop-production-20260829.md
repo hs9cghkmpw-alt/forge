@@ -8,4 +8,6 @@ Implemented path:
 
 The capability catalog now marks `simulate.loop` as IMPLEMENTED only after the production compiler emits the real runtime-backed widget. The runtime adapter binds `simulate.loop` to `simulation_loop` and production evidence tests require the generated game document to actually use that binding.
 
+The first full CI exposed two integration omissions rather than runtime failures: the legacy capability list did not yet include `plan.simulations`, and one black-box Flutter test duplicated the sealed widget switch without the new node. Both omissions were fixed in the follow-up commit produced by the one-shot `FORGE simulation CI truth fix` workflow. A fresh full CI is required before this checkpoint is considered green.
+
 Remaining Golden Gate blocker is not hidden: `effect.media_compose` is still MISSING, so the game-quality gate remains FAIL until real media composition exists and is objectively verified.
