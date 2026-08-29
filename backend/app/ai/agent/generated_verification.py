@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
-from app.ai.agent.generated_workspace import GeneratedWorkspace
+from app.ai.agent.generated_workspace import GeneratedWorkspace, GeneratedWorkspaceError
 from app.ai.agent.loop import AgentBudget, AgentLoop, AttemptResult, LoopReport
 from app.ai.agent.tools import ToolBroker
 from app.ai.agent.toolset import CommandObservation, CommandRunner
@@ -65,7 +65,25 @@ class GeneratedWorkspaceVerifier:
         return f"{stage}_timeout" if observation.timed_out else f"{stage}_failed"
 
     def verify(self) -> GeneratedVerification:
-        """Prepare -> test -> build -> optional runtime, preserving unrun UNKNOWNs."""
+        """Integrity -> prepare -> test -> build -> runtime, preserving UNKNOWNs."""
+        try:
+            self.workspace.verify_integrity()
+        except GeneratedWorkspaceError:
+            # Do not execute even a prepare command against an artifact whose identity
+            # can no longer be proven. UNKNOWN is more truthful than pretending the
+            # previously validated document is still the one being exercised.
+            return GeneratedVerification(
+                attempt=AttemptResult(
+                    succeeded=False,
+                    failure_code="artifact_integrity_failed",
+                    validator=VerificationOutcome.UNKNOWN,
+                    build=VerificationOutcome.UNKNOWN,
+                    test=VerificationOutcome.UNKNOWN,
+                    runtime=VerificationOutcome.UNKNOWN,
+                    visual=VerificationOutcome.UNKNOWN,
+                )
+            )
+
         runner = self._runner()
 
         prepare: CommandObservation | None = None
