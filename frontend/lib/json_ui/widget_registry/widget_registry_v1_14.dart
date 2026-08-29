@@ -39,7 +39,9 @@ class _ForgeAudioMixerState extends State<_ForgeAudioMixer> {
 
   Future<void> _toggle(String track) async {
     final asset = _assetByTrack[track];
-    if (asset == null) return;
+    if (asset == null) {
+      return;
+    }
     try {
       final player = _players.putIfAbsent(track, AudioPlayer.new);
       if (_active.contains(track)) {
@@ -50,12 +52,18 @@ class _ForgeAudioMixerState extends State<_ForgeAudioMixer> {
       } else {
         await player.setReleaseMode(ReleaseMode.loop);
         await player.play(AssetSource(asset));
-        if (mounted) setState(() {
-          _active.add(track);
-          _error = null;
-        });
+        if (mounted) {
+          setState(() {
+            _active.add(track);
+            _error = null;
+          });
+        }
       }
-    } catch (error) {
+    } catch (error, stackTrace) {
+      // Keep the user-facing message bounded, but make browser CI preserve the
+      // objective backend failure instead of swallowing the only diagnostic.
+      debugPrint('Forge audio mixer playback failed for $track: $error');
+      debugPrintStack(stackTrace: stackTrace);
       if (mounted) {
         setState(() => _error = '音を再生できませんでした');
       }
