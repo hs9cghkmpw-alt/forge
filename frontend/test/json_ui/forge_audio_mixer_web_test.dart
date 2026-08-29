@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:forge_studio/json_ui/renderer/forge_runtime_state.dart';
-import 'package:forge_studio/json_ui/schema/forge_document.dart';
-import 'package:forge_studio/json_ui/widget_registry/widget_registry.dart';
+import 'package:forge_app/json_ui/renderer/forge_runtime_state.dart';
+import 'package:forge_app/json_ui/schema/forge_document.dart';
+import 'package:forge_app/json_ui/widget_registry/widget_registry.dart';
 
 void main() {
   testWidgets('real web audio backend can start two bundled layers', (tester) async {
