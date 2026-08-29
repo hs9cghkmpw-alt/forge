@@ -34,4 +34,15 @@ jobs:
           cache: true
 
       - name: Run real generated Flutter repair probe
+        env:
+          FORGE_020D_EVIDENCE_PATH: /tmp/forge-020d-real-evidence.json
         run: python scripts/verify_generated_flutter_repair_020d.py
+
+      - name: Upload objective repair evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-020d-real-generated-repair-evidence
+          path: /tmp/forge-020d-real-evidence.json
+          if-no-files-found: ignore
+          retention-days: 90
