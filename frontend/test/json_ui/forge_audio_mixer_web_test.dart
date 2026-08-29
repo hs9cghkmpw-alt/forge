@@ -5,6 +5,16 @@ import 'package:forge_app/json_ui/renderer/forge_runtime_state.dart';
 import 'package:forge_app/json_ui/schema/forge_document.dart';
 import 'package:forge_app/json_ui/widget_registry/widget_registry.dart';
 
+Future<void> _waitForBrowserAudio(WidgetTester tester) async {
+  // Web plugins complete through real browser promises/events, not only the
+  // widget-test fake clock. Give those callbacks real wall-clock time, then
+  // pump once so the resulting setState is reflected in the widget tree.
+  await tester.runAsync(() async {
+    await Future<void>.delayed(const Duration(milliseconds: 1000));
+  });
+  await tester.pump();
+}
+
 void main() {
   testWidgets('real web audio backend can start two bundled layers', (tester) async {
     final node = ForgeWidgetNode.fromJson(const {
@@ -33,7 +43,7 @@ void main() {
     expect(chime, findsOneWidget);
 
     await tester.tap(pulse);
-    await tester.pump(const Duration(milliseconds: 800));
+    await _waitForBrowserAudio(tester);
     final pulseException = tester.takeException();
     if (pulseException != null) {
       fail('pulse web-audio exception: $pulseException');
@@ -45,7 +55,7 @@ void main() {
     }
 
     await tester.tap(chime);
-    await tester.pump(const Duration(milliseconds: 800));
+    await _waitForBrowserAudio(tester);
     final chimeException = tester.takeException();
     if (chimeException != null) {
       fail('chime web-audio exception: $chimeException');
