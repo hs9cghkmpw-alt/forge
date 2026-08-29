@@ -44,7 +44,9 @@ class _ForgeAudioMixerState extends State<_ForgeAudioMixer> {
       final player = _players.putIfAbsent(track, AudioPlayer.new);
       if (_active.contains(track)) {
         await player.stop();
-        if (mounted) setState(() => _active.remove(track));
+        if (mounted) {
+          setState(() => _active.remove(track));
+        }
       } else {
         await player.setReleaseMode(ReleaseMode.loop);
         await player.play(AssetSource(asset));
@@ -54,7 +56,9 @@ class _ForgeAudioMixerState extends State<_ForgeAudioMixer> {
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _error = '音を再生できませんでした');
+      if (mounted) {
+        setState(() => _error = '音を再生できませんでした');
+      }
     }
   }
 
