@@ -45,3 +45,5 @@ jobs:
             golden_game_phone.png
             /tmp/forge_golden_game.json
           if-no-files-found: error
+
+# One-shot rerun after the render assertion was corrected to concrete runtime controls.
