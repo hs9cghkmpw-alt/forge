@@ -4,7 +4,7 @@ import 'package:forge_app/json_ui/runtime/forge_simulation.dart';
 void main() {
   group('ForgeSimulationEngine', () {
     test('does not advance while paused', () {
-      const engine = ForgeSimulationEngine(step: Duration(milliseconds: 100));
+      final engine = ForgeSimulationEngine(step: const Duration(milliseconds: 100));
       const state = ForgeSimulationState();
 
       final next = engine.advance(state, const Duration(seconds: 3));
@@ -15,7 +15,7 @@ void main() {
     });
 
     test('converts elapsed time into deterministic fixed ticks', () {
-      const engine = ForgeSimulationEngine(step: Duration(milliseconds: 100));
+      final engine = ForgeSimulationEngine(step: const Duration(milliseconds: 100));
       final started = engine.start(const ForgeSimulationState());
 
       final first = engine.advance(started, const Duration(milliseconds: 250));
@@ -28,7 +28,7 @@ void main() {
     });
 
     test('same trajectory always produces same state', () {
-      const engine = ForgeSimulationEngine(step: Duration(milliseconds: 125));
+      final engine = ForgeSimulationEngine(step: const Duration(milliseconds: 125));
 
       ForgeSimulationState replay() {
         var state = engine.start(const ForgeSimulationState());
@@ -50,8 +50,8 @@ void main() {
     });
 
     test('caps catch-up work per advance to avoid runaway frame stalls', () {
-      const engine = ForgeSimulationEngine(
-        step: Duration(milliseconds: 100),
+      final engine = ForgeSimulationEngine(
+        step: const Duration(milliseconds: 100),
         maxTicksPerAdvance: 5,
       );
       final started = engine.start(const ForgeSimulationState());
@@ -63,7 +63,7 @@ void main() {
     });
 
     test('pause and reset are explicit state transitions', () {
-      const engine = ForgeSimulationEngine(step: Duration(milliseconds: 100));
+      final engine = ForgeSimulationEngine(step: const Duration(milliseconds: 100));
       var state = engine.start(const ForgeSimulationState());
       state = engine.advance(state, const Duration(milliseconds: 300));
       state = engine.pause(state);
