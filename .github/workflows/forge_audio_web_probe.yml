@@ -27,8 +27,17 @@ jobs:
         run: flutter pub get
       - name: Verify Chrome is available
         run: google-chrome --version || chromium --version
+      - name: Create deterministic Chrome launcher for media probe
+        run: |
+          cat >/tmp/forge-chrome <<'EOF'
+          #!/bin/sh
+          exec /usr/bin/google-chrome --autoplay-policy=no-user-gesture-required "$@"
+          EOF
+          chmod +x /tmp/forge-chrome
       - name: Run real browser audio mixer probe
         working-directory: frontend
+        env:
+          CHROME_EXECUTABLE: /tmp/forge-chrome
         run: flutter test --platform chrome test/json_ui/forge_audio_mixer_web_test.dart --reporter expanded
 
-# One-shot evidence trigger refreshed after lint/diagnostic repair, 2026-08-30 JST. Remove after green evidence.
+# One-shot evidence trigger with CI autoplay policy disabled so the probe measures Forge/audioplayers rather than headless-browser media policy. Remove after green evidence.
