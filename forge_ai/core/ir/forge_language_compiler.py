@@ -270,6 +270,7 @@ class ForgeLanguageCompiler:
         self, ir: ForgeIR, *, domain_category: str, title: str,
         design_intent: "DesignIntent | None" = None,
         layout_emphasis: str = "",
+        simulation_capabilities: tuple[str, ...] = (),
     ) -> ForgeIRDocument:
         errors = ir.referential_integrity_errors()
         if errors:
@@ -321,12 +322,83 @@ class ForgeLanguageCompiler:
         # 構造から解の形を決定的に選ぶ(`solution_shape.py`参照)。
         shape = select_solution_shape(entity)
         if shape is SolutionShape.CHECKLIST:
-            return self._compile_checklist_screen(entity, safe_title, domain_category=domain_category)
-
-        return self._compile_single_screen(
+            document = self._compile_checklist_screen(entity, safe_title, domain_category=domain_category)
+        else:
+            document = self._compile_single_screen(
                 entity, safe_title, layout_emphasis=layout_emphasis,
-            include_crud=edit_form_view is not None, domain_category=domain_category,
-            design_intent=design_intent,
+                include_crud=edit_form_view is not None, domain_category=domain_category,
+                design_intent=design_intent,
+            )
+
+        if "simulate.loop" in simulation_capabilities:
+            document = self._attach_simulation_loop(document)
+        return document
+
+    @staticmethod
+    def _attach_simulation_loop(document: ForgeIRDocument) -> ForgeIRDocument:
+        """Attach the deterministic v1.13 simulation driver to every screen.
+
+        The semantic plan decides *whether* time progression is required; this
+        compiler decides the concrete Forge Language primitive.  The driver is
+        intentionally invisible and writes only to a bounded number state.
+        Reserved identifiers fail closed instead of silently overwriting
+        generated state.
+        """
+        state_ref = "simulation_tick"
+        widget_id = "simulation_loop_driver"
+
+        def contains_id(node: ForgeIRWidget) -> bool:
+            return node.id == widget_id or any(contains_id(child) for child in node.children)
+
+        screens: list[ForgeIRScreen] = []
+        for screen in document.screens:
+            if state_ref in screen.state:
+                raise ForgeLanguageCompilationError(
+                    f"simulation state id collision: {state_ref}"
+                )
+            if contains_id(screen.body):
+                raise ForgeLanguageCompilationError(
+                    f"simulation widget id collision: {widget_id}"
+                )
+
+            driver = ForgeIRWidget(
+                type="simulation_loop",
+                id=widget_id,
+                properties={
+                    "state_ref": state_ref,
+                    "step_ms": 250,
+                    "max_ticks_per_advance": 40,
+                },
+            )
+            if screen.body.type == "column":
+                body = ForgeIRWidget(
+                    type=screen.body.type,
+                    id=screen.body.id,
+                    properties=dict(screen.body.properties),
+                    children=(driver, *screen.body.children),
+                )
+            else:
+                body = ForgeIRWidget(
+                    type="column", id="simulation_root",
+                    children=(driver, screen.body),
+                )
+            screens.append(ForgeIRScreen(
+                id=screen.id,
+                title=screen.title,
+                state={
+                    **screen.state,
+                    state_ref: ForgeIRStateValue(type="number", value=0),
+                },
+                body=body,
+            ))
+
+        return ForgeIRDocument(
+            version="1.13",
+            initial_screen_id=document.initial_screen_id,
+            screens=tuple(screens),
+            app_title=document.app_title,
+            record_schemas=dict(document.record_schemas),
+            design_tokens=dict(document.design_tokens),
         )
 
     def _compile_checklist_screen(

@@ -67,7 +67,7 @@ class TestTheUserIsToldWhatCannotBeBuilt(unittest.TestCase):
     def test_a_game_says_the_game_part_cannot_be_built(self) -> None:
         gap = _generate(self.client, GAME).get("capability_gap")
         self.assertIsNotNone(gap, "作れないと分かっているのに何も言っていない")
-        self.assertIn("simulate.loop", gap["missing"])
+        self.assertNotIn("simulate.loop", gap["missing"])
         self.assertIn("effect.media_compose", gap["missing"])
         self.assertTrue(gap["message"].strip())
 
@@ -142,7 +142,7 @@ class TestTheGapAlsoReachesLearningEvidence(unittest.TestCase):
             usage.capability_id for usage in record.capability_usage
             if usage.status is CapabilityUsageStatus.MISSING
         }
-        self.assertIn("simulate.loop", missing)
+        self.assertNotIn("simulate.loop", missing)
         self.assertIn("effect.media_compose", missing)
 
     def test_the_evidence_distinguishes_used_from_merely_requested(self) -> None:
@@ -154,7 +154,8 @@ class TestTheGapAlsoReachesLearningEvidence(unittest.TestCase):
         by_id = {u.capability_id: u for u in record.capability_usage}
         self.assertIn("simulate.loop", by_id)
         self.assertTrue(by_id["simulate.loop"].requested)
-        self.assertFalse(by_id["simulate.loop"].used)
+        self.assertTrue(by_id["simulate.loop"].used)
+        self.assertIs(by_id["simulate.loop"].status, CapabilityUsageStatus.IMPLEMENTED)
 
     def test_field_capabilities_are_recorded(self) -> None:
         """R4 では Field の Capability が抜けていた（§4）。"""

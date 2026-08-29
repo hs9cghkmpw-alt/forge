@@ -156,7 +156,9 @@ class TestThePlanAdmitsWhatForgeCannotDo(unittest.TestCase):
     def test_a_game_names_what_is_missing(self) -> None:
         """**無いものを checklist で代用して黙らない。**"""
         plan = plan_capabilities(GAME)
-        self.assertIn("simulate.loop", plan.missing)
+        self.assertIn("simulate.loop", plan.requested)
+        self.assertIn("simulate.loop", plan.simulations)
+        self.assertNotIn("simulate.loop", plan.missing)
         self.assertIn("effect.media_compose", plan.missing)
 
     def test_photo_is_recorded_as_partial_not_as_done(self) -> None:

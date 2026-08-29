@@ -156,6 +156,7 @@ _RUNTIME_BINDINGS: dict[str, tuple[str, ...]] = {
     "view.group_compare": ("bar_chart", "metric_view"),
     "interact.check_off": ("checklist", "checkbox"),
     "interact.edit": ("form", "record_list_view"),
+    "simulate.loop": ("simulation_loop",),
     # PARTIAL のものは**近いもので代用している**という結び付きを持つ。
     # 「出来る」ことにはしない（`supported` は False のまま）。
     "data.photo": ("text_field",),

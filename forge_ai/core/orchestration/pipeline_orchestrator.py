@@ -519,6 +519,7 @@ class CognitiveOrchestrator:
                     # 専用 Template を作らずに、比較・推移を求めた人には
                     # 集計の方を先に見せる。
                     layout_emphasis=compose_layout(capability_plan).value,
+                    simulation_capabilities=capability_plan.simulations,
                 )
             else:
                 # FORGE-AI-QUALITY-001(2026-08-11): 以前はここで

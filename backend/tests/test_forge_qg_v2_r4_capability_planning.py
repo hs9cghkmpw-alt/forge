@@ -296,7 +296,7 @@ class TestTheCapabilityPlanReachesDurableEvidence(unittest.TestCase):
         `effect.media_compose`）。会話側と同じ ID を見る。
         """
         record = self._record_for(GAME_NEED)
-        self.assertIn("unsupported:simulate.loop", record.capabilities)
+        self.assertIn("simulate.loop", record.capabilities)
         self.assertIn("unsupported:effect.media_compose", record.capabilities)
 
     def test_partial_support_is_distinguished_from_full_support(self) -> None:

@@ -83,8 +83,8 @@ class TestPartialNeverLooksLikeFullSuccess(unittest.TestCase):
 
     def test_a_missing_capability_is_not_listed_bare(self) -> None:
         record = _record_for(MISSING_NEED)
-        self.assertIn("unsupported:simulate.loop", record.capabilities)
-        self.assertNotIn("simulate.loop", record.capabilities)
+        self.assertIn("unsupported:effect.media_compose", record.capabilities)
+        self.assertNotIn("effect.media_compose", record.capabilities)
 
     def test_no_id_appears_both_bare_and_qualified(self) -> None:
         """**一般の不変条件。** Need を足しても成り立つこと。"""
@@ -123,12 +123,12 @@ class TestTypedUsageIsTheSourceOfTruth(unittest.TestCase):
 
     def test_a_missing_capability_is_requested_but_not_used(self) -> None:
         record = _record_for(MISSING_NEED)
-        loop = next(
-            u for u in record.capability_usage if u.capability_id == "simulate.loop"
+        media = next(
+            u for u in record.capability_usage if u.capability_id == "effect.media_compose"
         )
-        self.assertTrue(loop.requested)
-        self.assertFalse(loop.used)
-        self.assertIs(loop.status, CapabilityUsageStatus.MISSING)
+        self.assertTrue(media.requested)
+        self.assertFalse(media.used)
+        self.assertIs(media.status, CapabilityUsageStatus.MISSING)
 
     def test_training_candidates_can_tell_partial_from_implemented(self) -> None:
         """Dataset Builder が**接頭辞を parse せずに**判別できること。

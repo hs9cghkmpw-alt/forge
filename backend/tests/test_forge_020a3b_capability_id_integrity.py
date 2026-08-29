@@ -127,7 +127,8 @@ class TestEveryPlannedIdExistsInTheCatalog(unittest.TestCase):
         ok, partial, missing = _classify({"view.list", "data.photo", "simulate.loop"})
         self.assertIn("view.list", ok)
         self.assertIn("data.photo", partial)
-        self.assertIn("simulate.loop", missing)
+        self.assertIn("simulate.loop", ok)
+        self.assertNotIn("simulate.loop", missing)
 
 
 class TestNamespacesFollowResponsibility(unittest.TestCase):

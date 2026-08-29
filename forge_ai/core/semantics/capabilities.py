@@ -89,7 +89,7 @@ class CapabilityLayer(str, Enum):
     """**外へ何をするか。** ここだけが安全審査の対象。"""
 
     SIMULATE = "simulate"
-    """時間経過・生成的な振る舞い。Forge はまだ1つも持っていない。"""
+    """時間経過・生成的な振る舞い。`simulate.loop` は実Runtimeまで実装済み。"""
 
 
 class SafetyClass(str, Enum):
@@ -258,9 +258,8 @@ _CATALOG: tuple[CapabilityDefinition, ...] = (
     # **`SAFE` である。** 持っていないだけで、外部へ何かをするわけでは
     # ない。確認の対象は「外へ作用するもの」に限る（005 §3.1）。
     _c("simulate.loop", _L.SIMULATE, "時間を進める・ゲームとして動かす",
-       "放っておいても状態が変わる", _S.MISSING,
-       detection_keywords=("ゲーム", "育て", "育成"),
-       limitation="時間経過やゲームループは作れません"),
+       "放っておいても状態が変わる", _S.IMPLEMENTED,
+       detection_keywords=("ゲーム", "育て", "育成")),
 )
 
 SEMANTIC_CAPABILITIES: dict[str, CapabilityDefinition] = {c.id: c for c in _CATALOG}
