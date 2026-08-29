@@ -1,6 +1,6 @@
 # FORGE-020B — Tool-Using Local Agent production wiring report
 
-Status: **GITHUB REAL-AGENT PASS; PHYSICAL-PC LEG UNVERIFIED**
+Status: **GITHUB REAL-AGENT PASS + FINAL CLEANUP CI GREEN; PHYSICAL-PC LEG UNVERIFIED**
 
 ## Objective
 
@@ -22,12 +22,22 @@ The long-term product loop remains:
 - `6dab22f27a1007b67438cf9ce91f207ae129d274` — register `ForgeTask.AGENT_STEP` in the Learning Contract
 - `7660dfabeafbb411c1b16c39addcb70c73f061e9` — add shared real Local Agent verifier
 - `eeb48e0c4b28c27a8b37f526ec37c163b7e5b4a7` — trigger one-off genuine GitHub-hosted real-agent execution
+- `b60edbe20966a9c458c51c713c6e06c552659ebe` — preserve durable evidence and remove one-off workflow
 
 ## Normal CI evidence
 
-GitHub Actions run `33222716256` completed with conclusion **SUCCESS**. Python 3.11, Python 3.12, backend smoke, and Flutter analyze/test/web build all passed.
+Initial post-fix normal GitHub Actions run `33222716256` completed with conclusion **SUCCESS**. Python 3.11, Python 3.12, backend smoke, and Flutter analyze/test/web build all passed.
 
 The earlier run `33222193528` correctly exposed a contract mismatch: `ForgeTask.AGENT_STEP` existed but was missing from `_FORGE_TASK_MAPPING`. The explicit `forge.agent_step` mapping fixed that defect without weakening the fail-closed contract.
+
+After the real-agent evidence was committed and the temporary runner workflow was removed, final cleanup CI run `33227912897` also completed **SUCCESS**, with all four normal jobs green:
+
+- backend + forge_ai Python 3.11: SUCCESS
+- backend + forge_ai Python 3.12: SUCCESS
+- backend smoke startup/CORS: SUCCESS
+- frontend Flutter analyze/test/web build: SUCCESS
+
+This satisfies the GitHub-side closeout requirement that cleanup changes themselves remain regression-green.
 
 ## Genuine real-agent evidence — GitHub-hosted runner
 
@@ -77,7 +87,7 @@ The Ollama log records `bind: address already in use` for the explicit backgroun
 
 ## Physical-PC leg
 
-The user chose dual-environment verification. The clean GitHub-hosted runner leg is PASS. The physical/user-PC leg remains **UNVERIFIED** until the same verifier is run there and its evidence is committed.
+The user chose dual-environment verification. The clean GitHub-hosted runner leg is PASS and its post-cleanup normal CI is GREEN. The physical/user-PC leg remains **UNVERIFIED** until the same verifier is run there and its evidence is committed.
 
 Required command from repository root:
 
@@ -98,10 +108,10 @@ Acceptance requires a generated `docs/evidence/agent020b/*.json` showing a genui
 
 ## Closeout sequence
 
-1. Preserve this GitHub-runner evidence in the repository. **Done.**
-2. Remove the one-off GitHub real-agent workflow. **Done in the evidence closeout commit.**
-3. Require normal CI GREEN after cleanup. **Pending at the time this report is written.**
+1. Preserve GitHub-runner evidence in the repository. **Done.**
+2. Remove the one-off GitHub real-agent workflow. **Done.**
+3. Require normal CI GREEN after cleanup. **Done — run `33227912897` SUCCESS.**
 4. Run the shared verifier on the physical/user PC. **UNVERIFIED.**
-5. Commit physical-host evidence and update HANDOFF/report with exact facts.
+5. Commit physical-host evidence and update HANDOFF/report with exact facts. **Pending.**
 
-Do not declare dual-environment 020B closeout complete before steps 3–5 are satisfied.
+GitHub-hosted 020B closeout is complete. Dual-environment 020B closeout is not complete until steps 4–5 are satisfied.
