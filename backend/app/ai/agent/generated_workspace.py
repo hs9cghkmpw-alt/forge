@@ -1,12 +1,12 @@
 """FORGE-020C — isolated generated-artifact execution workspace.
 
 The build/test truth for a generated artifact must come from a workspace that contains
-that artifact, not from building Forge's own source tree.  This module creates a fresh,
+that artifact, not from building Forge's own source tree. This module creates a fresh,
 explicit execution root and writes only caller-supplied generated files into it.
 
-It deliberately does not know Flutter, npm, or any other build system.  A later
-materializer may populate platform-specific files, but every command runner must point
-at the returned workspace root.
+Generated files may be UTF-8 text or opaque bytes. Binary support is required for
+runtime templates that include images/fonts, but the same path boundary is applied to
+both forms.
 """
 
 from __future__ import annotations
@@ -20,10 +20,13 @@ from typing import Mapping
 from app.ai.agent.sandbox import ToolSandbox
 
 __all__ = [
+    "GeneratedFileContent",
     "GeneratedWorkspace",
     "GeneratedWorkspaceError",
     "materialize_generated_workspace",
 ]
+
+GeneratedFileContent = str | bytes
 
 
 class GeneratedWorkspaceError(ValueError):
@@ -67,20 +70,24 @@ def materialize_generated_workspace(
     *,
     root: pathlib.Path,
     forge_document: Mapping[str, object],
-    generated_files: Mapping[str, str],
+    generated_files: Mapping[str, GeneratedFileContent],
 ) -> GeneratedWorkspace:
     """Create one clean workspace that is cryptographically tied to the artifact.
 
-    `root` must not already exist.  Refusing reuse prevents stale files from a previous
+    `root` must not already exist. Refusing reuse prevents stale files from a previous
     generation from making a broken artifact appear to build successfully.
     """
     root = root.resolve()
     if root.exists():
         raise GeneratedWorkspaceError("generated workspace root already exists")
 
-    normalised: list[tuple[pathlib.PurePosixPath, str]] = []
+    normalised: list[tuple[pathlib.PurePosixPath, GeneratedFileContent]] = []
     seen: set[str] = set()
     for raw_path, content in generated_files.items():
+        if not isinstance(content, (str, bytes)):
+            raise GeneratedWorkspaceError(
+                f"unsupported generated content type for {raw_path!r}"
+            )
         path = _normalise_relative_path(raw_path)
         key = path.as_posix()
         if key in seen:
@@ -96,7 +103,10 @@ def materialize_generated_workspace(
         for relative, content in sorted(normalised, key=lambda item: item[0].as_posix()):
             target = root.joinpath(*relative.parts)
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding="utf-8")
+            if isinstance(content, bytes):
+                target.write_bytes(content)
+            else:
+                target.write_text(content, encoding="utf-8")
 
         fingerprint = _fingerprint(forge_document)
         metadata_dir = root / ".forge"
