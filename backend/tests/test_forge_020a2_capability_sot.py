@@ -77,7 +77,7 @@ class TestThereIsOnlyOneCatalog(unittest.TestCase):
             plan = plan_capabilities(need)
             everything = (
                 set(plan.requested) | set(plan.views) | set(plan.interactions)
-                | set(plan.effects) | set(plan.missing) | set(plan.partial)
+                | set(plan.effects) | set(plan.simulations) | set(plan.missing) | set(plan.partial)
                 | set(plan.structure_capabilities)
                 | {f.capability for f in plan.fields}
             )

@@ -256,6 +256,8 @@ class CapabilityPlan:
 
     interactions: tuple[str, ...] = ()
     effects: tuple[str, ...] = ()
+    simulations: tuple[str, ...] = ()
+    """時間経過・生成的な振る舞い。View/Effectへ混ぜず独立軸で保持する。"""
 
     structure_capabilities: tuple[str, ...] = ()
     """構造そのものが満たす Capability（`data.entity` 等）。
@@ -503,6 +505,7 @@ def plan_capabilities(text: str) -> CapabilityPlan:  # noqa: PLR0912 — 段の�
     views = tuple(c for c in ok if c.startswith("view."))
     interactions = tuple(c for c in ok if c.startswith("interact."))
     effects = tuple(c for c in ok if c.startswith("effect."))
+    simulations = tuple(c for c in ok if c.startswith("simulate."))
     field_capabilities = {f.capability for f in field_tuple}
     structure_capabilities = tuple(
         c for c in ok if c.startswith("data.") and c not in field_capabilities
@@ -512,7 +515,7 @@ def plan_capabilities(text: str) -> CapabilityPlan:  # noqa: PLR0912 — 段の�
         roles=roles, structure=structure,
         entity_name=entity_name, entity_label=entity_label,
         fields=field_tuple,
-        views=views, interactions=interactions, effects=effects,
+        views=views, interactions=interactions, effects=effects, simulations=simulations,
         structure_capabilities=structure_capabilities,
         requested=tuple(sorted(requested)),
         partial=partial, missing=missing,
