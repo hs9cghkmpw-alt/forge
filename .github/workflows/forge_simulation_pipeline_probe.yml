@@ -20,8 +20,8 @@ jobs:
       - name: Locate capability-plan generation path
         run: |
           echo '--- plan_capabilities ---'
-          rg -n "plan_capabilities|entity_spec_from_plan|compose_layout|layout_emphasis" forge_ai backend || true
+          grep -RInE "plan_capabilities|entity_spec_from_plan|compose_layout|layout_emphasis" forge_ai backend | head -n 300 || true
           echo '--- ForgeLanguageCompiler calls ---'
-          rg -n "ForgeLanguageCompiler|\.compile\(" forge_ai backend | head -n 250 || true
+          grep -RInE "ForgeLanguageCompiler|\.compile\(" forge_ai backend | head -n 300 || true
           echo '--- simulation_loop ---'
-          rg -n "simulation_loop|simulate\.loop|simulations" forge_ai backend frontend | head -n 300 || true
+          grep -RInE "simulation_loop|simulate\.loop|simulations" forge_ai backend frontend | head -n 400 || true
