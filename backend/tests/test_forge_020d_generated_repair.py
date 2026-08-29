@@ -62,6 +62,13 @@ class TestGeneratedRepairLoop(unittest.TestCase):
 
         self.assertEqual(calls, [("test_failed", 1)])
         self.assertEqual(len(result.verifications), 2)
+        self.assertTrue(result.initial.source_fingerprint)
+        self.assertTrue(result.final.source_fingerprint)
+        self.assertNotEqual(
+            result.initial.source_fingerprint,
+            result.final.source_fingerprint,
+            "a source mutation must create a distinct objectively verified revision",
+        )
         self.assertEqual(result.initial.attempt.test, VerificationOutcome.FAILED)
         self.assertEqual(result.initial.attempt.build, VerificationOutcome.UNKNOWN)
         self.assertTrue(result.final.attempt.succeeded)
@@ -88,7 +95,6 @@ class TestGeneratedRepairLoop(unittest.TestCase):
         episode = GenerationEpisode(task_id="forge.generated.repair")
 
         def ineffective_repair(latest, round_index: int) -> None:
-            # Returning nothing and changing nothing: only a fresh verifier run decides.
             self.assertEqual(latest.attempt.failure_code, "test_failed")
 
         result = run_generated_repair_episode(
@@ -101,6 +107,11 @@ class TestGeneratedRepairLoop(unittest.TestCase):
         self.assertEqual(result.report.outcome, EpisodeOutcome.ABANDONED)
         self.assertEqual(result.report.stopped_because, "max_repair_rounds")
         self.assertEqual(len(result.verifications), 2)
+        self.assertEqual(
+            result.initial.source_fingerprint,
+            result.final.source_fingerprint,
+            "a no-op repair must not invent a new source revision",
+        )
         self.assertFalse(result.final.attempt.succeeded)
         self.assertEqual(result.final.attempt.test, VerificationOutcome.FAILED)
         self.assertEqual(result.final.attempt.build, VerificationOutcome.UNKNOWN)
@@ -127,6 +138,7 @@ class TestGeneratedRepairLoop(unittest.TestCase):
         self.assertEqual(result.report.outcome, EpisodeOutcome.SUCCEEDED)
         self.assertEqual(result.report.rounds, 0)
         self.assertEqual(len(result.verifications), 1)
+        self.assertTrue(result.initial.source_fingerprint)
         self.assertEqual(episode.repair_rounds, ())
 
 
