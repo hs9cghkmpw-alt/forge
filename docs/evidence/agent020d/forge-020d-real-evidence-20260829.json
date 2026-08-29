@@ -1,0 +1,25 @@
+{
+  "artifact_fingerprint": "bbbb683514b53261eebe2ff9af3837a1ab3b12d16f926ce80dd3f08c9ec93db5",
+  "final_build": "passed",
+  "final_runtime": "passed",
+  "final_test": "passed",
+  "final_visual": "unknown",
+  "initial_build": "unknown",
+  "initial_failure_code": "test_failed",
+  "initial_runtime": "unknown",
+  "initial_test": "failed",
+  "outcome": "succeeded",
+  "repair_rounds": [
+    {
+      "action": "repair",
+      "diagnosis_code": "test_failed",
+      "failure_code": "test_failed",
+      "resolved": true,
+      "round_index": 1
+    }
+  ],
+  "repair_succeeded": true,
+  "rounds": 1,
+  "schema": "forge.generated_flutter_repair.020e.v1",
+  "verification_count": 2
+}
