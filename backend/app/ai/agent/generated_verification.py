@@ -11,14 +11,16 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from app.ai.agent.generated_workspace import GeneratedWorkspace
-from app.ai.agent.loop import AttemptResult
+from app.ai.agent.loop import AgentBudget, AgentLoop, AttemptResult, LoopReport
+from app.ai.agent.tools import ToolBroker
 from app.ai.agent.toolset import CommandObservation, CommandRunner
-from app.ai.learning.episode import VerificationOutcome
+from app.ai.learning.episode import GenerationEpisode, VerificationOutcome
 
 __all__ = [
     "GeneratedVerification",
     "GeneratedWorkspaceVerifier",
     "observation_outcome",
+    "run_generated_verification_episode",
 ]
 
 
@@ -115,3 +117,37 @@ class GeneratedWorkspaceVerifier:
             test=test,
             build=build,
         )
+
+
+def run_generated_verification_episode(
+    *,
+    episode: GenerationEpisode,
+    verifier: GeneratedWorkspaceVerifier,
+) -> tuple[GeneratedVerification, LoopReport]:
+    """Record one objective generated-workspace attempt into a GenerationEpisode.
+
+    This is deliberately verification-only: repair budget is zero. A failed build/test
+    is therefore recorded by AgentLoop and the report stops as ABANDONED because no
+    repair was attempted in this stage. A later 020D repair stage can use the same
+    verifier as its `attempt` function with a non-zero repair budget.
+    """
+    captured: GeneratedVerification | None = None
+
+    def attempt() -> AttemptResult:
+        nonlocal captured
+        captured = verifier.verify()
+        return captured.attempt
+
+    loop = AgentLoop(
+        broker=ToolBroker(),
+        episode=episode,
+        budget=AgentBudget(
+            max_repair_rounds=0,
+            max_tool_calls=0,
+            time_budget_seconds=max(verifier.timeout_seconds * 3.0, 1.0),
+        ),
+    )
+    report = loop.run(attempt=attempt, repair=lambda current: current)
+    if captured is None:  # pragma: no cover - verifier returns or raises before here
+        raise RuntimeError("generated verification produced no observation")
+    return captured, report
