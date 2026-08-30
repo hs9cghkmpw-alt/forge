@@ -527,6 +527,7 @@ class CognitiveOrchestrator:
                     layout_emphasis=compose_layout(capability_plan).value,
                     simulation_capabilities=capability_plan.simulations,
                     interaction_capabilities=capability_plan.interactions,
+                    promoted_capabilities=capability_plan.requested,
                 )
             else:
                 # Only an explicitly planned checklist may enter the legacy compiler.

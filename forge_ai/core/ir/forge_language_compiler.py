@@ -157,6 +157,7 @@ from forge_ai.core.ir.ir_types import (
     preferred_aggregate,
 )
 from forge_ai.core.ir.solution_shape import SolutionShape, select_solution_shape
+from forge_ai.core.orchestration.declarative_activation import apply_promoted_document_activations
 
 #: **まとめ・比較を先に見せる性格**（TD91 / 020A2 §6）。
 #:
@@ -272,6 +273,7 @@ class ForgeLanguageCompiler:
         layout_emphasis: str = "",
         simulation_capabilities: tuple[str, ...] = (),
         interaction_capabilities: tuple[str, ...] = (),
+        promoted_capabilities: tuple[str, ...] = (),
     ) -> ForgeIRDocument:
         errors = ir.referential_integrity_errors()
         if errors:
@@ -335,6 +337,10 @@ class ForgeLanguageCompiler:
             document = self._attach_simulation_loop(document)
         if "interact.audio_mix" in interaction_capabilities:
             document = self._attach_audio_mixer(document)
+        # A promoted declarative capability must change the generated
+        # document through its executable activation. Registry metadata
+        # alone is never sufficient to claim the capability is usable.
+        document = apply_promoted_document_activations(document, promoted_capabilities)
         return document
 
     @staticmethod
