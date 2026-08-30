@@ -66,6 +66,7 @@ __all__ = [
     "SupportLevel",
     "capability",
     "capability_ids",
+    "detect_capabilities",
     "is_known_capability",
 ]
 
@@ -280,3 +281,23 @@ def capability_ids() -> tuple[str, ...]:
 def is_known_capability(capability_id: str) -> bool:
     """**知らない ID を黙って通さない。**"""
     return capability_id in SEMANTIC_CAPABILITIES
+
+
+def detect_capabilities(
+    text: str, *, layers: tuple[CapabilityLayer, ...] | None = None
+) -> tuple[str, ...]:
+    """Detect canonical capabilities directly from catalog-owned keywords.
+
+    This is a semantic vocabulary adapter, not a product template.  It is used
+    where a requested capability (for example a missing view primitive) has no
+    separate role-lexicon representation.  The catalog remains the single source
+    of truth for IDs and detection words.
+    """
+    allowed = set(layers) if layers is not None else None
+    found: list[str] = []
+    for definition in _CATALOG:
+        if allowed is not None and definition.layer not in allowed:
+            continue
+        if any(keyword in text for keyword in definition.detection_keywords):
+            found.append(definition.id)
+    return tuple(found)

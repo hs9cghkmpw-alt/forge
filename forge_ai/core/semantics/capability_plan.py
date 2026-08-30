@@ -66,7 +66,9 @@ from enum import Enum
 
 from forge_ai.core.semantics.capabilities import (
     SEMANTIC_CAPABILITIES,
+    CapabilityLayer,
     SupportLevel,
+    detect_capabilities,
 )
 from forge_ai.core.orchestration.extension_registry import is_promoted_capability
 from forge_ai.core.semantics.roles import (
@@ -399,10 +401,25 @@ def plan_capabilities(text: str) -> CapabilityPlan:  # noqa: PLR0912 — 段の�
     Capability だけである。
     """
     roles = extract_semantic_roles(text)
+    # Some canonical capabilities intentionally do not have a second role-lexicon
+    # entry.  Missing presentation primitives such as map/calendar/line-chart must
+    # still survive planning as exact gaps instead of disappearing when their only
+    # evidence is the canonical capability keyword.  Restrict this direct adapter
+    # to VIEW here; behavior/effect words need role context to avoid semantic
+    # ambiguity (for example generic "組み合わせ" vs audio mixing).
+    directly_requested = set(detect_capabilities(text, layers=(CapabilityLayer.VIEW,)))
     if roles.is_empty:
-        return CapabilityPlan(roles=roles, structure=StructuralMode.UNKNOWN)
+        ok, partial, missing = _classify(directly_requested)
+        return CapabilityPlan(
+            roles=roles,
+            structure=StructuralMode.UNKNOWN,
+            views=tuple(c for c in ok if c.startswith("view.")),
+            requested=tuple(sorted(directly_requested)),
+            partial=partial,
+            missing=missing,
+        )
 
-    requested: set[str] = set()
+    requested: set[str] = set(directly_requested)
     activities = set(roles.of(SemanticRole.ACTIVITY))
 
     # -- 1件ごとに残す値 ------------------------------------------------
