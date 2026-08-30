@@ -99,7 +99,7 @@ class TestTheUserIsToldWhatCannotBeBuilt(unittest.TestCase):
         gap = result.get("capability_gap")
         self.assertIsNotNone(gap)
         self.assertIn("view.calendar", gap["missing"])
-        self.assertIn("地図は表示できません", gap["message"])
+        self.assertIn("カレンダー表示はできません", gap["message"])
 
 
 class TestCriticalGapsBlockCompletion(unittest.TestCase):

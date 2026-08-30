@@ -41,6 +41,7 @@ from forge_ai.core.semantics.roles import (
     concepts_blocked_by_role,
     extract_semantic_roles,
 )
+from forge_ai.core.orchestration.extension_registry import is_promoted_capability
 from forge_ai.core.orchestration.outcomes import (
     CognitivePipelineFailed,
     CognitivePipelineNeedsConfirmation,
@@ -526,7 +527,13 @@ class CognitiveOrchestrator:
                     layout_emphasis=compose_layout(capability_plan).value,
                     simulation_capabilities=capability_plan.simulations,
                     interaction_capabilities=capability_plan.interactions,
-                    promoted_capabilities=capability_plan.requested,
+                    # Only capabilities that passed the extension evidence gate
+                    # may enter BUILD_TIME/declarative compiler bindings.  A requested
+                    # MISSING capability is not promoted merely because the user asked for it.
+                    promoted_capabilities=tuple(
+                        capability_id for capability_id in capability_plan.requested
+                        if is_promoted_capability(capability_id)
+                    ),
                 )
             else:
                 # Only an explicitly planned checklist may enter the legacy compiler.
