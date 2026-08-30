@@ -12,10 +12,11 @@ compiler.py`にあった`DomainField`・`DomainDataModel`・
 (それぞれ IR層の`Field`・Entity定義・Domain登録表に相当する概念
 だったため)。`compiler.py`側の該当コードは削除済み。
 
-**対象外Domainについて**: `generate_ir()`は、登録されていない
-`domain_category`に対しては`None`を返す(例外にしない)。呼び出し側
-(`pipeline_orchestrator.py`)は、`None`が返った場合、既存の
-`Compiler`(Checklist単一画面)へフォールバックする。
+**対象外Domainについて**: `generate()`は、登録されていない
+`domain_category`に対して`None`を返す。この`None`はChecklistへの
+意味的フォールバック許可ではない。Capability Planが先に要求構造を決め、
+未解決要求はCapability Gap / Self-Extensionへ送る。`IRGenerator`は
+解決済みEntity表現をIRへ変換する下流コンポーネントである。
 
 **FORGE v0.8(Record Runtime Phase2)での拡張**: `update_<entity>`・
 `delete_<entity>` Actionと、編集用View(`mode="edit"`のForm View)を
@@ -374,9 +375,10 @@ class IRGenerator:
     関数)。"""
 
     def generate(self, plan: ApplicationPlan, *, domain_category: str) -> ForgeIR | None:
-        """`domain_category`が対象3 Domainのいずれでもない場合は`None`
-        を返す(例外にしない、呼び出し側がフォールバック判断できる
-        ようにするため)。
+        """登録済みEntity定義が無い場合は`None`を返す。
+
+        `None`は表現生成不能の事実だけを示し、Checklist/CRUD等への意味的な
+        代替を許可しない。代替・拡張の判断は上流Capability Planが担う。
 
         `plan`は現時点では実質的に未使用(Entity定義は`domain_category`
         だけから決定的に導出できるため)。将来、`plan`の内容(例:

@@ -339,11 +339,10 @@ class CognitiveOrchestrator:
                 ))
 
             # 12. Forge IR Compilation
-            # FORGE v0.6対応(FORGE IR v1 Phase2): 対象3 Domain
-            # (fishing_log/household_budget/habit_tracking)のみ、
-            # `IRGenerator` → `ForgeLanguageCompiler`という新しい経路を
-            # 通す。それ以外のDomainは、既存の`deps.compiler.compile()`
-            # (Checklist単一画面)をそのまま使う(無変更)。
+            # Product-level structure is already resolved by Capability Plan.
+            # `IRGenerator` / `ForgeLanguageCompiler` are downstream representation
+            # mechanisms only. An unresolved/non-checklist request must never enter
+            # the legacy checklist compiler merely because IR construction failed.
             #
             # `IRGenerator`/`ForgeLanguageCompiler`は`CognitiveDependencies`
             # へは追加していない(状態を持たない純粋なクラスであり、
