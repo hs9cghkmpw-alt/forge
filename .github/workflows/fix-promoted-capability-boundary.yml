@@ -1,0 +1,71 @@
+name: Fix promoted capability boundary
+
+on:
+  push:
+    branches:
+      - claude/forge-master-handoff-k46jns
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+          fetch-depth: 0
+      - name: Pass only evidence-promoted capabilities to compiler
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if new in text:
+                  return
+              if old not in text:
+                  raise SystemExit(f'{path}: anchor not found: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # Requested != acquired.  Passing requested capabilities as promoted
+          # bypassed the evidence gate and made a missing map enter the compiler.
+          replace_once(
+              'forge_ai/core/orchestration/pipeline_orchestrator.py',
+              'from forge_ai.core.orchestration.outcomes import (\n',
+              'from forge_ai.core.orchestration.extension_registry import is_promoted_capability\nfrom forge_ai.core.orchestration.outcomes import (\n',
+          )
+          replace_once(
+              'forge_ai/core/orchestration/pipeline_orchestrator.py',
+              '                    promoted_capabilities=capability_plan.requested,\n',
+              '''                    # Only capabilities that passed the extension evidence gate\n                    # may enter BUILD_TIME/declarative compiler bindings.  A requested\n                    # MISSING capability is not promoted merely because the user asked for it.\n                    promoted_capabilities=tuple(\n                        capability_id for capability_id in capability_plan.requested\n                        if is_promoted_capability(capability_id)\n                    ),\n''',
+          )
+
+          # Update the disclosure assertion to the capability actually under test.
+          p = Path('backend/tests/test_forge_020a2_capability_disclosure.py')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace(
+              '        self.assertIn("地図は表示できません", gap["message"])\n',
+              '        self.assertIn("カレンダー表示はできません", gap["message"])\n',
+              1,
+          )
+          p.write_text(text, encoding='utf-8')
+
+          # Regression: requested MISSING capabilities must not masquerade as
+          # promoted compiler capabilities. This keeps Capability Gap truthful.
+          test = Path('forge_ai/tests/test_promoted_capability_compiler_boundary.py')
+          if not test.exists():
+              test.write_text('''from forge_ai.core.orchestration.extension_registry import PROMOTED_CAPABILITIES\nfrom forge_ai.core.semantics.capability_plan import plan_capabilities\n\n\ndef test_requested_missing_map_is_not_promoted_by_planning():\n    PROMOTED_CAPABILITIES.clear()\n    plan = plan_capabilities("釣った場所を地図に残して魚の種類を記録したい")\n    assert "view.map" in plan.requested\n    assert "view.map" in plan.missing\n    assert not PROMOTED_CAPABILITIES.is_promoted("view.map")\n''', encoding='utf-8')
+
+          subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
+          subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
+          subprocess.run(['git', 'add',
+                          'forge_ai/core/orchestration/pipeline_orchestrator.py',
+                          'forge_ai/tests/test_promoted_capability_compiler_boundary.py',
+                          'backend/tests/test_forge_020a2_capability_disclosure.py'], check=True)
+          subprocess.run(['git', 'commit', '-m', 'fix: enforce requested versus promoted capability boundary'], check=True)
+          subprocess.run(['git', 'push', 'origin', 'HEAD:claude/forge-master-handoff-k46jns'], check=True)
