@@ -352,9 +352,12 @@ class TestPreliminaryFinalMismatchAcrossRevisions(unittest.TestCase):
 
         orchestrator = self._build_orchestrator(_ConvergingSelector())
         outcome = orchestrator.run("買い物リストを作りたい")
-        self.assertIsInstance(outcome, CognitivePipelineSuccess)
-        self.assertFalse(outcome.context.template_selection.differs_from_preliminary)
-        self.assertEqual(outcome.context.template_selection.template, "checklist")
+        # Template mismatch自体は収束しても、Capability PlanがUNKNOWNなら
+        # 「checklistを選べた」ことを成功理由にしてはならない。
+        # 新しいfail-closed契約では意味構造未解決として失敗する。
+        self.assertIsInstance(outcome, CognitivePipelineFailed)
+        self.assertEqual(outcome.reached_stage, "capability_gap")
+        self.assertIn("semantic_structure_unresolved", str(outcome.error))
 
     def test_shared_revision_limit_reached_results_in_needs_confirmation(self) -> None:
         """共有Revision上限到達時はNeedsConfirmationになる(上記の

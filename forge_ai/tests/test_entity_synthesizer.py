@@ -392,11 +392,11 @@ class _SynthesisSabotagingProvider:
         return self._inner.complete(prompt)
 
 
-class TestOrchestratorFallsBackSafely(unittest.TestCase):
-    """合成が失敗しても、以前(Checklist)より悪くならないことの確認。
+class TestOrchestratorFailsClosedOnSynthesisFailure(unittest.TestCase):
+    """合成失敗をChecklist成功へ偽装しないことの確認。
 
-    この性質はこの機能の安全性の根拠そのものである(合成が使えなければ
-    従来の経路へ落ちるだけで、生成自体が失敗することはない)。
+    未解決のRecord/構造要求はexact Capability Gapとして保持する。
+    legacy Checklistへの意味変更は安全策ではなく誤成功なので禁止する。
     """
 
     def _widget_types(self, doc: dict[str, Any]) -> set[str]:
@@ -411,22 +411,18 @@ class TestOrchestratorFallsBackSafely(unittest.TestCase):
             walk(screen["body"])
         return found
 
-    def test_broken_synthesis_falls_back_to_checklist_instead_of_failing(self) -> None:
+    def test_broken_synthesis_fails_closed_instead_of_substituting_checklist(self) -> None:
         from forge_ai.core.pipeline import run_cognitive_pipeline
+        from forge_ai.core.orchestration.outcomes import CognitivePipelineFailed
 
-        # 「通院」等の高リスク語を含む入力はConfirmationへ分岐するため
-        # (`pipeline_orchestrator._is_high_risk_domain_hint`)、ここでは
-        # 確認を挟まずに完走する入力を使う。
         outcome = run_cognitive_pipeline(
             "買い物リストを作りたい", provider=_SynthesisSabotagingProvider({})
         )
-        doc = outcome.ir.to_json_dict()
-        # 生成自体は成功し、従来のChecklistが返る。
-        self.assertIn("checklist", self._widget_types(doc))
-        self.assertNotIn("record_list_view", self._widget_types(doc))
-        # 合成が使われなかったことがDecision Traceからも分かる。
-        stages = [d.stage for d in outcome.context.decision_trace]
-        self.assertNotIn("entity_source", stages)
+        self.assertIsInstance(outcome, CognitivePipelineFailed)
+        self.assertEqual(outcome.reached_stage, "capability_gap")
+        self.assertIn("semantic_structure_unresolved", str(outcome.error))
+        # 失敗をChecklist文書へ変換して成功扱いしていない。
+        self.assertFalse(hasattr(outcome, "ir"))
 
     def test_successful_synthesis_records_its_source_in_the_decision_trace(self) -> None:
         """成否がDecision Traceから追えること(運用時にどちらの経路を
