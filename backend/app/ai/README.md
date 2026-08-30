@@ -1,17 +1,47 @@
-# ai/
+# Forge AI layer
 
-AIによるJSON UI Schema生成・検証・改善提案を担うモジュール。
-「AIはコードを書かずJSONだけ返す」という大原則（`docs/AI.md`参照）をコードレベルで担保する層。
+This directory participates in Forge's natural-language software-generation pipeline. It is **not** defined as a finite UI-template selector and it must not narrow Forge's product goal to "generate JSON for known screens".
 
-- `generators/` — 会話 → JSON UI Schema を生成する処理（LLM API呼び出しを含む）
-- `validators/` — 生成されたJSONを `shared/schemas/` のJSON Schemaに対して検証する処理
-- `memory/` — AI Memory機能のための会話履歴・長期記憶の読み書き（将来のAI Memory機能の実体）
-- `prompts/` — 実行時にコードから読み込むプロンプトテンプレートの参照ロジック
-  （プロンプトの**本文**は `PROMPTS/` に置き、ここは読み込み・組み立てロジックのみを持つ）
+Canonical direction:
 
-## 依存ルール
+1. `docs/FORGE-CORE-CONSTITUTION.md`
+2. `docs/PRODUCT-DIRECTION.md`
+3. `docs/GENERATIVE-SOFTWARE-DIRECTION.md`
+4. `docs/FORGE-WHOLE-SCAN-PROTOCOL.md`
 
-- `ai/` は `domain/entities` を参照してよいが、`routers/` や `services/` からは
-  `ai/` の公開インターフェース（例: `generate_ui_schema()`）のみを呼び出す。
-- `ai/validators/` は生成物を弾く最終防衛ラインであり、ここを通らないJSONはユーザーに返さない
-  （`docs/AI.md` の安全境界と対応）。
+Core invariant:
+
+> **持っている能力は組み合わせる。足りない能力は作る。作った能力は検証し、再利用可能な Forge Capability として取り込む。**
+
+## Responsibilities
+
+The AI/generation path should move from user intent toward verified software through semantic decomposition and capability planning:
+
+```text
+natural-language need
+ -> candidacy / intent understanding
+ -> capability decomposition
+ -> compose existing capabilities
+ -> identify exact missing capability when composition is insufficient
+ -> safe synthesis / extension route when feasible
+ -> Forge IR / versioned language / generated workspace
+ -> validator / compiler / runtime
+ -> test / build / runtime evidence
+ -> repair if needed
+ -> evidence-backed capability promotion when a new reusable capability was created
+```
+
+Some production paths still emit versioned Forge JSON. JSON is a transport/language boundary for those paths, **not the definition of Forge itself**.
+
+## Rules
+
+- Do not map an unsupported request to the nearest easy app shape and call that success.
+- Do not add domain-specific templates just to pass a Golden request.
+- Prefer reusable semantic capabilities and primitives over one-off widgets.
+- If the current runtime cannot express a requirement, return an exact Capability Gap and enter the applicable extension/synthesis path rather than silently deleting the requirement.
+- Never fabricate unknown schema types to bypass validation.
+- Keep effects, permissions, secrets, irreversible operations, and trust boundaries explicit.
+- `PARTIAL`, `MISSING`, `MOCK`, `STUB`, and `UNVERIFIED` must remain distinct from `IMPLEMENTED` / `PASS`.
+- A generated result is not complete merely because a model returned text or JSON; production validation and evidence are required.
+
+Historical fixed-template experiments may still exist in git history or old reports. They are not authoritative product direction.
