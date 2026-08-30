@@ -234,7 +234,7 @@ See `docs/reports/FORGE-WHOLE-SCAN-20260830-report.md` for the full scan record.
 
 ## CI evidence
 
-Canonical CI run `33339800860` on head `d8a93410` completed successfully
+Canonical CI run `33340416175` on head `8ea7fc9d` completed successfully
 (4/4 jobs):
 
 - backend + forge_ai Python 3.11: PASS
@@ -242,7 +242,7 @@ Canonical CI run `33339800860` on head `d8a93410` completed successfully
 - backend smoke: PASS
 - Flutter analyze/test/web build: PASS
 
-Earlier green heads in this slice: `33339385724` (`83683e1`), `33339175463` (`5827f2d`),
+Earlier green heads in this slice: `33339800860` (`d8a9341`), `33339385724` (`83683e1`), `33339175463` (`5827f2d`),
 `33338884887` (`2fba6f1`), `33328203164` (`8e3c876`).
 
 A later HEAD must receive its own canonical CI before being called green.
