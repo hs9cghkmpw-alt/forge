@@ -3,6 +3,8 @@
 - 日付: 2026-08-31
 - Branch: `claude/forge-master-handoff-k46jns`
 - 対象: `SynthesizingBuildTimeImplementer`（本番の `ExtensionImplementer`）
+- Canonical CI: run `33339385724` / head `83683e16` / **4 jobs すべて success**
+- 関連 commit: `0e24a25`（生成段）/ `5827f2d`（実 build 接続）/ `83683e1`（必須項目の宣言化）
 
 > **この文書は「Self-Extension E2E が完成した」とは言わない。**
 > 証明できた範囲と、**まだ証明していない範囲**を分けて書く。

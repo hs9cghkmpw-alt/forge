@@ -30,6 +30,52 @@ Operational scan term:
 
 `FORGE-GENERAL-APP-MODE.md` is **not a new product goal**. Missing-capability synthesis is cross-cutting and must not be postponed until the end of a phase list.
 
+## Self-extension: what the build pipeline now actually proves (020E-2/3)
+
+`SynthesizingBuildTimeImplementer` is the **production** `ExtensionImplementer`.
+Until it existed, the only implementer ever injected into `extension_cycle` was
+a test closure.
+
+Proven with **real subprocesses** (no fake builder/loader):
+
+```
+test           python -m unittest discover   exit 0
+build          python -m compileall -q .     exit 0
+runtime_probe  python probe.py               exit 0   stdout: "runtime probe ok"
+-> manifest promoted, promotion_blockers empty, activation loaded
+```
+
+Negative proof: a failing generated test, a failing probe, or source that does
+not compile all leave the manifest **unpromoted with `activation is None`**;
+later phases do not run after an earlier phase fails; an unsupported host
+language is refused rather than defaulted to Python; regurgitated shipped
+source raises `PreexistingSourceError`.
+
+Capability prerequisites are now **declared in the canonical catalog**
+(`CapabilityDefinition.required_fields`) instead of branching on a capability
+name in the planner. The former `if "view.map" in directly_requested:` branch is
+gone — an acquired capability could never have that branch written for it, so it
+could never stand on its own. This is **not** permission to geocode: the map
+capability declares explicit numeric latitude/longitude, and a place name alone
+still produces no coordinate fields.
+
+**Still unproven — do not read this as a completed self-extension E2E:**
+
+| Item | State |
+|---|---|
+| That a **real model** authored the generated source | **UNPROVEN.** The provider here is a Test Double; the implementation string is supplied by the test |
+| Natural-language request -> NeedsExtension -> cycle -> retry | **UNPROVEN** |
+| Retried document contains the widget; Validator PASS | **UNPROVEN** |
+| Flutter runtime rendering evidence | **UNPROVEN** |
+| Second different request reuses without a second build | **UNPROVEN** (counters exist: `synthesis_count` / `build_count`) |
+| Real Local Model runs | **0** |
+
+Evidence: `docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md`.
+
+Next real bottleneck: executing the `capability_implementation` stage against a
+**real model**. The plumbing and gates are in place; what is missing is a
+machine that can run one (`docs/MACHINE-INDEPENDENT-POLICY.md`).
+
 ## Determination: map so far is activation, not generation (020E, 2026-08-30)
 
 Ordered explicitly by the CEO before any further self-extension work.
@@ -175,14 +221,18 @@ See `docs/reports/FORGE-WHOLE-SCAN-20260830-report.md` for the full scan record.
 
 ## CI evidence
 
-Canonical CI run `33328203164` on head `8e3c87616ef3f5ab9b9cad594b46cc609bda7c87` completed successfully:
+Canonical CI run `33339385724` on head `83683e16` completed successfully
+(4/4 jobs):
 
 - backend + forge_ai Python 3.11: PASS
 - backend + forge_ai Python 3.12: PASS
 - backend smoke: PASS
 - Flutter analyze/test/web build: PASS
 
-A later documentation/comment-cleanup HEAD must receive its own canonical CI before being called green.
+Earlier green heads in this slice: `33339175463` (`5827f2d`),
+`33338884887` (`2fba6f1`), `33328203164` (`8e3c876`).
+
+A later HEAD must receive its own canonical CI before being called green.
 
 ## Existing Golden game closure remains valid
 
