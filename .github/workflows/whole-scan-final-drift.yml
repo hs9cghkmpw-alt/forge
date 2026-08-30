@@ -21,38 +21,43 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
 
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text(encoding='utf-8')
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'{path}: expected 1 match, found {count}')
-              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          p = Path('forge_ai/core/ir/ir_generator.py')
+          text = p.read_text(encoding='utf-8')
+          text, n1 = re.subn(
+              r'\*\*対象外Domainについて\*\*: `generate_ir\(\)`は、登録されていない\n`domain_category`に対しては`None`を返す\(例外にしない\)。呼び出し側\n\(`pipeline_orchestrator\.py`\)は、`None`が返った場合、既存の\n`Compiler`\(Checklist単一画面\)へフォールバックする。',
+              '**対象外Domainについて**: `generate()`は、登録されていない\n`domain_category`に対して`None`を返す。この`None`はChecklistへの\n意味的フォールバック許可ではない。Capability Planが先に要求構造を決め、\n未解決要求はCapability Gap / Self-Extensionへ送る。`IRGenerator`は\n解決済みEntity表現をIRへ変換する下流コンポーネントである。',
+              text,
+              count=1,
+          )
+          text, n2 = re.subn(
+              r'        """`domain_category`が対象3 Domainのいずれでもない場合は`None`\n        を返す\(例外にしない、呼び出し側がフォールバック判断できる\n        ようにするため\)。',
+              '        """登録済みEntity定義が無い場合は`None`を返す。\n\n        `None`は表現生成不能の事実だけを示し、Checklist/CRUD等への意味的な\n        代替を許可しない。代替・拡張の判断は上流Capability Planが担う。',
+              text,
+              count=1,
+          )
+          if n1 + n2 == 0:
+              print('ir_generator stale text already absent')
+          p.write_text(text, encoding='utf-8')
 
-          replace_once(
-              'forge_ai/core/ir/ir_generator.py',
-              '''**対象外Domainについて**: `generate_ir()`は、登録されていない\n`domain_category`に対しては`None`を返す(例外にしない)。呼び出し側\n(`pipeline_orchestrator.py`)は、`None`が返った場合、既存の\n`Compiler`(Checklist単一画面)へフォールバックする。\n''',
-              '''**対象外Domainについて**: `generate()`は、登録されていない\n`domain_category`に対して`None`を返す。この`None`は「Checklistへ\nフォールバックしてよい」という意味ではない。product-levelの構造判断は\nCapability Planが先に行い、未解決の要求はCapability Gap / Self-Extensionへ\n送る。`IRGenerator`は解決済みのEntity表現をIRへ変換する下流コンポーネント\nであり、ユーザー要求を別のSolutionShapeへ読み替える権限を持たない。\n''',
-          )
-          replace_once(
-              'forge_ai/core/ir/ir_generator.py',
-              '''        """`domain_category`が対象3 Domainのいずれでもない場合は`None`\n        を返す(例外にしない、呼び出し側がフォールバック判断できる\n        ようにするため)。\n''',
-              '''        """登録済みEntity定義が無い場合は`None`を返す。\n\n        `None`は表現生成不能の事実だけを示し、Checklist/CRUD等への意味的な\n        代替を許可しない。代替・拡張の判断は上流Capability Planが担う。\n''',
-          )
-          replace_once(
-              'forge_ai/core/orchestration/pipeline_orchestrator.py',
-              '''            # 12. Forge IR Compilation\n            # FORGE v0.6対応(FORGE IR v1 Phase2): 対象3 Domain\n            # (fishing_log/household_budget/habit_tracking)のみ、\n            # `IRGenerator` → `ForgeLanguageCompiler`という新しい経路を\n            # 通す。それ以外のDomainは、既存の`deps.compiler.compile()`\n            # (Checklist単一画面)をそのまま使う(無変更)。\n''',
-              '''            # 12. Forge IR Compilation\n            # Product-level structure is already resolved by Capability Plan.\n            # `IRGenerator` / `ForgeLanguageCompiler` are downstream representation\n            # mechanisms only. An unresolved/non-checklist request must never enter\n            # the legacy checklist compiler merely because IR construction failed.\n''',
-          )
-          replace_once(
-              'forge_ai/core/orchestration/pipeline_orchestrator.py',
-              '''            # 合成できなかった場合(AIの応答が\n            # 不正、Provider未注入等)は、従来どおりChecklistへ安全に\n            # フォールバックする——この機能が失敗しても以前より悪くは\n            # ならない、という形にしている。\n''',
-              '''            # 合成できなかった場合も意味をChecklistへ縮退させない。\n            # explicit CHECKLISTだけがlegacy compilerへ進み、それ以外は\n            # Capability GapとしてSelf-Extensionへ渡す。\n''',
-          )
+          p = Path('forge_ai/core/orchestration/pipeline_orchestrator.py')
+          text = p.read_text(encoding='utf-8')
+          old = '''            # 12. Forge IR Compilation\n            # FORGE v0.6対応(FORGE IR v1 Phase2): 対象3 Domain\n            # (fishing_log/household_budget/habit_tracking)のみ、\n            # `IRGenerator` → `ForgeLanguageCompiler`という新しい経路を\n            # 通す。それ以外のDomainは、既存の`deps.compiler.compile()`\n            # (Checklist単一画面)をそのまま使う(無変更)。\n'''
+          new = '''            # 12. Forge IR Compilation\n            # Product-level structure is already resolved by Capability Plan.\n            # `IRGenerator` / `ForgeLanguageCompiler` are downstream representation\n            # mechanisms only. An unresolved/non-checklist request must never enter\n            # the legacy checklist compiler merely because IR construction failed.\n'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          stale = '''            # 合成できなかった場合(AIの応答が\n            # 不正、Provider未注入等)は、従来どおりChecklistへ安全に\n            # フォールバックする——この機能が失敗しても以前より悪くは\n            # ならない、という形にしている。\n'''
+          replacement = '''            # 合成できなかった場合も意味をChecklistへ縮退させない。\n            # explicit CHECKLISTだけがlegacy compilerへ進み、それ以外は\n            # Capability GapとしてSelf-Extensionへ渡す。\n'''
+          if stale in text:
+              text = text.replace(stale, replacement, 1)
+          p.write_text(text, encoding='utf-8')
       - name: Commit cleanup
         run: |
-          if git diff --quiet; then exit 0; fi
+          if git diff --quiet; then
+            echo "No stale fallback doctrine remained"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add forge_ai/core/ir/ir_generator.py forge_ai/core/orchestration/pipeline_orchestrator.py
