@@ -52,6 +52,30 @@ Source of Truthとする。Codex/Claude固有のローカルhandoffは補助情�
 未commit差分は別Agentまたは利用者の作業かもしれない。監査せずに
 reset、delete、overwriteしてはならない。
 
+## Context / Token Safety
+
+全AI Agentは、残りcontext/token余力と残作業量を継続確認または保守的に推定する。限界、打切り、状態喪失の危険域まで続行してはならない。
+
+危険域へ入る前に:
+1. 現在の作業を安全なcheckpointまで閉じる。
+2. 可能なら正しいfeature branchへ意図した変更だけを保存する。
+3. Issue / PR / `docs/HANDOFF.md` 等、次担当が必ず読める場所へ `AI-HANDOFF` を残す。
+4. HANDOFF後に新しい大規模作業を開始せず停止する。
+
+`AI-HANDOFF` には必ず次の10項目を含める:
+1. 目的
+2. 完了済み
+3. 未完了
+4. branch / commit / PR / Issue
+5. 変更ファイル
+6. tests / CI / 実機結果
+7. 失敗 / blocker
+8. 次の具体的1〜3手
+9. 安全境界 / 触ってはいけない箇所
+10. 推測 / 未検証事項
+
+次のAgentは作業開始時に最新HANDOFFを最初に読み、完了済み作業を重複してやり直さない。古いHANDOFFより新しいGitHub evidenceを優先する。
+
 ## 実装と交代
 
 - 同じworking treeで動くImplementation Agentは一度に1つとする。
