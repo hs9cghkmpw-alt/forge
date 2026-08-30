@@ -65,16 +65,24 @@ still produces no coordinate fields.
 |---|---|
 | That a **real model** authored the generated source | **UNPROVEN.** The provider here is a Test Double; the implementation string is supplied by the test |
 | Natural-language request -> acquisition -> retry -> reuse | **PROVEN** (real build; `capability_plan` consults the registry on retry) |
-| Retried document contains the widget; Validator PASS | **UNPROVEN** |
+| Retried document contains the widget; Validator PASS | **UNPROVEN, and now precisely understood.** Acquisition closes the *planning* gap (`plan.views` contains it) but emits **no widget**: the generated artifact targets Python while document emission/runtime are Dart, and `forge_language_compiler.py` still selects widgets with an `if "view.map"` branch that an acquired capability never gets |
 | Flutter runtime rendering evidence | **UNPROVEN** |
 | Second different request reuses without a second build | **PROVEN** (synthesis=1, build=1, provider_calls=1 across two different requests) |
 | Real Local Model runs | **0** |
 
 Evidence: `docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md`.
 
-Next real bottleneck: executing the `capability_implementation` stage against a
-**real model**. The plumbing and gates are in place; what is missing is a
-machine that can run one (`docs/MACHINE-INDEPENDENT-POLICY.md`).
+Next real bottlenecks — there are **two**, not one:
+
+1. **Real model authorship.** Executing the `capability_implementation` stage
+   against a real model. Plumbing and gates are in place; what is missing is a
+   machine that can run one (`docs/MACHINE-INDEPENDENT-POLICY.md`).
+2. **The acquired capability must be able to reach the generated document.**
+   Today it cannot: the artifact targets Python while emission/runtime are Dart,
+   and the compiler still picks widgets via `if "view.map"`. The planner-side
+   version of that branch was removed in `83683e1`; the compiler-side one
+   remains. Until it is declaration-driven, an acquired capability can never
+   appear in generated software — which is the whole point of acquiring it.
 
 ## Determination: map so far is activation, not generation (020E, 2026-08-30)
 
@@ -221,7 +229,7 @@ See `docs/reports/FORGE-WHOLE-SCAN-20260830-report.md` for the full scan record.
 
 ## CI evidence
 
-Canonical CI run `33339385724` on head `83683e16` completed successfully
+Canonical CI run `33339800860` on head `d8a93410` completed successfully
 (4/4 jobs):
 
 - backend + forge_ai Python 3.11: PASS
@@ -229,7 +237,7 @@ Canonical CI run `33339385724` on head `83683e16` completed successfully
 - backend smoke: PASS
 - Flutter analyze/test/web build: PASS
 
-Earlier green heads in this slice: `33339175463` (`5827f2d`),
+Earlier green heads in this slice: `33339385724` (`83683e1`), `33339175463` (`5827f2d`),
 `33338884887` (`2fba6f1`), `33328203164` (`8e3c876`).
 
 A later HEAD must receive its own canonical CI before being called green.

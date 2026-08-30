@@ -3,8 +3,8 @@
 - 日付: 2026-08-31
 - Branch: `claude/forge-master-handoff-k46jns`
 - 対象: `SynthesizingBuildTimeImplementer`（本番の `ExtensionImplementer`）
-- Canonical CI: run `33339385724` / head `83683e16` / **4 jobs すべて success**
-- 関連 commit: `0e24a25`（生成段）/ `5827f2d`（実 build 接続）/ `83683e1`（必須項目の宣言化）
+- Canonical CI: run `33339800860` / head `d8a93410` / **4 jobs すべて success**
+- 関連 commit: `0e24a25`（生成段）/ `5827f2d`（実 build 接続）/ `83683e1`（必須項目の宣言化）/ `d8a9341`（通し）
 
 > **この文書は「Self-Extension E2E が完成した」とは言わない。**
 > 証明できた範囲と、**まだ証明していない範囲**を分けて書く。
@@ -141,6 +141,39 @@ Negative proof（通し側）:
 - `runtime_probe` を失敗させると activation が出ず、`install()` が
   `ValueError` で拒否し、**gap は開いたまま残る**
 - `requested` に入っているだけでは PROMOTED にならない（`6da20fc` の境界）
+
+---
+
+## 3.6 獲得した能力は、まだ**生成物には届いていない**（実測）
+
+§3.5 で `view.calendar` を獲得したあと、実際に確かめた。
+
+```
+plan.views                       : ('view.calendar',)   ← 計画には載る
+compiler が calendar に言及するか : False               ← 出力には出ない
+compiler が view.map に言及するか : True
+```
+
+**獲得は Capability Plan の gap を閉じるが、Forge Document に widget を
+出すところまでは届いていない。**
+
+理由ははっきりしている。
+
+1. 生成した Artifact の実装先は **Python** である。一方、Document の
+   emission と Runtime は **Dart** 側にある
+2. `forge_language_compiler.py` は **`if "view.map"` という能力名の枝**で
+   widget を出している。`view.map` にだけ人が書いた枝があり、
+   **獲得した能力には枝が無い**
+
+これは §0 の判定（map は activation であって生成ではない）が、出力側で
+もう一度現れたものである。Planner 側の同じ枝は `83683e1` で宣言へ移した
+が、**Compiler 側にはまだ残っている。**
+
+### したがって CEO の E2E 項目 #4 は未達である
+
+「生成された Forge Document に当該 widget が含まれること」は、
+**獲得した能力については満たしていない**。満たしているのは
+`view.map`——すなわち最初から実装があったものだけである。
 
 ---
 
