@@ -24,71 +24,122 @@ Operational scan term:
 ## Current branch / active engineering slice
 
 - Branch: `claude/forge-master-handoff-k46jns`
-- Active slice: general reusable logic semantics and runtime binding.
+- Active slice: self-extension production loop + GA-1 logic closure.
 - Execution program: `docs/spec/FORGE-GENERAL-APP-MODE.md`.
 - Self-extension basis: `docs/spec/FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md`.
 
-`FORGE-GENERAL-APP-MODE.md` is explicitly **not a new product goal**. It is coverage scaffolding under the canonical invariant. Missing-capability synthesis is cross-cutting and must not be postponed until the end of a phase list.
+`FORGE-GENERAL-APP-MODE.md` is **not a new product goal**. Missing-capability synthesis is cross-cutting and must not be postponed until the end of a phase list.
 
-## Current implementation evidence
+## Self-extension implementation now present
 
-### General expression engine
-
-Commit:
-
-- `2abf295132d3f83ced0f65863e651f5b24b37b1b` — `feat: add deterministic general expression engine`
-- `5c07ed2fc2ef5b493fb42e20945216c88da70c6a` — `test: lock general expression semantics`
-
-Implemented reusable expression semantics include literal/state references, arithmetic, comparisons, boolean composition, and record aggregates. Expressions are data and fail closed; arbitrary Dart/code execution is not an expression feature.
-
-CI:
-
-- run `33292399951` — **SUCCESS**
-
-### Live Runtime State binding
-
-Commits:
-
-- `8dc9e38bab6aa38b0d6119282911422cfb4b1c86` — `feat: bind general expressions to live runtime state`
-- `7574168c76722acc54cbefc5c6e6db16592287e6` — `test: prove live runtime expression binding`
-
-The regression proves that state mutation changes a derived balance and its boolean negative condition using the same reusable expression layer.
-
-CI:
-
-- run `33292752019` — **SUCCESS**
-
-This is **not** a household-budget feature. The household-budget request is only a Golden probe for reusable logic semantics.
-
-## Whole Scan corrections made on 2026-08-30
-
-The first explicit Whole Scan found strategic drift and began correcting it:
-
-1. `PROMPTS/system/core_directive.v1.md` described Forge as a JSON-only UI generator and could imply that undefined types are a permanent product boundary. It is now explicitly subordinate to the canonical product goal and routes missing capabilities toward synthesis/extension rather than silent downgrade.
-2. `docs/spec/FORGE-GENERAL-APP-MODE.md` said "next official goal" and placed self-extension at the end of the phase sequence. This could recreate the exact goal-substitution failure the CEO identified. It now states that the product goal never changed and that missing-capability synthesis is cross-cutting from the beginning.
-3. `docs/FORGE-WHOLE-SCAN-PROTOCOL.md` now defines **全体スキャン / Whole Scan** as a repository-wide goal-alignment scan plus immediate repair of safe deviations.
-
-See `docs/reports/FORGE-WHOLE-SCAN-20260830-report.md` for findings and remaining drift.
-
-## Current next work
-
-Continue the logic vertical slice without turning it into the goal:
+The production architecture now contains these reusable stages:
 
 ```text
-reusable expression
- -> live state binding               DONE / CI green
- -> conditional branch / visibility NEXT
- -> derived value binding
- -> Forge Language representation
- -> validator/parser/compiler wiring
- -> generated-app runtime evidence
+Capability Gap
+ -> CognitivePipelineNeedsExtension
+ -> ExtensionCandidate
+ -> ExtensionManifest
+ -> route-specific implementation
+ -> evidence gate
+ -> VERIFIED
+ -> PROMOTED
+ -> executable activation
+ -> registry install
+ -> original request retry
+ -> repeated loop until all gaps close or progress stops
 ```
 
-At every step apply the same challenge:
+Implemented guardrails include:
 
-- Can an unrelated request reuse this capability?
-- Are we writing a test-case-specific path?
-- If a real request needs a capability that existing primitives cannot express, are we entering synthesis/extension rather than rewriting the request to something easier?
+- unresolved semantics cannot skip decomposition;
+- unverified manifests cannot promote;
+- sensitive capability promotion requires safety evidence;
+- manifest-only promotion is insufficient: executable activation is required;
+- BUILD_TIME capabilities require a loaded runtime/build attestation before reuse;
+- capability identity may not change during implementation;
+- the same unresolved gap after promotion is treated as no progress;
+- retry cycles are bounded;
+- promoted declarative capabilities can be persisted and integrity-checked on reload.
+
+Relevant production surfaces include:
+
+- `forge_ai/core/orchestration/extension_plan.py`
+- `extension_manifest.py`
+- `extension_activation.py`
+- `extension_registry.py`
+- `extension_cycle.py`
+- `self_extension_loop.py`
+- `declarative_extension.py`
+- `declarative_activation.py`
+- `extension_store.py`
+- `build_time_extension.py`
+
+The multi-gap regression in `forge_ai/tests/test_self_extension_loop.py` proves that a request needing more than one missing capability is not completed after acquiring only the first gap.
+
+## GA-1 logic vertical slice
+
+GA-1 is now wired through the generated document path rather than existing only as a standalone expression helper.
+
+```text
+Python GA-1 Logic model
+ -> ForgeIRDocument.logic
+ -> generated JSON `logic`
+ -> Backend Validator
+ -> Dart ForgeDocument parser
+ -> ForgeLogicRuntime
+ -> Renderer `visible_when`
+```
+
+Implemented reusable semantics:
+
+- literal/state references
+- arithmetic and comparison
+- boolean composition
+- aggregate operations
+- derived values computed from current mutable state
+- conditional widget visibility
+
+Derived values are not copied into mutable state, so they do not create a second Source of Truth.
+
+Validator behavior is fail-closed:
+
+- `logic` is accepted only for Forge Language v1.15+;
+- unknown expression kinds/operators are rejected;
+- aggregate field references are constrained to their valid context;
+- expression depth and logic-entry count are bounded.
+
+Key commits:
+
+- `2abf295132d3f83ced0f65863e651f5b24b37b1b` — deterministic expression engine
+- `8dc9e38bab6aa38b0d6119282911422cfb4b1c86` — runtime state binding
+- `ebe90998c321cbd886dbdbae8b486b641791e3a7` — document/parser/renderer GA-1 wiring
+- `a83396ed3f7b1e21c48118a9c75d4049101db472` — backend GA-1 validator
+
+## Whole Scan status
+
+The first Whole Scan corrected the highest-risk strategic drift:
+
+- legacy JSON-only/product-boundary wording was demoted;
+- undefined requirements may not be rewritten into convenient templates;
+- only an explicitly planned CHECKLIST may enter the legacy checklist compiler;
+- unresolved RECORD_ENTITY / UNKNOWN structure becomes Capability Gap;
+- Capability Gap is a first-class `CognitivePipelineNeedsExtension` outcome, not generic failure;
+- `SolutionShape` is a downstream legacy representation chooser, not the product capability catalog;
+- self-extension is evidence-gated and retry-oriented rather than a claim-only registry;
+- stale comments/docstrings that still describe automatic checklist fallback are being removed as part of final scan cleanup.
+
+See `docs/reports/FORGE-WHOLE-SCAN-20260830-report.md` for the full scan record.
+
+## CI evidence
+
+Canonical CI run `33328203164` on head `8e3c87616ef3f5ab9b9cad594b46cc609bda7c87` completed successfully:
+
+- backend + forge_ai Python 3.11: PASS
+- backend + forge_ai Python 3.12: PASS
+- backend smoke: PASS
+- Flutter analyze/test/web build: PASS
+
+A later documentation/comment-cleanup HEAD must receive its own canonical CI before being called green.
 
 ## Existing Golden game closure remains valid
 
@@ -108,8 +159,17 @@ Truth status remains:
 - `effect.media_compose`: MISSING
 - physical/user-PC verification: UNVERIFIED
 
-Do not reopen that Golden unless a regression occurs, and do not treat its PASS as proof of general software-generation completion.
+Do not treat that Golden as a template or as proof of general software-generation completion.
+
+## Next engineering target after this scan pass
+
+Do not expand patterns for their own sake. Continue from the real goal backward:
+
+1. prove one real unseen request end-to-end through `Gap -> extension -> promotion -> retry -> working generated product` with runtime evidence;
+2. convert boolean extension evidence flags into stronger evidence references/artifact identities where practical;
+3. continue GA-2 persistent data/navigation and later capabilities only as reusable primitives;
+4. rerun Whole Scan whenever new capability routes or fallbacks are introduced.
 
 ## Final closure rule
 
-The final branch HEAD after implementation and bookkeeping must pass persistent `.github/workflows/ci.yml`. Do not convert pending/unmeasured evidence into PASS.
+A branch state is green only when persistent `.github/workflows/ci.yml` passes for that exact descendant HEAD. Pending/unmeasured evidence is never PASS.
