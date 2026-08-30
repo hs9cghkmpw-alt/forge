@@ -14,13 +14,17 @@ on:
       - frontend/pubspec.lock
       - frontend/assets/sounds/**
 
+concurrency:
+  group: forge-exact-golden-visual-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   render:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,7 +52,7 @@ jobs:
         env:
           FORGE_GOLDEN_DOC_PATH: /tmp/forge_golden_game.json
           FORGE_GOLDEN_SCREENSHOT_PATH: ${{ github.workspace }}/golden_game_phone.png
-        run: flutter test test/json_ui/forge_golden_game_render_probe_test.dart --reporter expanded
+        run: timeout 180s flutter test test/json_ui/forge_golden_game_render_probe_test.dart --reporter expanded
       - uses: actions/upload-artifact@v4
         with:
           name: forge-golden-game-visual-evidence
@@ -58,4 +62,5 @@ jobs:
           if-no-files-found: error
 
 # Objective visual evidence: exact production-generated document rendered at the
-# phone viewport by the checked-in Flutter renderer.
+# phone viewport by the checked-in Flutter renderer. The shell timeout ensures a
+# lifecycle leak cannot leave an apparently-running gate indefinitely.
