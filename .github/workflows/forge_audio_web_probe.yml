@@ -6,6 +6,11 @@ on:
       - claude/forge-master-handoff-k46jns
     paths:
       - .github/workflows/forge_audio_web_probe.yml
+      - frontend/pubspec.yaml
+      - frontend/pubspec.lock
+      - frontend/test/json_ui/forge_audio_mixer_web_test.dart
+      - frontend/lib/json_ui/widget_registry/widget_registry_v1_14.dart
+      - frontend/assets/sounds/**
 
 permissions:
   contents: read
@@ -22,9 +27,11 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Resolve Flutter dependencies
+      - name: Resolve Flutter dependencies from a clean web build state
         working-directory: frontend
-        run: flutter pub get
+        run: |
+          flutter clean
+          flutter pub get
       - name: Verify Chrome is available
         run: google-chrome --version || chromium --version
       - name: Create deterministic Chrome launcher for media probe
