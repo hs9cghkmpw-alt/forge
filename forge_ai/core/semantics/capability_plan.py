@@ -68,6 +68,7 @@ from forge_ai.core.semantics.capabilities import (
     SEMANTIC_CAPABILITIES,
     SupportLevel,
 )
+from forge_ai.core.orchestration.extension_registry import is_promoted_capability
 from forge_ai.core.semantics.roles import (
     SemanticRole,
     SemanticRoleExtraction,
@@ -378,7 +379,10 @@ def _classify(requested: set[str]) -> tuple[tuple[str, ...], tuple[str, ...], tu
             #
             # **未知の semantic ID は設定/実装の誤りである。** 落とす。
             raise UnknownCapabilityError(capability_id)
-        if definition.support is SupportLevel.IMPLEMENTED:
+        if definition.support is SupportLevel.IMPLEMENTED or is_promoted_capability(capability_id):
+            # A promoted declarative/composition extension is an acquired
+            # capability for this running Forge process.  Static catalog support
+            # remains the semantic baseline; promotion is the evidence-gated overlay.
             ok.append(capability_id)
         elif definition.support is SupportLevel.PARTIAL:
             ok.append(capability_id)

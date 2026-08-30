@@ -7,6 +7,7 @@ import pytest
 
 from forge_ai.core.orchestration.extension_cycle import ExtensionCycleError, run_extension_cycle
 from forge_ai.core.orchestration.extension_manifest import ExtensionEvidence
+from forge_ai.core.orchestration.extension_registry import PROMOTED_CAPABILITIES
 from forge_ai.core.orchestration.extension_plan import (
     ExtensionCandidate,
     ExtensionRoute,
@@ -52,18 +53,20 @@ def _promote(manifest):
     return replace(manifest, evidence=evidence).verified().promoted()
 
 
-def test_promoted_extension_retries_original_request() -> None:
+def test_promoted_declarative_extension_is_installed_then_retries_original_request() -> None:
+    PROMOTED_CAPABILITIES.clear()
     retried: list[str] = []
 
     result = run_extension_cycle(
         _outcome(_candidate()),
         decompose=lambda c: c,
-        select_route=lambda c: ExtensionRoute.BUILD_TIME,
+        select_route=lambda c: ExtensionRoute.DECLARATIVE,
         implement=_promote,
         retry=lambda raw: retried.append(raw) or "RETRIED",  # type: ignore[arg-type,return-value]
     )
 
     assert result.manifest.status.value == "promoted"
+    assert PROMOTED_CAPABILITIES.is_promoted("view.map")
     assert retried == ["釣果を地図で見たい"]
     assert result.retry_outcome == "RETRIED"
 
@@ -113,3 +116,20 @@ def test_implementer_cannot_swap_capability_identity() -> None:
             implement=lambda manifest: replace(_promote(manifest), capability_id="view.calendar"),
             retry=lambda raw: "RETRIED",  # type: ignore[return-value]
         )
+
+
+def test_build_time_promotion_requires_runtime_reload_before_retry() -> None:
+    PROMOTED_CAPABILITIES.clear()
+    retried: list[str] = []
+
+    with pytest.raises(ExtensionCycleError, match="cannot be activated in-process"):
+        run_extension_cycle(
+            _outcome(_candidate()),
+            decompose=lambda c: c,
+            select_route=lambda c: ExtensionRoute.BUILD_TIME,
+            implement=_promote,
+            retry=lambda raw: retried.append(raw) or "RETRIED",  # type: ignore[arg-type,return-value]
+        )
+
+    assert retried == []
+    assert not PROMOTED_CAPABILITIES.is_promoted("view.map")

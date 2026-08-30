@@ -23,6 +23,7 @@ from forge_ai.core.orchestration.extension_manifest import (
     create_extension_manifest,
 )
 from forge_ai.core.orchestration.extension_plan import ExtensionCandidate, ExtensionRoute
+from forge_ai.core.orchestration.extension_registry import PROMOTED_CAPABILITIES
 from forge_ai.core.orchestration.outcomes import (
     CognitivePipelineNeedsExtension,
     CognitivePipelineOutcome,
@@ -98,6 +99,15 @@ def run_extension_cycle(
             "Extension was not evidence-gated PROMOTED; refusing retry as if capability existed: "
             + blockers
         )
+
+    # Only routes whose implementation is already loadable in this
+    # process may be installed and retried immediately. Build-time,
+    # service and native extensions need the produced runtime/service
+    # to be loaded first; pretending otherwise would be false success.
+    try:
+        PROMOTED_CAPABILITIES.install(implemented)
+    except ValueError as exc:
+        raise ExtensionCycleError(str(exc)) from exc
 
     raw_input = outcome.partial_context.raw_input
     retry_outcome = retry(raw_input)
