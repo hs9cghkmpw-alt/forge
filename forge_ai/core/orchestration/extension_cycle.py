@@ -1,22 +1,21 @@
 """Executable orchestration for Forge's self-extension loop.
 
-This module does not generate arbitrary code itself.  It closes the control-flow
-contract around a capability gap:
+This module closes the control-flow contract around a capability gap:
 
 NeedsExtension -> exact decomposition -> managed route -> implementation ->
-evidence-gated promotion -> retry the original request.
+evidence-gated promotion -> executable activation -> retry original request.
 
-The implementation/decomposition hooks are injected deliberately.  Their output
-is not trusted: this coordinator verifies that the manifest is PROMOTED before
-retrying, and refuses semantic drift between the original candidate and the
-implemented capability.
+A manifest proves evidence; it is not itself executable.  Immediate retry is
+allowed only when the implementer returns a matching activation that can be
+installed into the current process.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Protocol
+from typing import Protocol
 
+from forge_ai.core.orchestration.extension_activation import ExtensionImplementation
 from forge_ai.core.orchestration.extension_manifest import (
     ExtensionManifest,
     ExtensionStatus,
@@ -39,7 +38,7 @@ class ExtensionRouteSelector(Protocol):
 
 
 class ExtensionImplementer(Protocol):
-    def __call__(self, manifest: ExtensionManifest) -> ExtensionManifest: ...
+    def __call__(self, manifest: ExtensionManifest) -> ExtensionImplementation: ...
 
 
 class ExtensionRetry(Protocol):
@@ -66,12 +65,7 @@ def run_extension_cycle(
     implement: ExtensionImplementer,
     retry: ExtensionRetry,
 ) -> ExtensionCycleResult:
-    """Run one complete, fail-closed self-extension attempt.
-
-    The first candidate is handled per cycle so failures remain attributable.
-    Multi-gap requests can call this repeatedly; Forge must not silently mark a
-    bundle complete when only one capability was acquired.
-    """
+    """Run one complete, fail-closed self-extension attempt."""
     if not outcome.extension_candidates:
         raise ExtensionCycleError("NeedsExtension outcome contains no extension candidate.")
 
@@ -84,8 +78,9 @@ def run_extension_cycle(
         raise ExtensionCycleError("Resolved candidate still requires decomposition.")
 
     route = select_route(resolved)
-    manifest = create_extension_manifest(resolved, route)
-    implemented = implement(manifest)
+    draft = create_extension_manifest(resolved, route)
+    implementation = implement(draft)
+    implemented = implementation.manifest
 
     if implemented.capability_id != resolved.capability_id:
         raise ExtensionCycleError(
@@ -100,12 +95,8 @@ def run_extension_cycle(
             + blockers
         )
 
-    # Only routes whose implementation is already loadable in this
-    # process may be installed and retried immediately. Build-time,
-    # service and native extensions need the produced runtime/service
-    # to be loaded first; pretending otherwise would be false success.
     try:
-        PROMOTED_CAPABILITIES.install(implemented)
+        PROMOTED_CAPABILITIES.install(implemented, implementation.activation)
     except ValueError as exc:
         raise ExtensionCycleError(str(exc)) from exc
 
