@@ -31,10 +31,11 @@ from forge_ai.core.orchestration.cognitive_context import (
     StructureProvider, StructureSource,
 )
 from forge_ai.core.orchestration.cognitive_dependencies import CognitiveDependencies
+from forge_ai.core.orchestration.capability_gate import require_explicit_checklist
 from forge_ai.core.orchestration.cognitive_types import CriticIssue, CriticReport, OverallConfidence
 from forge_ai.core.orchestration.confidence import compute_legacy_escalation_reasons, compute_overall_confidence, compute_shadow_judgment
 from forge_ai.core.orchestration.errors import AmbiguityError, ConfirmationRequired, CriticFailure, PlanningError
-from forge_ai.core.semantics.capability_plan import plan_capabilities
+from forge_ai.core.semantics.capability_plan import StructuralMode, plan_capabilities
 from forge_ai.core.semantics.roles import (
     SemanticRole,
     concepts_blocked_by_role,
@@ -434,6 +435,10 @@ class CognitiveOrchestrator:
                 context = context.with_structure_provenance(StructureProvenance(
                     StructureSource.DETERMINISTIC_CAPABILITY_PLAN,
                     StructureProvider.NONE, "entity_structure"))
+            elif capability_plan.structure is StructuralMode.CHECKLIST:
+                # Checklist is a semantic decision, not a fallback.
+                # Do not synthesize it into an unrelated record structure.
+                pass
             elif deps.entity_synthesizer is not None:
                 if hasattr(deps.entity_synthesizer, "synthesize_with_attempt"):
                     synthesized_spec, synthesis_attempt = deps.entity_synthesizer.synthesize_with_attempt(
@@ -523,6 +528,9 @@ class CognitiveOrchestrator:
                     interaction_capabilities=capability_plan.interactions,
                 )
             else:
+                # Only an explicitly planned checklist may enter the legacy compiler.
+                # UNKNOWN or a failed RECORD_ENTITY remains a capability gap.
+                require_explicit_checklist(capability_plan)
                 # FORGE-AI-QUALITY-001(2026-08-11): 以前はここで
                 # `context.template_selection.template`を一切渡しておらず、
                 # Template Selectorが"form"等を選んでも常にChecklist単一

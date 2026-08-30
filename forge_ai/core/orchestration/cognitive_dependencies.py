@@ -53,11 +53,11 @@ class CognitiveDependencies:
     # データ構造をAIに合成させる(`entity_synthesizer.py`参照)。
     #
     # **既定を`None`にしている理由**: このフィールドを必須にすると、
-    # 既にこのdataclassを直接構築している箇所(テストフィクスチャ等)が
-    # 全て壊れる。`None`の場合、`pipeline_orchestrator.py`は合成を
-    # 一切試みず、従来どおりChecklistへフォールバックする——つまり
-    # 「合成を注入しなければ以前と完全に同じ挙動」であり、この機能は
-    # 純粋な追加になっている。実運用の組み立て
+    # 既にこのdataclassを直接構築している箇所(テストフィクスチャ等)を
+    # 壊さないため型上は`None`を許す。ただし`None`はChecklistへ
+    # フォールバックしてよいという意味ではない。Capability Planが明示的
+    # CHECKLISTの場合だけlegacy compilerを使い、それ以外で合成手段が無い
+    # 場合はCapability Gapとしてfail-closedする。実運用の組み立て
     # (`_default_cognitive_dependencies()`)では必ず注入される。
     entity_synthesizer: EntitySynthesizer | None = None
 
