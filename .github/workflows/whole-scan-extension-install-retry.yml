@@ -1,0 +1,100 @@
+name: Whole Scan promoted capability reuse
+
+on:
+  push:
+    branches:
+      - claude/forge-master-handoff-k46jns
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+          fetch-depth: 0
+
+      - name: Wire promoted declarative capability into planner and retry
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "forge_ai/core/semantics/capability_plan.py",
+              "from forge_ai.core.semantics.capabilities import (\n    SEMANTIC_CAPABILITIES,\n    SupportLevel,\n)\n",
+              "from forge_ai.core.semantics.capabilities import (\n    SEMANTIC_CAPABILITIES,\n    SupportLevel,\n)\nfrom forge_ai.core.orchestration.extension_registry import is_promoted_capability\n",
+          )
+          replace_once(
+              "forge_ai/core/semantics/capability_plan.py",
+              "        if definition.support is SupportLevel.IMPLEMENTED:\n            ok.append(capability_id)\n        elif definition.support is SupportLevel.PARTIAL:\n",
+              "        if definition.support is SupportLevel.IMPLEMENTED or is_promoted_capability(capability_id):\n            # A promoted declarative/composition extension is an acquired\n            # capability for this running Forge process.  Static catalog support\n            # remains the semantic baseline; promotion is the evidence-gated overlay.\n            ok.append(capability_id)\n        elif definition.support is SupportLevel.PARTIAL:\n",
+          )
+
+          replace_once(
+              "forge_ai/core/orchestration/extension_cycle.py",
+              "from forge_ai.core.orchestration.extension_plan import ExtensionCandidate, ExtensionRoute\n",
+              "from forge_ai.core.orchestration.extension_plan import ExtensionCandidate, ExtensionRoute\nfrom forge_ai.core.orchestration.extension_registry import PROMOTED_CAPABILITIES\n",
+          )
+          replace_once(
+              "forge_ai/core/orchestration/extension_cycle.py",
+              "    raw_input = outcome.partial_context.raw_input\n    retry_outcome = retry(raw_input)\n",
+              "    # Only routes whose implementation is already loadable in this\n"
+              "    # process may be installed and retried immediately. Build-time,\n"
+              "    # service and native extensions need the produced runtime/service\n"
+              "    # to be loaded first; pretending otherwise would be false success.\n"
+              "    try:\n"
+              "        PROMOTED_CAPABILITIES.install(implemented)\n"
+              "    except ValueError as exc:\n"
+              "        raise ExtensionCycleError(str(exc)) from exc\n\n"
+              "    raw_input = outcome.partial_context.raw_input\n"
+              "    retry_outcome = retry(raw_input)\n",
+          )
+
+          p = Path("forge_ai/tests/test_extension_cycle.py")
+          text = p.read_text(encoding="utf-8")
+          text = text.replace(
+              "from forge_ai.core.orchestration.extension_manifest import ExtensionEvidence\n",
+              "from forge_ai.core.orchestration.extension_manifest import ExtensionEvidence\nfrom forge_ai.core.orchestration.extension_registry import PROMOTED_CAPABILITIES\n",
+              1,
+          )
+          text = text.replace(
+              "def test_promoted_extension_retries_original_request() -> None:\n    retried: list[str] = []\n\n    result = run_extension_cycle(\n        _outcome(_candidate()),\n        decompose=lambda c: c,\n        select_route=lambda c: ExtensionRoute.BUILD_TIME,\n",
+              "def test_promoted_declarative_extension_is_installed_then_retries_original_request() -> None:\n    PROMOTED_CAPABILITIES.clear()\n    retried: list[str] = []\n\n    result = run_extension_cycle(\n        _outcome(_candidate()),\n        decompose=lambda c: c,\n        select_route=lambda c: ExtensionRoute.DECLARATIVE,\n",
+              1,
+          )
+          text = text.replace(
+              "    assert result.manifest.status.value == \"promoted\"\n    assert retried == [\"釣果を地図で見たい\"]\n",
+              "    assert result.manifest.status.value == \"promoted\"\n    assert PROMOTED_CAPABILITIES.is_promoted(\"view.map\")\n    assert retried == [\"釣果を地図で見たい\"]\n",
+              1,
+          )
+          text += '''\n\ndef test_build_time_promotion_requires_runtime_reload_before_retry() -> None:\n    PROMOTED_CAPABILITIES.clear()\n    retried: list[str] = []\n\n    with pytest.raises(ExtensionCycleError, match="cannot be activated in-process"):\n        run_extension_cycle(\n            _outcome(_candidate()),\n            decompose=lambda c: c,\n            select_route=lambda c: ExtensionRoute.BUILD_TIME,\n            implement=_promote,\n            retry=lambda raw: retried.append(raw) or "RETRIED",  # type: ignore[arg-type,return-value]\n        )\n\n    assert retried == []\n    assert not PROMOTED_CAPABILITIES.is_promoted("view.map")\n'''
+          p.write_text(text, encoding="utf-8")
+
+          Path("forge_ai/tests/test_extension_registry.py").write_text('''from __future__ import annotations\n\nfrom dataclasses import replace\n\nimport pytest\n\nfrom forge_ai.core.orchestration.extension_manifest import ExtensionEvidence, create_extension_manifest\nfrom forge_ai.core.orchestration.extension_plan import ExtensionCandidate, ExtensionRoute\nfrom forge_ai.core.orchestration.extension_registry import PROMOTED_CAPABILITIES\nfrom forge_ai.core.semantics.capabilities import SafetyClass, SupportLevel\nfrom forge_ai.core.semantics.capability_plan import _classify\n\n\ndef _promoted_manifest(route: ExtensionRoute = ExtensionRoute.DECLARATIVE):\n    candidate = ExtensionCandidate(\n        capability_id="interact.filter", label_ja="絞り込む",\n        support=SupportLevel.MISSING, safety=SafetyClass.SAFE,\n        routes=(ExtensionRoute.DECLARATIVE, ExtensionRoute.BUILD_TIME),\n        reason="test", requires_confirmation=False,\n    )\n    manifest = create_extension_manifest(candidate, route)\n    evidence = ExtensionEvidence(\n        semantic_decomposition=True, reusable_primitive=True, language_binding=True,\n        validator_binding=True, runtime_binding=True, compiler_binding=True,\n        tests_pass=True, build_pass=True, runtime_evidence=True,\n    )\n    return replace(manifest, evidence=evidence).verified().promoted()\n\n\ndef test_promoted_declarative_capability_changes_effective_support_for_retry() -> None:\n    PROMOTED_CAPABILITIES.clear()\n    before_ok, _, before_missing = _classify({"interact.filter"})\n    assert before_ok == ()\n    assert before_missing == ("interact.filter",)\n\n    PROMOTED_CAPABILITIES.install(_promoted_manifest())\n    after_ok, after_partial, after_missing = _classify({"interact.filter"})\n    assert after_ok == ("interact.filter",)\n    assert after_partial == ()\n    assert after_missing == ()\n\n\ndef test_unverified_manifest_cannot_enter_promoted_registry() -> None:\n    PROMOTED_CAPABILITIES.clear()\n    candidate = ExtensionCandidate(\n        capability_id="interact.filter", label_ja="絞り込む",\n        support=SupportLevel.MISSING, safety=SafetyClass.SAFE,\n        routes=(ExtensionRoute.DECLARATIVE,), reason="test", requires_confirmation=False,\n    )\n    with pytest.raises(ValueError, match="Only PROMOTED"):\n        PROMOTED_CAPABILITIES.install(create_extension_manifest(candidate, ExtensionRoute.DECLARATIVE))\n\n\ndef test_build_time_manifest_cannot_claim_in_process_activation() -> None:\n    PROMOTED_CAPABILITIES.clear()\n    with pytest.raises(ValueError, match="cannot be activated in-process"):\n        PROMOTED_CAPABILITIES.install(_promoted_manifest(ExtensionRoute.BUILD_TIME))\n''', encoding="utf-8")
+
+      - name: Commit promoted capability reuse wiring
+        run: |
+          if git diff --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add forge_ai/core/semantics/capability_plan.py \
+                  forge_ai/core/orchestration/extension_cycle.py \
+                  forge_ai/tests/test_extension_cycle.py \
+                  forge_ai/tests/test_extension_registry.py
+          git commit -m "feat: reuse promoted declarative capabilities on retry"
+          git push origin HEAD:claude/forge-master-handoff-k46jns
