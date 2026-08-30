@@ -4,16 +4,18 @@ The canonical catalog remains the source of semantic truth.  This registry is an
 overlay for capabilities that were already known as PARTIAL/MISSING and have
 completed a managed self-extension lifecycle.
 
-Only PROMOTED declarative/composition extensions may become immediately visible
-inside the current process.  BUILD_TIME/SERVICE/NATIVE extensions require their
-new runtime to be loaded before retry and therefore are not silently activated
-here.
+Only PROMOTED declarative/composition extensions with an executable activation
+payload may become immediately visible inside the current process.  A manifest
+alone is evidence metadata, not an implementation.  BUILD_TIME/SERVICE/NATIVE
+extensions require their new runtime to be loaded before retry and therefore are
+not silently activated here.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from forge_ai.core.orchestration.extension_activation import CapabilityActivation
 from forge_ai.core.orchestration.extension_manifest import ExtensionManifest, ExtensionStatus
 from forge_ai.core.orchestration.extension_plan import ExtensionRoute
 
@@ -26,6 +28,7 @@ class PromotedCapability:
     capability_id: str
     route: ExtensionRoute
     manifest: ExtensionManifest
+    activation: CapabilityActivation
 
 
 class PromotedCapabilityRegistry:
@@ -34,7 +37,11 @@ class PromotedCapabilityRegistry:
     def __init__(self) -> None:
         self._items: dict[str, PromotedCapability] = {}
 
-    def install(self, manifest: ExtensionManifest) -> PromotedCapability:
+    def install(
+        self,
+        manifest: ExtensionManifest,
+        activation: CapabilityActivation | None,
+    ) -> PromotedCapability:
         if manifest.status is not ExtensionStatus.PROMOTED:
             raise ValueError("Only PROMOTED extensions may be installed for reuse.")
         if manifest.promotion_blockers():
@@ -44,10 +51,18 @@ class PromotedCapabilityRegistry:
                 f"Extension route {manifest.route.value!r} cannot be activated in-process; "
                 "load the produced runtime/build before retrying."
             )
+        if activation is None:
+            raise ValueError(
+                "PROMOTED manifest has no executable activation; refusing metadata-only reuse."
+            )
+        if activation.capability_id != manifest.capability_id:
+            raise ValueError("Activation changed capability identity; refusing install.")
+
         item = PromotedCapability(
             capability_id=manifest.capability_id,
             route=manifest.route,
             manifest=manifest,
+            activation=activation,
         )
         self._items[manifest.capability_id] = item
         return item
