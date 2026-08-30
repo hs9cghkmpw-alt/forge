@@ -1,0 +1,103 @@
+name: Whole Scan stale-test contract fix
+
+on:
+  push:
+    branches:
+      - claude/forge-master-handoff-k46jns
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+          fetch-depth: 0
+
+      - name: Align stale tests with fail-closed contract
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+              '        outcome = orchestrator.run("買い物リストを作りたい")\n'
+              '        self.assertIsInstance(outcome, CognitivePipelineSuccess)\n'
+              '        self.assertFalse(outcome.context.template_selection.differs_from_preliminary)\n'
+              '        self.assertEqual(outcome.context.template_selection.template, "checklist")\n',
+              '        outcome = orchestrator.run("買い物リストを作りたい")\n'
+              '        # Template mismatch自体は収束しても、Capability PlanがUNKNOWNなら\n'
+              '        # 「checklistを選べた」ことを成功理由にしてはならない。\n'
+              '        # 新しいfail-closed契約では意味構造未解決として失敗する。\n'
+              '        self.assertIsInstance(outcome, CognitivePipelineFailed)\n'
+              '        self.assertEqual(outcome.reached_stage, "capability_gap")\n'
+              '        self.assertIn("semantic_structure_unresolved", str(outcome.error))\n',
+          )
+
+          replace_once(
+              "forge_ai/tests/test_entity_synthesizer.py",
+              'class TestOrchestratorFallsBackSafely(unittest.TestCase):\n'
+              '    """合成が失敗しても、以前(Checklist)より悪くならないことの確認。\n\n'
+              '    この性質はこの機能の安全性の根拠そのものである(合成が使えなければ\n'
+              '    従来の経路へ落ちるだけで、生成自体が失敗することはない)。\n'
+              '    """\n',
+              'class TestOrchestratorFailsClosedOnSynthesisFailure(unittest.TestCase):\n'
+              '    """合成失敗をChecklist成功へ偽装しないことの確認。\n\n'
+              '    未解決のRecord/構造要求はexact Capability Gapとして保持する。\n'
+              '    legacy Checklistへの意味変更は安全策ではなく誤成功なので禁止する。\n'
+              '    """\n',
+          )
+
+          replace_once(
+              "forge_ai/tests/test_entity_synthesizer.py",
+              '    def test_broken_synthesis_falls_back_to_checklist_instead_of_failing(self) -> None:\n'
+              '        from forge_ai.core.pipeline import run_cognitive_pipeline\n\n'
+              '        # 「通院」等の高リスク語を含む入力はConfirmationへ分岐するため\n'
+              '        # (`pipeline_orchestrator._is_high_risk_domain_hint`)、ここでは\n'
+              '        # 確認を挟まずに完走する入力を使う。\n'
+              '        outcome = run_cognitive_pipeline(\n'
+              '            "買い物リストを作りたい", provider=_SynthesisSabotagingProvider({})\n'
+              '        )\n'
+              '        doc = outcome.ir.to_json_dict()\n'
+              '        # 生成自体は成功し、従来のChecklistが返る。\n'
+              '        self.assertIn("checklist", self._widget_types(doc))\n'
+              '        self.assertNotIn("record_list_view", self._widget_types(doc))\n'
+              '        # 合成が使われなかったことがDecision Traceからも分かる。\n'
+              '        stages = [d.stage for d in outcome.context.decision_trace]\n'
+              '        self.assertNotIn("entity_source", stages)\n',
+              '    def test_broken_synthesis_fails_closed_instead_of_substituting_checklist(self) -> None:\n'
+              '        from forge_ai.core.pipeline import run_cognitive_pipeline\n'
+              '        from forge_ai.core.orchestration.outcomes import CognitivePipelineFailed\n\n'
+              '        outcome = run_cognitive_pipeline(\n'
+              '            "買い物リストを作りたい", provider=_SynthesisSabotagingProvider({})\n'
+              '        )\n'
+              '        self.assertIsInstance(outcome, CognitivePipelineFailed)\n'
+              '        self.assertEqual(outcome.reached_stage, "capability_gap")\n'
+              '        self.assertIn("semantic_structure_unresolved", str(outcome.error))\n'
+              '        # 失敗をChecklist文書へ変換して成功扱いしていない。\n'
+              '        self.assertFalse(hasattr(outcome, "ir"))\n',
+          )
+
+      - name: Commit test contract correction
+        run: |
+          if git diff --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add forge_ai/tests/test_cognitive_orchestrator_integration.py forge_ai/tests/test_entity_synthesizer.py
+          git commit -m "test: align synthesis failures with capability-gap truth"
+          git push origin HEAD:claude/forge-master-handoff-k46jns
