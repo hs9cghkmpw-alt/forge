@@ -1,52 +1,76 @@
 # FORGE GENERAL APP MODE
 
-Status: EXECUTION TARGET
+Status: EXECUTION PROGRAM / NOT A NEW PRODUCT GOAL
 Date: 2026-08-30
+
+## Positioning
+
+General App Mode is **not a goal switch**. It is an implementation program under the already-canonical Forge goal in `docs/FORGE-CORE-CONSTITUTION.md`, `docs/PRODUCT-DIRECTION.md`, and `docs/GENERATIVE-SOFTWARE-DIRECTION.md`.
+
+The invariant is:
+
+> **持っている能力は組み合わせる。足りない能力は作る。作った能力は検証し、再利用可能な Forge Capability として取り込む。**
+
+Do not replace that invariant with a finite list of app types, widgets, templates, Golden cases, or hand-written domain paths.
 
 ## Product target
 
-Forge の次の正式ゴールは、単に Widget の種類を増やすことではない。
-
-> **ユーザーが自然文で欲しいアプリを説明すると、Forge が要求を能力へ分解し、既存 Primitive で構成し、足りなければ不足を明示し、安全に能力を拡張し、生成・検証・修復まで行って動くアプリへ到達する。**
-
-ユーザー体験としての到達点は「自然文を言えば何でもアプリになる」に近づける。ただし内部では「何でも」を無条件に成功扱いしない。実装不能・権限不足・危険な Effect は Capability Gap として正直に残し、作れたふりを禁止する。
-
-本仕様は `FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md` の Product Goal / Semantic Capability と Runtime Primitive の分離 / A→B→C の Self-Extension 順序を実行計画へ落としたもの。
-
-## Definition of Done
-
-General App Mode は次の一連が自動で閉じる状態を PASS とする。
+Forge receives a natural-language need, understands the actual desired outcome, decomposes it into semantic capabilities, composes existing capabilities where possible, synthesizes genuinely missing capabilities when necessary, verifies the result, repairs failures, and reaches a usable tool.
 
 ```text
-natural language
-  -> semantic/capability plan
-  -> product spec
-  -> runtime primitive plan
-  -> Forge Document / generated workspace
+Need / desired outcome
+  -> semantic understanding
+  -> capability decomposition
+  -> existing capability reuse + composition
+  -> missing capability synthesis when required
+  -> generated software / Forge Document / workspace
   -> validator
   -> test
   -> build
   -> runtime probe
-  -> visual/behavior evidence when applicable
+  -> visual / behavioral / effect evidence where applicable
   -> bounded repair
-  -> final evidence
+  -> reverify
+  -> usable tool
+  -> validated new capability promotion for reuse
 ```
 
-加えて、未実装能力を要求された場合は次を満たす。
+The user-facing destination approaches "say what you need and it becomes usable software". Internally, Forge must never fake unsupported, unsafe, permission-blocked, or unverified behavior.
+
+## Definition of Done
+
+A General App Mode slice is PASS only when its production path closes with objective evidence. A Golden request is a **test case**, never the product goal and never permission to add a bespoke implementation that only passes that request.
+
+If an unsupported need is encountered, the correct path is not merely to report a gap and stop forever:
 
 ```text
 unsupported need
   -> exact missing capability
-  -> safety/trust classification
-  -> extension route (composition / declarative / build-time / service / privileged)
-  -> no false success
+  -> confirm it is genuinely missing rather than already composable
+  -> safety / trust / permission classification
+  -> choose extension route
+       composition
+       declarative capability
+       generated build-time extension
+       service adapter
+       native / privileged adapter
+  -> isolated implementation
+  -> schema / validator / parser / compiler / runtime wiring as applicable
+  -> tests / build / runtime / security evidence
+  -> provisional capability
+  -> evidence-backed promotion
+  -> reusable capability available to future unrelated requests
 ```
 
-## Capability expansion order
+If the capability cannot safely or technically be created yet, retain an explicit Capability Gap. Never silently rewrite the user need into something easier.
+
+## Capability development areas
+
+The following GA areas are **coverage scaffolding**, not the boundary of what Forge may create and not a fixed sequential checklist.
 
 ### GA-1 Logic Core
 
-最優先。CRUD/画面配置から「アプリの振る舞い」へ広げる。
+Reusable deterministic semantics for behavior:
 
 - condition / compare
 - if / else
@@ -59,12 +83,12 @@ unsupported need
 - event -> state transition
 - reusable rule definitions
 
-Acceptance examples:
+Acceptance examples are probes only:
 
-- 「残高が0未満なら赤い警告を出す」
-- 「未完了だけ表示する」
-- 「カテゴリ別に支出を合計する」
-- 「BMIを体重と身長から計算する」
+- "残高が0未満なら警告を出す"
+- "未完了だけ表示する"
+- "カテゴリ別に合計する"
+- "複数の入力値から派生値を計算する"
 
 ### GA-2 Navigation + Persistent Data
 
@@ -73,32 +97,18 @@ Acceptance examples:
 - schema migration/versioning
 - search/query
 - relation/reference between records
-- import/export of structured data
-
-Acceptance examples:
-
-- 顧客一覧 -> 顧客詳細 -> 編集
-- アプリを閉じても記録が残る
-- CSV/JSON の安全な入出力
+- structured import/export
 
 ### GA-3 External Service Effects
-
-Effect は純粋な View/Transform と分離し、Policy Gate を必須にする。
 
 - HTTP/API request
 - authenticated service adapters
 - file upload/download
 - share
 - notification
-- email/webhook style outbound adapters
+- email/webhook-style outbound adapters
 
-Requirements:
-
-- outbound destination visible in evidence
-- secret isolation
-- timeout/retry boundary
-- allowlist/policy
-- irreversible operation confirmation where required
+Effects require observable destination/policy, secret isolation, timeout/retry boundaries, and confirmation for irreversible operations where required.
 
 ### GA-4 Device Capabilities
 
@@ -107,9 +117,9 @@ Requirements:
 - location
 - file picker
 - clipboard
-- sensors where platform support exists
+- sensors where supported
 
-OS permission と Capability Safety を明示し、自動で権限を隠れて取得しない。
+OS permission and capability safety must remain explicit.
 
 ### GA-5 Rich Presentation
 
@@ -123,7 +133,7 @@ OS permission と Capability Safety を明示し、自動で権限を隠れて�
 - responsive layouts
 - theme/design composition
 
-ここでも「Widgetを増やすだけ」に戻らず、Encoding Primitive（position/color/size/opacity 等）を優先する。
+Prefer reusable encoding/layout primitives over app-specific widgets.
 
 ### GA-6 Media + Game Runtime
 
@@ -137,80 +147,67 @@ OS permission と Capability Safety を明示し、自動で権限を隠れて�
 - deterministic game state
 - save/load
 
-既存 `simulate.loop` と `audio_mixer` を基礎に拡張する。
+### GA-7 Self-Extension Hardening / Promotion
 
-### GA-7 Safe Self-Extension
+**Self-extension is not postponed until GA-7.** Missing-capability synthesis is a cross-cutting requirement from the beginning.
 
-既存 Primitive だけで表現できる Capability は declarative definition として追加できるようにする。
+GA-7 means hardening and automating the extension lifecycle itself: isolation, generated implementation contracts, promotion rules, rollback, provenance, compatibility, security, and repeated-evidence gates.
 
-新しい Runtime 実装が必要な場合は build-time extension とし、最低限:
-
-1. generated change is isolated
-2. validator/schema/parser/runtime/compiler binding exists
-3. tests pass
-4. build passes
-5. runtime evidence passes
-6. security/policy checks pass
-7. only then capability status may become IMPLEMENTED
-
-AI の自己申告だけで Capability を IMPLEMENTED に変更してはならない。
+A capability may become IMPLEMENTED only after the applicable production bindings and evidence exist. AI self-report is never sufficient.
 
 ## Architecture rule
 
-Capability と Widget を同一視しない。
+`Capability != Widget` and `Golden Case != Product Goal`.
 
 ```text
 User Need
  -> Semantic Capability
- -> Runtime Primitive(s)
+ -> Runtime Primitive(s) and/or generated extension
     DATA
     TRANSFORM
     VIEW
     ENCODING
     EFFECT
     SIMULATE
- -> Forge Language binding
+ -> Forge Language / generated workspace binding
  -> platform/runtime implementation
+ -> evidence
+ -> capability registry promotion when genuinely reusable
 ```
 
-同じ Primitive を再利用して表現の族を増やす。例として aggregate を一度実装すれば、家計・体重・釣果・売上など複数ドメインで再利用する。
+A new implementation must be challenged with:
+
+1. Is this only for one named app/domain/test case?
+2. Could the same semantic capability serve an unrelated request?
+3. Are we adding a pattern because it is easy instead of creating the missing general capability?
+4. If existing primitives cannot express the need, did we actually enter synthesis/extension rather than silently downgrade the request?
+
+If the answer reveals goal substitution, redesign before calling the slice complete.
 
 ## Truthfulness rule
 
-General App Mode の成功率を上げるために、Capability Gap を消すための嘘は禁止する。
-
-- PARTIAL を IMPLEMENTED と呼ばない
-- interactive audio mixing を media export と呼ばない
-- browser/widget test を実端末/実ブラウザ evidence と混同しない
-- visual unknown を PASS に書き換えない
-- privileged effect を UI が存在するだけで実装済みにしない
+- PARTIAL is not IMPLEMENTED.
+- Interactive audio mixing is not media export.
+- Widget/browser harness evidence is not real-device evidence.
+- Visual UNKNOWN is not PASS.
+- A privileged-effect UI is not an implemented effect.
+- A Capability Gap is not a successful alternative app.
+- A Golden test passing through bespoke code is not evidence of general generation ability.
 
 ## Execution strategy
 
-一度に「全アプリ種類」を個別実装しない。汎用 Primitive を優先する。
+Current engineering attention starts with GA-1 because logic primitives unlock many compositions, but this is an implementation choice, not a redefinition of Forge.
 
-優先度:
+There is **no rule that GA-1 must be exhausted before a missing capability from another area may be synthesized**. The governing rule is goal-backward planning:
 
-1. GA-1 Logic Core
-2. GA-2 Persistent Data / Navigation
-3. GA-3 External Service Effects
-4. GA-5 Rich Presentation
-5. GA-4 Device Capabilities
-6. GA-6 Media/Game Runtime
-7. GA-7 Build-Time Self-Extension
+> Start from the real target, compose what exists, create what is missing, verify, and retain reusable capability.
 
-この順序は固定ではないが、個別 Widget を大量追加するより、条件・計算・派生状態・Effect Adapter のような横断 Primitive を優先する。
-
-## First implementation slice
-
-次の実装スライスは **GA-1 Logic Core**。
-
-最初の縦切りは:
+Current first vertical slice:
 
 ```text
-condition expression
- -> conditional branch
- -> derived value
+expression
+ -> live state binding
+ -> conditional branch / derived value
  -> UI visibility/value binding
  -> compiler generation
  -> backend validation
@@ -219,20 +216,8 @@ condition expression
  -> generated-app evidence
 ```
 
-Golden acceptance request:
+First Golden probe:
 
-> 「毎月の収入と支出を記録して、残高を自動計算し、残高がマイナスなら警告を表示する家計アプリを作って」
+> `毎月の収入と支出を記録して、残高を自動計算し、残高がマイナスなら警告を表示する家計アプリを作って`
 
-PASS 条件:
-
-- income/expense records can be entered
-- balance is derived, not hard-coded
-- negative balance condition controls warning visibility
-- generated document validates
-- ordinary CI passes
-- generated app builds and runs
-- evidence confirms the condition changes behavior
-
-## Relation to previous Golden game
-
-Golden game closure is retained as evidence that Forge is already beyond static CRUD: deterministic simulation + interactive audio + real Chrome rendering passed. General App Mode starts from that proven baseline and expands breadth via reusable primitives rather than reopening the closed Golden game work.
+This probe must not introduce a household-budget-specific runtime path. It passes only if the same logic/branching capabilities are reusable for unrelated needs.
