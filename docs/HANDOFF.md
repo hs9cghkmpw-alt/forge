@@ -68,7 +68,7 @@ This prevents the simulation requirement from being requested internally and the
 - Real generated Flutter repair/runtime run `33236863659`: **SUCCESS / PASS**
 - Durable evidence: `docs/evidence/agent020d/forge-020d-real-evidence-20260829.json`
 - Artifact: `9710186190`
-- Digest: `sha256:bb66c4b1fb38dec4f70783b813b15f16fd530622c731d7d406eef35a2b6cd469`
+- Digest: `sha256:bb66c4b1fb38dec4f70783b813b15f16fd7d82f20adee98687d80cded89f6bd9`
 - Objective trajectory: `test fail -> repair -> test pass -> build pass -> runtime pass`
 - The old episode's visual outcome remains historically `unknown`; it is not rewritten. The later Golden-specific compiled-Web visual proof above is a separate evidence run.
 
