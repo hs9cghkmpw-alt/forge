@@ -209,12 +209,34 @@ Dart 側（Validator / Parser / Widget Registry）の契約が壊れる。
 これは §0 の判定を補強する事実である——map は実装が先に在っただけで
 なく、**その出力経路も検査されていなかった。**
 
-#### まだ残ること
+#### まだ残ること — そして**どこで証明できないか**
 
 宣言は「この能力はこの widget を出す」と言っているだけであり、
 **その widget を Dart Runtime が描けるかどうかは別の事実**である。
 新しい能力を実際に描けるようにするには、BUILD_TIME で Dart 側を
-ビルドし直す必要がある。そこは未着手である。
+ビルドし直す必要がある。
+
+**それはこの CI 構成では証明できない。** 確認した事実:
+
+- `forge_ai` / `backend` のテストは **Python job** で走る。
+  その job に `dart` も `flutter` も無い
+- Flutter が在るのは **frontend job** だけであり、そちらは
+  Python 側の Self-Extension 経路を実行しない
+
+したがって、生成した Dart を隔離 workspace でビルドする command plan を
+足しても、**Python job では skip されるだけ**である。
+**skip されたテストは何も証明しない**ので、それを「Dart も通した」の
+証拠にしてはならない。
+
+証明するには次のどちらかが要る。
+
+1. Flutter を持つ job（または実機）で Self-Extension 経路を走らせる
+2. 生成 Dart を既存 Flutter プロジェクトへ組み込んでビルドする
+   ——隔離 workspace 単体のビルドでは、Widget Registry への登録を
+   含む「実際に描ける」の証明にならない
+
+どちらも設計判断が要るので、ここでは**着手せずに残す**。
+半端に足して skip を「通った」と数える方が危険である。
 
 ---
 
