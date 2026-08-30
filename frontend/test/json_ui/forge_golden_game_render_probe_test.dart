@@ -55,18 +55,28 @@ void main() {
 
     final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(captureKey));
     final image = await boundary.toImage(pixelRatio: 2.0);
-    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (bytes == null) {
-      fail('rendered Golden game could not be encoded as PNG');
+    try {
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (bytes == null) {
+        fail('rendered Golden game could not be encoded as PNG');
+      }
+      File(screenshotPath).writeAsBytesSync(bytes.buffer.asUint8List());
+    } finally {
+      image.dispose();
     }
-    File(screenshotPath).writeAsBytesSync(bytes.buffer.asUint8List());
     final size = File(screenshotPath).lengthSync();
     // ignore: avoid_print
     print('FORGE_GOLDEN_VISUAL png_bytes=$size path=$screenshotPath');
     expect(size, greaterThan(1000));
 
-    // Dispose lifecycle-owned timers/audio widgets before test teardown.
+    // Dispose lifecycle-owned timers/audio widgets before test teardown. Keep
+    // objective markers around each await so a lifecycle regression names the
+    // exact blocking boundary instead of surfacing only as a workflow timeout.
+    // ignore: avoid_print
+    print('FORGE_GOLDEN_VISUAL dispose_begin=true');
     await tester.pumpWidget(const SizedBox.shrink());
+    // ignore: avoid_print
+    print('FORGE_GOLDEN_VISUAL pump_widget_disposed=true');
     await tester.pump();
     // ignore: avoid_print
     print('FORGE_GOLDEN_VISUAL disposed=true');
