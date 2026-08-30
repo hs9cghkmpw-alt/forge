@@ -1,5 +1,7 @@
+import 'package:audioplayers_web/audioplayers_web.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 
 import 'package:forge_app/json_ui/renderer/forge_runtime_state.dart';
 import 'package:forge_app/json_ui/schema/forge_document.dart';
@@ -9,6 +11,13 @@ void main() {
   testWidgets(
     'real web audio backend can start two bundled layers',
     (tester) async {
+      // `flutter test --platform chrome` boots the test harness rather than the
+      // compiled application entrypoint, so Flutter's generated web plugin
+      // registrant is not executed. Register the actual audioplayers_web
+      // implementation explicitly; this still exercises the real browser audio
+      // backend rather than a MethodChannel mock.
+      AudioplayersPlugin.registerWith(Registrar());
+
       final node = ForgeWidgetNode.fromJson(const {
         'type': 'audio_mixer',
         'id': 'mixer',
