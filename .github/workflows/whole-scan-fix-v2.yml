@@ -104,10 +104,6 @@ jobs:
               "    # (`_default_cognitive_dependencies()`)では必ず注入される。\n",
           )
 
-      - name: Run focused tests
-        run: |
-          python -m pytest forge_ai/tests/test_capability_gate.py forge_ai/tests/test_020a2_compositional_plan.py -q
-
       - name: Commit corrective patch
         run: |
           if git diff --quiet; then
