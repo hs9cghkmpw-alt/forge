@@ -1,3 +1,4 @@
+# temporary corrective workflow; delete after patch commit
 name: Whole Scan GA-1 logic validator
 
 on:
