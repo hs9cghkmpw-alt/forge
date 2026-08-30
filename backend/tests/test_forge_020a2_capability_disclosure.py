@@ -93,11 +93,12 @@ class TestTheUserIsToldWhatCannotBeBuilt(unittest.TestCase):
         """**無い問題を作らない。**"""
         self.assertIsNone(_generate(self.client, FINANCE).get("capability_gap"))
 
-    def test_a_missing_map_view_is_disclosed(self) -> None:
-        """Catalog が知っている MISSING view を「問題なし」に戻さない。"""
-        gap = _generate(self.client, MAP).get("capability_gap")
+    def test_a_still_missing_view_is_disclosed(self) -> None:
+        """Self-Extension済みの能力ではなく、現在も未獲得の能力を検査する。"""
+        result = _generate(self.client, "予定をカレンダーで見たい")
+        gap = result.get("capability_gap")
         self.assertIsNotNone(gap)
-        self.assertIn("view.map", gap["missing"])
+        self.assertIn("view.calendar", gap["missing"])
         self.assertIn("地図は表示できません", gap["message"])
 
 

@@ -481,6 +481,22 @@ def plan_capabilities(text: str) -> CapabilityPlan:  # noqa: PLR0912 — 段の�
                 capability="data.text", origin_role=SemanticRole.MANAGED_OBJECT,
             ))
 
+    # Geographic rendering requires explicit coordinate data.  This is a
+    # reusable capability prerequisite, not a fishing-specific template and not
+    # geocoding: free-form place text is never converted into coordinates here.
+    if "view.map" in directly_requested:
+        for value in ("latitude", "longitude"):
+            name, label, kind, capability_id = _FIELD_BLUEPRINT[value]
+            if all(field.name != name for field in fields):
+                requested.add(capability_id)
+                fields.append(PlannedField(
+                    name=name,
+                    label=label,
+                    kind=kind,
+                    capability=capability_id,
+                    origin_role=SemanticRole.RECORDED_DATA,
+                ))
+
     field_tuple = tuple(fields)
 
     # -- 構造（見せ方とは独立） -----------------------------------------

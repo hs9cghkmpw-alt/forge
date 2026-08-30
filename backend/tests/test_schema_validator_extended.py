@@ -66,7 +66,7 @@ class TestUnknownWidget(unittest.TestCase):
         doc = _minimal_doc()
         doc["screens"][0]["body"] = {
             "type": "column", "id": "c1",
-            "children": [{"type": "map_view", "id": "m1"}],
+            "children": [{"type": "future_map_widget", "id": "m1"}],
         }
         result = validate_forge_document(doc)
         self.assertFalse(result.valid)

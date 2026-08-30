@@ -38,6 +38,7 @@ const Set<String> kRegisteredWidgetTypes = {
   'choice_field', 'bar_chart', 'date_field', 'tab_view', 'slider',
   // v1.11(2026-08-17、FORGE-R1 / TD69)。Hero KPI。
   'metric_view',
+  'simulation_loop', 'audio_mixer', 'simulation_progress', 'map_view',
 };
 
 /// sealed ForgeWidgetNode の全14派生型(13 Widget種 + Unknown)を網羅する。
@@ -90,6 +91,7 @@ String _typeNameOf(ForgeWidgetNode node) => switch (node) {
       ForgeSimulationLoopWidgetNode() => 'simulation_loop',
       ForgeAudioMixerWidgetNode() => 'audio_mixer',
       ForgeSimulationProgressWidgetNode() => 'simulation_progress',
+      ForgeMapViewWidgetNode() => 'map_view',
       ForgeUnknownWidgetNode() => 'unknown',
     };
 

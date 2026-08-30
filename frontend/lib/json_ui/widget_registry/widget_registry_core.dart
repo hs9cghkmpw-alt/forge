@@ -60,6 +60,7 @@ String typeNameOf(ForgeWidgetNode node) => switch (node) {
       ForgeSimulationProgressWidgetNode() => 'simulation_progress',
       ForgeAudioMixerWidgetNode() => 'audio_mixer',
       ForgeSimulationLoopWidgetNode() => 'simulation_loop',
+      ForgeMapViewWidgetNode() => 'map_view',
       ForgeUnknownWidgetNode() => 'unknown',
     };
 
