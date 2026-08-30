@@ -178,10 +178,7 @@ jobs:
 
       - name: flutter test
         working-directory: frontend
-        # Browser plugin tests need a real Chrome/Web plugin registrar. Running them
-        # on the default VM binding produces MissingPluginException even when the
-        # production web app is valid, so those probes live in a dedicated workflow.
-        run: flutter test --exclude-tags web-plugin
+        run: flutter test
 
       # 013 §7: analyze と test が通っても **Web build は落ちうる**
       # （Web 非対応の依存、条件付き import、dart2js だけが出す型エラー等）。
