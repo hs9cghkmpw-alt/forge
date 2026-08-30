@@ -30,6 +30,12 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Chrome probe registers the web implementation explicitly because
+  # `flutter test --platform chrome` does not run the generated app plugin
+  # registrant. The shipped app still relies on Flutter's generated registrant.
+  flutter_web_plugins:
+    sdk: flutter
+  audioplayers_web: ^5.3.0
   build_runner: ^2.4.9
   freezed: ^2.5.2
   json_serializable: ^6.8.0
