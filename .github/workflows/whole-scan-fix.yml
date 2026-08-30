@@ -63,16 +63,6 @@ jobs:
               "                require_explicit_checklist(capability_plan)\n"
               "                # FORGE-AI-QUALITY-001(2026-08-11): 以前はここで\n",
           )
-          replace_once(
-              "forge_ai/core/orchestration/pipeline_orchestrator.py",
-              "            # 合成できなかった場合(AIの応答が\n"
-              "            # 不正、Provider未注入等)は、従来どおりChecklistへ安全に\n"
-              "            # フォールバックする——この機能が失敗しても以前より悪くは\n"
-              "            # ならない、という形にしている。\n",
-              "            # 合成できなかった場合(AIの応答が不正、Provider未注入等)も、\n"
-              "            # 意味をChecklistへ書き換えない。明示的Checklist要求だけが\n"
-              "            # Checklist Compilerへ進み、それ以外はCapability Gapとして失敗する。\n",
-          )
 
           # Product docs: JSON is the current safe runtime contract, not Forge's
           # permanent capability ceiling.
