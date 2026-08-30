@@ -16,6 +16,7 @@ from forge_ai.core.compiler import ForgeIRDocument
 from forge_ai.core.orchestration.cognitive_context import CognitiveContext
 from forge_ai.core.orchestration.cognitive_types import ConfirmationRequest, DecisionTrace
 from forge_ai.core.orchestration.errors import CognitiveError, PlanningError
+from forge_ai.core.orchestration.extension_plan import ExtensionCandidate
 from forge_ai.quality.quality_engine import QualityScore
 
 
@@ -48,8 +49,25 @@ class CognitivePipelineNeedsConfirmation:
 
 
 @dataclass(frozen=True)
+class CognitivePipelineNeedsExtension:
+    """要求は理解できたが、現在のCapabilityでは忠実に実装できない状態。
+
+    これは通常のFailureとは区別する。Forgeの製品ループでは、この状態を
+    Self-Extensionの入力として扱い、既存能力への意味変更で成功扱いしない。
+    `extension_candidates`はエラー文字列からの再推測ではなく、Capability
+    Planから構造化された候補をそのまま保持する。
+    """
+
+    error: CognitiveError
+    reached_stage: str
+    partial_context: CognitiveContext
+    extension_candidates: tuple[ExtensionCandidate, ...]
+    decision_trace: tuple[DecisionTrace, ...]
+
+
+@dataclass(frozen=True)
 class CognitivePipelineFailed:
-    """回復不能な失敗。"""
+    """Self-Extensionで扱う意味上のCapability Gapではない回復不能な失敗。"""
 
     error: CognitiveError
     reached_stage: str
@@ -57,7 +75,10 @@ class CognitivePipelineFailed:
 
 
 CognitivePipelineOutcome = (
-    CognitivePipelineSuccess | CognitivePipelineNeedsConfirmation | CognitivePipelineFailed
+    CognitivePipelineSuccess
+    | CognitivePipelineNeedsConfirmation
+    | CognitivePipelineNeedsExtension
+    | CognitivePipelineFailed
 )
 
 
