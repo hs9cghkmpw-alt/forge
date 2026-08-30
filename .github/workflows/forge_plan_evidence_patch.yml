@@ -1,0 +1,43 @@
+name: FORGE simulation plan evidence patch
+
+on:
+  push:
+    branches: [claude/forge-master-handoff-k46jns]
+    paths:
+      - .github/workflows/forge_plan_evidence_patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+          fetch-depth: 0
+      - name: Patch CapabilityPlan evidence and regression
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('forge_ai/core/semantics/capability_plan.py')
+          text = path.read_text()
+          old = '            "effects": list(self.effects),\n            "structure_capabilities": list(self.structure_capabilities),'
+          new = '            "effects": list(self.effects),\n            "simulations": list(self.simulations),\n            "structure_capabilities": list(self.structure_capabilities),'
+          if old not in text:
+              raise SystemExit('CapabilityPlan.to_dict insertion point not found')
+          path.write_text(text.replace(old, new, 1))
+
+          test = Path('forge_ai/tests/test_simulation_plan_evidence.py')
+          test.write_text('''from forge_ai.core.semantics.capability_plan import plan_capabilities\n\n\ndef test_simulation_is_serialized_in_plan_evidence() -> None:\n    plan = plan_capabilities("植物を育てながら音を組み合わせるゲームを作りたい")\n    assert plan.simulations == ("simulate.loop",)\n    assert plan.to_dict()["simulations"] == ["simulate.loop"]\n''')
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "forge-ci"
+          git config user.email "forge-ci@users.noreply.github.com"
+          git add forge_ai/core/semantics/capability_plan.py forge_ai/tests/test_simulation_plan_evidence.py
+          git diff --cached --check
+          git commit -m "fix: serialize simulation capability plan evidence"
+          git push origin HEAD:claude/forge-master-handoff-k46jns
