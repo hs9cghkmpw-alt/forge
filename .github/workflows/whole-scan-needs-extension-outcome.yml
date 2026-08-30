@@ -1,0 +1,124 @@
+name: Whole Scan capability extension outcome
+
+on:
+  push:
+    branches:
+      - claude/forge-master-handoff-k46jns
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+          fetch-depth: 0
+
+      - name: Wire NeedsExtension outcome
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "forge_ai/core/orchestration/pipeline_orchestrator.py",
+              "from forge_ai.core.orchestration.capability_gate import require_explicit_checklist\n",
+              "from forge_ai.core.orchestration.capability_gate import CapabilityGapError, require_explicit_checklist\n",
+          )
+          replace_once(
+              "forge_ai/core/orchestration/pipeline_orchestrator.py",
+              "    CognitivePipelineNeedsConfirmation,\n    CognitivePipelineOutcome,\n",
+              "    CognitivePipelineNeedsConfirmation,\n    CognitivePipelineNeedsExtension,\n    CognitivePipelineOutcome,\n",
+          )
+          replace_once(
+              "forge_ai/core/orchestration/pipeline_orchestrator.py",
+              "        except (PlanningError, CriticFailure) as exc:\n            return CognitivePipelineFailed(\n                error=exc, reached_stage=getattr(exc, \"stage\", \"unknown\"), decision_trace=context.decision_trace,\n            )\n",
+              "        except CapabilityGapError as exc:\n"
+              "            # A semantic capability gap is not an infrastructure failure.\n"
+              "            # Preserve partial context and structured extension candidates so\n"
+              "            # the self-extension loop can continue without reinterpreting text.\n"
+              "            return CognitivePipelineNeedsExtension(\n"
+              "                error=exc, reached_stage=getattr(exc, \"stage\", \"capability_gap\"),\n"
+              "                partial_context=context, extension_candidates=exc.extension_candidates,\n"
+              "                decision_trace=context.decision_trace,\n"
+              "            )\n"
+              "        except (PlanningError, CriticFailure) as exc:\n"
+              "            return CognitivePipelineFailed(\n"
+              "                error=exc, reached_stage=getattr(exc, \"stage\", \"unknown\"), decision_trace=context.decision_trace,\n"
+              "            )\n",
+          )
+
+          # Keep old regression scenarios, but assert the new truthful state:
+          # unresolved semantics require extension/decomposition, not generic failure.
+          p = Path("forge_ai/tests/test_cognitive_orchestrator_integration.py")
+          text = p.read_text(encoding="utf-8")
+          text = text.replace(
+              "    CognitivePipelineNeedsConfirmation,\n    CognitivePipelineSuccess,\n",
+              "    CognitivePipelineNeedsConfirmation,\n    CognitivePipelineNeedsExtension,\n    CognitivePipelineSuccess,\n",
+              1,
+          )
+          text = text.replace(
+              "        self.assertIsInstance(outcome, CognitivePipelineFailed)\n"
+              "        self.assertEqual(outcome.reached_stage, \"capability_gap\")\n"
+              "        self.assertIn(\"semantic_structure_unresolved\", str(outcome.error))\n",
+              "        self.assertIsInstance(outcome, CognitivePipelineNeedsExtension)\n"
+              "        self.assertEqual(outcome.reached_stage, \"capability_gap\")\n"
+              "        self.assertIn(\"semantic_structure_unresolved\", str(outcome.error))\n"
+              "        self.assertEqual(outcome.extension_candidates[0].capability_id, \"semantic_structure_unresolved\")\n",
+              1,
+          )
+          p.write_text(text, encoding="utf-8")
+
+          p = Path("forge_ai/tests/test_entity_synthesizer.py")
+          text = p.read_text(encoding="utf-8")
+          old = (
+              '        from forge_ai.core.orchestration.outcomes import CognitivePipelineFailed\n\n'
+              '        outcome = run_cognitive_pipeline(\n'
+              '            "買い物リストを作りたい", provider=_SynthesisSabotagingProvider({})\n'
+              '        )\n'
+              '        self.assertIsInstance(outcome, CognitivePipelineFailed)\n'
+              '        self.assertEqual(outcome.reached_stage, "capability_gap")\n'
+              '        self.assertIn("semantic_structure_unresolved", str(outcome.error))\n'
+              '        # 失敗をChecklist文書へ変換して成功扱いしていない。\n'
+              '        self.assertFalse(hasattr(outcome, "ir"))\n'
+          )
+          new = (
+              '        from forge_ai.core.orchestration.outcomes import CognitivePipelineNeedsExtension\n\n'
+              '        outcome = run_cognitive_pipeline(\n'
+              '            "買い物リストを作りたい", provider=_SynthesisSabotagingProvider({})\n'
+              '        )\n'
+              '        self.assertIsInstance(outcome, CognitivePipelineNeedsExtension)\n'
+              '        self.assertEqual(outcome.reached_stage, "capability_gap")\n'
+              '        self.assertIn("semantic_structure_unresolved", str(outcome.error))\n'
+              '        self.assertEqual(outcome.extension_candidates[0].capability_id, "semantic_structure_unresolved")\n'
+              '        # Capability GapをChecklist文書へ変換して成功扱いしていない。\n'
+              '        self.assertFalse(hasattr(outcome, "ir"))\n'
+          )
+          if old not in text:
+              raise SystemExit("test_entity_synthesizer.py: expected old fail-closed assertion not found")
+          p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+      - name: Commit extension outcome wiring
+        run: |
+          if git diff --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add forge_ai/core/orchestration/pipeline_orchestrator.py \
+                  forge_ai/tests/test_cognitive_orchestrator_integration.py \
+                  forge_ai/tests/test_entity_synthesizer.py
+          git commit -m "feat: return actionable outcome for capability gaps"
+          git push origin HEAD:claude/forge-master-handoff-k46jns
