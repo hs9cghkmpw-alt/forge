@@ -30,6 +30,49 @@ Operational scan term:
 
 `FORGE-GENERAL-APP-MODE.md` is **not a new product goal**. Missing-capability synthesis is cross-cutting and must not be postponed until the end of a phase list.
 
+## Determination: map so far is activation, not generation (020E, 2026-08-30)
+
+Ordered explicitly by the CEO before any further self-extension work.
+
+**`view.map` to date is activation of pre-existing shipped code, not
+capability generation.** Evidence in repo:
+
+- `BuildTimeCapabilityArtifact(...)` is constructed in **tests only**
+  (3 sites); there is **no production construction site**;
+- `ExtensionImplementer` is a Protocol; the only implementer injected is a
+  test closure;
+- `test_self_extension_loop.py` promotes `view.map` through
+  `ExtensionRoute.DECLARATIVE` — **no source is generated**;
+- the v1.16 map language/validator/parser/registry/runtime/compiler wiring
+  was written by earlier human commits and shipped in the repo.
+
+`ManagedBuildTimeImplementer` genuinely proves *verification and intake* of a
+given artifact via real subprocesses. It does **not** prove that Forge wrote
+the implementation.
+
+Full record: `docs/reports/FORGE-020E-CAPABILITY-ARTIFACT-SYNTHESIS-report.md`.
+
+## The generation stage is now present (but not yet proven end to end)
+
+`forge_ai/core/orchestration/capability_artifact_synthesis.py` fills the gap
+between Capability Gap and BUILD_TIME.
+
+- capability-agnostic: takes only a contract pulled mechanically from the
+  canonical catalog; a static test forbids capability-id literals in the
+  executable code, so `if capability_id == "view.map"` cannot be introduced
+  as the general mechanism;
+- `known_source_digests` is a **required** argument: source that is
+  byte-identical (after whitespace normalisation) to shipped source raises
+  `PreexistingSourceError`, so regurgitated repo code cannot be counted as
+  generation;
+- unusable responses return `None` — implementation without tests, tests
+  without implementation, empty output, unsafe paths;
+- capability identity comes from the contract, never from model self-report.
+
+**Still unproven:** unseen request → generated source → real build/probe →
+PROMOTED → retry → reuse without a second build. Real Local Model runs
+remain **0**.
+
 ## Self-extension implementation now present
 
 The production architecture now contains these reusable stages:
