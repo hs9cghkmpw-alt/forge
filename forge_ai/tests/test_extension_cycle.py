@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import pytest
 
+from forge_ai.core.orchestration.extension_activation import ExtensionImplementation
 from forge_ai.core.orchestration.extension_cycle import ExtensionCycleError, run_extension_cycle
 from forge_ai.core.orchestration.extension_manifest import ExtensionEvidence
 from forge_ai.core.orchestration.extension_registry import PROMOTED_CAPABILITIES
@@ -14,6 +15,11 @@ from forge_ai.core.orchestration.extension_plan import (
 )
 from forge_ai.core.orchestration.outcomes import CognitivePipelineNeedsExtension
 from forge_ai.core.semantics.capabilities import SafetyClass, SupportLevel
+
+
+@dataclass(frozen=True)
+class _Activation:
+    capability_id: str
 
 
 def _candidate(capability_id: str = "view.map") -> ExtensionCandidate:
@@ -38,7 +44,7 @@ def _outcome(candidate: ExtensionCandidate) -> CognitivePipelineNeedsExtension:
     )
 
 
-def _promote(manifest):
+def _promoted_manifest(manifest):
     evidence = ExtensionEvidence(
         semantic_decomposition=True,
         reusable_primitive=True,
@@ -53,6 +59,11 @@ def _promote(manifest):
     return replace(manifest, evidence=evidence).verified().promoted()
 
 
+def _promote_with_activation(manifest):
+    promoted = _promoted_manifest(manifest)
+    return ExtensionImplementation(promoted, _Activation(promoted.capability_id))
+
+
 def test_promoted_declarative_extension_is_installed_then_retries_original_request() -> None:
     PROMOTED_CAPABILITIES.clear()
     retried: list[str] = []
@@ -61,7 +72,7 @@ def test_promoted_declarative_extension_is_installed_then_retries_original_reque
         _outcome(_candidate()),
         decompose=lambda c: c,
         select_route=lambda c: ExtensionRoute.DECLARATIVE,
-        implement=_promote,
+        implement=_promote_with_activation,
         retry=lambda raw: retried.append(raw) or "RETRIED",  # type: ignore[arg-type,return-value]
     )
 
@@ -71,18 +82,31 @@ def test_promoted_declarative_extension_is_installed_then_retries_original_reque
     assert result.retry_outcome == "RETRIED"
 
 
-def test_unverified_extension_cannot_trigger_retry() -> None:
+def test_metadata_only_promotion_cannot_trigger_retry() -> None:
+    PROMOTED_CAPABILITIES.clear()
     retried: list[str] = []
 
+    with pytest.raises(ExtensionCycleError, match="no executable activation"):
+        run_extension_cycle(
+            _outcome(_candidate()),
+            decompose=lambda c: c,
+            select_route=lambda c: ExtensionRoute.DECLARATIVE,
+            implement=lambda manifest: ExtensionImplementation(_promoted_manifest(manifest), None),
+            retry=lambda raw: retried.append(raw) or "RETRIED",  # type: ignore[arg-type,return-value]
+        )
+    assert retried == []
+
+
+def test_unverified_extension_cannot_trigger_retry() -> None:
+    retried: list[str] = []
     with pytest.raises(ExtensionCycleError, match="not evidence-gated PROMOTED"):
         run_extension_cycle(
             _outcome(_candidate()),
             decompose=lambda c: c,
-            select_route=lambda c: ExtensionRoute.BUILD_TIME,
-            implement=lambda manifest: manifest,
+            select_route=lambda c: ExtensionRoute.DECLARATIVE,
+            implement=lambda manifest: ExtensionImplementation(manifest, _Activation(manifest.capability_id)),
             retry=lambda raw: retried.append(raw) or "RETRIED",  # type: ignore[arg-type,return-value]
         )
-
     assert retried == []
 
 
@@ -96,13 +120,12 @@ def test_unresolved_semantics_cannot_enter_implementation() -> None:
         reason="unresolved",
         requires_confirmation=False,
     )
-
     with pytest.raises(ExtensionCycleError, match="did not resolve"):
         run_extension_cycle(
             _outcome(unresolved),
             decompose=lambda c: c,
             select_route=lambda c: ExtensionRoute.NEEDS_DECOMPOSITION,
-            implement=lambda manifest: manifest,
+            implement=lambda manifest: ExtensionImplementation(manifest, None),
             retry=lambda raw: "RETRIED",  # type: ignore[return-value]
         )
 
@@ -112,8 +135,25 @@ def test_implementer_cannot_swap_capability_identity() -> None:
         run_extension_cycle(
             _outcome(_candidate("view.map")),
             decompose=lambda c: c,
-            select_route=lambda c: ExtensionRoute.BUILD_TIME,
-            implement=lambda manifest: replace(_promote(manifest), capability_id="view.calendar"),
+            select_route=lambda c: ExtensionRoute.DECLARATIVE,
+            implement=lambda manifest: ExtensionImplementation(
+                replace(_promoted_manifest(manifest), capability_id="view.calendar"),
+                _Activation("view.calendar"),
+            ),
+            retry=lambda raw: "RETRIED",  # type: ignore[return-value]
+        )
+
+
+def test_activation_cannot_swap_capability_identity() -> None:
+    PROMOTED_CAPABILITIES.clear()
+    with pytest.raises(ExtensionCycleError, match="Activation changed capability identity"):
+        run_extension_cycle(
+            _outcome(_candidate("view.map")),
+            decompose=lambda c: c,
+            select_route=lambda c: ExtensionRoute.DECLARATIVE,
+            implement=lambda manifest: ExtensionImplementation(
+                _promoted_manifest(manifest), _Activation("view.calendar")
+            ),
             retry=lambda raw: "RETRIED",  # type: ignore[return-value]
         )
 
@@ -121,15 +161,15 @@ def test_implementer_cannot_swap_capability_identity() -> None:
 def test_build_time_promotion_requires_runtime_reload_before_retry() -> None:
     PROMOTED_CAPABILITIES.clear()
     retried: list[str] = []
-
     with pytest.raises(ExtensionCycleError, match="cannot be activated in-process"):
         run_extension_cycle(
             _outcome(_candidate()),
             decompose=lambda c: c,
             select_route=lambda c: ExtensionRoute.BUILD_TIME,
-            implement=_promote,
+            implement=lambda manifest: ExtensionImplementation(
+                _promoted_manifest(manifest), _Activation(manifest.capability_id)
+            ),
             retry=lambda raw: retried.append(raw) or "RETRIED",  # type: ignore[arg-type,return-value]
         )
-
     assert retried == []
     assert not PROMOTED_CAPABILITIES.is_promoted("view.map")
