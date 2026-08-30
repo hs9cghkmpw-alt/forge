@@ -20,6 +20,7 @@ import 'dart:ui' show Color;
 
 // v1.9(2026-08-13)。bar_chartのgroup_by/aggregateが参照する。
 import '../runtime/forge_aggregate.dart';
+import '../runtime/forge_logic_document.dart';
 
 /// 未知の構造・型不一致など、サーバー側Validatorを通過したはずのJSONが
 /// クライアント側で解釈できなかった場合に投げる。Renderer側でこれを捕まえ、
@@ -92,6 +93,9 @@ class ForgeDocument {
 
   final ForgeDesignTokens? designTokens;
 
+  /// GA-1 deterministic document logic. Empty for legacy documents.
+  final ForgeLogicDocument logic;
+
   ForgeDocument({
     required this.version,
     required this.appTitle,
@@ -99,6 +103,7 @@ class ForgeDocument {
     required this.screens,
     this.recordSchemas = const {},
     this.designTokens,
+    this.logic = const ForgeLogicDocument(),
   });
 
   factory ForgeDocument.fromJson(Map<String, dynamic> json) {
@@ -140,6 +145,8 @@ class ForgeDocument {
         ? ForgeDesignTokens.fromJson(rawDesignTokens, '/design_tokens')
         : null;
 
+    final logic = ForgeLogicDocument.fromJson(json['logic']);
+
     return ForgeDocument(
       version: json['version'] as String? ?? '',
       appTitle: appTitle,
@@ -147,6 +154,7 @@ class ForgeDocument {
       screens: screens,
       recordSchemas: recordSchemas,
       designTokens: designTokens,
+      logic: logic,
     );
   }
 

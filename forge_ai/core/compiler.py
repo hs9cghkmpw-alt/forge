@@ -343,6 +343,13 @@ class ForgeIRDocument:
     # 空dictの場合はJSON上に一切出力しない(design_tokensを使わない
     # 既存Domain・Legacy文書の出力を1バイトも変えないため)。
     design_tokens: dict[str, Any] = field(default_factory=dict)
+    # GA-1: declarative, deterministic application logic. Expressions are
+    # data and remain separate from mutable state. Empty means legacy/no logic.
+    logic: dict[str, Any] = field(default_factory=dict)
+
+    def with_logic(self, logic: dict[str, Any]) -> "ForgeIRDocument":
+        from dataclasses import replace
+        return replace(self, logic=dict(logic))
 
     def to_json_dict(self) -> dict[str, Any]:
         """Forge Language v1.0互換のJSON dictへ変換する(実際の
@@ -359,6 +366,8 @@ class ForgeIRDocument:
             result["record_schemas"] = {name: schema.to_json_dict() for name, schema in self.record_schemas.items()}
         if self.design_tokens:
             result["design_tokens"] = self.design_tokens
+        if self.logic:
+            result["logic"] = self.logic
         return result
 
 

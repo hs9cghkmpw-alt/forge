@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/utils/forge_logger.dart';
 import '../schema/forge_document.dart';
+import '../runtime/forge_expression.dart';
+import '../runtime/forge_logic_document.dart';
 import '../widget_registry/widget_registry.dart';
 import 'forge_runtime_state.dart';
 import 'design_language.dart';
@@ -176,6 +178,7 @@ class _ForgeScreenViewState extends State<ForgeScreenView> {
   static const int _maxNavigationDepth = 20;
 
   late final ForgeRuntimeState _state;
+  late final ForgeLogicRuntime _logic;
   final ForgeWidgetRegistry _registry = buildDefaultForgeRegistry();
 
   @override
@@ -204,6 +207,7 @@ class _ForgeScreenViewState extends State<ForgeScreenView> {
       // 側が色・角丸を参照するために使う。CRUD挙動には一切影響しない)。
       designTokens: widget.document.designTokens,
     );
+    _logic = ForgeLogicRuntime(state: _state, logic: widget.document.logic);
     if (widget.onScreenStateChanged != null) {
       _state.addListener(_persistState);
     }
@@ -275,6 +279,12 @@ class _ForgeScreenViewState extends State<ForgeScreenView> {
   Widget _build(ForgeWidgetNode node, int depth) {
     if (depth > _maxClientSideDepth) {
       return const ForgeFallbackWidget(reason: '再帰深度の上限を超えました(クライアント側ガード)');
+    }
+    try {
+      if (!_logic.isVisible(node.id)) return const SizedBox.shrink();
+    } on ForgeExpressionException catch (e) {
+      ForgeLogger.error('GA1Logic', 'visible_when evaluation failed for ${node.id}: $e');
+      return ForgeFallbackWidget(reason: '条件式を評価できませんでした: ${node.id}');
     }
     final role = widget.screen.styleRoles[node.id];
     // role を builder へ**先に**届ける。被せる方式（`applyForgeRole`）は
