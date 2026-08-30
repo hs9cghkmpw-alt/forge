@@ -53,7 +53,7 @@ void main() {
 
   test('logic parser rejects malformed expression maps', () {
     expect(
-      () => ForgeLogicDocument.fromJson({'derived': []}),
+      () => ForgeLogicDocument.fromJson({'derived': <dynamic>[]}),
       throwsA(isA<ForgeExpressionException>()),
     );
     expect(
