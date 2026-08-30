@@ -13,13 +13,17 @@ on:
       - frontend/lib/json_ui/widget_registry/widget_registry_v1_14.dart
       - frontend/assets/sounds/**
 
+concurrency:
+  group: forge-real-chrome-audio-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   chrome-audio:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,15 +35,21 @@ jobs:
       - name: Resolve Flutter dependencies from a clean web build state
         working-directory: frontend
         run: |
+          flutter config --enable-web
           flutter clean
           flutter pub get
       - name: Verify Chrome is available
         run: google-chrome --version || chromium --version
-      - name: Create deterministic Chrome launcher for media probe
+      - name: Create deterministic headless Chrome launcher for media probe
         run: |
           cat >/tmp/forge-chrome <<'EOF'
           #!/bin/sh
-          exec /usr/bin/google-chrome --autoplay-policy=no-user-gesture-required "$@"
+          exec /usr/bin/google-chrome \
+            --headless=new \
+            --no-sandbox \
+            --disable-dev-shm-usage \
+            --autoplay-policy=no-user-gesture-required \
+            "$@"
           EOF
           chmod +x /tmp/forge-chrome
       - name: Run compiled Flutter Web integration probe
