@@ -3,16 +3,35 @@
 ## Current state
 
 - Branch: `claude/forge-master-handoff-k46jns`
-- Current task: **Golden game closure complete; preserve evidence and keep ordinary CI green.**
-- Golden target request: `植物を育てながら音を組み合わせるゲームを作りたい`
-- Golden Generated App Quality Gate for that request: **PASS**.
-- Exact production-generated Forge Document version: **1.15**.
-- Required runtime widgets proved in the generated document: `simulation_loop`, `simulation_progress`, `audio_mixer`.
+- Current task: **GENERAL APP MODE — GA-1 Logic Core. Natural-language app generation breadth is now the primary roadmap target.**
+- Execution spec: `docs/spec/FORGE-GENERAL-APP-MODE.md`.
+- Architecture basis: `docs/spec/FORGE-SELF-EXTENSION-ARCH-REVIEW-v2.md`.
+- Product target: user need -> semantic capability -> runtime primitives -> generated app -> validator/test/build/runtime/visual evidence -> bounded repair; unsupported needs must become explicit Capability Gaps rather than false success.
+- First GA-1 Golden acceptance request: `毎月の収入と支出を記録して、残高を自動計算し、残高がマイナスなら警告を表示する家計アプリを作って`.
+- GA-1 scope: condition/compare, if/else, derived/computed state, filter/sort/aggregate/arithmetic, event-to-state transitions, compiler/runtime/validator integration.
+- Previous Golden game target request: `植物を育てながら音を組み合わせるゲームを作りたい`
+- Previous Golden Generated App Quality Gate: **PASS**.
+- Exact production-generated Forge Document version for that evidence: **1.15**.
+- Required runtime widgets proved in that generated document: `simulation_loop`, `simulation_progress`, `audio_mixer`.
 - `simulate.loop`: **IMPLEMENTED** with deterministic fixed-step engine, runtime-state binding, real Flutter lifecycle, visible progress, and serialized CapabilityPlan evidence.
 - `interact.audio_mix`: **PARTIAL by design** — simultaneous bundled track playback is implemented and real-Chrome verified; arbitrary user audio import is not claimed.
 - `effect.media_compose`: **MISSING** — exporting/rendering a newly composed media asset is still an explicit capability gap.
 - Japanese surface `合成` is mapped to semantic activity `combine`; requests such as `音を合成して書き出したい` therefore keep `effect.media_compose` in the missing plan instead of silently collapsing to the mixer.
 - Physical/user-PC validation remains **UNVERIFIED from this environment**.
+
+## General App Mode execution rule
+
+Do not try to reach broad app coverage by adding one bespoke Widget per requested app. Prefer reusable Runtime Primitives. The execution order is currently:
+
+1. GA-1 Logic Core
+2. GA-2 Navigation + Persistent Data
+3. GA-3 External Service Effects
+4. GA-5 Rich Presentation
+5. GA-4 Device Capabilities
+6. GA-6 Media + Game Runtime
+7. GA-7 Safe Build-Time Self-Extension
+
+`Capability != Widget`. Semantic needs must decompose to DATA / TRANSFORM / VIEW / ENCODING / EFFECT / SIMULATE primitives. PARTIAL/MISSING truthfulness rules remain mandatory.
 
 ## Golden closure evidence
 
@@ -94,11 +113,22 @@ Persistent production runtime, ordinary unit/regression tests, durable reports/e
 
 ## Remaining boundaries / next work
 
-The Golden request itself is closed. Do not reopen it unless a regression occurs. The remaining work belongs to later capabilities and product hardening:
+The previous Golden game request is closed. Do not reopen it unless a regression occurs.
 
-1. `effect.media_compose` — implement real exported media composition only when Forge has an actual safe runtime/renderer path; do not claim the interactive mixer satisfies export.
-2. Arbitrary user-supplied audio import — separate capability/safety design if required.
-3. Physical-PC verification — run only from the actual machine and preserve evidence before marking PASS.
-4. Continue ordinary product roadmap after final branch CI is green.
+The active next work is GA-1 Logic Core:
 
-Final closure rule: the **last branch HEAD** after bookkeeping/cleanup must pass persistent `.github/workflows/ci.yml`; the exact final run ID is reported externally rather than written back into this file, because writing it would create a newer unverified HEAD.
+1. audit current state/action/expression surfaces and establish the smallest general expression AST rather than domain-specific conditions;
+2. add compare + boolean + arithmetic expression evaluation as a pure/deterministic runtime primitive;
+3. add derived/computed state and conditional rendering/branching bindings;
+4. wire semantic/capability planning and compiler generation for the GA-1 Golden household-budget request;
+5. add validator/parser/runtime/compiler tests, then generated-app runtime evidence;
+6. only after the GA-1 slice is green move to GA-2 persistence/navigation.
+
+Separate later boundaries remain:
+
+- `effect.media_compose` real export path;
+- arbitrary user-supplied audio import;
+- physical-PC verification;
+- privileged/device effects require explicit policy and real platform evidence.
+
+Final closure rule for every slice: the **last branch HEAD** after bookkeeping/cleanup must pass persistent `.github/workflows/ci.yml`; do not write the final run ID back into this file because doing so creates a newer unverified HEAD.
