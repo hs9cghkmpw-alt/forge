@@ -175,6 +175,47 @@ compiler が view.map に言及するか : True
 **獲得した能力については満たしていない**。満たしているのは
 `view.map`——すなわち最初から実装があったものだけである。
 
+### 直した（020E-5）
+
+Compiler の枝を消し、**宣言表**へ移した
+（`capability_document_contribution.py`）。
+
+```python
+# 以前
+if "view.map" in promoted_capabilities:
+    document = self._attach_map_view(document, entity)
+
+# いま
+document = apply_capability_contributions(
+    document, promoted_capabilities, entity,
+)
+```
+
+**表であることが本質である。** 枝は人が書き足すものだが、表は獲得した
+能力が `register_document_contribution()` で自分で登録できる。
+獲得した能力が widget を出せることは実際に確かめた
+（`TestAnAcquiredCapabilityCanRegisterItsOwn`）。
+
+`view.map` の出力は**属性の順序まで1バイトも変えていない**——変えると
+Dart 側（Validator / Parser / Widget Registry）の契約が壊れる。
+
+#### この経路には**テストが1つも無かった**
+
+宣言の登録を外しても、**backend 1984 件も forge_ai 全件も素通りした**。
+つまり `_attach_map_view` の時代から、`view.map` の**出力経路そのものが
+無検査**だった。実際に compile して widget が出ることを確かめる
+テストを足した（登録を外すと落ちる）。
+
+これは §0 の判定を補強する事実である——map は実装が先に在っただけで
+なく、**その出力経路も検査されていなかった。**
+
+#### まだ残ること
+
+宣言は「この能力はこの widget を出す」と言っているだけであり、
+**その widget を Dart Runtime が描けるかどうかは別の事実**である。
+新しい能力を実際に描けるようにするには、BUILD_TIME で Dart 側を
+ビルドし直す必要がある。そこは未着手である。
+
 ---
 
 ## 4. **証明していないこと**（ここが本題）

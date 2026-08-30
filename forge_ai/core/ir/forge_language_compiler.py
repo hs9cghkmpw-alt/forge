@@ -156,8 +156,18 @@ from forge_ai.core.ir.ir_types import (
     ViewKind,
     preferred_aggregate,
 )
+from forge_ai.core.ir.capability_document_contribution import (
+    apply_capability_contributions,
+)
+from forge_ai.core.ir.shipped_contributions import register_shipped_contributions
 from forge_ai.core.ir.solution_shape import SolutionShape, select_solution_shape
 from forge_ai.core.orchestration.declarative_activation import apply_promoted_document_activations
+
+# **出荷済み能力の出力宣言を登録する。**
+#
+# 副作用 import に頼らず明示的に呼ぶ。呼ばなければ地図が出なくなるので、
+# 忘れれば既存の v1.16 テストが落ちる（置物にならない）。
+register_shipped_contributions()
 
 #: **まとめ・比較を先に見せる性格**（TD91 / 020A2 §6）。
 #:
@@ -337,64 +347,22 @@ class ForgeLanguageCompiler:
             document = self._attach_simulation_loop(document)
         if "interact.audio_mix" in interaction_capabilities:
             document = self._attach_audio_mixer(document)
-        if "view.map" in promoted_capabilities:
-            document = self._attach_map_view(document, entity)
+        # **能力名で分岐しない**（020E-5、2026-08-31）。
+        #
+        # 以前ここは `if "view.map" in promoted_capabilities:` だった。
+        # 枝は人が書き足すものなので、Self-Extension で獲得した能力には
+        # 一生書かれない——**獲得しても生成物に現れない**。
+        #
+        # 宣言表（`capability_document_contribution.py`）を引くだけにした。
+        # 獲得した能力は promotion 時に自分の宣言を登録できる。
+        document = apply_capability_contributions(
+            document, promoted_capabilities, entity,
+        )
         # A promoted declarative capability must change the generated
         # document through its executable activation. Registry metadata
         # alone is never sufficient to claim the capability is usable.
         document = apply_promoted_document_activations(document, promoted_capabilities)
         return document
-
-    @staticmethod
-    def _attach_map_view(document: ForgeIRDocument, entity: Entity) -> ForgeIRDocument:
-        latitude = next((f for f in entity.fields if f.name == "latitude"), None)
-        longitude = next((f for f in entity.fields if f.name == "longitude"), None)
-        if latitude is None or longitude is None:
-            raise ForgeLanguageCompilationError(
-                "view.map requires explicit numeric latitude and longitude fields; "
-                "free-form place text requires a separate geocoding capability"
-            )
-        if latitude.type is not FieldType.NUMBER or longitude.type is not FieldType.NUMBER:
-            raise ForgeLanguageCompilationError("view.map latitude/longitude fields must be numeric")
-        label_field = next(
-            (f.name for f in entity.fields if f.name not in {"latitude", "longitude"} and f.type is FieldType.STRING),
-            None,
-        )
-        map_widget = ForgeIRWidget(
-            type="map_view",
-            id="record_map",
-            properties={
-                "state_ref": "records",
-                "latitude_field": latitude.name,
-                "longitude_field": longitude.name,
-                "title": "地図",
-                "empty_text": "緯度と経度を記録すると地図に表示されます",
-                "initial_zoom": 11,
-                "height": 320,
-                **({"label_field": label_field} if label_field else {}),
-            },
-        )
-        screens: list[ForgeIRScreen] = []
-        for screen in document.screens:
-            if screen.body.type == "column":
-                body = ForgeIRWidget(
-                    type=screen.body.type, id=screen.body.id,
-                    properties=dict(screen.body.properties),
-                    children=(*screen.body.children, map_widget),
-                )
-            else:
-                body = ForgeIRWidget(type="column", id="map_root", children=(screen.body, map_widget))
-            screens.append(ForgeIRScreen(
-                id=screen.id, title=screen.title, state=dict(screen.state), body=body,
-            ))
-        return ForgeIRDocument(
-            version="1.16",
-            initial_screen_id=document.initial_screen_id,
-            screens=tuple(screens),
-            app_title=document.app_title,
-            record_schemas=dict(document.record_schemas),
-            design_tokens=dict(document.design_tokens),
-        )
 
     @staticmethod
     def _attach_audio_mixer(document: ForgeIRDocument) -> ForgeIRDocument:

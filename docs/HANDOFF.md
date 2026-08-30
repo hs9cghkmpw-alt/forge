@@ -77,12 +77,17 @@ Next real bottlenecks — there are **two**, not one:
 1. **Real model authorship.** Executing the `capability_implementation` stage
    against a real model. Plumbing and gates are in place; what is missing is a
    machine that can run one (`docs/MACHINE-INDEPENDENT-POLICY.md`).
-2. **The acquired capability must be able to reach the generated document.**
-   Today it cannot: the artifact targets Python while emission/runtime are Dart,
-   and the compiler still picks widgets via `if "view.map"`. The planner-side
-   version of that branch was removed in `83683e1`; the compiler-side one
-   remains. Until it is declaration-driven, an acquired capability can never
-   appear in generated software — which is the whole point of acquiring it.
+2. **The acquired capability must be renderable by the Dart runtime.**
+   The compiler-side `if "view.map"` branch is **now gone** (020E-5): widget
+   emission is declaration-driven, and an acquired capability can register its
+   own contribution, which was verified. `view.map` output is unchanged down to
+   property order. What remains is that a declaration only says *which widget to
+   emit* — whether the Dart runtime can **render** a genuinely new widget still
+   requires rebuilding the Flutter side through BUILD_TIME. That is untouched.
+
+   While doing this a coverage hole surfaced: removing the shipped map
+   declaration left **all 1984 backend tests and all forge_ai tests passing**,
+   i.e. the `view.map` emission path had never been tested at all. It is now.
 
 ## Determination: map so far is activation, not generation (020E, 2026-08-30)
 
