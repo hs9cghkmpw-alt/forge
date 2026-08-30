@@ -3,7 +3,16 @@ name: FORGE exact Golden visual probe
 on:
   push:
     branches: [claude/forge-master-handoff-k46jns]
-    paths: [.github/workflows/forge_golden_visual_probe.yml]
+    paths:
+      - .github/workflows/forge_golden_visual_probe.yml
+      - scripts/generate_golden_game_fixture.py
+      - forge_ai/**
+      - backend/app/ai/**
+      - frontend/lib/json_ui/**
+      - frontend/test/json_ui/forge_golden_game_render_probe_test.dart
+      - frontend/pubspec.yaml
+      - frontend/pubspec.lock
+      - frontend/assets/sounds/**
 
 permissions:
   contents: read
@@ -29,9 +38,11 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Resolve Flutter dependencies
+      - name: Resolve Flutter dependencies from clean state
         working-directory: frontend
-        run: flutter pub get
+        run: |
+          flutter clean
+          flutter pub get
       - name: Render phone viewport and capture evidence
         working-directory: frontend
         env:
@@ -46,4 +57,5 @@ jobs:
             /tmp/forge_golden_game.json
           if-no-files-found: error
 
-# One-shot rerun after the render assertion was corrected to concrete runtime controls.
+# Objective visual evidence: exact production-generated document rendered at the
+# phone viewport by the checked-in Flutter renderer.
