@@ -1,34 +1,27 @@
-"""Solution Shape(2026-08-12、CEO「常にニーズに合わせた最適解を出せる
-ようにして」対応)。
+"""Legacy IR representation chooser for already-resolved entity structures.
 
-**解いている問題**: これまで、Forgeが生成するアプリの**形**は1種類しか
-無かった。「追加タブ / 一覧タブ / 編集タブ + 入力フォーム +
-record_list_view」という構成が、ニーズが何であれ常に出力されていた。
+This module is **not** Forge's product-level capability planner and must not be
+used to decide what the user really asked for.  That responsibility belongs to
+the semantic Capability Plan and, when a requirement cannot be represented, the
+Capability Gap / Self-Extension path.
 
-    「腕立ての回数を数えたい」    → 3タブCRUD
-    「買うものを並べて消したい」  → 3タブCRUD
-    「釣果を細かく記録したい」    → 3タブCRUD  ← これだけが妥当
+Historically this module was described as deciding the application's "solution
+shape" from entity fields alone.  That framing was too strong: field shape
+cannot tell whether a user wanted a counter, simulation, derived calculation,
+map, external effect, or another capability.  Treating the nearest available IR
+shape as the answer is exactly the kind of goal substitution Whole Scan forbids.
 
-つまり「いつ作るか」(Conversation Readiness)は判断できるようになった
-一方で、「**何を作るか**」は固定だった。買い物メモが欲しい人に、
-釣果記録と同じ重さの道具を渡していた。
+The only remaining responsibility here is narrower and compatibility-oriented:
+for a semantic request that has **already been resolved as an entity/list style
+representation**, choose between the two legacy renderable representations
+without dropping entity fields:
 
-このモジュールは、Entityの構造から**解の形**を決定的に選ぶ。
+* ``CHECKLIST`` when the entity can be represented losslessly by checklist state
+* ``RECORD_CRUD`` for a multi-attribute record entity
 
-**判定材料をEntityのFieldに限っている理由**: ユーザーの言葉
-(「数えたい」「チェックしたい」)から直接形を選ぶこともできるが、
-それは表現の揺れに弱く、同じニーズでも言い方次第で形が変わってしまう。
-一方Entityは、既に会話とEntitySynthesizerを通って「このアプリが
-繰り返し記録する1件分のデータ」へ煮詰まった結果であり、
-「属性が1つしかない」=「並べてチェックするだけで足りる」という
-対応が構造的に安定している。
-
-**現在2形しかない理由(正直な申告)**: 「回数を数える」カウンタ形は、
-意図的に**実装していない**。Forge Languageの`ACTION_TYPES`には
-`set_value`(固定値の代入)しか無く、`count + 1`のような**動的な
-加算を表現する手段が存在しない**(`increment`アクションが無い)。
-カウンタ形を作ると「押しても増えないボタン」になるため、Runtimeに
-increment相当が入るまでは`RECORD_CRUD`のまま扱う。
+A missing capability must never be converted into RECORD_CRUD merely because
+RECORD_CRUD exists.  Counter/increment, transforms, effects, simulations, etc.
+must be identified by the semantic planner before this module is reached.
 """
 
 from __future__ import annotations
@@ -41,15 +34,13 @@ __all__ = ["SolutionShape", "select_solution_shape"]
 
 
 class SolutionShape(str, Enum):
-    """生成するアプリの構造。Widget名ではなく「道具としての形」を表す。"""
+    """Legacy render representation, not a catalog of product capabilities."""
 
     CHECKLIST = "checklist"
-    """並べて、消す。属性を持たない項目の集まり(買い物メモ、持ち物、
-    やることリスト)。1画面・タブ無し・入力欄1つ。"""
+    """並べて、消す。属性を持たない項目の集まり。"""
 
     RECORD_CRUD = "record_crud"
-    """1件が複数の属性を持つ記録(釣果、家計簿、議事録)。
-    追加/一覧/編集のタブ構成、型付きフォーム、一覧、グラフ。"""
+    """1件が複数の属性を持つ記録。"""
 
 
 # CHECKLIST形が吸収できるField型。`checklist`Stateの1項目は
@@ -60,27 +51,23 @@ _CHECKLIST_DONE_TYPES = frozenset({FieldType.BOOLEAN})
 
 
 def select_solution_shape(entity: Entity) -> SolutionShape:
-    """Entityの構造から、解の形を決定的に選ぶ。
+    """Choose a lossless legacy representation for an already-resolved entity.
 
-    `CHECKLIST`になるのは、`checklist`Stateの1項目(`{id, text, done}`)
-    で**情報を落とさずに表現しきれる**場合だけである:
+    ``CHECKLIST`` is allowed only when checklist state can preserve every field:
 
-    * 文字列1つだけ(例: 「買うもの」)
-    * 文字列1つ + 真偽値1つ(例: 「やること」+「済んだか」)
+    * one string field
+    * one string field plus one boolean field
 
-    これ以外は、属性を捨てずに保持できる`RECORD_CRUD`にする。
-    「軽い形の方が親切だから」といって、日付や金額を持つEntityを
-    checklistへ押し込むと、**ユーザーが記録したかった情報が消える**
-    ——形を軽くすることと、情報を捨てることは別である。
-
-    Curated Domain(fishing_log等、いずれも4〜5 Field)は、この条件に
-    一つも該当しないため、従来どおり`RECORD_CRUD`になる(既存の
-    生成結果は1バイトも変わらない)。
+    Otherwise the entity is represented as ``RECORD_CRUD`` so its attributes are
+    not discarded.  This fallback is only a representation decision *inside an
+    already-resolved record-entity path*.  It is not permission to reinterpret
+    an unresolved semantic requirement as CRUD.
     """
     fields = entity.fields
     if not fields:
-        # Fieldが1つも無いEntityは`IRGenerator`が作らない想定だが、
-        # 防御的に、より情報を落としにくい方(RECORD_CRUD)へ倒す。
+        # Defensive legacy behavior.  Product-level UNKNOWN structure must have
+        # been rejected earlier by the Capability Gate; this branch must not be
+        # used as semantic fallback.
         return SolutionShape.RECORD_CRUD
 
     if len(fields) == 1 and fields[0].type in _CHECKLIST_TEXT_TYPES:
