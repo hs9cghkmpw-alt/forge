@@ -1,0 +1,161 @@
+name: Self Extension map v1.16 patch
+
+on:
+  push:
+    branches:
+      - claude/forge-master-handoff-k46jns
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+          fetch-depth: 0
+      - name: Wire map capability across language validator compiler runtime
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if new in text:
+                  return
+              if old not in text:
+                  raise SystemExit(f'{path}: anchor not found: {old[:80]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # Flutter dependencies: verified current stable versions on pub.dev.
+          replace_once(
+              'frontend/pubspec.yaml',
+              '  audioplayers: ^6.8.1\n',
+              '  audioplayers: ^6.8.1\n  # v1.16 BUILD_TIME self-extension: real geographic map rendering.\n  flutter_map: ^8.3.2\n  latlong2: ^0.10.1\n',
+          )
+
+          # Runtime parser/model.
+          replace_once(
+              'frontend/lib/json_ui/schema/forge_document.dart',
+              "      case 'simulation_loop':\n",
+              "      case 'map_view':\n        final mapStateRef = json['state_ref'];\n        if (mapStateRef is! String || mapStateRef.isEmpty) {\n          throw ForgeParseException('$path/state_ref', 'map_view.state_ref is required');\n        }\n        final latitudeField = json['latitude_field'];\n        final longitudeField = json['longitude_field'];\n        if (latitudeField is! String || latitudeField.isEmpty) {\n          throw ForgeParseException('$path/latitude_field', 'map_view.latitude_field is required');\n        }\n        if (longitudeField is! String || longitudeField.isEmpty) {\n          throw ForgeParseException('$path/longitude_field', 'map_view.longitude_field is required');\n        }\n        final rawZoom = json['initial_zoom'];\n        final rawHeight = json['height'];\n        return ForgeMapViewWidgetNode(\n          id,\n          stateRef: mapStateRef,\n          latitudeField: latitudeField,\n          longitudeField: longitudeField,\n          labelField: json['label_field'] as String?,\n          title: json['title'] as String?,\n          emptyText: json['empty_text'] as String? ?? '地図に表示できる位置情報がまだありません',\n          initialZoom: rawZoom is num ? rawZoom.toDouble() : 11,\n          height: rawHeight is num ? rawHeight.toDouble() : 320,\n        );\n      case 'simulation_loop':\n",
+          )
+          p = Path('frontend/lib/json_ui/schema/forge_document.dart')
+          text = p.read_text(encoding='utf-8')
+          marker = '\n// ---------------------------------------------------------------------------\n// Action\n// ---------------------------------------------------------------------------\n'
+          if 'class ForgeMapViewWidgetNode extends ForgeWidgetNode' not in text:
+              if marker not in text:
+                  raise SystemExit('forge_document Action marker not found')
+              map_class = '''\nclass ForgeMapViewWidgetNode extends ForgeWidgetNode {\n  final String stateRef;\n  final String latitudeField;\n  final String longitudeField;\n  final String? labelField;\n  final String? title;\n  final String emptyText;\n  final double initialZoom;\n  final double height;\n\n  const ForgeMapViewWidgetNode(\n    super.id, {\n    required this.stateRef,\n    required this.latitudeField,\n    required this.longitudeField,\n    this.labelField,\n    this.title,\n    required this.emptyText,\n    required this.initialZoom,\n    required this.height,\n  });\n}\n'''
+              text = text.replace(marker, map_class + marker, 1)
+              p.write_text(text, encoding='utf-8')
+
+          # Registry wiring.
+          replace_once(
+              'frontend/lib/json_ui/widget_registry/widget_registry.dart',
+              "import 'widget_registry_v1_15.dart';\n",
+              "import 'widget_registry_v1_15.dart';\nimport 'widget_registry_v1_16.dart';\n",
+          )
+          replace_once(
+              'frontend/lib/json_ui/widget_registry/widget_registry.dart',
+              '  registerV1_15Widgets(registry);\n  return registry;\n',
+              '  registerV1_15Widgets(registry);\n  registerV1_16Widgets(registry);\n  return registry;\n',
+          )
+
+          # Canonical recorded coordinate semantics. These are generic numeric
+          # data fields, not a map-app template.
+          replace_once(
+              'forge_ai/core/semantics/roles.py',
+              '    ("場所", SemanticRole.RECORDED_DATA, "place"),\n',
+              '    ("場所", SemanticRole.RECORDED_DATA, "place"),\n    ("緯度", SemanticRole.RECORDED_DATA, "latitude"),\n    ("経度", SemanticRole.RECORDED_DATA, "longitude"),\n',
+          )
+          replace_once(
+              'forge_ai/core/semantics/capability_plan.py',
+              '    "place": ("place", "場所", "string", "data.text"),\n',
+              '    "place": ("place", "場所", "string", "data.text"),\n    "latitude": ("latitude", "緯度", "number", "data.number"),\n    "longitude": ("longitude", "経度", "number", "data.number"),\n',
+          )
+
+          # Compiler: a promoted BUILD_TIME view.map changes the generated
+          # document only when real numeric coordinate fields are present.
+          replace_once(
+              'forge_ai/core/ir/forge_language_compiler.py',
+              '        if "interact.audio_mix" in interaction_capabilities:\n            document = self._attach_audio_mixer(document)\n',
+              '        if "interact.audio_mix" in interaction_capabilities:\n            document = self._attach_audio_mixer(document)\n        if "view.map" in promoted_capabilities:\n            document = self._attach_map_view(document, entity)\n',
+          )
+          p = Path('forge_ai/core/ir/forge_language_compiler.py')
+          text = p.read_text(encoding='utf-8')
+          anchor = '    @staticmethod\n    def _attach_audio_mixer(document: ForgeIRDocument) -> ForgeIRDocument:\n'
+          if 'def _attach_map_view(' not in text:
+              if anchor not in text:
+                  raise SystemExit('compiler map method anchor not found')
+              method = '''    @staticmethod\n    def _attach_map_view(document: ForgeIRDocument, entity: Entity) -> ForgeIRDocument:\n        latitude = next((f for f in entity.fields if f.name == "latitude"), None)\n        longitude = next((f for f in entity.fields if f.name == "longitude"), None)\n        if latitude is None or longitude is None:\n            raise ForgeLanguageCompilationError(\n                "view.map requires explicit numeric latitude and longitude fields; "\n                "free-form place text requires a separate geocoding capability"\n            )\n        if latitude.type is not FieldType.NUMBER or longitude.type is not FieldType.NUMBER:\n            raise ForgeLanguageCompilationError("view.map latitude/longitude fields must be numeric")\n        label_field = next(\n            (f.name for f in entity.fields if f.name not in {"latitude", "longitude"} and f.type is FieldType.STRING),\n            None,\n        )\n        map_widget = ForgeIRWidget(\n            type="map_view",\n            id="record_map",\n            properties={\n                "state_ref": "records",\n                "latitude_field": latitude.name,\n                "longitude_field": longitude.name,\n                "title": "地図",\n                "empty_text": "緯度と経度を記録すると地図に表示されます",\n                "initial_zoom": 11,\n                "height": 320,\n                **({"label_field": label_field} if label_field else {}),\n            },\n        )\n        screens: list[ForgeIRScreen] = []\n        for screen in document.screens:\n            if screen.body.type == "column":\n                body = ForgeIRWidget(\n                    type=screen.body.type, id=screen.body.id,\n                    properties=dict(screen.body.properties),\n                    children=(*screen.body.children, map_widget),\n                )\n            else:\n                body = ForgeIRWidget(type="column", id="map_root", children=(screen.body, map_widget))\n            screens.append(ForgeIRScreen(\n                id=screen.id, title=screen.title, state=dict(screen.state), body=body,\n            ))\n        return ForgeIRDocument(\n            version="1.16",\n            initial_screen_id=document.initial_screen_id,\n            screens=tuple(screens),\n            app_title=document.app_title,\n            record_schemas=dict(document.record_schemas),\n            design_tokens=dict(document.design_tokens),\n        )\n\n'''
+              text = text.replace(anchor, method + anchor, 1)
+              p.write_text(text, encoding='utf-8')
+
+          # Backend validator v1.16 surface.
+          p = Path('backend/app/ai/validators/schema_validator.py')
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('"1.14", "1.15"}', '"1.14", "1.15", "1.16"}', 1)
+          text = text.replace('"1.13", "1.14", "1.15")', '"1.13", "1.14", "1.15", "1.16")', 1)
+          if 'WIDGET_TYPES_V1_16_ADDITIONS' not in text:
+              text = text.replace(
+                  'WIDGET_TYPES_V1_15_ADDITIONS = {"simulation_progress"}\n',
+                  'WIDGET_TYPES_V1_15_ADDITIONS = {"simulation_progress"}\nWIDGET_TYPES_V1_16_ADDITIONS = {"map_view"}\n',
+                  1,
+              )
+          dict_end = '}\nWIDGET_TYPES_ALL = (\n'
+          if 'WIDGET_TYPES_BY_VERSION["1.16"]' not in text:
+              text = text.replace(
+                  dict_end,
+                  '}\nWIDGET_TYPES_BY_VERSION["1.16"] = WIDGET_TYPES_BY_VERSION["1.15"] | WIDGET_TYPES_V1_16_ADDITIONS\nWIDGET_TYPES_ALL = (\n',
+                  1,
+              )
+          text = text.replace(
+              '    | WIDGET_TYPES_V1_14_ADDITIONS | WIDGET_TYPES_V1_15_ADDITIONS\n)  # 未知Widget判定用',
+              '    | WIDGET_TYPES_V1_14_ADDITIONS | WIDGET_TYPES_V1_15_ADDITIONS | WIDGET_TYPES_V1_16_ADDITIONS\n)  # 未知Widget判定用',
+              1,
+          )
+          if 'ACTION_TYPES_BY_VERSION["1.16"]' not in text:
+              text = text.replace(
+                  '}\nACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS',
+                  '}\nACTION_TYPES_BY_VERSION["1.16"] = ACTION_TYPES_BY_VERSION["1.15"]\nACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS',
+                  1,
+              )
+          if 'STATE_TYPES_BY_VERSION["1.16"]' not in text:
+              text = text.replace(
+                  '}\nSTATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS',
+                  '}\nSTATE_TYPES_BY_VERSION["1.16"] = STATE_TYPES_BY_VERSION["1.15"]\nSTATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS',
+                  1,
+              )
+          map_schema_anchor = '    elif t == "date_field":\n'
+          if 'elif t == "map_view":' not in text:
+              map_schema = '''    elif t == "map_view":\n        errors.extend(_check_additional_properties(\n            widget,\n            {"type", "id", "state_ref", "latitude_field", "longitude_field",\n             "label_field", "title", "empty_text", "initial_zoom", "height"},\n            path,\n        ))\n        if not _is_identifier(widget.get("state_ref")):\n            errors.append(_err(f"{path}/state_ref", Category.SCHEMA, "required", "map_view.state_refは必須です。"))\n        for key in ("latitude_field", "longitude_field"):\n            if not _is_identifier(widget.get(key)):\n                errors.append(_err(f"{path}/{key}", Category.SCHEMA, "required", f"map_view.{key}はField名である必要があります。"))\n        if "label_field" in widget and not _is_identifier(widget.get("label_field")):\n            errors.append(_err(f"{path}/label_field", Category.SCHEMA, "identifier", "map_view.label_fieldはField名である必要があります。"))\n        for key, limit in (("title", 80), ("empty_text", 120)):\n            if key in widget and (not isinstance(widget[key], str) or len(widget[key]) > limit):\n                errors.append(_err(f"{path}/{key}", Category.SCHEMA, "string_length", f"map_view.{key}が不正です。"))\n        zoom = widget.get("initial_zoom", 11)\n        if isinstance(zoom, bool) or not isinstance(zoom, (int, float)) or not (1 <= zoom <= 20):\n            errors.append(_err(f"{path}/initial_zoom", Category.SCHEMA, "range", "map_view.initial_zoomは1〜20の数値です。"))\n        height = widget.get("height", 320)\n        if isinstance(height, bool) or not isinstance(height, (int, float)) or not (160 <= height <= 720):\n            errors.append(_err(f"{path}/height", Category.SCHEMA, "range", "map_view.heightは160〜720の数値です。"))\n\n'''
+              text = text.replace(map_schema_anchor, map_schema + map_schema_anchor, 1)
+          text = text.replace(
+              '                "choice_field", "bar_chart", "date_field", "slider", "metric_view",\n',
+              '                "choice_field", "bar_chart", "date_field", "slider", "metric_view", "map_view",\n',
+              1,
+          )
+          text = text.replace(
+              '        "metric_view": "record_list",\n',
+              '        "metric_view": "record_list", "map_view": "record_list",\n',
+              1,
+          )
+          semantic_anchor = '            if wtype == "metric_view":\n'
+          if 'if wtype == "map_view":' not in text:
+              semantic = '''            if wtype == "map_view":\n                ref = widget.get("state_ref")\n                state_value = state.get(ref) if isinstance(ref, str) else None\n                schema_ref = state_value.get("schema_ref") if isinstance(state_value, dict) else None\n                schema_def = doc.get("record_schemas", {}).get(schema_ref) if schema_ref else None\n                if isinstance(schema_def, dict):\n                    fields_by_name = {\n                        f.get("name"): f for f in schema_def.get("fields", []) if isinstance(f, dict)\n                    }\n                    for key in ("latitude_field", "longitude_field"):\n                        field_name = widget.get(key)\n                        if field_name not in fields_by_name:\n                            errors.append(_err(\n                                f"{w_path}/{key}", Category.SEMANTIC, "field_reference_exists",\n                                f"{key} '{field_name}' に一致するFieldがrecord_schemas['{schema_ref}']にありません。",\n                            ))\n                        elif fields_by_name[field_name].get("type") != "number":\n                            errors.append(_err(\n                                f"{w_path}/{key}", Category.SEMANTIC, "field_type_mismatch",\n                                f"{key} '{field_name}' はtype=numberのFieldである必要があります。",\n                            ))\n                    label_field = widget.get("label_field")\n                    if label_field is not None and label_field not in fields_by_name:\n                        errors.append(_err(\n                            f"{w_path}/label_field", Category.SEMANTIC, "field_reference_exists",\n                            f"label_field '{label_field}' に一致するFieldがrecord_schemas['{schema_ref}']にありません。",\n                        ))\n\n'''
+              text = text.replace(semantic_anchor, semantic + semantic_anchor, 1)
+          p.write_text(text, encoding='utf-8')
+
+      - name: Commit map capability wiring
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/pubspec.yaml frontend/lib/json_ui/schema/forge_document.dart frontend/lib/json_ui/widget_registry/widget_registry.dart forge_ai/core/semantics/roles.py forge_ai/core/semantics/capability_plan.py forge_ai/core/ir/forge_language_compiler.py backend/app/ai/validators/schema_validator.py
+          git commit -m "feat: wire promoted view.map through Forge v1.16 runtime"
+          git push origin HEAD:claude/forge-master-handoff-k46jns
