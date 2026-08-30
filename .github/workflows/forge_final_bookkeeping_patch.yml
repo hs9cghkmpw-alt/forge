@@ -1,0 +1,47 @@
+name: FORGE final closure bookkeeping patch
+
+on:
+  push:
+    branches: [claude/forge-master-handoff-k46jns]
+    paths:
+      - .github/workflows/forge_final_bookkeeping_patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+          fetch-depth: 0
+      - name: Remove stale test exclusion and correct handoff evidence digest
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          ci = Path('.github/workflows/ci.yml')
+          ci_text = ci.read_text()
+          old_ci = 'run: flutter test --exclude-tags web-plugin'
+          if old_ci not in ci_text:
+              raise SystemExit('stale web-plugin exclusion not found')
+          ci.write_text(ci_text.replace(old_ci, 'run: flutter test', 1))
+
+          handoff = Path('docs/HANDOFF.md')
+          text = handoff.read_text()
+          wrong = 'sha256:bb66c4b1fb38dec4f70783b813b15f16fd530622c731d7d406eef35a2b6cd469'
+          right = 'sha256:bb66c4b1fb38dec4f70783b813b15f16fd7d82f20adee98687d80cded89f6bd9'
+          if wrong not in text:
+              raise SystemExit('handoff digest typo not found')
+          handoff.write_text(text.replace(wrong, right, 1))
+          PY
+      - name: Commit final bookkeeping
+        run: |
+          git config user.name "forge-ci"
+          git config user.email "forge-ci@users.noreply.github.com"
+          git add .github/workflows/ci.yml docs/HANDOFF.md
+          git diff --cached --check
+          git commit -m "chore: finish Golden closure bookkeeping"
+          git push origin HEAD:claude/forge-master-handoff-k46jns
