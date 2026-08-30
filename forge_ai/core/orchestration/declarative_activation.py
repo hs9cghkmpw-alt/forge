@@ -118,3 +118,34 @@ def activation_from_artifact(
 ) -> DeclarativeDocumentActivation:
     artifact.validate()
     return DeclarativeDocumentActivation(artifact=artifact)
+
+
+def apply_promoted_document_activations(
+    document: ForgeIRDocument,
+    capability_ids: tuple[str, ...],
+) -> ForgeIRDocument:
+    """Apply requested promoted activations in deterministic request order.
+
+    Registry presence alone is insufficient: an activation must expose the
+    executable ``apply`` contract.  This prevents metadata-only capability
+    promotion from changing planner truth without changing the generated app.
+    """
+    from forge_ai.core.orchestration.extension_registry import PROMOTED_CAPABILITIES
+
+    current = document
+    seen: set[str] = set()
+    for capability_id in capability_ids:
+        if capability_id in seen:
+            continue
+        seen.add(capability_id)
+        item = PROMOTED_CAPABILITIES.get(capability_id)
+        if item is None:
+            continue
+        activation = item.activation
+        apply = getattr(activation, "apply", None)
+        if not callable(apply):
+            raise DeclarativeActivationError(
+                f"Promoted capability {capability_id!r} has no executable document activation."
+            )
+        current = apply(current)
+    return current
