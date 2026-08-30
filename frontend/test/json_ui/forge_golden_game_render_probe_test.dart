@@ -69,15 +69,15 @@ void main() {
     print('FORGE_GOLDEN_VISUAL png_bytes=$size path=$screenshotPath');
     expect(size, greaterThan(1000));
 
-    // Dispose lifecycle-owned timers/audio widgets before test teardown. Keep
-    // objective markers around each await so a lifecycle regression names the
-    // exact blocking boundary instead of surfacing only as a workflow timeout.
+    // Keep the same Material root shape used by the simulation lifecycle regression
+    // test. Replacing the entire test root while a periodic Forge node is active can
+    // wedge Flutter's test stream teardown before child dispose has completed.
     // ignore: avoid_print
     print('FORGE_GOLDEN_VISUAL dispose_begin=true');
-    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     // ignore: avoid_print
     print('FORGE_GOLDEN_VISUAL pump_widget_disposed=true');
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
     // ignore: avoid_print
     print('FORGE_GOLDEN_VISUAL disposed=true');
   });
