@@ -309,6 +309,7 @@ class CapabilityPlan:
             "views": list(self.views),
             "interactions": list(self.interactions),
             "effects": list(self.effects),
+            "simulations": list(self.simulations),
             "structure_capabilities": list(self.structure_capabilities),
             "requested": list(self.requested),
             "partial": list(self.partial),
