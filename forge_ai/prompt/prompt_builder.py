@@ -31,7 +31,8 @@ class Prompt:
         参照する構造化データであり、文字列へ事前結合しない。
     """
 
-    stage: str  # "meaning" | "intent" | "planning" | "entity_synthesis" | "compile" | "repair"
+    stage: str  # "meaning" | "intent" | "planning" | "entity_synthesis"
+    #             | "capability_implementation" | "compile" | "repair"
     system: str
     instruction: str
     context: dict[str, Any] = field(default_factory=dict)
@@ -161,6 +162,67 @@ class PromptBuilder:
                 "データ構造を設計せよ。"
             ),
             context={"user_text": user_text, "plan": plan_summary, "domain_name": domain_name},
+        )
+
+    def build_capability_implementation_prompt(
+        self,
+        *,
+        capability_id: str,
+        capability_intent: str,
+        data_contract: tuple[str, ...],
+        host_language: str,
+        binding_targets: tuple[str, ...],
+    ) -> Prompt:
+        """**足りない Capability の実装そのもの**を書かせる段階（020E）。
+
+        `entity_synthesis` は「どんなデータを記録するか」という意味の設計
+        だけを AI に委ねる。こちらは一段深い——**Forge がまだ持っていない
+        能力の実装 Source を書かせる。**
+
+        ここが Self-Extension の本丸である。これが無い限り、Forge は
+        「足りない能力を名指しできる」までしか行けず、
+        「足りない能力を**作る**」へは到達しない。
+
+        **Capability ごとの分岐を持たない。** 引数は Canonical Catalog
+        から機械的に引いた契約だけであり、`view.map` を特別扱いする枝は
+        この Builder にも呼び出し側にも存在しない
+        （`test_capability_artifact_synthesis.py` が静的に固定する）。
+
+        出力は決して信用しない。`capability_artifact_synthesis.py` が
+        決定的に検証し、通らなければ `None` を返す——**通らないものを
+        「作れた」と言わない。**
+        """
+        return Prompt(
+            stage="capability_implementation",
+            system=(
+                "あなたは、既存のアプリ生成基盤へ**新しい能力を1つ追加する**"
+                "実装者である。追加する能力の契約だけが与えられる。\n"
+                "\n"
+                "規則:\n"
+                "1. 与えられた capability_id の能力**だけ**を実装する。"
+                "他の能力を一緒に足さない。\n"
+                "2. データ契約に書かれた入力だけを使う。書かれていない入力を"
+                "推測して補わない（例: 場所の名前から座標を導かない——"
+                "それは別の能力である）。\n"
+                "3. 実装と一緒に、その実装を検証するテストを必ず書く。\n"
+                "4. 既存ファイルの丸写しを返さない。**新しく書く。**\n"
+                "5. 各ファイルは相対パスで返す。絶対パスや `..` を使わない。"
+            ),
+            instruction=(
+                f"capability_id: {capability_id}\n"
+                f"この能力がすること: {capability_intent}\n"
+                f"使ってよいデータ契約: {', '.join(data_contract) or '(なし)'}\n"
+                f"実装先の言語: {host_language}\n"
+                f"配線し直す対象: {', '.join(binding_targets)}\n"
+                "\n"
+                "実装ファイルとテストファイルを返すこと。"
+            ),
+            context={
+                "capability_id": capability_id,
+                "data_contract": list(data_contract),
+                "host_language": host_language,
+                "binding_targets": list(binding_targets),
+            },
         )
 
     def build_compile_prompt(self, *, plan_summary: dict[str, Any]) -> Prompt:
