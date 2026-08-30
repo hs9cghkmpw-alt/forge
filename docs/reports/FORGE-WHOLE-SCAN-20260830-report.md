@@ -1,6 +1,6 @@
 # Forge Whole Scan Report — 2026-08-30/31
 
-Status: **CLOSING PASS — strategic defects repaired; final descendant CI still required**
+Status: **CLOSED — first strategic repository-wide pass**
 Branch: `claude/forge-master-handoff-k46jns`
 
 ## 1. Canonical invariant
@@ -56,7 +56,7 @@ Capability Gap
  -> never successful Checklist/CRUD merely because those are available
 ```
 
-`pipeline_orchestrator.py` now catches `CapabilityGapError` before generic planning failure and returns `CognitivePipelineNeedsExtension` with structured extension candidates.
+`pipeline_orchestrator.py` catches `CapabilityGapError` before generic planning failure and returns `CognitivePipelineNeedsExtension` with structured extension candidates.
 
 ### SolutionShape demotion
 
@@ -110,7 +110,7 @@ Regression `test_self_extension_loop.py` proves multi-gap requests must acquire 
 
 ## 3. GA-1 reusable logic closure
 
-GA-1 is now connected through the generated-document path:
+GA-1 is connected through the generated-document path:
 
 ```text
 GA-1 Python logic model
@@ -151,7 +151,13 @@ Key commits:
 
 ## 4. CI evidence
 
-Canonical run `33328203164` on head `8e3c87616ef3f5ab9b9cad594b46cc609bda7c87` is **SUCCESS**:
+Canonical run `33328203164` on head `8e3c87616ef3f5ab9b9cad594b46cc609bda7c87` was **SUCCESS** through GA-1 validator integration.
+
+The final descendant after Whole Scan cleanup and removal of the temporary cleanup workflow was head:
+
+- `47aed8cc4da14f845f27696f003ddf8109cef0a8`
+
+Canonical run `33333810005` on that head is **SUCCESS**:
 
 - backend + forge_ai Python 3.11: PASS
 - backend + forge_ai Python 3.12: PASS
@@ -160,7 +166,7 @@ Canonical run `33328203164` on head `8e3c87616ef3f5ab9b9cad594b46cc609bda7c87` i
 - Flutter tests: PASS
 - Flutter Web build: PASS
 
-This proves the repository state through GA-1 validator integration. Later documentation/comment-cleanup descendants require their own canonical CI before they are marked green.
+This satisfies the closure rule for the first Whole Scan engineering pass.
 
 ## 5. Final scan findings
 
@@ -168,15 +174,15 @@ This proves the repository state through GA-1 validator integration. Later docum
 
 Current compilation path was re-read after prior repairs. The active branch contains an explicit capability plan before structural compilation, and only explicit CHECKLIST may enter the legacy compiler. `CapabilityGapError` returns `CognitivePipelineNeedsExtension` rather than a successful substitute.
 
-The old Whole Scan report's statement that production still force-converted repair failure into a successful checklist is therefore **stale for the current branch** and is superseded by this report.
+The old Whole Scan statement that production still force-converted repair failure into a successful checklist is stale for the current branch and is superseded by this report.
 
 ### `ir_generator.py` stale comments
 
-The runtime behavior returns `None` for an absent registered Entity representation. Current orchestration does not grant that `None` permission to reinterpret an unresolved request as Checklist. Some historic docstrings/comments still described the older fallback doctrine; a final cleanup patch is being applied so comments match the current architecture.
+Historic wording that described `None` as permission to fall back to Checklist was removed. `IRGenerator` is now documented as a downstream representation component; product-level substitution/extension decisions remain upstream in Capability Plan and Self-Extension.
 
 ### Repair semantic-erasure boundary
 
-No current evidence in the inspected production orchestration supports declaring a non-checklist requirement successful by deleting its required capability. The stronger invariant remains: repair may fix representation/build/runtime faults, but may not erase required semantics to obtain green validation. Future repair implementations must receive an explicit regression when introduced or modified.
+No current evidence in the inspected production orchestration supports declaring a non-checklist requirement successful by deleting its required capability. The invariant remains: repair may fix representation/build/runtime faults, but may not erase required semantics to obtain green validation. Future repair implementations must receive an explicit regression when introduced or modified.
 
 ## 6. Truthful remaining limitation
 
@@ -199,16 +205,17 @@ Unit/integration contracts prove each major orchestration boundary, including mu
 
 ## 7. Whole Scan closure decision
 
-The **first strategic Whole Scan can close once the final descendant HEAD receives canonical CI success and temporary cleanup workflow is removed**.
+The **first strategic Whole Scan is CLOSED**.
 
-What this closure means:
+Closure means:
 
 - the highest-risk goal-substitution escape hatches found in this pass are repaired;
 - current architecture preserves Capability Gap rather than silently rewriting the need;
 - Self-Extension has a reusable, evidence-gated promotion/retry path;
-- GA-1 is a reusable capability slice rather than a domain template.
+- GA-1 is a reusable capability slice rather than a domain template;
+- the final engineering descendant before this closure bookkeeping passed canonical CI.
 
-What it does **not** mean:
+Closure does **not** mean:
 
 - Forge is finished;
 - every possible capability exists;
