@@ -1,0 +1,51 @@
+{
+  "schema": "forge.golden_game_closure.v1",
+  "date": "2026-08-30",
+  "need": "植物を育てながら音を組み合わせるゲームを作りたい",
+  "verdict": "pass",
+  "forge_document_version": "1.15",
+  "required_widgets": [
+    "simulation_loop",
+    "simulation_progress",
+    "audio_mixer"
+  ],
+  "simulation": {
+    "capability": "simulate.loop",
+    "support": "implemented",
+    "plan_evidence_serialized": true,
+    "runtime_state_binding": true
+  },
+  "audio_mix": {
+    "capability": "interact.audio_mix",
+    "support": "partial",
+    "scope": "bundled simultaneous layer playback",
+    "real_chrome": true,
+    "compiled_flutter_web": true,
+    "run_id": 33287000678,
+    "job_id": 99191815435,
+    "artifact_id": 9724753751,
+    "artifact_digest": "sha256:d9ba786e41e116a21502b1e90062ed43571ac2a30ead7eb50aef8c2fb4508df1"
+  },
+  "visual": {
+    "real_chrome": true,
+    "compiled_flutter_web": true,
+    "production_generated_document": true,
+    "run_id": 33287242065,
+    "job_id": 99192456927,
+    "artifact_id": 9724821297,
+    "artifact_digest": "sha256:fe220d16e553cd0e8e09daa21f1a3201ce5642e5f6f0bf6ca8fe04caeafde77b",
+    "png_bytes": 26857,
+    "viewport": [390, 844]
+  },
+  "boundaries": {
+    "effect.media_compose": "missing",
+    "arbitrary_user_audio_import": "not_claimed",
+    "physical_pc": "unverified"
+  },
+  "cleanup": {
+    "one_shot_workflows_removed": true,
+    "probe_entrypoints_removed": true,
+    "superseded_browser_test_harnesses_removed": true
+  },
+  "final_ci": "Run ordinary CI on the final branch HEAD after all closure bookkeeping; exact run ID is intentionally not embedded because recording it would create a newer unverified HEAD."
+}
