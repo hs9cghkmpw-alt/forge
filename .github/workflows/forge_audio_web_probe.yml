@@ -8,7 +8,8 @@ on:
       - .github/workflows/forge_audio_web_probe.yml
       - frontend/pubspec.yaml
       - frontend/pubspec.lock
-      - frontend/test/json_ui/forge_audio_mixer_web_test.dart
+      - frontend/integration_test/forge_audio_mixer_web_integration_test.dart
+      - frontend/test_driver/integration_test.dart
       - frontend/lib/json_ui/widget_registry/widget_registry_v1_14.dart
       - frontend/assets/sounds/**
 
@@ -18,7 +19,7 @@ permissions:
 jobs:
   chrome-audio:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,11 +42,17 @@ jobs:
           exec /usr/bin/google-chrome --autoplay-policy=no-user-gesture-required "$@"
           EOF
           chmod +x /tmp/forge-chrome
-      - name: Run real browser audio mixer probe
+      - name: Run compiled Flutter Web integration probe
         working-directory: frontend
         env:
           CHROME_EXECUTABLE: /tmp/forge-chrome
-        run: flutter test --platform chrome test/json_ui/forge_audio_mixer_web_test.dart --reporter expanded
+        run: |
+          flutter drive \
+            --driver=test_driver/integration_test.dart \
+            --target=integration_test/forge_audio_mixer_web_integration_test.dart \
+            -d chrome
 
-# Dedicated browser-plugin probe. The default VM suite explicitly excludes the
-# web-plugin tag so MissingPluginException there cannot masquerade as a product bug.
+# This probe compiles and launches a Flutter Web application, so the generated
+# web plugin registrant runs. It is intentionally stronger than
+# `flutter test --platform chrome`, whose test harness can bypass app plugin
+# registration and produce false MissingPluginException failures.
