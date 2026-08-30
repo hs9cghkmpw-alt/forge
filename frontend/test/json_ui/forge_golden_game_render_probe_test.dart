@@ -25,6 +25,8 @@ void main() {
     final raw = jsonDecode(File(fixturePath).readAsStringSync()) as Map<String, dynamic>;
     const captureKey = ValueKey('golden_game_capture');
 
+    // ignore: avoid_print
+    print('FORGE_GOLDEN_VISUAL loaded version=${raw['version']}');
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -40,13 +42,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.byType(ErrorWidget), findsNothing);
+    expect(find.byKey(const ValueKey('simulation_progress')), findsOneWidget,
+        reason: 'generated game must visibly expose the simulation state');
+    expect(find.byKey(const ValueKey('simulation_stage')), findsOneWidget,
+        reason: 'generated game must visibly expose a simulation stage');
     expect(find.byType(FilterChip), findsAtLeastNWidgets(2),
         reason: 'interactive audio layers must be visibly controllable');
-    // Assert the actual public audio affordance rather than coupling the visual gate
-    // to a Japanese copy choice made upstream. These labels are the concrete controls
-    // rendered by the runtime-backed audio_mixer widget.
     expect(find.text('Pulse'), findsOneWidget);
     expect(find.text('Chime'), findsOneWidget);
+    // ignore: avoid_print
+    print('FORGE_GOLDEN_VISUAL runtime_controls=present viewport=390x844');
 
     final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(captureKey));
     final image = await boundary.toImage(pixelRatio: 2.0);
@@ -55,10 +60,15 @@ void main() {
       fail('rendered Golden game could not be encoded as PNG');
     }
     File(screenshotPath).writeAsBytesSync(bytes.buffer.asUint8List());
-    expect(File(screenshotPath).lengthSync(), greaterThan(1000));
+    final size = File(screenshotPath).lengthSync();
+    // ignore: avoid_print
+    print('FORGE_GOLDEN_VISUAL png_bytes=$size path=$screenshotPath');
+    expect(size, greaterThan(1000));
 
     // Dispose lifecycle-owned timers/audio widgets before test teardown.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
+    // ignore: avoid_print
+    print('FORGE_GOLDEN_VISUAL disposed=true');
   });
 }
