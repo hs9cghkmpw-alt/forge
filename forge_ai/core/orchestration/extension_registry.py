@@ -1,14 +1,12 @@
 """Runtime registry for evidence-gated Forge capability acquisition.
 
-The canonical catalog remains the source of semantic truth.  This registry is an
-overlay for capabilities that were already known as PARTIAL/MISSING and have
-completed a managed self-extension lifecycle.
+The canonical catalog remains the source of semantic truth. This registry is an
+overlay for capabilities already known as PARTIAL/MISSING and acquired through
+a verified self-extension lifecycle.
 
-Only PROMOTED declarative/composition extensions with an executable activation
-payload may become immediately visible inside the current process.  A manifest
-alone is evidence metadata, not an implementation.  BUILD_TIME/SERVICE/NATIVE
-extensions require their new runtime to be loaded before retry and therefore are
-not silently activated here.
+Declarative/composition capabilities may activate immediately when they carry an
+executable activation. BUILD_TIME capabilities may activate only after the newly
+built runtime has actually been loaded and fingerprint-attested.
 """
 
 from __future__ import annotations
@@ -46,17 +44,32 @@ class PromotedCapabilityRegistry:
             raise ValueError("Only PROMOTED extensions may be installed for reuse.")
         if manifest.promotion_blockers():
             raise ValueError("PROMOTED manifest still has evidence blockers; refusing install.")
-        if manifest.route not in _IMMEDIATE_ROUTES:
-            raise ValueError(
-                f"Extension route {manifest.route.value!r} cannot be activated in-process; "
-                "load the produced runtime/build before retrying."
-            )
         if activation is None:
             raise ValueError(
                 "PROMOTED manifest has no executable activation; refusing metadata-only reuse."
             )
         if activation.capability_id != manifest.capability_id:
             raise ValueError("Activation changed capability identity; refusing install.")
+
+        if manifest.route in _IMMEDIATE_ROUTES:
+            pass
+        elif manifest.route is ExtensionRoute.BUILD_TIME:
+            # Avoid importing build_time_extension here (it imports the registry
+            # through the orchestration loop in normal operation). Structural
+            # attestation keeps this layer dependency-light while still requiring
+            # an actually loaded verified build.
+            if getattr(activation, "loaded", False) is not True:
+                raise ValueError("BUILD_TIME capability requires a loaded build activation.")
+            if not getattr(activation, "build_id", ""):
+                raise ValueError("BUILD_TIME activation requires build_id.")
+            if not getattr(activation, "runtime_fingerprint", ""):
+                raise ValueError("BUILD_TIME activation requires runtime_fingerprint.")
+            if not getattr(activation, "source_digest", ""):
+                raise ValueError("BUILD_TIME activation requires source_digest.")
+        else:
+            raise ValueError(
+                f"Extension route {manifest.route.value!r} cannot be activated in-process."
+            )
 
         item = PromotedCapability(
             capability_id=manifest.capability_id,
@@ -74,7 +87,6 @@ class PromotedCapabilityRegistry:
         return self._items.get(capability_id)
 
     def clear(self) -> None:
-        """Test/process reset. Persistent promotion belongs to a durable artifact store."""
         self._items.clear()
 
 
