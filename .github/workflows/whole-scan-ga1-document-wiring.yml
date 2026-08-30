@@ -1,0 +1,142 @@
+name: Whole Scan GA-1 document logic wiring
+
+on:
+  push:
+    branches:
+      - claude/forge-master-handoff-k46jns
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+          fetch-depth: 0
+
+      - name: Wire GA-1 logic through compiler document parser and renderer
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}: {old[:120]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'forge_ai/core/compiler.py',
+              '    design_tokens: dict[str, Any] = field(default_factory=dict)\n\n    def to_json_dict(self) -> dict[str, Any]:\n',
+              '    design_tokens: dict[str, Any] = field(default_factory=dict)\n'
+              '    # GA-1: declarative, deterministic application logic. Expressions are\n'
+              '    # data and remain separate from mutable state. Empty means legacy/no logic.\n'
+              '    logic: dict[str, Any] = field(default_factory=dict)\n\n'
+              '    def with_logic(self, logic: dict[str, Any]) -> "ForgeIRDocument":\n'
+              '        from dataclasses import replace\n'
+              '        return replace(self, logic=dict(logic))\n\n'
+              '    def to_json_dict(self) -> dict[str, Any]:\n',
+          )
+          replace_once(
+              'forge_ai/core/compiler.py',
+              '        if self.design_tokens:\n            result["design_tokens"] = self.design_tokens\n        return result\n',
+              '        if self.design_tokens:\n            result["design_tokens"] = self.design_tokens\n'
+              '        if self.logic:\n            result["logic"] = self.logic\n'
+              '        return result\n',
+          )
+
+          replace_once(
+              'frontend/lib/json_ui/schema/forge_document.dart',
+              "import '../runtime/forge_aggregate.dart';\n",
+              "import '../runtime/forge_aggregate.dart';\nimport '../runtime/forge_logic_document.dart';\n",
+          )
+          replace_once(
+              'frontend/lib/json_ui/schema/forge_document.dart',
+              '  final ForgeDesignTokens? designTokens;\n\n  ForgeDocument({\n',
+              '  final ForgeDesignTokens? designTokens;\n\n'
+              '  /// GA-1 deterministic document logic. Empty for legacy documents.\n'
+              '  final ForgeLogicDocument logic;\n\n'
+              '  ForgeDocument({\n',
+          )
+          replace_once(
+              'frontend/lib/json_ui/schema/forge_document.dart',
+              '    this.recordSchemas = const {},\n    this.designTokens,\n  });\n',
+              '    this.recordSchemas = const {},\n    this.designTokens,\n'
+              '    this.logic = const ForgeLogicDocument(),\n'
+              '  });\n',
+          )
+          replace_once(
+              'frontend/lib/json_ui/schema/forge_document.dart',
+              "    final rawDesignTokens = json['design_tokens'];\n    final designTokens = (rawDesignTokens is Map<String, dynamic>)\n        ? ForgeDesignTokens.fromJson(rawDesignTokens, '/design_tokens')\n        : null;\n\n    return ForgeDocument(\n",
+              "    final rawDesignTokens = json['design_tokens'];\n    final designTokens = (rawDesignTokens is Map<String, dynamic>)\n        ? ForgeDesignTokens.fromJson(rawDesignTokens, '/design_tokens')\n        : null;\n\n"
+              "    final logic = ForgeLogicDocument.fromJson(json['logic']);\n\n"
+              '    return ForgeDocument(\n',
+          )
+          replace_once(
+              'frontend/lib/json_ui/schema/forge_document.dart',
+              '      recordSchemas: recordSchemas,\n      designTokens: designTokens,\n    );\n',
+              '      recordSchemas: recordSchemas,\n      designTokens: designTokens,\n'
+              '      logic: logic,\n'
+              '    );\n',
+          )
+
+          replace_once(
+              'frontend/lib/json_ui/renderer/forge_renderer.dart',
+              "import '../schema/forge_document.dart';\n",
+              "import '../schema/forge_document.dart';\nimport '../runtime/forge_expression.dart';\nimport '../runtime/forge_logic_document.dart';\n",
+          )
+          replace_once(
+              'frontend/lib/json_ui/renderer/forge_renderer.dart',
+              '  late final ForgeRuntimeState _state;\n  final ForgeWidgetRegistry _registry = buildDefaultForgeRegistry();\n',
+              '  late final ForgeRuntimeState _state;\n'
+              '  late final ForgeLogicRuntime _logic;\n'
+              '  final ForgeWidgetRegistry _registry = buildDefaultForgeRegistry();\n',
+          )
+          replace_once(
+              'frontend/lib/json_ui/renderer/forge_renderer.dart',
+              '      designTokens: widget.document.designTokens,\n    );\n    if (widget.onScreenStateChanged != null) {\n',
+              '      designTokens: widget.document.designTokens,\n    );\n'
+              '    _logic = ForgeLogicRuntime(state: _state, logic: widget.document.logic);\n'
+              '    if (widget.onScreenStateChanged != null) {\n',
+          )
+          replace_once(
+              'frontend/lib/json_ui/renderer/forge_renderer.dart',
+              '  Widget _build(ForgeWidgetNode node, int depth) {\n    if (depth > _maxClientSideDepth) {\n      return const ForgeFallbackWidget(reason: \'再帰深度の上限を超えました(クライアント側ガード)\');\n    }\n    final role = widget.screen.styleRoles[node.id];\n',
+              '  Widget _build(ForgeWidgetNode node, int depth) {\n'
+              '    if (depth > _maxClientSideDepth) {\n'
+              "      return const ForgeFallbackWidget(reason: '再帰深度の上限を超えました(クライアント側ガード)');\n"
+              '    }\n'
+              '    try {\n'
+              '      if (!_logic.isVisible(node.id)) return const SizedBox.shrink();\n'
+              '    } on ForgeExpressionException catch (e) {\n'
+              "      ForgeLogger.error('GA1Logic', 'visible_when evaluation failed for ${node.id}: $e');\n"
+              "      return ForgeFallbackWidget(reason: '条件式を評価できませんでした: ${node.id}');\n"
+              '    }\n'
+              '    final role = widget.screen.styleRoles[node.id];\n',
+          )
+
+          Path('forge_ai/tests/test_ga1_document_serialization.py').write_text('''from forge_ai.core.compiler import ForgeIRDocument, ForgeIRScreen, ForgeIRWidget\n\n\ndef test_logic_serializes_only_when_present() -> None:\n    screen = ForgeIRScreen(id="s", title="T", state={}, body=ForgeIRWidget(type="column", id="root"))\n    plain = ForgeIRDocument(version="1.15", initial_screen_id="s", screens=(screen,))\n    assert "logic" not in plain.to_json_dict()\n\n    logic = {\n        "derived": {"balance": {"kind": "literal", "value": 10}},\n        "visible_when": {"warning": {"kind": "literal", "value": False}},\n    }\n    enriched = plain.with_logic(logic)\n    assert enriched.to_json_dict()["logic"] == logic\n    assert "logic" not in plain.to_json_dict()\n''', encoding='utf-8')
+
+          Path('frontend/test/json_ui/schema/forge_document_logic_test.dart').write_text('''import 'package:flutter_test/flutter_test.dart';\nimport 'package:forge_app/json_ui/schema/forge_document.dart';\n\nvoid main() {\n  test('ForgeDocument parses top-level GA-1 logic', () {\n    final document = ForgeDocument.fromJson({\n      'version': '1.15',\n      'initial_screen_id': 's',\n      'screens': [\n        {\n          'id': 's',\n          'title': 'T',\n          'state': <String, dynamic>{},\n          'body': {'type': 'column', 'id': 'root', 'children': <dynamic>[]},\n        },\n      ],\n      'logic': {\n        'derived': {\n          'balance': {'kind': 'literal', 'value': 10},\n        },\n        'visible_when': {\n          'warning': {'kind': 'literal', 'value': false},\n        },\n      },\n    });\n\n    expect(document.logic.derived['balance']?['value'], 10);\n    expect(document.logic.visibleWhen['warning']?['value'], isFalse);\n  });\n\n  test('legacy document receives empty logic', () {\n    final document = ForgeDocument.fromJson({\n      'version': '1.15',\n      'initial_screen_id': 's',\n      'screens': [\n        {\n          'id': 's',\n          'title': 'T',\n          'state': <String, dynamic>{},\n          'body': {'type': 'column', 'id': 'root', 'children': <dynamic>[]},\n        },\n      ],\n    });\n    expect(document.logic.derived, isEmpty);\n    expect(document.logic.visibleWhen, isEmpty);\n  });\n}\n''', encoding='utf-8')
+
+      - name: Commit GA-1 document wiring
+        run: |
+          if git diff --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add forge_ai/core/compiler.py \
+                  frontend/lib/json_ui/schema/forge_document.dart \
+                  frontend/lib/json_ui/renderer/forge_renderer.dart \
+                  forge_ai/tests/test_ga1_document_serialization.py \
+                  frontend/test/json_ui/schema/forge_document_logic_test.dart
+          git commit -m "feat: wire GA-1 logic through generated document runtime"
+          git push origin HEAD:claude/forge-master-handoff-k46jns
