@@ -481,12 +481,31 @@ def plan_capabilities(text: str) -> CapabilityPlan:  # noqa: PLR0912 — 段の�
                 capability="data.text", origin_role=SemanticRole.MANAGED_OBJECT,
             ))
 
-    # Geographic rendering requires explicit coordinate data.  This is a
-    # reusable capability prerequisite, not a fishing-specific template and not
-    # geocoding: free-form place text is never converted into coordinates here.
-    if "view.map" in directly_requested:
-        for value in ("latitude", "longitude"):
-            name, label, kind, capability_id = _FIELD_BLUEPRINT[value]
+    # **能力ごとの枝を持たない**（020E-3、2026-08-31）。
+    #
+    # 以前ここは `if "view.map" in directly_requested:` で緯度・経度を
+    # 足していた。能力を1つ獲得するたびに枝が増えるなら、それは
+    # Template を増やすのと同じである。
+    #
+    # 必要な記録項目は Canonical Catalog が宣言する
+    # （`CapabilityDefinition.required_fields`）。ここは**表を舐めるだけ**
+    # であり、`view.map` という文字列はもう出てこない。
+    #
+    # これは推測で補う口ではない。地図が明示的な緯度・経度を要求する
+    # という宣言であって、場所の名前から座標を導いてよいという意味では
+    # ない（geocoding は別の能力である）。
+    for requested_id in sorted(directly_requested):
+        definition = SEMANTIC_CAPABILITIES.get(requested_id)
+        if definition is None:
+            continue
+        for value in definition.required_fields:
+            blueprint = _FIELD_BLUEPRINT.get(value)
+            if blueprint is None:
+                raise UnknownCapabilityError(
+                    f"{requested_id} が宣言した必須項目 {value!r} が"
+                    " _FIELD_BLUEPRINT に無い",
+                )
+            name, label, kind, capability_id = blueprint
             if all(field.name != name for field in fields):
                 requested.add(capability_id)
                 fields.append(PlannedField(

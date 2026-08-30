@@ -148,6 +148,25 @@ class CapabilityDefinition:
     「partial」とだけ書いて済ませない。利用者へそのまま見せられる言葉。
     """
 
+    required_fields: tuple[str, ...] = field(default=())
+    """**その能力が成立するために必要な記録項目**（020E-3）。
+
+    以前これは `capability_plan.py` の
+
+    ```python
+    if "view.map" in directly_requested:   # ← 能力ごとの枝
+        ...latitude / longitude を足す
+    ```
+
+    という**能力名で分岐する枝**だった。能力を1つ獲得するたびに枝が
+    増えるなら、それは Template を増やすのと同じである。宣言をここへ
+    移し、Planner は**表を舐めるだけ**にした。
+
+    **推測で補う口ではない。** 例えば地図は明示的な緯度・経度を要求する
+    のであって、場所の名前から座標を導いてよいという意味ではない
+    （それは geocoding という別の能力である）。
+    """
+
 
 def _c(*args, **kwargs) -> CapabilityDefinition:
     return CapabilityDefinition(*args, **kwargs)
@@ -205,7 +224,10 @@ _CATALOG: tuple[CapabilityDefinition, ...] = (
        limitation="時系列のグラフはまだ描けません。日付順の一覧と合計で近似します"),
     _c("view.map", _L.VIEW, "地図で見る", "場所を地図の上で見る", _S.MISSING,
        detection_keywords=("地図", "マップ", "地図上"), nearest_supported_id="view.list",
-       limitation="地図は表示できません"),
+       limitation="地図は表示できません",
+       # **明示的な数値座標を要求する。** 場所の名前からは導かない
+       # （geocoding は別の能力であり、この宣言はその許可ではない）。
+       required_fields=("latitude", "longitude")),
     _c("view.heatmap", _L.VIEW, "濃淡で分布を見る", "分布を色の濃さで見る", _S.MISSING,
        detection_keywords=("ヒートマップ", "色の濃さ", "色を濃く", "濃淡"),
        nearest_supported_id="view.bar_chart", limitation="濃淡の表示はできません"),
