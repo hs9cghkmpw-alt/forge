@@ -24,7 +24,7 @@ permissions:
 jobs:
   render:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,15 +52,17 @@ jobs:
         env:
           FORGE_GOLDEN_DOC_PATH: /tmp/forge_golden_game.json
           FORGE_GOLDEN_SCREENSHOT_PATH: ${{ github.workspace }}/golden_game_phone.png
-        run: timeout 180s flutter test test/json_ui/forge_golden_game_render_probe_test.dart --reporter expanded
+        run: timeout 45s flutter test test/json_ui/forge_golden_game_render_probe_test.dart --reporter expanded
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: forge-golden-game-visual-evidence
           path: |
             golden_game_phone.png
             /tmp/forge_golden_game.json
-          if-no-files-found: error
+          if-no-files-found: warn
 
 # Objective visual evidence: exact production-generated document rendered at the
-# phone viewport by the checked-in Flutter renderer. The shell timeout ensures a
-# lifecycle leak cannot leave an apparently-running gate indefinitely.
+# phone viewport by the checked-in Flutter renderer. Failed runs still upload any
+# generated document/PNG so teardown defects cannot erase the evidence needed to
+# diagnose them.
