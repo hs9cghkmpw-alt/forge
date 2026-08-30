@@ -1,0 +1,170 @@
+name: Whole Scan corrective patch
+
+on:
+  push:
+    branches:
+      - claude/forge-master-handoff-k46jns
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/forge-master-handoff-k46jns
+          fetch-depth: 0
+
+      - name: Apply fail-closed capability corrections
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          # Production routing: explicit checklist is valid; unresolved/failed
+          # structures are capability gaps, never an excuse to emit a checklist.
+          replace_once(
+              "forge_ai/core/orchestration/pipeline_orchestrator.py",
+              "from forge_ai.core.orchestration.cognitive_dependencies import CognitiveDependencies\n",
+              "from forge_ai.core.orchestration.cognitive_dependencies import CognitiveDependencies\n"
+              "from forge_ai.core.orchestration.capability_gate import require_explicit_checklist\n",
+          )
+          replace_once(
+              "forge_ai/core/orchestration/pipeline_orchestrator.py",
+              "from forge_ai.core.semantics.capability_plan import plan_capabilities\n",
+              "from forge_ai.core.semantics.capability_plan import StructuralMode, plan_capabilities\n",
+          )
+          replace_once(
+              "forge_ai/core/orchestration/pipeline_orchestrator.py",
+              "            elif deps.entity_synthesizer is not None:\n",
+              "            elif capability_plan.structure is StructuralMode.CHECKLIST:\n"
+              "                # Checklist is a semantic decision, not a fallback. Do not ask\n"
+              "                # entity synthesis to turn it into an unrelated record app.\n"
+              "                pass\n"
+              "            elif deps.entity_synthesizer is not None:\n",
+          )
+          replace_once(
+              "forge_ai/core/orchestration/pipeline_orchestrator.py",
+              "            else:\n                # FORGE-AI-QUALITY-001(2026-08-11): 以前はここで\n",
+              "            else:\n"
+              "                # Whole Scan: only an explicitly planned checklist may enter\n"
+              "                # the legacy compiler. UNKNOWN or failed RECORD_ENTITY stays\n"
+              "                # a capability gap instead of being rewritten as success.\n"
+              "                require_explicit_checklist(capability_plan)\n"
+              "                # FORGE-AI-QUALITY-001(2026-08-11): 以前はここで\n",
+          )
+          replace_once(
+              "forge_ai/core/orchestration/pipeline_orchestrator.py",
+              "            # 合成できなかった場合(AIの応答が\n"
+              "            # 不正、Provider未注入等)は、従来どおりChecklistへ安全に\n"
+              "            # フォールバックする——この機能が失敗しても以前より悪くは\n"
+              "            # ならない、という形にしている。\n",
+              "            # 合成できなかった場合(AIの応答が不正、Provider未注入等)も、\n"
+              "            # 意味をChecklistへ書き換えない。明示的Checklist要求だけが\n"
+              "            # Checklist Compilerへ進み、それ以外はCapability Gapとして失敗する。\n",
+          )
+
+          # Product docs: JSON is the current safe runtime contract, not Forge's
+          # permanent capability ceiling.
+          replace_once(
+              "README.md",
+              "Forgeは、ユーザーが自然言語で要望を伝えるだけで、AIがアプリのUI/ロジックを\n"
+              "**JSON定義**として生成し、Flutterクライアントがそれをその場で画面として\n"
+              "レンダリングする「トークネイティブ・アプリビルダー」です。\n\n"
+              "AIはコードを書きません。AIが返すのはJSONだけです。\n"
+              "Flutterはその JSON を解釈して動的にウィジェットツリーを組み立てます。\n",
+              "Forgeは、ユーザーの自然言語要求を能力へ分解し、**持っている能力は組み合わせ、\n"
+              "持っていない能力は安全に作って再利用可能にする**アプリ生成基盤です。\n\n"
+              "通常の実行時生成では、検証可能なForge Document（JSON）を安全境界として\n"
+              "Flutter Runtimeが解釈します。ただしJSONは現在のRuntime契約であって、Forgeの\n"
+              "最終的な能力上限ではありません。不足能力はComposition / Declarative Extension /\n"
+              "Build-Time Extension等の管理された経路で実装・検証・統合し、以後再利用します。\n"
+              "任意コードの無検証実行や無制限のファイル操作は許可しません。\n",
+          )
+          replace_once(
+              "README.md",
+              "| コンセプト | 会話 → JSON UI Schema → 動的レンダリング |\n"
+              "| 対象 | 個人が自分専用の小規模アプリを即座に作れること |\n"
+              "| AIの役割 | JSON UI定義の生成・修正のみ（コード生成はしない） |\n"
+              "| クライアントの役割 | JSON schemaを解釈し、Widgetツリーとして描画 |\n",
+              "| コンセプト | 自然言語 → 能力分解 → 既存能力のComposition / 不足能力の生成 → 検証 → 動作するアプリ |\n"
+              "| 対象 | 個人の要求を、固定テンプレート数に制約されず動作するソフトウェアへ到達させること |\n"
+              "| AI/Forgeの役割 | 要求理解・能力計画・Forge Document生成・不足能力の安全な拡張計画/実装・検証/修復 |\n"
+              "| クライアントの役割 | 検証済みForge Documentを解釈し、Runtime能力を安全に実行・描画 |\n",
+          )
+
+          replace_once(
+              "docs/AI.md",
+              "**AIはコードを一切生成しない。AIが生成するのはJSON UI Schemaのみ。**\n\n"
+              "理由:\n"
+              "- コード生成は実行環境・セキュリティリスク・ビルド管理が複雑になる。\n"
+              "- JSONに制約することで、Flutter側で安全にサンドボックス的に解釈・検証できる。\n"
+              "- JSONはバージョン管理・差分比較・AIによる自己改善（AI Improve）と相性が良い。\n",
+              "**通常Runtimeでは、AI/Forgeの出力を検証可能なForge Document（JSON）へ制約する。\n"
+              "ただしJSONは安全な実行契約であって、Forgeの能力上限ではない。**\n\n"
+              "理由:\n"
+              "- 任意コードをそのままRuntimeへ注入する方式は実行環境・セキュリティ・ビルド管理上危険なので採用しない。\n"
+              "- JSON契約によりFlutter側で安全に解釈・検証でき、差分・履歴・修復も追跡しやすい。\n"
+              "- 要求に必要な能力が契約内に無い場合は、既存Templateへ意味を落とさずCapability Gapとして保持する。\n"
+              "- 不足能力はComposition / Declarative / Build-Time / Service / Native等の管理された拡張経路で生成し、\n"
+              "  Validator・tests・build・runtime・security evidenceを通過した後に再利用可能能力として登録する。\n",
+          )
+          replace_once(
+              "docs/AI.md",
+              "| AI | 会話の意図を解釈し、JSON UI Schemaを生成・修正する |\n"
+              "| Backend (FastAPI) | AI呼び出しの仲介、生成されたJSONの検証・保存・バージョン管理 |\n"
+              "| Frontend (Flutter) | JSON UI Schemaを解釈し、Widgetツリーとしてレンダリングする |\n\n"
+              "AIは **JSON Schemaという「契約」の中でのみ自由** であり、\n"
+              "契約外の出力（任意コード・任意ファイル操作など）は許可しない。\n",
+              "| AI / Forge Brain | 会話意図を能力へ分解し、既存能力を構成する。通常はForge Documentを生成し、不足時はCapability Gapを明示する |\n"
+              "| Extension Pipeline | 不足能力を安全クラスへ分類し、管理された拡張を実装・検証・登録する |\n"
+              "| Backend (FastAPI) | AI呼び出しの仲介、検証・保存・バージョン管理、Effect/Extensionの安全境界 |\n"
+              "| Frontend (Flutter) | 検証済みForge Documentを解釈し、登録済みRuntime能力を実行・描画する |\n\n"
+              "通常Runtimeは **JSON Schemaという契約** の中で動く。契約外の任意コード実行・無制限の\n"
+              "ファイル操作は許可しない。一方、Build-Time Self-Extensionは別の管理経路であり、\n"
+              "安全ゲートを通過した実装だけが新しい契約能力として昇格できる。\n",
+          )
+
+          replace_once(
+              "forge_ai/core/orchestration/cognitive_dependencies.py",
+              "    # 既にこのdataclassを直接構築している箇所(テストフィクスチャ等)が\n"
+              "    # 全て壊れる。`None`の場合、`pipeline_orchestrator.py`は合成を\n"
+              "    # 一切試みず、従来どおりChecklistへフォールバックする——つまり\n"
+              "    # 「合成を注入しなければ以前と完全に同じ挙動」であり、この機能は\n"
+              "    # 純粋な追加になっている。実運用の組み立て\n"
+              "    # (`_default_cognitive_dependencies()`)では必ず注入される。\n",
+              "    # 既にこのdataclassを直接構築している箇所(テストフィクスチャ等)を\n"
+              "    # 壊さないため型上は`None`を許す。ただし`None`は「Checklistへ\n"
+              "    # フォールバックしてよい」という意味ではない。Capability Planが明示的\n"
+              "    # CHECKLISTの場合だけlegacy compilerを使い、それ以外で合成手段が無い\n"
+              "    # 場合はCapability Gapとしてfail-closedする。実運用の組み立て\n"
+              "    # (`_default_cognitive_dependencies()`)では必ず注入される。\n",
+          )
+
+      - name: Run focused tests
+        run: |
+          python -m pytest forge_ai/tests/test_capability_gate.py forge_ai/tests/test_020a2_compositional_plan.py -q
+
+      - name: Commit corrective patch
+        run: |
+          if git diff --quiet; then
+            echo "No corrective changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add forge_ai/core/orchestration/pipeline_orchestrator.py \
+                  forge_ai/core/orchestration/cognitive_dependencies.py \
+                  README.md docs/AI.md
+          git commit -m "fix: fail closed on unresolved capability structure"
+          git push origin HEAD:claude/forge-master-handoff-k46jns
