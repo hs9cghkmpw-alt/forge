@@ -23,7 +23,7 @@ permissions:
 jobs:
   chrome-audio:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,7 +57,7 @@ jobs:
         env:
           CHROME_EXECUTABLE: /tmp/forge-chrome
         run: |
-          flutter drive \
+          timeout 240s flutter drive \
             --driver=test_driver/integration_test.dart \
             --target=integration_test/forge_audio_mixer_web_integration_test.dart \
             -d chrome
@@ -65,4 +65,6 @@ jobs:
 # This probe compiles and launches a Flutter Web application, so the generated
 # web plugin registrant runs. It is intentionally stronger than
 # `flutter test --platform chrome`, whose test harness can bypass app plugin
-# registration and produce false MissingPluginException failures.
+# registration and produce false MissingPluginException failures. The shell
+# timeout turns a browser/driver deadlock into an objective failure instead of
+# an indefinitely-running gate.
