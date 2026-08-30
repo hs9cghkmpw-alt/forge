@@ -6,10 +6,11 @@ on:
     paths:
       - .github/workflows/forge_golden_visual_probe.yml
       - scripts/generate_golden_game_fixture.py
+      - scripts/serve_audio_web_probe.py
       - forge_ai/**
       - backend/app/ai/**
       - frontend/lib/json_ui/**
-      - frontend/test/json_ui/forge_golden_game_render_probe_test.dart
+      - frontend/lib/golden_probe_main.dart
       - frontend/pubspec.yaml
       - frontend/pubspec.lock
       - frontend/assets/sounds/**
@@ -37,22 +38,91 @@ jobs:
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
       - name: Generate exact current Golden document through production API wiring
-        run: python scripts/generate_golden_game_fixture.py /tmp/forge_golden_game.json
+        run: |
+          python scripts/generate_golden_game_fixture.py /tmp/forge_golden_game.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          doc = json.loads(Path('/tmp/forge_golden_game.json').read_text())
+          types = []
+          def walk(node):
+              if not isinstance(node, dict): return
+              t = node.get('type')
+              if t: types.append(t)
+              for child in node.get('children', []): walk(child)
+              if isinstance(node.get('child'), dict): walk(node['child'])
+          for screen in doc.get('screens', []): walk(screen.get('body'))
+          required = {'simulation_loop', 'simulation_progress', 'audio_mixer'}
+          missing = required.difference(types)
+          assert not missing, f'Golden production document missing: {sorted(missing)}'
+          print('FORGE_GOLDEN_DOCUMENT required_widgets=PASS version=' + str(doc.get('version')))
+          PY
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: Resolve Flutter dependencies from clean state
+      - name: Prepare exact generated document as build asset
+        run: |
+          cp /tmp/forge_golden_game.json frontend/assets/forge_golden_game.json
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('frontend/pubspec.yaml')
+          s = p.read_text()
+          anchor = '    - assets/sounds/\n'
+          assert anchor in s
+          p.write_text(s.replace(anchor, anchor + '    - assets/forge_golden_game.json\n', 1))
+          PY
+      - name: Build exact Golden Flutter Web app
         working-directory: frontend
         run: |
+          flutter config --enable-web
           flutter clean
           flutter pub get
-      - name: Render phone viewport and capture evidence
-        working-directory: frontend
-        env:
-          FORGE_GOLDEN_DOC_PATH: /tmp/forge_golden_game.json
-          FORGE_GOLDEN_SCREENSHOT_PATH: ${{ github.workspace }}/golden_game_phone.png
-        run: timeout 45s flutter test test/json_ui/forge_golden_game_render_probe_test.dart --reporter expanded
+          flutter build web --debug --target lib/golden_probe_main.dart
+      - name: Render exact phone viewport in real Chrome and capture evidence
+        run: |
+          rm -f /tmp/forge_golden_visual_result.json /tmp/forge_golden_server.log golden_game_phone.png
+          python scripts/serve_audio_web_probe.py \
+            --root frontend/build/web \
+            --report /tmp/forge_golden_visual_result.json \
+            --port 8081 > /tmp/forge_golden_server.log 2>&1 &
+          echo $! > /tmp/forge_golden_server.pid
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8081/ >/dev/null && break
+            sleep 1
+          done
+          timeout 25s /usr/bin/google-chrome \
+            --headless=new \
+            --no-sandbox \
+            --disable-dev-shm-usage \
+            --autoplay-policy=no-user-gesture-required \
+            --hide-scrollbars \
+            --window-size=390,844 \
+            --virtual-time-budget=3000 \
+            --screenshot="${GITHUB_WORKSPACE}/golden_game_phone.png" \
+            http://127.0.0.1:8081/ > /tmp/forge_golden_chrome.log 2>&1 || true
+          for i in $(seq 1 20); do
+            test -f /tmp/forge_golden_visual_result.json && break
+            sleep 1
+          done
+          test -f /tmp/forge_golden_visual_result.json || { cat /tmp/forge_golden_chrome.log; exit 1; }
+          cat /tmp/forge_golden_visual_result.json
+          python - <<'PY'
+          import json, struct
+          from pathlib import Path
+          result = json.loads(Path('/tmp/forge_golden_visual_result.json').read_text())
+          assert result.get('status') == 'pass', result
+          png = Path('golden_game_phone.png')
+          assert png.stat().st_size > 1000, png.stat().st_size
+          data = png.read_bytes()
+          assert data[:8] == b'\x89PNG\r\n\x1a\n'
+          width, height = struct.unpack('>II', data[16:24])
+          assert (width, height) == (390, 844), (width, height)
+          print(f'FORGE_GOLDEN_VISUAL compiled_web=PASS png_bytes={len(data)} viewport={width}x{height}')
+          PY
+      - name: Stop evidence server
+        if: always()
+        run: test -f /tmp/forge_golden_server.pid && kill "$(cat /tmp/forge_golden_server.pid)" || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -60,9 +130,11 @@ jobs:
           path: |
             golden_game_phone.png
             /tmp/forge_golden_game.json
+            /tmp/forge_golden_visual_result.json
+            /tmp/forge_golden_server.log
+            /tmp/forge_golden_chrome.log
           if-no-files-found: warn
 
-# Objective visual evidence: exact production-generated document rendered at the
-# phone viewport by the checked-in Flutter renderer. Failed runs still upload any
-# generated document/PNG so teardown defects cannot erase the evidence needed to
-# diagnose them.
+# Strong visual proof: production API generates the document, the exact JSON is
+# compiled into a real Flutter Web application, Chrome renders a 390x844 viewport,
+# and both the app callback and PNG header/dimensions must validate.
