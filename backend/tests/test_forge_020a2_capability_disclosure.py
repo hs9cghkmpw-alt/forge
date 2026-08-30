@@ -92,7 +92,13 @@ class TestTheUserIsToldWhatCannotBeBuilt(unittest.TestCase):
     def test_a_need_with_no_gap_says_nothing(self) -> None:
         """**無い問題を作らない。**"""
         self.assertIsNone(_generate(self.client, FINANCE).get("capability_gap"))
-        self.assertIsNone(_generate(self.client, MAP).get("capability_gap"))
+
+    def test_a_missing_map_view_is_disclosed(self) -> None:
+        """Catalog が知っている MISSING view を「問題なし」に戻さない。"""
+        gap = _generate(self.client, MAP).get("capability_gap")
+        self.assertIsNotNone(gap)
+        self.assertIn("view.map", gap["missing"])
+        self.assertIn("地図は表示できません", gap["message"])
 
 
 class TestCriticalGapsBlockCompletion(unittest.TestCase):
