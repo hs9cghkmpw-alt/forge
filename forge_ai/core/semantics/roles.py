@@ -205,6 +205,8 @@ _ROLE_LEXICON: tuple[tuple[str, SemanticRole, str], ...] = (
     ("体重", SemanticRole.RECORDED_DATA, "weight"),
     ("身長", SemanticRole.RECORDED_DATA, "height"),
     ("場所", SemanticRole.RECORDED_DATA, "place"),
+    ("緯度", SemanticRole.RECORDED_DATA, "latitude"),
+    ("経度", SemanticRole.RECORDED_DATA, "longitude"),
     ("種類", SemanticRole.RECORDED_DATA, "kind"),
     ("条件", SemanticRole.RECORDED_DATA, "condition"),
     ("結果", SemanticRole.RECORDED_DATA, "result"),

@@ -993,6 +993,32 @@ sealed class ForgeWidgetNode {
           title: json['title'] as String? ?? 'サウンドミックス',
           tracks: rawTracks.cast<String>(),
         );
+      case 'map_view':
+        final mapStateRef = json['state_ref'];
+        if (mapStateRef is! String || mapStateRef.isEmpty) {
+          throw ForgeParseException('$path/state_ref', 'map_view.state_ref is required');
+        }
+        final latitudeField = json['latitude_field'];
+        final longitudeField = json['longitude_field'];
+        if (latitudeField is! String || latitudeField.isEmpty) {
+          throw ForgeParseException('$path/latitude_field', 'map_view.latitude_field is required');
+        }
+        if (longitudeField is! String || longitudeField.isEmpty) {
+          throw ForgeParseException('$path/longitude_field', 'map_view.longitude_field is required');
+        }
+        final rawZoom = json['initial_zoom'];
+        final rawHeight = json['height'];
+        return ForgeMapViewWidgetNode(
+          id,
+          stateRef: mapStateRef,
+          latitudeField: latitudeField,
+          longitudeField: longitudeField,
+          labelField: json['label_field'] as String?,
+          title: json['title'] as String?,
+          emptyText: json['empty_text'] as String? ?? '地図に表示できる位置情報がまだありません',
+          initialZoom: rawZoom is num ? rawZoom.toDouble() : 11,
+          height: rawHeight is num ? rawHeight.toDouble() : 320,
+        );
       case 'simulation_loop':
         // v1.13: deterministic fixed-step simulation lifecycle. The widget owns
         // scheduling only; arithmetic remains in runtime/forge_simulation.dart.
@@ -1358,6 +1384,29 @@ class ForgeSimulationLoopWidgetNode extends ForgeWidgetNode {
 class ForgeUnknownWidgetNode extends ForgeWidgetNode {
   final String rawType;
   const ForgeUnknownWidgetNode(super.id, {required this.rawType});
+}
+
+class ForgeMapViewWidgetNode extends ForgeWidgetNode {
+  final String stateRef;
+  final String latitudeField;
+  final String longitudeField;
+  final String? labelField;
+  final String? title;
+  final String emptyText;
+  final double initialZoom;
+  final double height;
+
+  const ForgeMapViewWidgetNode(
+    super.id, {
+    required this.stateRef,
+    required this.latitudeField,
+    required this.longitudeField,
+    this.labelField,
+    this.title,
+    required this.emptyText,
+    required this.initialZoom,
+    required this.height,
+  });
 }
 
 // ---------------------------------------------------------------------------

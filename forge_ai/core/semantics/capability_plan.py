@@ -155,6 +155,8 @@ _FIELD_BLUEPRINT: dict[str, tuple[str, str, str, str]] = {
     "weight": ("weight", "体重", "number", "data.number"),
     "height": ("height", "身長", "number", "data.number"),
     "place": ("place", "場所", "string", "data.text"),
+    "latitude": ("latitude", "緯度", "number", "data.number"),
+    "longitude": ("longitude", "経度", "number", "data.number"),
     "kind": ("kind", "種類", "string", "data.text"),
     "condition": ("condition", "条件", "string", "data.text"),
     "result": ("result", "結果", "string", "data.text"),

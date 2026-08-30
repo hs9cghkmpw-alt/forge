@@ -26,6 +26,9 @@ dependencies:
   # v1.14 local audio mixer. Multiple players may run simultaneously; no network
   # source is accepted by Forge Language. Version verified on pub.dev 2026-08-29.
   audioplayers: ^6.8.1
+  # v1.16 BUILD_TIME self-extension: real geographic map rendering.
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
 
 dev_dependencies:
   flutter_test:

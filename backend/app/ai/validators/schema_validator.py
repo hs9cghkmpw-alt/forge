@@ -82,7 +82,7 @@ GA1_UNARY_OPS = {"not", "negate"}
 GA1_BINARY_OPS = {"add", "subtract", "multiply", "divide", "eq", "neq", "lt", "lte", "gt", "gte", "and", "or"}
 GA1_AGGREGATE_OPS = {"sum", "count", "average", "min", "max"}
 
-SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15"}
+SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16"}
 
 # バージョン文字列同士を数値として比較するための順序付きタプル。
 # **設計上の注記(このセッションで実際に発見・修正した再発バグへの
@@ -97,7 +97,7 @@ SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1
 # **文字列の大小比較ではなく、この並びの位置で比較する**(`_at_least()`)。
 # "1.10" < "1.9" になる文字列比較を避けるためであり、ここへ追記する
 # 順序がそのままバージョンの前後関係になる。
-_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15")
+_VERSION_ORDER = ("1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15", "1.16")
 
 
 def _version_at_least(version: str, minimum: str) -> bool:
@@ -211,6 +211,7 @@ WIDGET_TYPES_V1_11_ADDITIONS = {"metric_view"}
 WIDGET_TYPES_V1_13_ADDITIONS = {"simulation_loop"}
 WIDGET_TYPES_V1_14_ADDITIONS = {"audio_mixer"}
 WIDGET_TYPES_V1_15_ADDITIONS = {"simulation_progress"}
+WIDGET_TYPES_V1_16_ADDITIONS = {"map_view"}
 
 WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.0": WIDGET_TYPES_V1_0,
@@ -296,11 +297,12 @@ WIDGET_TYPES_BY_VERSION: dict[str, set[str]] = {
         | WIDGET_TYPES_V1_14_ADDITIONS | WIDGET_TYPES_V1_15_ADDITIONS
     ),
 }
+WIDGET_TYPES_BY_VERSION["1.16"] = WIDGET_TYPES_BY_VERSION["1.15"] | WIDGET_TYPES_V1_16_ADDITIONS
 WIDGET_TYPES_ALL = (
     WIDGET_TYPES_V1_0 | WIDGET_TYPES_V1_1_ADDITIONS | WIDGET_TYPES_V1_3_ADDITIONS
     | WIDGET_TYPES_V1_5_ADDITIONS | WIDGET_TYPES_V1_6_ADDITIONS | WIDGET_TYPES_V1_7_ADDITIONS
     | WIDGET_TYPES_V1_8_ADDITIONS | WIDGET_TYPES_V1_11_ADDITIONS | WIDGET_TYPES_V1_13_ADDITIONS
-    | WIDGET_TYPES_V1_14_ADDITIONS | WIDGET_TYPES_V1_15_ADDITIONS
+    | WIDGET_TYPES_V1_14_ADDITIONS | WIDGET_TYPES_V1_15_ADDITIONS | WIDGET_TYPES_V1_16_ADDITIONS
 )  # 未知Widget判定用
 
 # `tab_view`はchildren[i]が「1タブ分の中身」に対応する、column/row/card/
@@ -348,6 +350,7 @@ ACTION_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.14": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
     "1.15": ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS,
 }
+ACTION_TYPES_BY_VERSION["1.16"] = ACTION_TYPES_BY_VERSION["1.15"]
 ACTION_TYPES = ACTION_TYPES_V1_0 | ACTION_TYPES_V1_2_ADDITIONS | ACTION_TYPES_V1_3_ADDITIONS  # 全バージョン合計(未知typeの判定用)
 
 # v1.0/v1.1で確定していた4型
@@ -391,6 +394,7 @@ STATE_TYPES_BY_VERSION: dict[str, set[str]] = {
     "1.14": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
     "1.15": STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS,
 }
+STATE_TYPES_BY_VERSION["1.16"] = STATE_TYPES_BY_VERSION["1.15"]
 STATE_TYPES = STATE_TYPES_V1_0 | STATE_TYPES_V1_2_ADDITIONS | STATE_TYPES_V1_3_ADDITIONS
 
 # FORGE v0.9新規(Typed Record Runtime Phase1)。record_schemaの
@@ -1382,6 +1386,30 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
             errors.append(_err(f"{path}/sign_field", Category.SCHEMA, "field_not_allowed",
                                 "metric_view.sign_fieldはaggregate=sumのときだけ使えます。"))
 
+    elif t == "map_view":
+        errors.extend(_check_additional_properties(
+            widget,
+            {"type", "id", "state_ref", "latitude_field", "longitude_field",
+             "label_field", "title", "empty_text", "initial_zoom", "height"},
+            path,
+        ))
+        if not _is_identifier(widget.get("state_ref")):
+            errors.append(_err(f"{path}/state_ref", Category.SCHEMA, "required", "map_view.state_refは必須です。"))
+        for key in ("latitude_field", "longitude_field"):
+            if not _is_identifier(widget.get(key)):
+                errors.append(_err(f"{path}/{key}", Category.SCHEMA, "required", f"map_view.{key}はField名である必要があります。"))
+        if "label_field" in widget and not _is_identifier(widget.get("label_field")):
+            errors.append(_err(f"{path}/label_field", Category.SCHEMA, "identifier", "map_view.label_fieldはField名である必要があります。"))
+        for key, limit in (("title", 80), ("empty_text", 120)):
+            if key in widget and (not isinstance(widget[key], str) or len(widget[key]) > limit):
+                errors.append(_err(f"{path}/{key}", Category.SCHEMA, "string_length", f"map_view.{key}が不正です。"))
+        zoom = widget.get("initial_zoom", 11)
+        if isinstance(zoom, bool) or not isinstance(zoom, (int, float)) or not (1 <= zoom <= 20):
+            errors.append(_err(f"{path}/initial_zoom", Category.SCHEMA, "range", "map_view.initial_zoomは1〜20の数値です。"))
+        height = widget.get("height", 320)
+        if isinstance(height, bool) or not isinstance(height, (int, float)) or not (160 <= height <= 720):
+            errors.append(_err(f"{path}/height", Category.SCHEMA, "range", "map_view.heightは160〜720の数値です。"))
+
     elif t == "date_field":
         # v1.7新規(CEO「全て実装してくれ」対応、Widget Vocabulary
         # Expansion第2弾)。choice_field(TD34)と同じ理由: TD33で
@@ -1663,7 +1691,7 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
 
             if wtype in {
                 "text", "text_field", "checklist", "list", "record_list_view",
-                "choice_field", "bar_chart", "date_field", "slider", "metric_view",
+                "choice_field", "bar_chart", "date_field", "slider", "metric_view", "map_view",
             } and (
                 wtype != "text" or "state_ref" in widget
             ):
@@ -1735,6 +1763,34 @@ def _check_semantics(doc: dict, allowed_widgets: set[str]) -> tuple[list[Validat
                     if aggregating and label_field is None:
                         pass  # 集計時はグループ化キーがラベルになる
                     elif label_field not in fields_by_name:
+                        errors.append(_err(
+                            f"{w_path}/label_field", Category.SEMANTIC, "field_reference_exists",
+                            f"label_field '{label_field}' に一致するFieldがrecord_schemas['{schema_ref}']にありません。",
+                        ))
+
+            if wtype == "map_view":
+                ref = widget.get("state_ref")
+                state_value = state.get(ref) if isinstance(ref, str) else None
+                schema_ref = state_value.get("schema_ref") if isinstance(state_value, dict) else None
+                schema_def = doc.get("record_schemas", {}).get(schema_ref) if schema_ref else None
+                if isinstance(schema_def, dict):
+                    fields_by_name = {
+                        f.get("name"): f for f in schema_def.get("fields", []) if isinstance(f, dict)
+                    }
+                    for key in ("latitude_field", "longitude_field"):
+                        field_name = widget.get(key)
+                        if field_name not in fields_by_name:
+                            errors.append(_err(
+                                f"{w_path}/{key}", Category.SEMANTIC, "field_reference_exists",
+                                f"{key} '{field_name}' に一致するFieldがrecord_schemas['{schema_ref}']にありません。",
+                            ))
+                        elif fields_by_name[field_name].get("type") != "number":
+                            errors.append(_err(
+                                f"{w_path}/{key}", Category.SEMANTIC, "field_type_mismatch",
+                                f"{key} '{field_name}' はtype=numberのFieldである必要があります。",
+                            ))
+                    label_field = widget.get("label_field")
+                    if label_field is not None and label_field not in fields_by_name:
                         errors.append(_err(
                             f"{w_path}/label_field", Category.SEMANTIC, "field_reference_exists",
                             f"label_field '{label_field}' に一致するFieldがrecord_schemas['{schema_ref}']にありません。",
@@ -1939,7 +1995,7 @@ def _check_state_ref(ref: str, expected_kind: str, state: dict, path: str, ref_f
         "selected_record": "selected_record",
         "choice_field": "string", "bar_chart": "record_list", "date_field": "string", "slider": "number",
         # v1.11。bar_chartと同じくrecord_listを畳んで見せる。
-        "metric_view": "record_list",
+        "metric_view": "record_list", "map_view": "record_list",
     }
     expected_type = expected_type_map.get(expected_kind)
     if expected_type and actual_type != expected_type:

@@ -22,6 +22,7 @@ import 'widget_registry_v1_11.dart';
 import 'widget_registry_v1_13.dart';
 import 'widget_registry_v1_14.dart';
 import 'widget_registry_v1_15.dart';
+import 'widget_registry_v1_16.dart';
 
 export 'widget_registry_core.dart' show ForgeWidgetRegistry, ForgeWidgetBuilder, ForgeFallbackWidget, buildForgeWidget;
 
@@ -61,6 +62,7 @@ ForgeWidgetRegistry buildDefaultForgeRegistry() {
   registerV1_13Widgets(registry);
   registerV1_14Widgets(registry);
   registerV1_15Widgets(registry);
+  registerV1_16Widgets(registry);
   return registry;
 }
 

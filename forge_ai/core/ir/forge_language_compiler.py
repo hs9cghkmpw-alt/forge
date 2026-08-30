@@ -337,11 +337,64 @@ class ForgeLanguageCompiler:
             document = self._attach_simulation_loop(document)
         if "interact.audio_mix" in interaction_capabilities:
             document = self._attach_audio_mixer(document)
+        if "view.map" in promoted_capabilities:
+            document = self._attach_map_view(document, entity)
         # A promoted declarative capability must change the generated
         # document through its executable activation. Registry metadata
         # alone is never sufficient to claim the capability is usable.
         document = apply_promoted_document_activations(document, promoted_capabilities)
         return document
+
+    @staticmethod
+    def _attach_map_view(document: ForgeIRDocument, entity: Entity) -> ForgeIRDocument:
+        latitude = next((f for f in entity.fields if f.name == "latitude"), None)
+        longitude = next((f for f in entity.fields if f.name == "longitude"), None)
+        if latitude is None or longitude is None:
+            raise ForgeLanguageCompilationError(
+                "view.map requires explicit numeric latitude and longitude fields; "
+                "free-form place text requires a separate geocoding capability"
+            )
+        if latitude.type is not FieldType.NUMBER or longitude.type is not FieldType.NUMBER:
+            raise ForgeLanguageCompilationError("view.map latitude/longitude fields must be numeric")
+        label_field = next(
+            (f.name for f in entity.fields if f.name not in {"latitude", "longitude"} and f.type is FieldType.STRING),
+            None,
+        )
+        map_widget = ForgeIRWidget(
+            type="map_view",
+            id="record_map",
+            properties={
+                "state_ref": "records",
+                "latitude_field": latitude.name,
+                "longitude_field": longitude.name,
+                "title": "地図",
+                "empty_text": "緯度と経度を記録すると地図に表示されます",
+                "initial_zoom": 11,
+                "height": 320,
+                **({"label_field": label_field} if label_field else {}),
+            },
+        )
+        screens: list[ForgeIRScreen] = []
+        for screen in document.screens:
+            if screen.body.type == "column":
+                body = ForgeIRWidget(
+                    type=screen.body.type, id=screen.body.id,
+                    properties=dict(screen.body.properties),
+                    children=(*screen.body.children, map_widget),
+                )
+            else:
+                body = ForgeIRWidget(type="column", id="map_root", children=(screen.body, map_widget))
+            screens.append(ForgeIRScreen(
+                id=screen.id, title=screen.title, state=dict(screen.state), body=body,
+            ))
+        return ForgeIRDocument(
+            version="1.16",
+            initial_screen_id=document.initial_screen_id,
+            screens=tuple(screens),
+            app_title=document.app_title,
+            record_schemas=dict(document.record_schemas),
+            design_tokens=dict(document.design_tokens),
+        )
 
     @staticmethod
     def _attach_audio_mixer(document: ForgeIRDocument) -> ForgeIRDocument:
