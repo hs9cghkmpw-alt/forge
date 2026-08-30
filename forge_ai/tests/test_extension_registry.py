@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 
 import pytest
 
+from forge_ai.core.orchestration.build_time_extension import LoadedBuildActivation
 from forge_ai.core.orchestration.extension_manifest import ExtensionEvidence, create_extension_manifest
 from forge_ai.core.orchestration.extension_plan import ExtensionCandidate, ExtensionRoute
 from forge_ai.core.orchestration.extension_registry import PROMOTED_CAPABILITIES
@@ -74,10 +75,28 @@ def test_activation_identity_must_match_manifest() -> None:
         PROMOTED_CAPABILITIES.install(_promoted_manifest(), _Activation("view.map"))
 
 
-def test_build_time_manifest_cannot_claim_in_process_activation() -> None:
+def test_build_time_manifest_requires_loaded_build_attestation() -> None:
     PROMOTED_CAPABILITIES.clear()
-    with pytest.raises(ValueError, match="cannot be activated in-process"):
+    with pytest.raises(ValueError, match="loaded build activation"):
         PROMOTED_CAPABILITIES.install(
             _promoted_manifest(ExtensionRoute.BUILD_TIME),
             _Activation("interact.filter"),
         )
+
+
+def test_loaded_build_time_capability_changes_effective_support() -> None:
+    PROMOTED_CAPABILITIES.clear()
+    activation = LoadedBuildActivation(
+        capability_id="interact.filter",
+        build_id="build-1",
+        runtime_fingerprint="runtime-1",
+        source_digest="digest-1",
+    )
+    PROMOTED_CAPABILITIES.install(
+        _promoted_manifest(ExtensionRoute.BUILD_TIME),
+        activation,
+    )
+    ok, partial, missing = _classify({"interact.filter"})
+    assert ok == ("interact.filter",)
+    assert partial == ()
+    assert missing == ()
