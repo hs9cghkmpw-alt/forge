@@ -413,15 +413,16 @@ class TestOrchestratorFailsClosedOnSynthesisFailure(unittest.TestCase):
 
     def test_broken_synthesis_fails_closed_instead_of_substituting_checklist(self) -> None:
         from forge_ai.core.pipeline import run_cognitive_pipeline
-        from forge_ai.core.orchestration.outcomes import CognitivePipelineFailed
+        from forge_ai.core.orchestration.outcomes import CognitivePipelineNeedsExtension
 
         outcome = run_cognitive_pipeline(
             "買い物リストを作りたい", provider=_SynthesisSabotagingProvider({})
         )
-        self.assertIsInstance(outcome, CognitivePipelineFailed)
+        self.assertIsInstance(outcome, CognitivePipelineNeedsExtension)
         self.assertEqual(outcome.reached_stage, "capability_gap")
         self.assertIn("semantic_structure_unresolved", str(outcome.error))
-        # 失敗をChecklist文書へ変換して成功扱いしていない。
+        self.assertEqual(outcome.extension_candidates[0].capability_id, "semantic_structure_unresolved")
+        # Capability GapをChecklist文書へ変換して成功扱いしていない。
         self.assertFalse(hasattr(outcome, "ir"))
 
     def test_successful_synthesis_records_its_source_in_the_decision_trace(self) -> None:

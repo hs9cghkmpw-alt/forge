@@ -13,6 +13,7 @@ from forge_ai.core.pipeline import run_cognitive_pipeline, run_pipeline  # noqa:
 from forge_ai.core.orchestration.outcomes import (  # noqa: E402
     CognitivePipelineFailed,
     CognitivePipelineNeedsConfirmation,
+    CognitivePipelineNeedsExtension,
     CognitivePipelineSuccess,
 )
 from forge_ai.provider.mock_provider import MockProvider  # noqa: E402
@@ -355,9 +356,10 @@ class TestPreliminaryFinalMismatchAcrossRevisions(unittest.TestCase):
         # Template mismatch自体は収束しても、Capability PlanがUNKNOWNなら
         # 「checklistを選べた」ことを成功理由にしてはならない。
         # 新しいfail-closed契約では意味構造未解決として失敗する。
-        self.assertIsInstance(outcome, CognitivePipelineFailed)
+        self.assertIsInstance(outcome, CognitivePipelineNeedsExtension)
         self.assertEqual(outcome.reached_stage, "capability_gap")
         self.assertIn("semantic_structure_unresolved", str(outcome.error))
+        self.assertEqual(outcome.extension_candidates[0].capability_id, "semantic_structure_unresolved")
 
     def test_shared_revision_limit_reached_results_in_needs_confirmation(self) -> None:
         """共有Revision上限到達時はNeedsConfirmationになる(上記の

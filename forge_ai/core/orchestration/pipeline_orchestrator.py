@@ -31,7 +31,7 @@ from forge_ai.core.orchestration.cognitive_context import (
     StructureProvider, StructureSource,
 )
 from forge_ai.core.orchestration.cognitive_dependencies import CognitiveDependencies
-from forge_ai.core.orchestration.capability_gate import require_explicit_checklist
+from forge_ai.core.orchestration.capability_gate import CapabilityGapError, require_explicit_checklist
 from forge_ai.core.orchestration.cognitive_types import CriticIssue, CriticReport, OverallConfidence
 from forge_ai.core.orchestration.confidence import compute_legacy_escalation_reasons, compute_overall_confidence, compute_shadow_judgment
 from forge_ai.core.orchestration.errors import AmbiguityError, ConfirmationRequired, CriticFailure, PlanningError
@@ -44,6 +44,7 @@ from forge_ai.core.semantics.roles import (
 from forge_ai.core.orchestration.outcomes import (
     CognitivePipelineFailed,
     CognitivePipelineNeedsConfirmation,
+    CognitivePipelineNeedsExtension,
     CognitivePipelineOutcome,
     CognitivePipelineSuccess,
     assert_context_ready_for_success,
@@ -584,6 +585,15 @@ class CognitiveOrchestrator:
             return CognitivePipelineNeedsConfirmation(
                 confirmation_request=request, reached_stage=getattr(exc, "stage", "unknown"),
                 partial_context=context, decision_trace=context.decision_trace,
+            )
+        except CapabilityGapError as exc:
+            # A semantic capability gap is not an infrastructure failure.
+            # Preserve partial context and structured extension candidates so
+            # the self-extension loop can continue without reinterpreting text.
+            return CognitivePipelineNeedsExtension(
+                error=exc, reached_stage=getattr(exc, "stage", "capability_gap"),
+                partial_context=context, extension_candidates=exc.extension_candidates,
+                decision_trace=context.decision_trace,
             )
         except (PlanningError, CriticFailure) as exc:
             return CognitivePipelineFailed(
