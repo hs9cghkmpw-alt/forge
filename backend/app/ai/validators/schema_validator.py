@@ -76,6 +76,11 @@ MAX_COMPOSITE_DEPTH = 3  # composite内にcomposite…と何段ネストして�
 MAX_RECORD_LIST_ITEMS = 500  # checklist/string_listと同じ上限に揃える
 MAX_RECORD_FIELDS = 20  # 1Recordが持てるFieldの上限(既存state.maxProperties: 30より保守的)
 MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)
+MAX_GA1_LOGIC_ENTRIES = 100
+MAX_GA1_EXPRESSION_DEPTH = 24
+GA1_UNARY_OPS = {"not", "negate"}
+GA1_BINARY_OPS = {"add", "subtract", "multiply", "divide", "eq", "neq", "lt", "lte", "gt", "gte", "and", "or"}
+GA1_AGGREGATE_OPS = {"sum", "count", "average", "min", "max"}
 
 SUPPORTED_VERSIONS = {"1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14", "1.15"}
 
@@ -508,13 +513,91 @@ def _err(path: str, category: Category, rule: str, message: str, severity: Sever
     return ValidationIssue(path=path, category=category, severity=severity, rule=rule, message=message)
 
 
+def _check_ga1_expression(expr: Any, path: str, *, depth: int = 0, allow_field: bool = False) -> list[ValidationIssue]:
+    if depth > MAX_GA1_EXPRESSION_DEPTH:
+        return [_err(path, Category.RUNTIME_SAFETY, "logic_expression_depth", "logic expressionのネストが深すぎます。")]
+    if not isinstance(expr, dict):
+        return [_err(path, Category.SCHEMA, "logic_expression_object", "logic expressionはobjectである必要があります。")]
+    errors: list[ValidationIssue] = []
+    kind = expr.get("kind")
+    if kind == "literal":
+        errors.extend(_check_additional_properties(expr, {"kind", "value"}, path))
+        if isinstance(expr.get("value"), (dict, list)):
+            errors.append(_err(f"{path}/value", Category.SCHEMA, "logic_literal_scalar", "literal.valueはscalar/nullのみ使用できます。"))
+        return errors
+    if kind == "state":
+        errors.extend(_check_additional_properties(expr, {"kind", "key"}, path))
+        if not _is_nonempty_str(expr.get("key"), 64):
+            errors.append(_err(f"{path}/key", Category.SCHEMA, "logic_state_key", "state.keyは1〜64文字の文字列である必要があります。"))
+        return errors
+    if kind == "field" and allow_field:
+        errors.extend(_check_additional_properties(expr, {"kind", "field"}, path))
+        if not _is_nonempty_str(expr.get("field"), 64):
+            errors.append(_err(f"{path}/field", Category.SCHEMA, "logic_field_name", "field.fieldは1〜64文字の文字列である必要があります。"))
+        return errors
+    if kind == "unary":
+        errors.extend(_check_additional_properties(expr, {"kind", "op", "value"}, path))
+        if expr.get("op") not in GA1_UNARY_OPS:
+            errors.append(_err(f"{path}/op", Category.SCHEMA, "logic_unary_op", f"未対応のunary opです: {expr.get('op')!r}"))
+        if "value" not in expr:
+            errors.append(_err(f"{path}/value", Category.SCHEMA, "required", "unary.valueは必須です。"))
+        else:
+            errors.extend(_check_ga1_expression(expr["value"], f"{path}/value", depth=depth + 1, allow_field=allow_field))
+        return errors
+    if kind == "binary":
+        errors.extend(_check_additional_properties(expr, {"kind", "op", "left", "right"}, path))
+        if expr.get("op") not in GA1_BINARY_OPS:
+            errors.append(_err(f"{path}/op", Category.SCHEMA, "logic_binary_op", f"未対応のbinary opです: {expr.get('op')!r}"))
+        for side in ("left", "right"):
+            if side not in expr:
+                errors.append(_err(f"{path}/{side}", Category.SCHEMA, "required", f"binary.{side}は必須です。"))
+            else:
+                errors.extend(_check_ga1_expression(expr[side], f"{path}/{side}", depth=depth + 1, allow_field=allow_field))
+        return errors
+    if kind == "aggregate":
+        errors.extend(_check_additional_properties(expr, {"kind", "source", "op", "field", "where"}, path))
+        if not _is_nonempty_str(expr.get("source"), 64):
+            errors.append(_err(f"{path}/source", Category.SCHEMA, "logic_aggregate_source", "aggregate.sourceは1〜64文字の文字列である必要があります。"))
+        op = expr.get("op")
+        if op not in GA1_AGGREGATE_OPS:
+            errors.append(_err(f"{path}/op", Category.SCHEMA, "logic_aggregate_op", f"未対応のaggregate opです: {op!r}"))
+        if op != "count" and not _is_nonempty_str(expr.get("field"), 64):
+            errors.append(_err(f"{path}/field", Category.SCHEMA, "logic_aggregate_field", f"aggregate.{op}にはfieldが必要です。"))
+        if "where" in expr:
+            errors.extend(_check_ga1_expression(expr["where"], f"{path}/where", depth=depth + 1, allow_field=True))
+        return errors
+    errors.append(_err(f"{path}/kind", Category.SCHEMA, "logic_expression_kind", f"未対応のexpression kindです: {kind!r}"))
+    return errors
+
+
+def _check_ga1_logic(logic: Any, path: str) -> list[ValidationIssue]:
+    if not isinstance(logic, dict):
+        return [_err(path, Category.SCHEMA, "logic_object", "logicはobjectである必要があります。")]
+    errors = _check_additional_properties(logic, {"derived", "visible_when"}, path)
+    for section in ("derived", "visible_when"):
+        if section not in logic:
+            continue
+        value = logic[section]
+        if not isinstance(value, dict):
+            errors.append(_err(f"{path}/{section}", Category.SCHEMA, "logic_section_object", f"logic.{section}はobjectである必要があります。"))
+            continue
+        if len(value) > MAX_GA1_LOGIC_ENTRIES:
+            errors.append(_err(f"{path}/{section}", Category.RUNTIME_SAFETY, "logic_entry_limit", f"logic.{section}は最大{MAX_GA1_LOGIC_ENTRIES}件です。"))
+        for name, expression in value.items():
+            if not _is_nonempty_str(name, 64):
+                errors.append(_err(f"{path}/{section}", Category.SCHEMA, "logic_entry_name", "logic entry名は1〜64文字の文字列である必要があります。"))
+                continue
+            errors.extend(_check_ga1_expression(expression, f"{path}/{section}/{name}"))
+    return errors
+
+
 def _check_schema(doc: Any, path: str) -> list[ValidationIssue]:
     errors: list[ValidationIssue] = []
 
     if not isinstance(doc, dict):
         return [_err(path, Category.SCHEMA, "root_is_object", "ルートはobjectである必要があります。")]
 
-    allowed_keys = {"version", "app", "initial_screen_id", "screens", "record_schemas", "design_tokens"}
+    allowed_keys = {"version", "app", "initial_screen_id", "screens", "record_schemas", "design_tokens", "logic"}
     errors.extend(_check_additional_properties(doc, allowed_keys, path))
 
     version = doc.get("version")
@@ -540,6 +623,12 @@ def _check_schema(doc: Any, path: str) -> list[ValidationIssue]:
                                 "design_tokensはv1.5以降の文書でのみ使用できます。"))
         else:
             errors.extend(_check_design_tokens(doc["design_tokens"], f"{path}/design_tokens"))
+
+    if "logic" in doc:
+        if not _version_at_least(version, "1.15"):
+            errors.append(_err(f"{path}/logic", Category.SCHEMA, "field_not_allowed_in_version", "logicはv1.15以降の文書でのみ使用できます。"))
+        else:
+            errors.extend(_check_ga1_logic(doc["logic"], f"{path}/logic"))
 
     if "app" in doc:
         app = doc["app"]
