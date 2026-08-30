@@ -8,10 +8,10 @@ on:
       - .github/workflows/forge_audio_web_probe.yml
       - frontend/pubspec.yaml
       - frontend/pubspec.lock
-      - frontend/integration_test/forge_audio_mixer_web_integration_test.dart
-      - frontend/test_driver/integration_test.dart
+      - frontend/lib/audio_probe_main.dart
       - frontend/lib/json_ui/widget_registry/widget_registry_v1_14.dart
       - frontend/assets/sounds/**
+      - scripts/serve_audio_web_probe.py
 
 concurrency:
   group: forge-real-chrome-audio-${{ github.ref }}
@@ -38,33 +38,68 @@ jobs:
           flutter config --enable-web
           flutter clean
           flutter pub get
+      - name: Build real Flutter Web audio probe
+        working-directory: frontend
+        run: flutter build web --debug --target lib/audio_probe_main.dart
       - name: Verify Chrome is available
-        run: google-chrome --version || chromium --version
-      - name: Create deterministic headless Chrome launcher for media probe
+        run: google-chrome --version
+      - name: Serve probe and capture same-origin result
         run: |
-          cat >/tmp/forge-chrome <<'EOF'
-          #!/bin/sh
-          exec /usr/bin/google-chrome \
+          rm -f /tmp/forge_audio_result.json /tmp/forge_audio_server.log
+          python scripts/serve_audio_web_probe.py \
+            --root frontend/build/web \
+            --report /tmp/forge_audio_result.json \
+            --port 8080 > /tmp/forge_audio_server.log 2>&1 &
+          echo $! > /tmp/forge_audio_server.pid
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:8080/ >/dev/null && break
+            sleep 1
+          done
+
+          # No webdriver/debug-service dependency: launch the exact compiled app,
+          # allow autoplay in this deterministic evidence environment, and wait
+          # for the app itself to report whether both real web AudioPlayers started.
+          timeout 25s /usr/bin/google-chrome \
             --headless=new \
             --no-sandbox \
             --disable-dev-shm-usage \
             --autoplay-policy=no-user-gesture-required \
-            "$@"
-          EOF
-          chmod +x /tmp/forge-chrome
-      - name: Run compiled Flutter Web integration probe
-        working-directory: frontend
-        env:
-          CHROME_EXECUTABLE: /tmp/forge-chrome
-        run: |
-          timeout 240s flutter drive \
-            --driver=test_driver/integration_test.dart \
-            --target=integration_test/forge_audio_mixer_web_integration_test.dart \
-            -d chrome
+            --disable-background-timer-throttling \
+            http://127.0.0.1:8080/ >/tmp/forge_audio_chrome.log 2>&1 || true
 
-# This probe compiles and launches a Flutter Web application, so the generated
-# web plugin registrant runs. It is intentionally stronger than
-# `flutter test --platform chrome`, whose test harness can bypass app plugin
-# registration and produce false MissingPluginException failures. The shell
-# timeout turns a browser/driver deadlock into an objective failure instead of
-# an indefinitely-running gate.
+          for i in $(seq 1 20); do
+            test -f /tmp/forge_audio_result.json && break
+            sleep 1
+          done
+          echo '--- server ---'
+          cat /tmp/forge_audio_server.log || true
+          echo '--- chrome tail ---'
+          tail -80 /tmp/forge_audio_chrome.log || true
+          echo '--- result ---'
+          test -f /tmp/forge_audio_result.json || { echo 'browser did not report'; exit 1; }
+          cat /tmp/forge_audio_result.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('/tmp/forge_audio_result.json').read_text())
+          assert data.get('status') == 'pass', data
+          print('FORGE_AUDIO_E2E compiled_web_two_layers=PASS')
+          PY
+      - name: Stop evidence server
+        if: always()
+        run: |
+          test -f /tmp/forge_audio_server.pid && kill "$(cat /tmp/forge_audio_server.pid)" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-real-chrome-audio-evidence
+          path: |
+            /tmp/forge_audio_result.json
+            /tmp/forge_audio_server.log
+            /tmp/forge_audio_chrome.log
+          if-no-files-found: warn
+
+# The browser executes a compiled Flutter Web application, therefore Flutter's
+# generated web plugin registrant initializes audioplayers_web. The probe reports
+# its result over same-origin HTTP, avoiding the webdriver/debug-service harness
+# that previously hung before the integration test could start.
