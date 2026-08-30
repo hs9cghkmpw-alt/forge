@@ -113,16 +113,47 @@ probe.py                  起動確認
 
 ---
 
+## 3.5 通し（未知要求 → 獲得 → retry → 別要求で再利用）
+
+`forge_ai/tests/test_self_extension_e2e_real_build.py`。
+Capability Plan も retry も**本番の関数**であり、build は**実 subprocess**。
+
+実行結果（実測）:
+
+```
+BEFORE   : missing = ('view.calendar',)          ← 獲得前は MISSING
+build_id : build-0a5cea3f69304b309654595cdda3000e
+manifest : promoted     blockers: ()             ← 全 Gate 通過
+RETRY #1 : missing = ()   views = ('view.calendar',)
+REUSE #2 : missing = ()   views = ('view.calendar',)
+counts   : synthesis=1  build=1  provider_calls=1
+```
+
+- **1回目の要求**「通院した日をカレンダーで確認したい」
+- **2回目の要求**「会議の予定を登録してカレンダーで見たい」（別の文・別の題材）
+- 2回目で **生成も build も Provider 呼び出しも増えていない**
+
+retry が本物であることは配線破壊試験で確認した——`capability_plan.py` が
+Registry を見る行を外すと、retry と再利用の2件が落ちる。
+
+Negative proof（通し側）:
+
+- `runtime_probe` を失敗させると activation が出ず、`install()` が
+  `ValueError` で拒否し、**gap は開いたまま残る**
+- `requested` に入っているだけでは PROMOTED にならない（`6da20fc` の境界）
+
+---
+
 ## 4. **証明していないこと**（ここが本題）
 
 | 項目 | 状態 |
 |---|---|
 | **その Source を実 Model が書いたこと** | **未証明。** ここでの Provider は **Test Double** であり、実装文字列はテストが与えている。**Forge が自律生成したとは言えない** |
-| 自然言語の未知要求 → NeedsExtension → … → retry の通し | **未証明**（このモジュールは cycle の実装者ピースであり、通しは未接続） |
+| 自然言語の未知要求 → 獲得 → retry → 別要求で再利用 | **証明済み**（§3.5。ただし Source は Test Double 由来） |
 | retry 後に生成された Forge Document に当該 Widget が入ること | **未証明** |
 | Backend Validator PASS までの通し | **未証明** |
 | Flutter runtime での実描画 | **未証明** |
-| 2つ目の別要求での再利用（再 build 無し） | **未証明**（数える口＝`synthesis_count` / `build_count` は用意済み） |
+| 2つ目の別要求での再利用（再 build 無し） | **証明済み**（§3.5。synthesis=1 / build=1 のまま） |
 | **Real Local Model runs** | **0**（増やしていない） |
 
 > **いちばん重要な未証明点は1つ目である。**

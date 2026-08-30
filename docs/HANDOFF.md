@@ -64,10 +64,10 @@ still produces no coordinate fields.
 | Item | State |
 |---|---|
 | That a **real model** authored the generated source | **UNPROVEN.** The provider here is a Test Double; the implementation string is supplied by the test |
-| Natural-language request -> NeedsExtension -> cycle -> retry | **UNPROVEN** |
+| Natural-language request -> acquisition -> retry -> reuse | **PROVEN** (real build; `capability_plan` consults the registry on retry) |
 | Retried document contains the widget; Validator PASS | **UNPROVEN** |
 | Flutter runtime rendering evidence | **UNPROVEN** |
-| Second different request reuses without a second build | **UNPROVEN** (counters exist: `synthesis_count` / `build_count`) |
+| Second different request reuses without a second build | **PROVEN** (synthesis=1, build=1, provider_calls=1 across two different requests) |
 | Real Local Model runs | **0** |
 
 Evidence: `docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md`.
