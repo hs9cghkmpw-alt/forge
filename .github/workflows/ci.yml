@@ -1,7 +1,29 @@
 # Forge CI（FORGE-AI-FOUNDATION-011 §7、2026-08-17）
 #
-# Canonical CI. A temporary one-shot patch job is appended at the bottom and
-# will be removed immediately after it lands the GA-1 validator change.
+# ---
+#
+# ## 何を守るためのCIか
+#
+# Forgeのテストは「基盤が動くこと」より **「基盤が本番から使われて
+# いること」** を測る方向へ寄せてきた（Phase Bの Anti-Bypass
+# Regression、R0の Experience Wiring）。この種のテストは、
+# 「気を付ける」では守れないものを機械に守らせるためにある。
+#
+# CIも同じ役割である。ローカルで通ったかどうかは記憶に頼る話であり、
+# 記憶は忘れる。
+#
+# ## 実APIを絶対に呼ばない
+#
+# `FORGE_LIVE_TEST` を設定しない。設定しない限り
+# `tests/test_live_api.py` は自分でSKIPする（既定SKIP、010 Phase I）。
+# CIへAPIキーを置かないので、
+#
+#   * 無料枠を消費しない（§38）
+#   * Secretを持たないので漏れない（§14〜18の境界をCIでも保つ）
+#   * PRからの実行でSecretが露出する経路が最初から存在しない
+#
+# Providerが未設定な環境では Auto Discovery が候補を空にするため、
+# 実Providerを要求するテストは存在しない構成になっている。
 
 name: CI
 
@@ -10,12 +32,13 @@ on:
     branches: ["**"]
   pull_request:
 
+# 同じブランチへ続けてpushしたとき、古い実行を止める。
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   backend:
@@ -24,62 +47,108 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # requirements.txt が明示している上限・下限の両端で回す。
+        # pydantic 2.7.4 / supabase 2.5.1 は 3.13 のwheelを出して
+        # いないので 3.13 は入れない（上限を上げるのは、その2つを
+        # 上げてからの話である。requirements.txt 冒頭のコメント参照）。
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: backend/requirements.txt
+
       - name: Install backend dependencies
         run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
+
       - name: forge_ai tests
         working-directory: forge_ai
         run: python -m pytest tests -q
+
       - name: backend tests
         working-directory: backend
+        # 実APIは呼ばない（FORGE_LIVE_TEST を設定しない = test_live_api.py は自分でSKIPする）。
         run: python -m pytest tests -q
 
+  # ---------------------------------------------------------------------
+  # Backend smoke（013 §7）
+  #
+  # 「テストが通る」と「サーバーが起動して応答する」は別である。
+  # 実際に uvicorn を立てて HTTP を叩く。とくに **CORS** を見る:
+  # regex を書き間違えても unit test は通りうるが、開発中の Flutter Web
+  # からは繋がらなくなる。CI をすり抜ける形にしない。
+  #
+  # 実 Cloud API は呼ばない。API Key も置かない。Mock を本番の
+  # fallback にもしない（Provider を指定しないので、AI を呼ぶ経路自体を
+  # 叩かない ── /health と OPTIONS だけで足りる）。
+  # ---------------------------------------------------------------------
   backend-smoke:
     name: backend smoke (起動 + CORS)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.txt
+
       - name: Install backend dependencies
         run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
+
       - name: Start uvicorn
         env:
           FORGE_ENV: development
+          # 空文字の optional env でも起動できること（013 §2 の実バグ）。
+          # `.env.example` をコピーした利用者と同じ状態を CI で再現する。
           FORGE_LOCAL_TIMEOUT_SECONDS: ""
           FORGE_GROQ_TIMEOUT_SECONDS: ""
         run: |
-          nohup python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
+          # 出力をファイルへ逃がす。stdout を継承したまま background に
+          # すると、runner が step の終了を待ち続けることがある。
+          nohup python -m uvicorn backend.app.main:app \
+            --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
           echo $! > /tmp/uvicorn.pid
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:8000/health > /dev/null; then echo "起動を確認"; exit 0; fi
+            if curl -sf http://127.0.0.1:8000/health > /dev/null; then
+              echo "起動を確認"; exit 0
+            fi
             sleep 1
           done
+          echo "30秒待っても /health が応答しない"
           cat /tmp/uvicorn.log
           exit 1
+
       - name: GET /health は 200
         run: |
           code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health)
-          test "$code" = "200"
+          test "$code" = "200" || { echo "health=$code"; exit 1; }
+
       - name: localhost Origin の preflight が通る
         run: |
-          headers=$(curl -s -i -X OPTIONS http://127.0.0.1:8000/api/v1/ai/converse -H 'Origin: http://localhost:56000' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type')
-          echo "$headers" | grep -qi '^HTTP/1.1 200'
-          echo "$headers" | grep -qi '^access-control-allow-origin: http://localhost:56000'
+          headers=$(curl -s -i -X OPTIONS http://127.0.0.1:8000/api/v1/ai/converse \
+            -H 'Origin: http://localhost:56000' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type')
+          echo "$headers" | head -20
+          echo "$headers" | grep -qi '^HTTP/1.1 200' \
+            || { echo 'preflight が 200 を返さない'; exit 1; }
+          echo "$headers" | grep -qi '^access-control-allow-origin: http://localhost:56000' \
+            || { echo 'Access-Control-Allow-Origin が Origin と一致しない'; exit 1; }
+
       - name: 外部 Origin は許可されない
         run: |
-          headers=$(curl -s -i -X OPTIONS http://127.0.0.1:8000/api/v1/ai/converse -H 'Origin: https://evil.example' -H 'Access-Control-Request-Method: POST')
-          if echo "$headers" | grep -qi '^access-control-allow-origin'; then exit 1; fi
+          headers=$(curl -s -i -X OPTIONS http://127.0.0.1:8000/api/v1/ai/converse \
+            -H 'Origin: https://evil.example' \
+            -H 'Access-Control-Request-Method: POST')
+          if echo "$headers" | grep -qi '^access-control-allow-origin'; then
+            echo '外部 Origin を許可している'; exit 1
+          fi
+
       - name: Stop uvicorn
         if: always()
         run: kill "$(cat /tmp/uvicorn.pid)" || true
@@ -89,57 +158,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
+          # pubspec.yaml の sdk: '>=3.3.0 <4.0.0' に対して stable を使う。
           channel: stable
           cache: true
+
       - name: flutter pub get
         working-directory: frontend
         run: flutter pub get
+
+      # `flutter analyze` は 2026-08-13 に warning/info 含めて0件へ
+      # 落としてある（STATUS.md）。0件を保つのが目的なので、
+      # info も失敗として扱う。
       - name: flutter analyze
         working-directory: frontend
         run: flutter analyze --fatal-infos --fatal-warnings
+
       - name: flutter test
         working-directory: frontend
         run: flutter test
+
+      # 013 §7: analyze と test が通っても **Web build は落ちうる**
+      # （Web 非対応の依存、条件付き import、dart2js だけが出す型エラー等）。
+      # Forge の完成図は Web IDE なので、Web が build できることは
+      # 品質ではなく前提である。
       - name: flutter build web
         working-directory: frontend
         run: flutter build web --debug
-
-  ga1-validator-patch:
-    if: github.ref == 'refs/heads/claude/forge-master-handoff-k46jns' && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: claude/forge-master-handoff-k46jns
-          fetch-depth: 0
-      - name: Patch validator and tests
-        shell: python
-        run: |
-          from pathlib import Path
-
-          p = Path('backend/app/ai/validators/schema_validator.py')
-          text = p.read_text(encoding='utf-8')
-          if 'MAX_GA1_LOGIC_ENTRIES = 100' not in text:
-              text = text.replace(
-                  'MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)\n',
-                  'MAX_FIELD_BINDINGS = 20  # add_record.field_bindingsの上限(MAX_RECORD_FIELDSと揃える)\nMAX_GA1_LOGIC_ENTRIES = 100\nMAX_GA1_EXPRESSION_DEPTH = 24\nGA1_UNARY_OPS = {"not", "negate"}\nGA1_BINARY_OPS = {"add", "subtract", "multiply", "divide", "eq", "neq", "lt", "lte", "gt", "gte", "and", "or"}\nGA1_AGGREGATE_OPS = {"sum", "count", "average", "min", "max"}\n',
-                  1,
-              )
-              helper = '''def _check_ga1_expression(expr: Any, path: str, *, depth: int = 0, allow_field: bool = False) -> list[ValidationIssue]:\n    if depth > MAX_GA1_EXPRESSION_DEPTH:\n        return [_err(path, Category.RUNTIME_SAFETY, "logic_expression_depth", "logic expressionのネストが深すぎます。")]\n    if not isinstance(expr, dict):\n        return [_err(path, Category.SCHEMA, "logic_expression_object", "logic expressionはobjectである必要があります。")]\n    errors: list[ValidationIssue] = []\n    kind = expr.get("kind")\n    if kind == "literal":\n        errors.extend(_check_additional_properties(expr, {"kind", "value"}, path))\n        if isinstance(expr.get("value"), (dict, list)):\n            errors.append(_err(f"{path}/value", Category.SCHEMA, "logic_literal_scalar", "literal.valueはscalar/nullのみ使用できます。"))\n        return errors\n    if kind == "state":\n        errors.extend(_check_additional_properties(expr, {"kind", "key"}, path))\n        if not _is_nonempty_str(expr.get("key"), 64):\n            errors.append(_err(f"{path}/key", Category.SCHEMA, "logic_state_key", "state.keyは1〜64文字の文字列である必要があります。"))\n        return errors\n    if kind == "field" and allow_field:\n        errors.extend(_check_additional_properties(expr, {"kind", "field"}, path))\n        if not _is_nonempty_str(expr.get("field"), 64):\n            errors.append(_err(f"{path}/field", Category.SCHEMA, "logic_field_name", "field.fieldは1〜64文字の文字列である必要があります。"))\n        return errors\n    if kind == "unary":\n        errors.extend(_check_additional_properties(expr, {"kind", "op", "value"}, path))\n        if expr.get("op") not in GA1_UNARY_OPS:\n            errors.append(_err(f"{path}/op", Category.SCHEMA, "logic_unary_op", f"未対応のunary opです: {expr.get('op')!r}"))\n        if "value" not in expr:\n            errors.append(_err(f"{path}/value", Category.SCHEMA, "required", "unary.valueは必須です。"))\n        else:\n            errors.extend(_check_ga1_expression(expr["value"], f"{path}/value", depth=depth + 1, allow_field=allow_field))\n        return errors\n    if kind == "binary":\n        errors.extend(_check_additional_properties(expr, {"kind", "op", "left", "right"}, path))\n        if expr.get("op") not in GA1_BINARY_OPS:\n            errors.append(_err(f"{path}/op", Category.SCHEMA, "logic_binary_op", f"未対応のbinary opです: {expr.get('op')!r}"))\n        for side in ("left", "right"):\n            if side not in expr:\n                errors.append(_err(f"{path}/{side}", Category.SCHEMA, "required", f"binary.{side}は必須です。"))\n            else:\n                errors.extend(_check_ga1_expression(expr[side], f"{path}/{side}", depth=depth + 1, allow_field=allow_field))\n        return errors\n    if kind == "aggregate":\n        errors.extend(_check_additional_properties(expr, {"kind", "source", "op", "field", "where"}, path))\n        if not _is_nonempty_str(expr.get("source"), 64):\n            errors.append(_err(f"{path}/source", Category.SCHEMA, "logic_aggregate_source", "aggregate.sourceは1〜64文字の文字列である必要があります。"))\n        op = expr.get("op")\n        if op not in GA1_AGGREGATE_OPS:\n            errors.append(_err(f"{path}/op", Category.SCHEMA, "logic_aggregate_op", f"未対応のaggregate opです: {op!r}"))\n        if op != "count" and not _is_nonempty_str(expr.get("field"), 64):\n            errors.append(_err(f"{path}/field", Category.SCHEMA, "logic_aggregate_field", f"aggregate.{op}にはfieldが必要です。"))\n        if "where" in expr:\n            errors.extend(_check_ga1_expression(expr["where"], f"{path}/where", depth=depth + 1, allow_field=True))\n        return errors\n    errors.append(_err(f"{path}/kind", Category.SCHEMA, "logic_expression_kind", f"未対応のexpression kindです: {kind!r}"))\n    return errors\n\n\ndef _check_ga1_logic(logic: Any, path: str) -> list[ValidationIssue]:\n    if not isinstance(logic, dict):\n        return [_err(path, Category.SCHEMA, "logic_object", "logicはobjectである必要があります。")]\n    errors = _check_additional_properties(logic, {"derived", "visible_when"}, path)\n    for section in ("derived", "visible_when"):\n        if section not in logic:\n            continue\n        value = logic[section]\n        if not isinstance(value, dict):\n            errors.append(_err(f"{path}/{section}", Category.SCHEMA, "logic_section_object", f"logic.{section}はobjectである必要があります。"))\n            continue\n        if len(value) > MAX_GA1_LOGIC_ENTRIES:\n            errors.append(_err(f"{path}/{section}", Category.RUNTIME_SAFETY, "logic_entry_limit", f"logic.{section}は最大{MAX_GA1_LOGIC_ENTRIES}件です。"))\n        for name, expression in value.items():\n            if not _is_nonempty_str(name, 64):\n                errors.append(_err(f"{path}/{section}", Category.SCHEMA, "logic_entry_name", "logic entry名は1〜64文字の文字列である必要があります。"))\n                continue\n            errors.extend(_check_ga1_expression(expression, f"{path}/{section}/{name}"))\n    return errors\n\n\n'''
-              text = text.replace('def _check_schema(doc: Any, path: str) -> list[ValidationIssue]:\n', helper + 'def _check_schema(doc: Any, path: str) -> list[ValidationIssue]:\n', 1)
-              text = text.replace('allowed_keys = {"version", "app", "initial_screen_id", "screens", "record_schemas", "design_tokens"}', 'allowed_keys = {"version", "app", "initial_screen_id", "screens", "record_schemas", "design_tokens", "logic"}', 1)
-              text = text.replace('    if "app" in doc:\n', '    if "logic" in doc:\n        if not _version_at_least(version, "1.15"):\n            errors.append(_err(f"{path}/logic", Category.SCHEMA, "field_not_allowed_in_version", "logicはv1.15以降の文書でのみ使用できます。"))\n        else:\n            errors.extend(_check_ga1_logic(doc["logic"], f"{path}/logic"))\n\n    if "app" in doc:\n', 1)
-              p.write_text(text, encoding='utf-8')
-
-          test = Path('backend/tests/test_ga1_logic_validator.py')
-          test.write_text('''from app.ai.validators.schema_validator import validate_forge_document\n\n\ndef _doc(version: str = "1.15") -> dict:\n    return {"version": version, "initial_screen_id": "s", "screens": [{"id": "s", "title": "T", "state": {}, "body": {"type": "column", "id": "root", "children": []}}]}\n\n\ndef test_ga1_logic_valid_and_unknown_op_rejected() -> None:\n    doc = _doc(); doc["logic"] = {"derived": {"x": {"kind": "literal", "value": 1}}}\n    assert validate_forge_document(doc).valid\n    doc["logic"] = {"derived": {"x": {"kind": "binary", "op": "execute_python", "left": {"kind": "literal", "value": 1}, "right": {"kind": "literal", "value": 2}}}}\n    result = validate_forge_document(doc)\n    assert not result.valid and any(e.rule == "logic_binary_op" for e in result.errors)\n\n\ndef test_ga1_logic_rejected_before_v115() -> None:\n    doc = _doc("1.14"); doc["logic"] = {"derived": {"x": {"kind": "literal", "value": 1}}}\n    result = validate_forge_document(doc)\n    assert not result.valid and any(e.rule == "field_not_allowed_in_version" for e in result.errors)\n\n\ndef test_aggregate_where_allows_field_refs_only_inside_where() -> None:\n    doc = _doc(); doc["logic"] = {"derived": {"total": {"kind": "aggregate", "source": "records", "op": "sum", "field": "amount", "where": {"kind": "binary", "op": "eq", "left": {"kind": "field", "field": "category"}, "right": {"kind": "literal", "value": "food"}}}}}\n    assert validate_forge_document(doc).valid\n    doc["logic"] = {"derived": {"bad": {"kind": "field", "field": "amount"}}}\n    result = validate_forge_document(doc)\n    assert not result.valid and any(e.rule == "logic_expression_kind" for e in result.errors)\n''', encoding='utf-8')
-      - name: Commit validator patch
-        run: |
-          if git diff --quiet; then exit 0; fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/app/ai/validators/schema_validator.py backend/tests/test_ga1_logic_validator.py
-          git commit -m "feat: validate GA-1 document logic fail closed"
-          git push origin HEAD:claude/forge-master-handoff-k46jns
