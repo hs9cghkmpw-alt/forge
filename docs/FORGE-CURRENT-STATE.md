@@ -5,7 +5,7 @@
 **Detailed product authority:** `docs/PRODUCT-DIRECTION.md`  
 **Operational handoff:** `docs/HANDOFF.md`
 
-Last reviewed against GitHub HEAD: **2026-08-29**
+Last reviewed against GitHub code HEAD: **2026-08-31**
 
 ---
 
@@ -13,8 +13,9 @@ Last reviewed against GitHub HEAD: **2026-08-29**
 
 - Repository: `hs9cghkmpw-alt/forge`
 - Active/default branch at review time: `claude/forge-master-handoff-k46jns`
-- Reviewed HEAD: `af66546b8ecb80b810daf489b15ae3816bdb39e2`
-- Latest reviewed commit: `docs: record simulation loop vertical slice checkpoint`
+- Latest code HEAD reviewed before documentation-only checkpoint updates: `c2ec1529ce1c3eb97d456dc667a03cd1a3ee1ac7`
+- Canonical CI for that code HEAD: run `33340554937` — **SUCCESS, 4/4 jobs**
+- Physical-PC checkpoint: `docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md`
 
 This file is not a replacement for Git history, CI, evidence JSON, or `docs/HANDOFF.md`. It is a compact map of the current state so agents do not confuse old chat context with current repository facts.
 
@@ -120,9 +121,9 @@ A genuine GitHub-hosted run used a real Ollama runtime and real `qwen2.5:7b-inst
 
 - GitHub-hosted real-agent run: `33227448429` — **PASS**
 - Durable evidence: `docs/evidence/agent020b/agent020b-20260829-015345.json`
-- Physical/user-PC execution: **UNVERIFIED / NOT YET EXECUTED**
+- Physical/user-PC execution of this Local-Agent path: **UNVERIFIED**
 
-This proves a real Local Model can produce a bounded agent tool plan and Forge can execute the selected read-only tools through the production Agent path. It does **not** prove full autonomous build/test/runtime/visual repair by the model.
+This proves a real Local Model can produce a bounded agent tool plan and Forge can execute the selected read-only tools through the production Agent path. It does **not** prove full autonomous build/test/runtime/visual repair by the model, and it does not prove real-model authorship of a newly synthesized capability.
 
 ---
 
@@ -164,7 +165,62 @@ Important boundary: this was a bounded trusted Forge-side repair. It is **not** 
 
 ---
 
-## 7. Golden Generated App Quality Gate
+## 7. Self-extension — current proven boundary
+
+Forge now has a production self-extension path that can:
+
+- detect a Capability Gap,
+- synthesize a build-time artifact through the production implementer,
+- run real subprocess test/build/runtime-probe gates,
+- refuse failed or unsafe artifacts,
+- promote only verified artifacts,
+- install the promoted capability,
+- retry the original request,
+- reuse the capability from a second different request without a second build.
+
+Natural-language acquisition -> retry -> reuse is **PROVEN** using `view.calendar` as the unseen capability example. Compiler-side capability-name branching for widget emission is also removed; an acquired capability can register a document contribution and emit its widget through the production compiler path.
+
+Still **UNPROVEN**:
+
+- real-model authorship of the synthesized capability source (`capability_implementation` still uses a Test Double in the proof),
+- Validator PASS for a genuinely new/acquired widget,
+- real Flutter/Dart runtime rendering of a genuinely new/acquired widget,
+- full unseen request -> self-extension -> working rendered product E2E.
+
+Primary evidence: `docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md` and `docs/HANDOFF.md`.
+
+---
+
+## 8. Physical-PC execution checkpoint — 2026-08-31
+
+A real Windows PC at ぱすとらる was used for Forge verification.
+
+Observed session results:
+
+- `flutter analyze`: **PASS / clean**
+- `flutter test`: **PASS — 546 tests**
+- `flutter build web`: **PASS**
+- `flutter run -d chrome`: **BLOCKED before successful app startup**
+- actual rendered app in Chrome: **UNVERIFIED**
+- manual visual/behavioral interaction: **NOT EXECUTED**
+
+The blocker is Flutter SDK / web SDK path resolution through Puro (Flutter version manager). The session observed a path shaped like:
+
+```text
+../../../.puro/envs/stable/flutter/bin/cache/flutter_web_sdk/
+```
+
+The exact local checkout SHA used for this physical run was **not durably captured**, so the next physical session must first record `git rev-parse HEAD` before attaching results to a commit.
+
+Durable checkpoint and exact resume instructions:
+
+- `docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md`
+
+This physical session is useful evidence that analyze/test/web-build work on that host, but it is **not physical runtime PASS**.
+
+---
+
+## 9. Golden Generated App Quality Gate
 
 **CURRENT STATUS: FAIL**
 
@@ -176,9 +232,9 @@ Current priority is therefore not merely “more tests”; it is closing real se
 
 ---
 
-## 8. Simulation/runtime capability — latest vertical slice
+## 10. Simulation/runtime capability — latest vertical slice
 
-The current branch now contains and documents a reusable deterministic simulation vertical slice through Forge’s normal runtime/validation surface.
+The current branch contains and documents a reusable deterministic simulation vertical slice through Forge’s normal runtime/validation surface.
 
 Progress includes:
 
@@ -189,10 +245,9 @@ Progress includes:
 - persistence/pause/reset semantics tests,
 - backend validator support for the simulation-loop document shape,
 - Forge Document schema and widget-registry/runtime wiring,
-- frontend tests that prove simulation state flows through the existing Forge state/runtime path,
-- a committed checkpoint documenting the vertical slice at HEAD `af66546b8ecb80b810daf489b15ae3816bdb39e2`.
+- frontend tests that prove simulation state flows through the existing Forge state/runtime path.
 
-Key integration commit immediately before the checkpoint:
+Key integration commit:
 
 - `12ed096f389904809152f57786942849c49a07c1` — `forge-golden: wire simulation loop through runtime and validator`
 
@@ -202,37 +257,39 @@ It is still **not** proof that all simulation/game/media requests are supported,
 
 ---
 
-## 9. Current unverified / incomplete boundaries
+## 11. Current unverified / incomplete boundaries
 
 Do not claim these as complete without new evidence:
 
 - Physical/user-PC 020B Local-Agent execution
+- Successful Chrome startup for the 2026-08-31 physical-PC checkpoint
 - Genuine visual PASS for the current generated Golden App gate
+- Real-model authorship of a new capability during self-extension
+- Validator + real Flutter runtime proof for a genuinely acquired/new widget
 - Local model autonomously diagnosing and selecting a successful repair
 - Complete production API exposure of all internal build/test/runtime/repair evidence
 - Broad generative-software support for simulation/media/game semantics beyond the newly wired primitive
-- Self-extension that safely synthesizes missing capabilities and promotes them after repeated evidence
 - Broad local-model promotion: Local Promotion remains evidence-gated, not assumed
 - Any benchmark axis that is unmeasured should remain `unsupported` or `unknown`, not fake zero/PASS
 
 ---
 
-## 10. Current next-work direction
+## 12. Current next-work direction
 
-Order of attack should preserve the Product Direction closed loop:
+Order of attack should preserve the Product Direction closed loop and the physical checkpoint:
 
-1. **Continue closing semantic/runtime capability gaps** with reusable capabilities, not genre templates.
-2. **Keep every new capability on the production generation/validator/runtime path**, with tests that fail when wiring is removed.
-3. **Run objective generated-artifact verification** (validator/build/test/runtime) on representative Golden/novel tasks.
-4. **Run genuine visual/behavioral review** and keep the Golden Gate FAIL until it passes.
-5. **Preserve Generation Episode / evidence lineage** for both successes and repairs.
-6. **Use accepted, rights-cleared, evidence-backed episodes** as Knowledge/Dataset candidates.
+1. **Resume the physical-PC blocker first**: start PowerShell transcript, capture `git rev-parse HEAD`, `where.exe flutter`, `flutter --version`, `flutter doctor -v`, then fix the Puro/Flutter SDK path issue.
+2. **Get `flutter run -d chrome` to a visibly rendered Forge app** before claiming physical runtime PASS.
+3. **Then run one real unseen request through self-extension to the real Flutter/Dart runtime**, including Validator evidence and a genuinely acquired capability.
+4. **Keep every new capability on the production generation/validator/runtime path**, with tests that fail when wiring is removed.
+5. **Run genuine visual/behavioral review** and keep the Golden Gate FAIL until it passes.
+6. **Preserve Generation Episode / evidence lineage** for both successes and repairs.
 7. **Improve Local Intelligence / agent diagnosis and controlled repair selection** without weakening verifier boundaries.
 8. **Promote Local routing only when held-out evidence meets the product bar.**
 
 ---
 
-## 11. Agent read order
+## 13. Agent read order
 
 Before doing Forge work, read in this order:
 
@@ -242,16 +299,17 @@ Before doing Forge work, read in this order:
 4. `docs/LEARNABLE-LOCAL-AI-VISION.md`
 5. `docs/FORGE-CURRENT-STATE.md`
 6. `docs/HANDOFF.md`
-7. `AGENTS.md`
-8. `CLAUDE.md` when using Claude Code
-9. relevant Architecture / Spec / report / evidence
-10. latest GitHub HEAD / diff / CI
+7. `docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md` when resuming the current physical-PC work
+8. `AGENTS.md`
+9. `CLAUDE.md` when using Claude Code
+10. relevant Architecture / Spec / report / evidence
+11. latest GitHub HEAD / diff / CI
 
 If this CURRENT STATE disagrees with newer GitHub evidence, **newer evidence wins** and this file must be updated in the same task.
 
 ---
 
-## 12. State-management rule
+## 14. State-management rule
 
 `FORGE-CORE-CONSTITUTION.md` changes only through CEO-approved Constitution Change Proposal.
 
