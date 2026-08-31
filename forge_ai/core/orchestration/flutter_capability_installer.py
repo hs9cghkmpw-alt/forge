@@ -40,17 +40,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import shutil
+
+from hashlib import sha256
+import json
 
 from forge_ai.core.orchestration.build_time_extension import (
-    BuildTimeCapabilityArtifact,
     BuildTimeExtensionError,
+)
+from forge_ai.core.orchestration.synthesizing_build_time_implementer import (
+    VerifiedCapabilityArtifact,
 )
 
 __all__ = [
     "AcquiredCapabilityInstallation",
     "FlutterCapabilityInstaller",
     "InstallationError",
+    "PROVENANCE_FILE",
     "capability_slug",
+    "verify_installed_capability",
 ]
 
 #: 獲得能力の binding が公開する記号。**能力ごとに変えない。**
@@ -60,6 +68,9 @@ BINDING_SYMBOL = "capability"
 #: 生成物を書き込んでよい唯一の場所（`frontend/` からの相対）。
 INSTALL_ROOT = Path("lib/json_ui/acquired")
 REGISTRATIONS_FILE = "acquired_registrations.g.dart"
+
+#: 何を載せたのかの記録。**あとから中身が変わっていないか確かめるため。**
+PROVENANCE_FILE = "capability_provenance.json"
 
 _SLUG_UNSAFE = re.compile(r"[^a-z0-9]+")
 
@@ -76,12 +87,22 @@ def capability_slug(capability_id: str) -> str:
     return slug
 
 
+def _digest_of(content: str) -> str:
+    return sha256(content.encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class AcquiredCapabilityInstallation:
     capability_id: str
     slug: str
     installed_files: tuple[str, ...]
     """`frontend/` からの相対パス。**証拠として読む。**"""
+
+    source_digest: str
+    """検査を通った生成物の digest。install 後の照合に使う。"""
+
+    build_id: str
+    runtime_fingerprint: str
 
 
 @dataclass(slots=True)
@@ -97,8 +118,17 @@ class FlutterCapabilityInstaller:
     host_prefix: str = "flutter/"
 
     def install(
-        self, artifact: BuildTimeCapabilityArtifact,
+        self, verified: VerifiedCapabilityArtifact,
     ) -> AcquiredCapabilityInstallation:
+        """**検査を通ったものだけを、通ったそのままの形で載せる。**
+
+        受け取るのは `VerifiedCapabilityArtifact` だけである。生の artifact を
+        渡す口を用意しない——用意すると「検査していないものを載せる」経路が
+        できてしまう。受け取った直後に digest を照合するので、検査のあとに
+        1byte でも変わっていれば落ちる。
+        """
+        verified.verify()
+        artifact = verified.artifact
         artifact.validate()
         slug = capability_slug(artifact.capability_id)
         target_dir = (self.frontend_root / INSTALL_ROOT / slug).resolve()
@@ -127,19 +157,66 @@ class FlutterCapabilityInstaller:
                 " a capability with no Flutter binding cannot be rendered",
             )
 
-        target_dir.mkdir(parents=True, exist_ok=True)
+        # **保存先名の衝突を検出する。** 別の能力が同じ slug を取っていたら、
+        # 黙って上書きせずに落とす（古いコードが混ざる原因になる）。
+        existing = target_dir / PROVENANCE_FILE
+        if existing.is_file():
+            try:
+                previous = json.loads(existing.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise InstallationError(
+                    f"unreadable provenance at {existing}; refusing to overwrite",
+                ) from exc
+            if previous.get("capability_id") != artifact.capability_id:
+                raise InstallationError(
+                    f"install slug {slug!r} is already taken by "
+                    f"{previous.get('capability_id')!r}; "
+                    f"{artifact.capability_id!r} cannot reuse it",
+                )
+        elif target_dir.exists() and any(target_dir.iterdir()):
+            raise InstallationError(
+                f"{target_dir} holds files with no provenance; refusing to mix "
+                "unknown source into an acquired capability",
+            )
+
+        # **古いファイルを残さない。** 前回の生成物が混ざると、
+        # 「いま検査したもの」と「いま動いているもの」がずれる。
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+        target_dir.mkdir(parents=True)
+
         written: list[str] = []
+        file_digests: dict[str, str] = {}
         for destination, content in planned:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(content, encoding="utf-8", newline="\n")
+            relative = str(destination.relative_to(target_dir)).replace("\\", "/")
+            file_digests[relative] = _digest_of(content)
             written.append(
                 str(destination.relative_to(self.frontend_root.resolve())).replace("\\", "/"),
             )
+
+        (target_dir / PROVENANCE_FILE).write_text(
+            json.dumps(
+                {
+                    "capability_id": artifact.capability_id,
+                    "source_digest": verified.source_digest,
+                    "build_id": verified.build_id,
+                    "runtime_fingerprint": verified.runtime_fingerprint,
+                    "files": file_digests,
+                },
+                ensure_ascii=False, indent=2, sort_keys=True,
+            ) + "\n",
+            encoding="utf-8", newline="\n",
+        )
 
         return AcquiredCapabilityInstallation(
             capability_id=artifact.capability_id,
             slug=slug,
             installed_files=tuple(sorted(written)),
+            source_digest=verified.source_digest,
+            build_id=verified.build_id,
+            runtime_fingerprint=verified.runtime_fingerprint,
         )
 
     def rewrite_registrations(self) -> Path:
@@ -189,3 +266,42 @@ class FlutterCapabilityInstaller:
         if path.startswith(self.host_prefix):
             return path[len(self.host_prefix):]
         return path
+
+
+def verify_installed_capability(frontend_root: Path, slug: str) -> str:
+    """**載っているものが、検査したときのままか。**
+
+    install 後に誰かが手で書き換えていないかを、記録した digest と
+    突き合わせて確かめる。ずれていれば落ちる——「Flutter 側だけ直す」
+    という抜け道を塞ぐためである。
+
+    戻り値は検査を通した生成物の `source_digest`。
+    """
+    directory = (frontend_root / INSTALL_ROOT / slug).resolve()
+    record = directory / PROVENANCE_FILE
+    if not record.is_file():
+        raise InstallationError(f"no provenance for installed capability at {directory}")
+    try:
+        provenance = json.loads(record.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise InstallationError(f"unreadable provenance at {record}") from exc
+
+    expected: dict[str, str] = provenance.get("files", {})
+    present = {
+        str(path.relative_to(directory)).replace("\\", "/")
+        for path in directory.rglob("*")
+        if path.is_file() and path.name != PROVENANCE_FILE
+    }
+    if present != set(expected):
+        raise InstallationError(
+            f"installed files for {slug!r} do not match the record: "
+            f"unexpected={sorted(present - set(expected))} "
+            f"missing={sorted(set(expected) - present)}",
+        )
+    for relative, digest in sorted(expected.items()):
+        actual = _digest_of((directory / relative).read_text(encoding="utf-8"))
+        if actual != digest:
+            raise InstallationError(
+                f"installed file {relative!r} of {slug!r} was modified after inspection",
+            )
+    return str(provenance.get("source_digest", ""))

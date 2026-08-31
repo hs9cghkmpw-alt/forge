@@ -40,3 +40,6 @@ frontend/.packages
 # `acquired_registrations.g.dart` だけは出荷状態（空）を commit する。
 frontend/lib/json_ui/acquired/*/
 frontend/test_acquired/generated_document.json
+
+# 直近の自由文E2Eの生ログ（seed 付きのものだけ証拠として残す）
+logs/forge-reuse-first-e2e-latest.json

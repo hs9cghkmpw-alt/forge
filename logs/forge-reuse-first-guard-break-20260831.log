@@ -1,0 +1,38 @@
+[R1 足りなくても足りていても常に生成する（方式Bを壊す）] DETECTED
+       test_an_already_acquired_capability_is_reused_not_regenerated
+       test_an_existing_only_request_generates_nothing
+[R2 検査を通った生成物ではなく作り直したものを載せる] DETECTED
+       test_the_installed_bytes_are_the_inspected_bytes
+[R3 install 前の digest 照合を外す] DETECTED
+       test_one_changed_character_after_inspection_is_refused
+       test_swapping_in_a_different_artifact_is_refused
+[R4 昇格していなくても verified を渡す] *** NOT DETECTED (placebo) ***
+[R8 証拠が別物を指していても通す（下層の検査を外す）] *** NOT DETECTED (placebo) ***
+[R5 保存先名の衝突検査を外す] DETECTED
+       test_a_slug_collision_between_capabilities_is_detected
+[R6 古いファイルを消さない] DETECTED
+       test_reinstalling_removes_files_the_new_artifact_does_not_have
+[R7 載せたあとの中身の照合を外す] DETECTED
+       test_editing_the_installed_flutter_side_is_detected
+
+--- R4 / R8 について（置物ではなく、下層と重なった検査） ---
+
+R4「昇格していなくても verified を渡す」
+  外しても落ちない。ただし手前の `activation is not None` が同じことを
+  保証しているためであり、検査そのものが効いていないわけではない。
+  失敗した build で生成物を渡さないことは
+  tests/test_dart_build_plan.py::test_a_failed_build_hands_out_nothing
+  が実際に確かめている。
+
+R8「証拠が別物を指していても通す（下層の検査を外す）」
+  外しても落ちない。ただし同じ関数の後段
+  `activation.source_digest != artifact.source_digest` が捕まえるためである。
+  証拠が別物を指す場合に拒否することは
+  tests/test_reuse_first_integrity.py::
+  test_a_mismatched_evidence_digest_refuses_to_hand_out_the_artifact
+  が実際に確かめている。
+
+つまり R4 / R8 は「誰も見ていない配線」ではなく、
+**同じ不変条件を二重に守っている**箇所である。
+一方、`SynthesizingBuildTimeImplementer` へ重ねて書いた digest 照合は
+**到達しないコード**だったので削除した（コードの置物）。

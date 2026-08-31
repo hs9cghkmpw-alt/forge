@@ -1,0 +1,35 @@
+random seed: 20260831   （再現するには --seed 20260831）
+restored: no acquired capability is installed
+
+=== A. いま持っている能力だけで作れる要求 ===
+  入力: うまく言えないけど、釣れた魚を残しておいて、釣れた場所も一緒に並びにしたい。細かい機能はいらない。
+  必要な能力  : ('data.entity', 'data.text', 'interact.edit', 'view.list')
+  足りない能力: ()
+  生成回数    : 0   Provider 呼び出し: 0
+  所要        : 0.4 ms
+
+=== B. 足りない能力が1つ要る要求 ===
+  入力: 働いた時間を記録して、出勤した日を月ごとにまとめて見たい。細かい機能はいらない。
+  足りない能力: ('view.calendar',)
+  獲得        : ('view.calendar',)
+  生成回数    : 1   Provider 呼び出し: 1
+  所要        : 1062.1 ms  {'understand_ms': 0.1, 'capability_lookup_ms': 0.0, 'synthesis_ms': 0.0, 'verify_ms': 1059.6, 'install_ms': 1.6, 'document_ms': 0.8, 'total_ms': 1062.1}
+  検査した生成物 = 載せた生成物: 9b7a53ec7f6bc370…
+  calendar_view が生成 Document に入っている
+
+=== C. 意味は近いが文章が違う2回目 ===
+  入力: 出した書類を記録して、出した日を月ごとにまとめて見たい。
+  足りない能力: ()
+  再利用      : ('view.calendar',)
+  生成回数    : 0   Provider 呼び出し: 0
+  所要        : 0.2 ms
+
+=== まとめ ===
+  seed                : 20260831
+  生成回数 合計       : 1（B の1回だけ）
+  Provider 呼び出し合計: 1
+  ログ                : logs/forge-reuse-first-e2e-latest.json
+
+=== まだ言えないこと ===
+  実 Model が書いた証拠は無い（Provider は Test Double）
+  Real Local Model runs = 0 のまま

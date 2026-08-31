@@ -1,3 +1,34 @@
+## 2026-08-31 — 方式B: 持っているものは組み合わせ、足りないものだけ作る
+
+**実バグ修正（TD94の穴）**: E2E は検査した生成物とは**別に**もう一度生成して
+Flutter へ載せていた。検査した対象と動く対象が別物になっていた。1回だけ生成し、
+`last_verified` に**検査を通ったそのもの**を残す形へ直した。`install()` は
+`VerifiedCapabilityArtifact` しか受け取らず、直前に digest を照合する
+——1byte でも変われば落ちる。
+
+- `reuse_first_pipeline.py` を新設。要求 → 持っている能力で足りるか →
+  **足りない分だけ**獲得 → 画面。生成回数と Provider 呼び出し回数を数えるので、
+  既存能力だけの要求で生成が走れば**テストが落ちる**。
+- 保存先の衝突検出（`capability_provenance.json`）、install ごとの
+  ディレクトリ作り直し（古いファイルを残さない）、
+  `verify_installed_capability()`（載せたあとの改変を検出）。
+- `forge_ai/testing/free_text_requests.py`: ランダム自由文生成器。15分野、
+  言い回しを毎回変える。**Forge の内部語彙が混ざった文はその場で落とす。**
+  seed で完全再現できる。
+- E2E A/B/C（`scripts/reuse_first_e2e.py`）+ 速度計測。seed 20260831 実測:
+  **A 生成0回 0.4ms / B 生成1回 1062.1ms / C 生成0回 0.2ms**（約5000倍速い）。
+- **ランダム自由文で要求理解の取りこぼしを発見**（TD96）。「月ごと」「出勤した日」
+  を読み取れなかった。2つ直したが、読み取り率は月表示の要求で 117/200 のまま。
+  取りこぼした文はログへ残す。
+- 配線破壊試験 6件検出 + 2件は下層と重なった検査（ログに理由を記載）。
+  到達しないコードを1つ見つけて**削除**した。
+- CI（frontend job）が自由文 E2E を skip なしで実行する。
+- 検証: forge_ai 744 passed / backend 1998 passed / flutter analyze clean /
+  flutter test 562 passed / test_acquired 7 passed / flutter build web OK。
+- **まだ言えないこと**: 実 Model が書いた証拠は無い（**Real Local Model runs = 0
+  のまま**）。実機 Chrome 未確認。再利用は process ローカル（TD97）。
+- Evidence: `docs/evidence/REUSE-FIRST-B-20260831.md`
+
 ## 2026-08-31 — FORGE-TD94: 獲得した Capability が Forge の Flutter アプリで実際に描かれる
 
 - `frontend/lib/json_ui/acquired/` を新設。`ForgeAcquiredCapability` は

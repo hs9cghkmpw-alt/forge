@@ -1,0 +1,168 @@
+{
+  "seed": 20260831,
+  "scenarios": {
+    "A": {
+      "request": {
+        "text": "うまく言えないけど、釣れた魚を残しておいて、釣れた場所も一緒に並びにしたい。細かい機能はいらない。",
+        "shape": "existing_only",
+        "domain": "釣果",
+        "seed": 20260831
+      },
+      "need": "うまく言えないけど、釣れた魚を残しておいて、釣れた場所も一緒に並びにしたい。細かい機能はいらない。",
+      "requested": [
+        "data.entity",
+        "data.text",
+        "interact.edit",
+        "view.list"
+      ],
+      "missing_before": [],
+      "missing_after": [],
+      "reused": [],
+      "acquired": [],
+      "generation_count": 0,
+      "build_count": 0,
+      "provider_calls": 0,
+      "document_produced": true,
+      "timings": {
+        "understand_ms": 0.1,
+        "capability_lookup_ms": 0.0,
+        "synthesis_ms": 0.0,
+        "verify_ms": 0.0,
+        "install_ms": 0.0,
+        "document_ms": 0.3,
+        "total_ms": 0.4
+      },
+      "failure": null
+    },
+    "B": {
+      "request": {
+        "text": "働いた時間を記録して、出勤した日を月ごとにまとめて見たい。細かい機能はいらない。",
+        "shape": "needs_monthly_view",
+        "domain": "勤怠",
+        "seed": 20261841
+      },
+      "source_digest": "9b7a53ec7f6bc370921433c7fbd9790d524e95a6738701d1a0bb6289e40ca1f3",
+      "build_id": "build-467cf7142c084576a38fc4717bac7450",
+      "runtime_fingerprint": "bc9d5a50099b7744756cb6e9c39771f9e6df994320aa2b95a2f22d5e40b3999c",
+      "installed_digest": "9b7a53ec7f6bc370921433c7fbd9790d524e95a6738701d1a0bb6289e40ca1f3",
+      "need": "働いた時間を記録して、出勤した日を月ごとにまとめて見たい。細かい機能はいらない。",
+      "requested": [
+        "data.date",
+        "data.entity",
+        "interact.edit",
+        "view.calendar",
+        "view.list"
+      ],
+      "missing_before": [
+        "view.calendar"
+      ],
+      "missing_after": [],
+      "reused": [],
+      "acquired": [
+        "view.calendar"
+      ],
+      "generation_count": 1,
+      "build_count": 1,
+      "provider_calls": 1,
+      "document_produced": true,
+      "timings": {
+        "understand_ms": 0.1,
+        "capability_lookup_ms": 0.0,
+        "synthesis_ms": 0.0,
+        "verify_ms": 1059.6,
+        "install_ms": 1.6,
+        "document_ms": 0.8,
+        "total_ms": 1062.1
+      },
+      "failure": null,
+      "document_run": {
+        "need": "働いた時間を記録して、出勤した日を月ごとにまとめて見たい。細かい機能はいらない。",
+        "requested": [
+          "data.date",
+          "data.entity",
+          "interact.edit",
+          "view.calendar",
+          "view.list"
+        ],
+        "missing_before": [],
+        "missing_after": [],
+        "reused": [
+          "view.calendar"
+        ],
+        "acquired": [],
+        "generation_count": 0,
+        "build_count": 0,
+        "provider_calls": 0,
+        "document_produced": true,
+        "timings": {
+          "understand_ms": 0.1,
+          "capability_lookup_ms": 0.0,
+          "synthesis_ms": 0.0,
+          "verify_ms": 0.0,
+          "install_ms": 0.0,
+          "document_ms": 0.3,
+          "total_ms": 0.4
+        },
+        "failure": null
+      }
+    },
+    "C": {
+      "request": {
+        "text": "出した書類を記録して、出した日を月ごとにまとめて見たい。",
+        "shape": "needs_monthly_view",
+        "domain": "申請",
+        "seed": 20262851
+      },
+      "need": "出した書類を記録して、出した日を月ごとにまとめて見たい。",
+      "requested": [
+        "data.date",
+        "data.entity",
+        "interact.edit",
+        "view.calendar",
+        "view.list"
+      ],
+      "missing_before": [],
+      "missing_after": [],
+      "reused": [
+        "view.calendar"
+      ],
+      "acquired": [],
+      "generation_count": 0,
+      "build_count": 0,
+      "provider_calls": 0,
+      "document_produced": true,
+      "timings": {
+        "understand_ms": 0.1,
+        "capability_lookup_ms": 0.0,
+        "synthesis_ms": 0.0,
+        "verify_ms": 0.0,
+        "install_ms": 0.0,
+        "document_ms": 0.2,
+        "total_ms": 0.2
+      },
+      "failure": null
+    }
+  },
+  "comprehension_misses": {
+    "A": [],
+    "B": [
+      {
+        "text": "うまく言えないけど、働いた時間を残しておいて、どの月に何回あったか分かるようにしたい。",
+        "reason": "月ごとに見たい意図を読み取れなかった"
+      }
+    ],
+    "C": [
+      {
+        "text": "自分用でいいんだけど、読んだ本を残しておいて、どの月に何回あったか分かるようにしたい。続けられる形がいい。",
+        "reason": "月ごとに見たい意図を読み取れなかった"
+      },
+      {
+        "text": "売れた商品を入れておいて、月ごとの回数がひと目で分かるといい。あとで見返すことが多いので。",
+        "reason": "記録する型を組めなかった（日付の欄が立たない）"
+      }
+    ]
+  },
+  "provider_calls_total": 1,
+  "synthesis_count_total": 1,
+  "build_count_total": 1
+}

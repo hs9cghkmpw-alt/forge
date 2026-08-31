@@ -299,5 +299,110 @@ class TestMissingEntryFilesFailAsGeneration(_DartCase):
             implementer(_manifest())
 
 
+class TestTheBuiltArtifactIsTheOneHandedOut(_DartCase):
+    """**検査したものと、渡されるものが同じであること。**
+
+    ここが緩むと「検査したあとに作り直したもの」を組み込めてしまい、
+    証拠の鎖が切れる。
+    """
+
+    def test_the_verified_artifact_matches_the_build_evidence(self) -> None:
+        implementer = _implementer(_payload())
+        implementer(_manifest())
+        verified = implementer.last_verified
+        execution = implementer.last_execution
+        assert verified is not None and execution is not None
+        self.assertEqual(verified.source_digest, execution.evidence.source_digest)
+        self.assertEqual(verified.artifact.source_digest, verified.source_digest)
+        self.assertEqual(verified.build_id, execution.result.build_id)
+        self.assertEqual(
+            verified.runtime_fingerprint, execution.result.runtime_fingerprint,
+        )
+
+    def test_a_failed_build_hands_out_nothing(self) -> None:
+        """**通らなかったものを渡さない。**"""
+        broken = _TEST.replace("rows.length != 3", "rows.length != 99")
+        implementer = _implementer(_payload(test=broken))
+        implementer(_manifest())
+        self.assertIsNone(
+            implementer.last_verified,
+            "検査に落ちたのに生成物を渡している",
+        )
+
+
+class TestAcquisitionInstallsWhatItInspected(_DartCase):
+    """**作り直さない。** 2回目の生成が載ることがあってはならない。"""
+
+    class _DriftingProvider:
+        """呼ばれるたび**違うものを返す** Provider。
+
+        作り直しが起きていれば、載ったものが検査したものと食い違う。
+        """
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def complete(self, prompt):  # noqa: ANN001, ANN202
+            self.calls += 1
+            impl = _IMPL + f"\n// 生成 {self.calls} 回目\n"
+            return ProviderResponse(text="", structured=_payload(impl=impl))
+
+    def test_the_installed_bytes_are_the_inspected_bytes(self) -> None:
+        import shutil
+        import tempfile
+
+        from forge_ai.core.orchestration.extension_registry import (
+            PROMOTED_CAPABILITIES,
+        )
+        from forge_ai.core.orchestration.flutter_capability_installer import (
+            INSTALL_ROOT,
+            FlutterCapabilityInstaller,
+            verify_installed_capability,
+        )
+        from forge_ai.core.orchestration.reuse_first_pipeline import (
+            ReuseFirstPipeline,
+            StageTimings,
+        )
+
+        frontend = pathlib.Path(tempfile.mkdtemp(prefix="forge-frontend-"))
+        (frontend / INSTALL_ROOT).mkdir(parents=True)
+        self.addCleanup(shutil.rmtree, frontend, ignore_errors=True)
+        PROMOTED_CAPABILITIES.clear()
+        self.addCleanup(PROMOTED_CAPABILITIES.clear)
+
+        provider = self._DriftingProvider()
+        implementer = SynthesizingBuildTimeImplementer(
+            synthesizer=CapabilityArtifactSynthesizer(provider=provider),
+            contract_for=lambda _cid: CONTRACT,
+            known_source_digests=frozenset(),
+        )
+        pipeline = ReuseFirstPipeline(
+            implementer=implementer,
+            installer=FlutterCapabilityInstaller(
+                frontend_root=frontend,
+                harness_files=frozenset({"capability_test.dart", "probe.dart"}),
+                host_prefix="flutter/",
+            ),
+            build_document=lambda *_args: None,
+            provider_call_count=lambda: provider.calls,
+        )
+
+        record = pipeline._acquire(CAPABILITY, StageTimings())
+        self.assertEqual(
+            provider.calls, 1,
+            "1つの能力を獲得するのに生成が2回走っている",
+        )
+        verified = implementer.last_verified
+        assert verified is not None
+        installed_digest = verify_installed_capability(
+            frontend, record.capability_id.replace(".", "_"),
+        )
+        self.assertEqual(
+            installed_digest, verified.source_digest,
+            "載せたものが検査したものと違う",
+        )
+        self.assertEqual(record.source_digest, verified.source_digest)
+
+
 if __name__ == "__main__":
     unittest.main()

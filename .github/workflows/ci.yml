@@ -218,9 +218,13 @@ jobs:
       #
       # 実 API は呼ばない（Provider は Test Double）。
       # ---------------------------------------------------------------
+      # 自由文はランダムに作る。**固定文へ Forge を最適化させない。**
+      # 落ちたらログに出た seed を `--seed` へ渡せば完全に同じ試験を再実行できる。
+      - name: 自由文 E2E（既存能力なら生成0回 / 足りない分だけ1回 / 2回目は再利用）
+        run: python3 scripts/reuse_first_e2e.py
+
       - name: 獲得 Capability を Forge アプリへ載せる
-        run: python -m pytest --version > /dev/null 2>&1 || true;
-             python3 scripts/acquired_capability_flutter_e2e.py
+        run: python3 scripts/acquired_capability_flutter_e2e.py
 
       - name: flutter analyze（獲得 Capability を載せた状態）
         working-directory: frontend

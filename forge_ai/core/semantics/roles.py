@@ -52,6 +52,8 @@ Need → keyword → Domain → Template/Compiler → checklist
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass
 from enum import Enum
 
@@ -281,6 +283,11 @@ class SemanticRoleExtraction:
         }
 
 
+#: 「出勤した日」「釣りに行った日」「休みの日」のような、**日付を指す言い方**。
+#: 「毎日」「今日」「誕生日」は形が違うので拾わない。
+_DATE_PHRASE = re.compile(r"[^\s、。，．]{1,10}(?:た日|の日)")
+
+
 def extract_semantic_roles(text: str) -> SemanticRoleExtraction:
     """Need から役を取り出す。**決定的**。
 
@@ -298,6 +305,26 @@ def extract_semantic_roles(text: str) -> SemanticRoleExtraction:
         if surface in source and (role, value) not in seen:
             seen.add((role, value))
             found.append(RoleAssignment(role=role, value=value, surface=surface))
+
+    # **利用者は「日付」とは書かない。**
+    #
+    # ランダムな自由文を実際に投げて分かったことである。人は
+    # 「出勤した日」「使った日」「釣りに行った日」と書く。表は
+    # 「日付」「日時」しか持っていなかったので、そういう文では
+    # 日付の欄が1つも立たず、記録の型が組めずに画面が作れなかった。
+    #
+    # 語を1つずつ足しても追いつかない（分野の数だけ増える）ので、
+    # **「〜た日 / 〜の日」という日本語の形**で受ける。表に既に
+    # 日付があるときは触らない。
+    if (SemanticRole.RECORDED_DATA, "date") not in seen:
+        match = _DATE_PHRASE.search(source)
+        if match is not None:
+            seen.add((SemanticRole.RECORDED_DATA, "date"))
+            found.append(RoleAssignment(
+                role=SemanticRole.RECORDED_DATA, value="date",
+                surface=match.group(0),
+            ))
+
     # **Need に現れた順に並べる。** 表の並び順を意味の順にしない。
     found.sort(key=lambda a: source.index(a.surface))
     return SemanticRoleExtraction(assignments=tuple(found))

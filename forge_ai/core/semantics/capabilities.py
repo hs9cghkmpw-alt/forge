@@ -232,7 +232,10 @@ _CATALOG: tuple[CapabilityDefinition, ...] = (
        detection_keywords=("ヒートマップ", "色の濃さ", "色を濃く", "濃淡"),
        nearest_supported_id="view.bar_chart", limitation="濃淡の表示はできません"),
     _c("view.calendar", _L.VIEW, "カレンダーで見る", "月の形で見る", _S.MISSING,
-       detection_keywords=("カレンダー", "月表示", "月ごとの表"),
+       # 利用者は「カレンダー」と言わずに「月ごと」「月単位」「月別」とも書く。
+       # 実際にランダム自由文で投げたところ、それらを取りこぼしていた。
+       detection_keywords=("カレンダー", "月表示", "月ごとの表",
+                           "月ごと", "月単位", "月別", "月でまとまって"),
        nearest_supported_id="view.list", limitation="カレンダー表示はできません"),
     _c("view.line_chart", _L.VIEW, "折れ線で見る", "変化を線で見る", _S.MISSING,
        detection_keywords=("折れ線",), nearest_supported_id="view.bar_chart",

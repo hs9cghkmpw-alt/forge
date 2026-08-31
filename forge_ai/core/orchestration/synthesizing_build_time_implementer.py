@@ -45,6 +45,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from forge_ai.core.orchestration.build_time_extension import (
+    BuildTimeCapabilityArtifact,
     BuildTimeExtensionError,
     implement_build_time_extension,
 )
@@ -58,13 +59,17 @@ from forge_ai.core.orchestration.capability_artifact_synthesis import (
     CapabilityImplementationContract,
 )
 from forge_ai.core.orchestration.extension_activation import ExtensionImplementation
-from forge_ai.core.orchestration.extension_manifest import ExtensionManifest
+from forge_ai.core.orchestration.extension_manifest import (
+    ExtensionManifest,
+    ExtensionStatus,
+)
 from forge_ai.core.orchestration.managed_build_time_implementer import (
     ManagedBuildTimeImplementer,
 )
 
 __all__ = [
     "CapabilityImplementationUnavailable",
+    "VerifiedCapabilityArtifact",
     "LanguageBuildPlan",
     "SynthesizingBuildTimeImplementer",
     "build_plan_for_language",
@@ -76,6 +81,35 @@ __all__ = [
 
 class CapabilityImplementationUnavailable(BuildTimeExtensionError):
     """**実装を作れなかった。** 作れなかったことを、そう言う。"""
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedCapabilityArtifact:
+    """**検査を通ったそのもの。**
+
+    Forge へ組み込んでよいのは、検査したものと**同一の**生成物だけである。
+    検査したあとに作り直したものを組み込むと、
+    「検査した対象」と「動く対象」が別物になり、証拠の鎖が切れる。
+
+    そこで検査を通した生成物そのものをここへ包み、install する側は
+    この型しか受け取らない。`source_digest` は build 実行時に materialize
+    された workspace の digest と一致したものである——1byte でも違えば
+    ここまで来ない。
+    """
+
+    artifact: BuildTimeCapabilityArtifact
+    source_digest: str
+    build_id: str
+    runtime_fingerprint: str
+
+    def verify(self) -> None:
+        """**いま持っている中身が、検査したときのままか。**"""
+        if self.artifact.source_digest != self.source_digest:
+            raise BuildTimeExtensionError(
+                "verified artifact changed after inspection: "
+                f"{self.artifact.capability_id!r} digest "
+                f"{self.artifact.source_digest} != {self.source_digest}",
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,6 +252,13 @@ class SynthesizingBuildTimeImplementer:
     last_execution: ManagedBuildExecution | None = field(default=None, init=False)
     """直近の実コマンド証拠。Evidence 文書を書くために外から読む。"""
 
+    last_verified: VerifiedCapabilityArtifact | None = field(default=None, init=False)
+    """**検査を通った生成物そのもの。**
+
+    install する側はこれを使う。もう一度生成し直してはならない
+    ——作り直した瞬間、検査した対象と動く対象が別物になる。
+    """
+
     synthesis_count: int = field(default=0, init=False)
     """**実装を作った回数。** 2回目の要求で増えないことを示すために数える。"""
 
@@ -258,6 +299,7 @@ class SynthesizingBuildTimeImplementer:
             runner=self.runner,
         )
         self.build_count += 1
+        self.last_verified = None
         implementation = implement_build_time_extension(
             manifest,
             artifact,
@@ -265,6 +307,27 @@ class SynthesizingBuildTimeImplementer:
             load_runtime=managed.load_runtime,
         )
         self.last_execution = managed.last_execution
+
+        # **検査を通ったものだけを、通ったそのままの形で残す。**
+        execution = managed.last_execution
+        activation = implementation.activation
+        # 「証拠がこの artifact のものであること」は
+        # `implement_build_time_extension()` が既に強制している
+        # （`build.source_digest != artifact.source_digest` で落ちる）。
+        # ここで同じ検査をもう一度書いても**到達しない**ので書かない
+        # ——到達しないコードは、外しても誰も気づかない置物である。
+        if (
+            execution is not None
+            and activation is not None
+            and getattr(activation, "loaded", False) is True
+            and implementation.manifest.status is ExtensionStatus.PROMOTED
+        ):
+            self.last_verified = VerifiedCapabilityArtifact(
+                artifact=artifact,
+                source_digest=artifact.source_digest,
+                build_id=execution.result.build_id,
+                runtime_fingerprint=execution.result.runtime_fingerprint,
+            )
         return implementation
 
     def _contract(self, capability_id: str) -> CapabilityImplementationContract:

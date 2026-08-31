@@ -20,6 +20,9 @@ from forge_ai.core.orchestration.build_time_extension import (  # noqa: E402
     BuildTimeExtensionError,
     BuildTimeSourceFile,
 )
+from forge_ai.core.orchestration.synthesizing_build_time_implementer import (  # noqa: E402
+    VerifiedCapabilityArtifact,
+)
 from forge_ai.core.orchestration.flutter_capability_installer import (  # noqa: E402
     INSTALL_ROOT,
     FlutterCapabilityInstaller,
@@ -28,6 +31,20 @@ from forge_ai.core.orchestration.flutter_capability_installer import (  # noqa: 
 )
 
 HARNESS = frozenset({"capability_test.dart", "probe.dart"})
+
+
+def _verified(artifact: BuildTimeCapabilityArtifact) -> VerifiedCapabilityArtifact:
+    """install が受け取るのは**検査を通ったもの**だけである。
+
+    生の artifact を渡す口は用意していない——用意すると
+    「検査していないものを載せる」経路ができてしまう。
+    """
+    return VerifiedCapabilityArtifact(
+        artifact=artifact,
+        source_digest=artifact.source_digest,
+        build_id="build-test",
+        runtime_fingerprint="fp-test",
+    )
 
 
 def _artifact(
@@ -63,7 +80,7 @@ class _Base(unittest.TestCase):
 
 class TestWhatLandsInTheApp(_Base):
     def test_the_binding_and_the_implementation_are_installed(self) -> None:
-        installed = self.installer.install(_artifact())
+        installed = self.installer.install(_verified(_artifact()))
         self.assertEqual(
             installed.installed_files,
             (
@@ -74,7 +91,7 @@ class TestWhatLandsInTheApp(_Base):
 
     def test_the_isolated_harness_is_not_shipped(self) -> None:
         """**検証の道具は製品ではない。** テストと probe は載せない。"""
-        self.installer.install(_artifact())
+        self.installer.install(_verified(_artifact()))
         directory = self.frontend / INSTALL_ROOT / "view_calendar"
         names = sorted(p.name for p in directory.iterdir())
         self.assertNotIn("capability_test.dart", names)
@@ -94,7 +111,7 @@ class TestWhatIsRefused(_Base):
             ("capability_test.dart", "void main() {}\n"),
         ))
         with self.assertRaises(InstallationError):
-            self.installer.install(artifact)
+            self.installer.install(_verified(artifact))
 
     def test_a_path_escaping_the_acquired_root_is_refused(self) -> None:
         """外へ出るパスは載らない。
@@ -109,7 +126,7 @@ class TestWhatIsRefused(_Base):
             ("flutter/../../../forge_binding.dart", "const capability = 0;\n"),
         ))
         with self.assertRaises(BuildTimeExtensionError):
-            self.installer.install(artifact)
+            self.installer.install(_verified(artifact))
 
     def test_writing_never_touches_shipped_source(self) -> None:
         """書き込み先は獲得用の1ディレクトリだけ。"""
@@ -117,7 +134,7 @@ class TestWhatIsRefused(_Base):
         shipped.mkdir(parents=True)
         guarded = shipped / "forge_document.dart"
         guarded.write_text("// shipped\n", encoding="utf-8")
-        self.installer.install(_artifact())
+        self.installer.install(_verified(_artifact()))
         self.assertEqual(guarded.read_text(encoding="utf-8"), "// shipped\n")
 
 
@@ -130,22 +147,22 @@ class TestTheRegistrationTableIsRebuilt(_Base):
         self.assertNotIn("registerAcquiredCapability(", body)
 
     def test_an_installed_capability_is_registered(self) -> None:
-        self.installer.install(_artifact())
+        self.installer.install(_verified(_artifact()))
         body = self.installer.rewrite_registrations().read_text(encoding="utf-8")
         self.assertIn("import 'view_calendar/forge_binding.dart' as capability_0;", body)
         self.assertIn("registerAcquiredCapability(capability_0.capability);", body)
 
     def test_a_removed_capability_disappears_from_the_table(self) -> None:
         """installer を通っていない能力が表に残り続けない。"""
-        self.installer.install(_artifact())
+        self.installer.install(_verified(_artifact()))
         self.installer.rewrite_registrations()
         shutil.rmtree(self.frontend / INSTALL_ROOT / "view_calendar")
         body = self.installer.rewrite_registrations().read_text(encoding="utf-8")
         self.assertNotIn("view_calendar", body)
 
     def test_two_capabilities_are_ordered_deterministically(self) -> None:
-        self.installer.install(_artifact("view.calendar"))
-        self.installer.install(_artifact("view.timeline"))
+        self.installer.install(_verified(_artifact("view.calendar")))
+        self.installer.install(_verified(_artifact("view.timeline")))
         first = self.installer.rewrite_registrations().read_text(encoding="utf-8")
         second = self.installer.rewrite_registrations().read_text(encoding="utf-8")
         self.assertEqual(first, second)
