@@ -1,3 +1,22 @@
+## 2026-08-31 — FORGE-020F: 獲得したCapabilityがValidatorへ届く（Dart側は未達）
+
+- `backend/app/ai/validators/runtime_attested_widgets.py` を追加。**PROMOTED かつ
+  loaded な BUILD_TIME activation を持ち、出力宣言を持つ**能力の widget 型だけが
+  Validator の許可集合を広げる。`requested` も `DECLARATIVE` も広げない。既定は空集合。
+- `schema_validator.py` の実バグ修正: `WIDGET_TYPES_ALL` を先に見ていたため、獲得型は
+  `allowed_widgets` に足しても手前で `unknown_widget` として落ちていた。判定順を
+  allowed → 版違い → 未知 に修正（出荷型に対する挙動は不変）。
+- `PromotedCapabilityRegistry.items()` を追加し、private `_items` への読み取りを解消。
+- 配線破壊試験 **9件すべて検出**。初回に素通りした4本（loaded / build_id /
+  runtime_fingerprint / identity の再確認）へテストを追加してから再測した。
+- **Dart側は閉じていない。** 実Flutterで実行したテストにより、獲得widgetは
+  Parserの`switch`で`ForgeUnknownWidgetNode`へ倒れ、Registryへ登録しても
+  描かれないことを確認した（拡張点はRegistryではなくParser側）。TD92 / TD93 を追加。
+- 検証: backend 1998 passed / forge_ai 717 passed / flutter analyze clean /
+  flutter test 550 passed（546→550）。
+- Evidence: `docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md`、
+  ログ `logs/forge-020f-guard-break-20260831.log`。
+
 ## 2026-08-29 — FORGE-020A5: Genuine Real Local Level 0 PASS
 
 - Prompt / provider JSON schema / strict Entity evidence now derive structural limits from the canonical `forge_ai/core/semantics/entity_contract.py` contract.

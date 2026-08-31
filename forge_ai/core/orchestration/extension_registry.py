@@ -86,6 +86,10 @@ class PromotedCapabilityRegistry:
     def get(self, capability_id: str) -> PromotedCapability | None:
         return self._items.get(capability_id)
 
+    def items(self) -> tuple[PromotedCapability, ...]:
+        """Snapshot of everything promoted, for read-only overlays."""
+        return tuple(self._items.values())
+
     def clear(self) -> None:
         self._items.clear()
 

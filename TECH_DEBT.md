@@ -3976,3 +3976,22 @@ fallbackとなった。現在Evidenceには最終`structure_provenance`しかな
 identifier不正・field不採用等のどのsanitizer条件で落ちたかを後から区別できない。
 raw model outputを保存せず、閉じたreason codeとstage attempt/acceptedをdurableに
 残し、再現性と改善判断を得る必要がある。Level 0判定を緩めてはならない。
+
+## TD92. 描けないwidgetがrelease buildで無言で消える（2026-08-31）
+
+`ForgeFallbackWidget`は`kDebugMode`でのみ理由を表示し、release buildでは
+`SizedBox.shrink()`を返す。Registry未登録・未知typeのwidgetが**利用者に何も
+告げずに消える**。既存の製品方針（方針12章）であり今回は変更していないが、
+020FでValidator側が「実runtimeを伴う獲得能力」の型を通すようになったため、
+Validator PASSと実描画の乖離が起きたときに気付けない向きになっている。
+UNKNOWNを「無かったこと」へ倒す設計なので、fail-open側である。
+CEO判断を仰ぐ（release時も最小限の可視signalを出すか、Validator側の
+attestationにDart binary fingerprintを含めるか）。
+
+## TD93. Dart側の拡張点がParserのswitchに閉じている（2026-08-31）
+
+`ForgeWidgetNode.fromJson`の`switch`が未知typeを`ForgeUnknownWidgetNode`へ
+倒し、`buildForgeWidget`はRegistryを引く前にそこで短絡する。したがって
+**Registryへ登録しただけでは獲得widgetは描けない**。獲得能力をDartまで通す
+には、Parser側にも宣言駆動の受け口が要る。
+実測済み: `frontend/test/json_ui/widget_registry/acquired_widget_runtime_boundary_test.dart`

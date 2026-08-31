@@ -60,6 +60,7 @@ from enum import Enum
 from typing import Any
 
 from app.ai.runtime.design_language import is_known_role
+from app.ai.validators.runtime_attested_widgets import runtime_attested_widget_types
 
 
 # ---------------------------------------------------------------------------
@@ -499,7 +500,9 @@ def validate_forge_document(doc: Any) -> ValidationResult:
         return ValidationResult(valid=False, errors=schema_errors)
 
     version = doc["version"]
-    allowed_widgets = WIDGET_TYPES_BY_VERSION[version]
+    # **実際にビルドして載せた能力の widget だけを足す**（020F）。
+    # requested では広がらない。何も獲得していなければ空集合である。
+    allowed_widgets = WIDGET_TYPES_BY_VERSION[version] | runtime_attested_widget_types()
 
     semantic_errors, semantic_warnings = _check_semantics(doc, allowed_widgets)
     safety_errors, safety_warnings = _check_runtime_safety(doc)
@@ -653,7 +656,7 @@ def _check_schema(doc: Any, path: str) -> list[ValidationIssue]:
         errors.append(_err(f"{path}/screens", Category.SCHEMA, "array_bounds",
                             f"screens は要素数1〜{MAX_SCREENS}の配列である必要があります。"))
     else:
-        allowed_widgets = WIDGET_TYPES_BY_VERSION[version]
+        allowed_widgets = WIDGET_TYPES_BY_VERSION[version] | runtime_attested_widget_types()
         for i, screen in enumerate(screens):
             errors.extend(_check_screen_schema(screen, f"{path}/screens/{i}", allowed_widgets, version))
 
@@ -987,11 +990,14 @@ def _check_widget_schema(widget: Any, path: str, allowed_widgets: set[str], vers
         return [_err(path, Category.SCHEMA, "widget_type_missing", "widgetにはtypeが必須です。")]
 
     t = widget.get("type")
-    if t not in WIDGET_TYPES_ALL:
-        return [_err(f"{path}/type", Category.SCHEMA, "unknown_widget", f"未知のWidget type '{t}' です。")]
+    # allowed_widgets は「この文書のversionで出荷されている型」に、
+    # runtime attested（実際にbuildして載せた獲得能力）の型を足したもの。
+    # 出荷表にしか無い型を先に弾くと、獲得した型が永久にunknownになる。
     if t not in allowed_widgets:
-        return [_err(f"{path}/type", Category.SCHEMA, "widget_not_allowed_in_version",
-                      f"Widget type '{t}' はこの文書のversionでは使用できません。")]
+        if t in WIDGET_TYPES_ALL:
+            return [_err(f"{path}/type", Category.SCHEMA, "widget_not_allowed_in_version",
+                          f"Widget type '{t}' はこの文書のversionでは使用できません。")]
+        return [_err(f"{path}/type", Category.SCHEMA, "unknown_widget", f"未知のWidget type '{t}' です。")]
 
     errors: list[ValidationIssue] = []
     if not _is_identifier(widget.get("id")):

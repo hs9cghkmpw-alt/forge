@@ -1,5 +1,96 @@
 # Forge Handoff — current Source of Truth
 
+---
+
+## CEOへの依頼（最優先・上から順に）
+
+1. **OpenAI API キーの失効手続き。** 以前のセッションでチャットへ貼られた
+   `sk-proj-...` は Repository に保存していないが、**貼られた時点で漏れている**。
+   OpenAI 管理画面から revoke（失効）してください。未完了です。
+2. **ぱすとらる PC (Windows) の Puro（Flutter のバージョン管理ツール）問題。**
+   `flutter run -d chrome` が SDK path 解決で止まる件は、**この Linux 実行
+   ホストでは再現しません**（こちらは `/opt/flutter` で正常動作）。
+   実機側で下記を実行し、出力を貼ってください（秘密情報は含みません）。
+
+   ```powershell
+   where.exe flutter
+   puro ls
+   puro env use stable
+   flutter --version
+   flutter doctor -v
+   ```
+
+3. **TD92 の判断。** 描けない widget が release build で無言で消えます
+   （下記「今回の発見」参照）。現状維持か、可視 signal を出すか。
+
+---
+
+## 直近の作業（2026-08-31 / FORGE-020F）
+
+### やったこと
+
+CEO 指示の最優先項目
+**「acquired capability → Validator → real Flutter/Dart runtime」** に着手し、
+**前半（Validator）だけを閉じました。後半（Dart）は閉じていません。**
+
+* `backend/app/ai/validators/runtime_attested_widgets.py` を追加。
+  **PROMOTED かつ loaded な BUILD_TIME activation を持ち、出力宣言を持つ**
+  能力の widget 型だけが、Validator（生成物を検査する仕組み）の許可集合を
+  広げます。`requested`（欲しいと言っただけ）でも `DECLARATIVE` でも
+  広がりません。既定は空集合＝**忘れても緩まない向き**。
+* `schema_validator.py` の実バグを修正。全版の出荷表を先に見ていたため、
+  獲得型は許可集合へ足しても手前で「未知の widget」として落ちていました。
+* 配線破壊試験（配線を1本ずつ外して対応テストが落ちるか確かめる）を **9件**
+  実施し、**9件すべて検出**。初回は4本が素通りした（＝置物テストだった）ため、
+  install 後に activation を壊す test class を追加してから再測しました。
+
+### 今の状態
+
+| 区間 | 状態 |
+|---|---|
+| acquired capability → Validator | **CLOSED**（14 tests + 破壊試験9件） |
+| Validator → real Flutter/Dart runtime | **NOT CLOSED** |
+
+### 今回の発見（実 Flutter で実行して確認）
+
+* 獲得 widget は Parser の `switch` で `ForgeUnknownWidgetNode` へ倒れ、
+  **Registry へ登録しても描かれません。** 拡張点は Registry ではなく
+  **Parser 側**にあります → **TD93**。
+  Registry を拡張点だと思って作業すると必ず外すので、テストで固定しました。
+* `ForgeFallbackWidget` は release build では `SizedBox.shrink()`。
+  描けない widget が**無言で消えます** → **TD92**（製品方針に触るため
+  勝手に変えていません）。
+
+### 検証結果
+
+```text
+backend        1998 passed, 16 skipped
+forge_ai        717 passed
+ruff (変更箇所)  All checks passed
+flutter analyze No issues found
+flutter test    550 passed（546 → 550）
+```
+
+Evidence: `docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md`
+ログ: `logs/forge-020f-guard-break-20260831.log`
+
+### 次にやること
+
+1. **TD93 を開ける。** Parser 側に宣言駆動の受け口を作り、獲得能力の
+   Dart source を実生成して**実際に描画**するところまで通す。
+   `if capability_id == ...` の専用分岐は作らない。
+2. その描画を Chrome 実機で撮る（この Linux ホストで可能）。
+3. ぱすとらる PC の Puro 問題（CEO 依頼 2）。
+
+### まだ証明していないこと（推測で埋めない）
+
+* 獲得能力の Dart 実描画
+* Real Local Model が capability の source を書くこと（**Real Local Model runs = 0 のまま**）
+* 未知の要求からの完全 E2E
+* ぱすとらる PC での `flutter run -d chrome` 成功
+
+---
+
 ## Canonical product invariant
 
 Forge's goal has **not switched** to a new mode or to a finite app-coverage program.

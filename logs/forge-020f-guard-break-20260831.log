@@ -1,0 +1,31 @@
+[B1 union removed at both call sites] DETECTED  1 failed, 13 passed in 0.09s
+      failing test: test_the_document_now_validates
+[B2 unknown/allowed check order reverted] DETECTED  1 failed, 13 passed in 0.09s
+      failing test: test_the_document_now_validates
+[B3 BUILD_TIME route condition removed] DETECTED  1 failed, 13 passed in 0.09s
+      failing test: test_a_declarative_promotion_does_not_open_it
+[B4 loaded re-check removed] DETECTED  1 failed, 13 passed in 0.07s
+      failing test: test_a_runtime_that_was_unloaded_stops_being_attested
+[B5 build_id re-check removed] DETECTED  1 failed, 13 passed in 0.08s
+      failing test: test_a_lost_build_id_stops_being_attested
+[B6 runtime_fingerprint re-check removed] DETECTED  1 failed, 13 passed in 0.07s
+      failing test: test_a_lost_runtime_fingerprint_stops_being_attested
+[B7 identity re-check removed] DETECTED  1 failed, 13 passed in 0.07s
+      failing test: test_an_activation_for_another_capability_stops_being_attested
+[B8 contribution requirement removed (fall back to a guessed name)] DETECTED  6 failed, 8 passed in 0.09s
+      failing test: test_the_document_now_validates
+      failing test: test_the_widget_is_attested
+      failing test: test_a_lost_build_id_stops_being_attested
+      failing test: test_a_lost_runtime_fingerprint_stops_being_attested
+      failing test: test_a_runtime_that_was_unloaded_stops_being_attested
+      failing test: test_an_activation_for_another_capability_stops_being_attested
+[B9 fail-open default (return every declared widget)] DETECTED  9 failed, 5 passed in 0.09s
+      failing test: test_an_unknown_widget_fails_validation
+      failing test: test_declaring_a_contribution_alone_does_not_open_the_validator
+      failing test: test_nothing_is_attested_before_acquisition
+      failing test: test_a_declarative_promotion_does_not_open_it
+      failing test: test_a_promotion_without_a_declared_widget_opens_nothing
+      failing test: test_a_lost_build_id_stops_being_attested
+      failing test: test_a_lost_runtime_fingerprint_stops_being_attested
+      failing test: test_a_runtime_that_was_unloaded_stops_being_attested
+      failing test: test_an_activation_for_another_capability_stops_being_attested
