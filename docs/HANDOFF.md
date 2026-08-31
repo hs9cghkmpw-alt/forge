@@ -88,7 +88,16 @@ forge_ai(dart)  9 passed（FORGE_REQUIRE_DART_BUILD=1、実 dart subprocess）
 
 Evidence: `docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md`
 ログ: `logs/forge-020f-guard-break-20260831.log`、
-`logs/forge-020f-dart-guard-break-20260831.log`
+`logs/forge-020f-dart-guard-break-20260831.log`、
+`logs/forge-020f-dart-plan-guard-break-20260831.log`
+
+### CI（canonical）
+
+run **33387417433** / head `442ba87` / **4 jobs すべて success**。
+
+新しい step「生成 Dart の実ビルド経路」は frontend job の step 8 として
+**実際に走って success** しています（skip ではありません——
+`FORGE_REQUIRE_DART_BUILD=1` は dart が無ければ失敗させます）。
 
 ### どこまでを「閉じた」と言っているか（過大主張の防止）
 

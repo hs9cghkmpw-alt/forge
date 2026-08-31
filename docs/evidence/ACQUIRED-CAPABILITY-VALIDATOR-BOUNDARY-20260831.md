@@ -320,7 +320,13 @@ dart 不在 + 指定なし                     → 2 passed, 7 skipped
 dart 有り + FORGE_REQUIRE_DART_BUILD=1  → 9 passed
 ```
 
-### 10.6 これでもまだ言えないこと
+### 10.6 CI で実際に走ったことの確認
+
+CI run **33387417433** / head `442ba87` / 4 jobs すべて success。
+frontend job の step 8「生成 Dart の実ビルド経路」が
+**success（skip ではない）**。所要 6 秒。
+
+### 10.7 これでもまだ言えないこと
 
 隔離 workspace は **Flutter を持たない**。したがって
 「生成 Dart が Forge の Flutter アプリで描かれる」ことは、
