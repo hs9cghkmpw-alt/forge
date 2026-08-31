@@ -20,6 +20,7 @@ import 'dart:ui' show Color;
 
 // v1.9(2026-08-13)。bar_chartのgroup_by/aggregateが参照する。
 import 'acquired_widget_types.dart';
+import '../acquired/acquired_capabilities.dart';
 import '../runtime/forge_aggregate.dart';
 import '../runtime/forge_logic_document.dart';
 
@@ -1041,15 +1042,19 @@ sealed class ForgeWidgetNode {
       default:
         // 獲得したCapabilityのwidget型は、ここで受ける。
         // 出荷済み型は上のcaseが先に一致するので、この表では乗っ取れない。
+        // **登録を呼び忘れる経路を作らない。** 未知の型を見た時点で必ず通る。
+        ensureAcquiredCapabilitiesRegistered();
         final acquiredType = type is String ? type : null;
         final acquired = acquiredType == null
             ? null
             : forgeAcquiredWidgetTypes.specFor(acquiredType);
         if (acquired != null && acquiredType != null) {
-          final rawProperties = json['properties'];
-          final properties = rawProperties is Map<String, dynamic>
-              ? Map<String, dynamic>.unmodifiable(rawProperties)
-              : const <String, dynamic>{};
+          // 生成 Document は widget の属性を**平らに**持つ（出荷済みの型と同じ）。
+          // `type` と `id` は widget の骨であって属性ではない。
+          final properties = Map<String, dynamic>.unmodifiable(<String, dynamic>{
+            for (final entry in json.entries)
+              if (entry.key != 'type' && entry.key != 'id') entry.key: entry.value,
+          });
           for (final required in acquired.requiredProperties) {
             if (!properties.containsKey(required)) {
               // 出荷済み型と同じ厳しさで落とす。黙って空のwidgetを描かない。

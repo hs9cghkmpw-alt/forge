@@ -38,12 +38,12 @@ ForgeWidgetRegistry registryWithAcquiredBuilder() {
     });
 }
 
-Map<String, dynamic> acquiredJson(
-        {Map<String, dynamic>? properties}) =>
+/// 生成 Document は widget の属性を**平らに**持つ（出荷済みの型と同じ）。
+Map<String, dynamic> acquiredJson({Map<String, dynamic>? properties}) =>
     <String, dynamic>{
       'type': acquiredType,
       'id': 'acquired_grid',
-      'properties': properties ?? <String, dynamic>{'columns': 3},
+      ...(properties ?? <String, dynamic>{'columns': 3}),
     };
 
 Future<void> pumpNode(WidgetTester tester, ForgeWidgetNode node,
@@ -60,8 +60,12 @@ Future<void> pumpNode(WidgetTester tester, ForgeWidgetNode node,
 void main() {
   tearDown(forgeAcquiredWidgetTypes.clear);
 
-  test('既定では何も登録されていない', () {
-    expect(forgeAcquiredWidgetTypes.registeredTypes, isEmpty);
+  test('宣言していない型は登録されていない', () {
+    // 「表が空である」ではなく「**この型が**入っていない」を見る。
+    // 実際に能力を獲得した checkout では表は空でないのが正しく、
+    // 空を期待すると獲得を壊れたことにしてしまう。
+    expect(forgeAcquiredWidgetTypes.registeredTypes,
+        isNot(contains(acquiredType)));
   });
 
   testWidgets('両方登録すれば、獲得 widget は実際に描かれる', (tester) async {

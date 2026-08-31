@@ -1,0 +1,24 @@
+[T1 Registry から獲得の描き方を入れる行を外す] DETECTED
+       parse していなくても Registry は獲得 widget を解決する [E]
+       4. Widget Registry がその型を実 Widget へ解決する [E]
+       Registry を組むと獲得した描き方が入る [E]
+       5. 生成 Document からその Widget が実際に描かれる [E]
+[T2 Registry 側の登録呼び出しを外す] DETECTED
+       parse していなくても Registry は獲得 widget を解決する [E]
+[T3 Parser 側の登録呼び出しを外す] DETECTED
+       2. Parser が獲得 widget 型を認識する [E]
+       3. forgeAcquiredWidgetTypes へ本番経路で登録されている [E]
+[T4 登録表を読む本体を空にする] DETECTED
+       parse していなくても Registry は獲得 widget を解決する [E]
+       2. Parser が獲得 widget 型を認識する [E]
+       3. forgeAcquiredWidgetTypes へ本番経路で登録されている [E]
+       4. Widget Registry がその型を実 Widget へ解決する [E]
+[T5 widget 型の持ち主検査を外す（静かに奪えるようにする）] DETECTED
+       別の能力が同じ widget 型を奪えない [E]
+[T6 installer が binding 無しでも載せるようにする] DETECTED
+       FAILED tests/test_flutter_capability_installer.py::TestWhatIsRefused::test_an_artifact_without_a_binding_is_refused
+[T7 installer が登録表を作り直さない] DETECTED
+       FAILED tests/test_flutter_capability_installer.py::TestTheRegistrationTableIsRebuilt::test_a_removed_capability_disappears_from_the_table
+       FAILED tests/test_flutter_capability_installer.py::TestTheRegistrationTableIsRebuilt::test_an_empty_root_produces_an_empty_table
+       FAILED tests/test_flutter_capability_installer.py::TestTheRegistrationTableIsRebuilt::test_an_installed_capability_is_registered
+       FAILED tests/test_flutter_capability_installer.py::TestTheRegistrationTableIsRebuilt::test_two_capabilities_are_ordered_deterministically

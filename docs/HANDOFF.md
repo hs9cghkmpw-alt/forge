@@ -51,7 +51,8 @@ CEO 指示の最優先項目
 | acquired capability → Validator | **CLOSED**（14 tests + 破壊試験 9件） |
 | Validator → 実 Flutter widget runtime | **CLOSED**（7 tests + 破壊試験 4件） |
 | 生成 Dart → 実 `dart` で試験・解析・起動確認 | **CLOSED**（9 tests + 破壊試験 4件） |
-| 生成 Dart → Flutter アプリへ載せて実描画 | **NOT CLOSED**（TD94 の残り） |
+| **生成 Dart → Forge アプリへ載せて実描画** | **CLOSED**（TD94。7 tests + 破壊試験 7件） |
+| 実 Model が実装を書く / 実機 Chrome 表示 | **NOT CLOSED**（TD95） |
 
 ### 途中で見つけたこと（実 Flutter で実行して確認）
 
@@ -125,20 +126,79 @@ Chrome 上の Forge アプリで自律生成能力を描いた ——**してい
 `FORGE_REQUIRE_DART_BUILD=1`（dart が無ければ skip ではなく**失敗**）を
 立ててあります。
 
+---
+
+## TD94 を閉じました（2026-08-31 / 同日 追記）
+
+### 何が繋がったか
+
+```text
+未知の要求
+  → Capability Plan が gap を名指しする      （view.calendar が missing）
+  → 実装を生成する                            （Dart）
+  → 隔離 workspace で実 dart による試験・解析・起動確認
+  → PROMOTED
+  → Forge の Flutter アプリへ install          ← ここが空いていた
+  → 本番 compiler が生成 Document へ widget を出す
+  → Parser → document model → Registry → 実 Widget
+```
+
+CEO が挙げた10項目はすべて PASS です（内訳は Evidence の §2）。
+
+### 設計の要点
+
+* 獲得能力は **Parser 側の宣言と描き方を両方**持ちます。片方だけの値は
+  型として作れません（`ForgeAcquiredCapability`）。
+* 登録は**本番が必ず通る2箇所**から呼ばれます——Parser が未知の型を見たとき、
+  Registry を組むとき。「呼び出し側が忘れずに呼ぶ」設計にしていません。
+* installer は登録表を**丸ごと作り直します**（追記ではない）。installer を
+  通っていない能力が表に残り続ける形にしていません。
+* 生成物は **commit しません**。commit すると「出荷済み source」になり、
+  生成したものと出荷したものの区別が消えます。CI が毎回作り直します。
+
+### 途中で直した実バグ 2件
+
+1. Parser の獲得分岐が `json['properties']` を読んでいましたが、生成
+   Document は属性を**平ら**に持ちます。獲得 widget が**永久に parse で
+   落ちていました**。
+2. 「表が空である」を期待するテストは、実際に能力を獲得した checkout で
+   **獲得を壊れたことにしてしまいます**。「この型が入っていない」へ変更。
+
+### 置物テストを1本見つけて潰しました
+
+配線破壊試験の T2（Registry 側の登録呼び出しを外す）が**初回は素通り**
+しました。同じファイル内で先に走ったテストの parse が既に登録を済ませて
+いたためです。parse を一切しない独立ファイルを足して締め直しました。
+
+### 検証結果
+
+```text
+flutter analyze  No issues found（獲得を載せた状態）
+flutter test     562 passed（素の状態）
+flutter test test_acquired  7 passed（獲得を載せた状態）
+flutter build web  ✓ Built build/web（獲得を載せた状態）
+forge_ai         736 passed
+backend          1998 passed, 16 skipped
+配線破壊試験       TD94 7件すべて検出（累計 24件）
+```
+
+Evidence: `docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md`
+ログ: `logs/forge-td94-e2e-20260831.log`、`logs/forge-td94-guard-break-20260831.log`
+
 ### 次にやること
 
-1. **TD94 の残り。** 隔離 workspace は Flutter を持たないので、生成 Dart を
-   Forge の Flutter アプリへ組み込んでビルドし、上の 2 箇所へ登録させて
-   **実際に描く**ところが未実装です。
-2. それが繋がってから、Chrome 実機で撮る（この Linux ホストで可能）。
+1. **実機 Chrome 表示**（CEO の指示どおり、TD94 の次）。この Linux ホストで
+   `flutter run -d chrome` は既に成功しているので、獲得を載せた状態で
+   撮ります。
+2. **TD95 の残り半分**——実 Model が capability の実装を書いた証拠。
+   **Real Local Model runs = 0 のまま**です。
 3. ぱすとらる PC の Puro 問題（CEO 依頼 2）。
 
 ### まだ証明していないこと（推測で埋めない）
 
-* 生成された Dart を Flutter アプリへ載せて描くこと（TD94 の残り）
-* Chrome 実機での自律生成能力の描画
-* Real Local Model が capability の source を書くこと（**Real Local Model runs = 0 のまま**）
-* 未知の要求からの完全 E2E
+* Real Local Model が capability の source を書くこと（**Real Local Model runs = 0 のまま**。Provider は Test Double）
+* 実機 Chrome での自律生成能力の描画
+* 自然言語の要求から Capability 契約を機械的に引くこと（いまは script が固定）
 * ぱすとらる PC での `flutter run -d chrome` 成功
 
 ---

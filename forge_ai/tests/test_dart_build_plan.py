@@ -117,12 +117,36 @@ CONTRACT = CapabilityImplementationContract(
 )
 
 
-def _payload(impl: str = _IMPL, test: str = _TEST, probe: str = _PROBE) -> dict:
+_BINDING = """import 'package:flutter/material.dart';
+
+import 'package:forge_app/json_ui/acquired/acquired_capability.dart';
+import 'package:forge_app/json_ui/schema/acquired_widget_types.dart';
+
+import 'capability_impl.dart';
+
+const ForgeAcquiredCapability capability = ForgeAcquiredCapability(
+  capabilityId: 'view.acquired_grid',
+  spec: ForgeAcquiredWidgetSpec(
+    typeName: 'acquired_grid_view',
+    requiredProperties: <String>['columns'],
+  ),
+  build: buildAcquiredGrid,
+);
+"""
+
+
+def _payload(
+    impl: str = _IMPL,
+    test: str = _TEST,
+    probe: str = _PROBE,
+    binding: str = _BINDING,
+) -> dict:
     return {
         "files": [
             {"path": "capability_impl.dart", "content": impl},
             {"path": "capability_test.dart", "content": test},
             {"path": "probe.dart", "content": probe},
+            {"path": "flutter/forge_binding.dart", "content": binding},
         ],
         "reusable_contract": "列数で折り返して並べる再利用可能な実装",
     }
@@ -173,7 +197,12 @@ class TestTheDartPlanIsDeclared(unittest.TestCase):
         """手順が名指しするファイルは、先に要求しておく。"""
         self.assertEqual(
             entry_files_for_language("dart"),
-            ("capability_test.dart", "probe.dart"),
+            (
+                "capability_impl.dart",
+                "capability_test.dart",
+                "probe.dart",
+                "flutter/forge_binding.dart",
+            ),
         )
 
 

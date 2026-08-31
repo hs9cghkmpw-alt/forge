@@ -204,10 +204,38 @@ jobs:
           pip install pytest
           python -m pytest tests/test_dart_build_plan.py -q
 
+      # ---------------------------------------------------------------
+      # 獲得した Capability が Forge のアプリへ載って描けること（TD94）。
+      #
+      # 隔離 workspace で dart が通っただけでは「Forge が描ける」ことに
+      # ならない。ここで実際に install し、**その状態で** analyze /
+      # test / build web を通す。
+      #
+      # `test_acquired/` を `test/` の外に置いてあるのは、素の checkout で
+      # `flutter test` が落ちないようにするためである。「生成物が無ければ
+      # skip」にすると **skip が PASS として数えられる**ので、そうしない。
+      # 生成物が無ければ skip ではなく失敗する。
+      #
+      # 実 API は呼ばない（Provider は Test Double）。
+      # ---------------------------------------------------------------
+      - name: 獲得 Capability を Forge アプリへ載せる
+        run: python -m pytest --version > /dev/null 2>&1 || true;
+             python3 scripts/acquired_capability_flutter_e2e.py
+
+      - name: flutter analyze（獲得 Capability を載せた状態）
+        working-directory: frontend
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: flutter test（獲得 Capability が実際に描かれる）
+        working-directory: frontend
+        run: flutter test test_acquired
+
       # 013 §7: analyze と test が通っても **Web build は落ちうる**
       # （Web 非対応の依存、条件付き import、dart2js だけが出す型エラー等）。
       # Forge の完成図は Web IDE なので、Web が build できることは
       # 品質ではなく前提である。
+      # 獲得 Capability を載せたまま build する。載せた Dart が Web まで
+      # 通ることは、品質ではなく前提である。
       - name: flutter build web
         working-directory: frontend
         run: flutter build web --debug

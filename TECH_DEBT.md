@@ -4001,15 +4001,30 @@ Parser側の受け口を開けた。Parserの宣言とRegistryの描き方を**�
 
 **残る負債はTD94**（生成されたDart sourceを実ビルドして載せる経路が無い）。
 
-## TD94. 生成DartをFlutterアプリへ載せて描く経路が無い（2026-08-31）
+## TD94. 生成DartをFlutterアプリへ載せて描く経路が無い（2026-08-31）→ **解消**
 
-同日中に`dart`のbuild planを足し、生成Dartが実`dart`で
-`dart run capability_test.dart` / `dart analyze .` / `dart run probe.dart`
-を通ることまでは閉じた（配線破壊試験4件すべて検出。CIのfrontend jobで
-`FORGE_REQUIRE_DART_BUILD=1`を立てて**skipではなく失敗**させる）。
+`dart`のbuild planに続き、同日中に`flutter_capability_installer.py`と
+`frontend/lib/json_ui/acquired/`を足して閉じた。生成Dartが
+Forgeアプリのビルド対象へ入り、Parser → document model → Registry →
+実Widgetまで本番経路で通る。`flutter analyze` / `flutter test` /
+`flutter build web`はいずれも獲得を載せた状態で通り、CIのfrontend jobが
+skipなしで実行する。配線破壊試験7件すべて検出（うち1件は置物テストを
+見つけて潰した）。
 
-**残っているのはその先である。** 隔離workspaceはFlutterを持たないので、
-生成DartをForgeのFlutterアプリへ組み込んでビルドし、
-`forgeAcquiredWidgetTypes`とWidget Registryへ登録させて**実際に描く**
-経路は未実装。したがって「生成 → ビルド → 実描画」を実物で通した実績は
-まだ**0**である。推測で埋めないこと。
+Evidence: `docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md`
+
+**残る境界はTD95**（実Modelが書いた証拠 / 実機Chrome表示）。
+
+
+## TD95. 実Modelが書いた証拠と実機Chrome表示（2026-08-31）
+
+TD94で「生成Dartが実際に描かれる」ところまで閉じたが、次の2つは未達である。
+
+1. **実Modelが capability の実装を書いた証拠が無い。** E2EのProviderは
+   Test Doubleである。**Real Local Model runs = 0のまま**。推測で増やさない。
+2. **実機Chromeでの表示が無い。** 描画を確かめたのは`flutter test`が動かす
+   本物のwidget treeであり、ブラウザではない。
+
+併せて、自然言語の要求からCapability契約（intent / data_contract /
+host_language / binding_targets）を機械的に引く段も未実装で、現在は
+`scripts/acquired_capability_flutter_e2e.py`が固定している。

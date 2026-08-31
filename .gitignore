@@ -31,3 +31,12 @@ frontend/.packages
 .DS_Store
 .vscode/
 .idea/
+
+# Self-Extension で獲得した Capability の install 先（TD94）。
+#
+# ここへ入るのは実行時に生成されたものである。commit すると
+# 「出荷済み source」になってしまい、**生成したものと出荷したものの
+# 区別が消える**。生成物は CI が毎回作り直す。
+# `acquired_registrations.g.dart` だけは出荷状態（空）を commit する。
+frontend/lib/json_ui/acquired/*/
+frontend/test_acquired/generated_document.json

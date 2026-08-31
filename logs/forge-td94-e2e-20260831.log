@@ -1,0 +1,19 @@
+=== BEFORE: Capability Plan ===
+  need    : 通院の記録を残して、日付をカレンダーで確認したい
+  missing : ('view.calendar',)
+=== 生成 → 実 dart による試験・解析・起動確認 → PROMOTED ===
+  test           exit=0
+  build          exit=0
+  runtime_probe  exit=0
+  PROMOTED  build_id=build-93316e9234b54fde9d6db6e45935b9ce
+=== install: Forge の Flutter アプリへ載せる ===
+  installed  lib/json_ui/acquired/view_calendar/capability_impl.dart
+  installed  lib/json_ui/acquired/view_calendar/forge_binding.dart
+  registrations rewritten: frontend/lib/json_ui/acquired/acquired_registrations.g.dart
+=== 生成 Document（本番 compiler） ===
+  calendar_view is in the compiled document
+  written: frontend/test_acquired/generated_document.json
+=== まだ言えないこと ===
+  実 Model が書いた証拠は無い（Provider は Test Double）
+  Real Local Model runs = 0 のまま
+  Flutter が実際に描くかどうかは frontend/test_acquired/ が確かめる

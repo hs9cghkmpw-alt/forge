@@ -91,6 +91,12 @@ class LanguageBuildPlan:
     commands: tuple[BuildCommand, ...]
     entry_files: tuple[str, ...]
 
+    harness_files: tuple[str, ...] = ()
+    """隔離 workspace での**検証の道具**。製品へは載せない。"""
+
+    host_prefix: str = ""
+    """製品側（Forge アプリ）へ載せるファイルの接頭辞。載せるとき剥がす。"""
+
 
 #: 言語ごとの「試験 / ビルド / 起動確認」の仕方。
 #:
@@ -120,6 +126,9 @@ _LANGUAGE_COMMAND_PLANS: dict[str, LanguageBuildPlan] = {
     # Dart は package を取りに行かない構成にしてある。`dart pub get` を
     # 挟むと外向き通信が要り、**ネットワークの都合が build の成否に化ける**。
     # 依存無しで書けるように、テストも probe も素の Dart entrypoint とする。
+    # `flutter/` 以下は Flutter を要るので、隔離 workspace では解析しない
+    # （Flutter が無いため）。あちらは install 後の `flutter analyze` /
+    # `flutter test` / `flutter build web` が見る。**2つは別の事実である。**
     "dart": LanguageBuildPlan(
         commands=(
             BuildCommand(
@@ -129,7 +138,10 @@ _LANGUAGE_COMMAND_PLANS: dict[str, LanguageBuildPlan] = {
             ),
             BuildCommand(
                 kind="build",
-                argv=("dart", "analyze", "."),
+                argv=(
+                    "dart", "analyze",
+                    "capability_impl.dart", "capability_test.dart", "probe.dart",
+                ),
                 timeout_seconds=300.0,
             ),
             BuildCommand(
@@ -138,7 +150,14 @@ _LANGUAGE_COMMAND_PLANS: dict[str, LanguageBuildPlan] = {
                 timeout_seconds=300.0,
             ),
         ),
-        entry_files=("capability_test.dart", "probe.dart"),
+        entry_files=(
+            "capability_impl.dart",
+            "capability_test.dart",
+            "probe.dart",
+            "flutter/forge_binding.dart",
+        ),
+        harness_files=("capability_test.dart", "probe.dart"),
+        host_prefix="flutter/",
     ),
 }
 

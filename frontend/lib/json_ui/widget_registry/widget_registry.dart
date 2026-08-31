@@ -8,6 +8,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../acquired/acquired_capability.dart';
+import '../acquired/acquired_capabilities.dart';
 import '../renderer/design_language.dart';
 import '../renderer/forge_runtime_state.dart';
 import '../schema/forge_document.dart';
@@ -63,6 +65,11 @@ ForgeWidgetRegistry buildDefaultForgeRegistry() {
   registerV1_14Widgets(registry);
   registerV1_15Widgets(registry);
   registerV1_16Widgets(registry);
+  // 獲得した Capability の描き方を入れる。**出荷済みの型より後に入れるが、
+  // 型名は重ならない**——出荷済みの型は Parser の `switch` が先に一致するので
+  // 獲得側の宣言はそもそも引かれない。
+  ensureAcquiredCapabilitiesRegistered();
+  forgeAcquiredWidgetBuilders.forEach(registry.register);
   return registry;
 }
 

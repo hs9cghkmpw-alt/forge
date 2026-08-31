@@ -1,3 +1,33 @@
+## 2026-08-31 — FORGE-TD94: 獲得した Capability が Forge の Flutter アプリで実際に描かれる
+
+- `frontend/lib/json_ui/acquired/` を新設。`ForgeAcquiredCapability` は
+  **Parser 側の宣言と描き方を両方**持つ（片方だけの値は型として作れない）。
+- 登録は**本番が必ず通る2箇所**（`ForgeWidgetNode.fromJson` の未知型分岐と
+  `buildDefaultForgeRegistry()`）から呼ばれる。呼び忘れる経路が無い。
+- `forge_ai/core/orchestration/flutter_capability_installer.py` を新設。
+  生成 binding を `lib/json_ui/acquired/<slug>/` へ置き、登録表を**丸ごと
+  作り直す**（追記ではない）。harness は載せない。binding 無しは落とす。
+- `LanguageBuildPlan` へ `harness_files` / `host_prefix` を追加。
+  **能力ごとの表ではない。**
+- `scripts/acquired_capability_flutter_e2e.py`: 未知の要求 → gap → 生成 →
+  実 dart 検証 → PROMOTED → install → 本番 compiler で生成 Document、まで通す。
+- **実バグ修正**: Parser の獲得分岐が `json['properties']` を読んでいたが、
+  生成 Document は属性を**平ら**に持つ。獲得 widget が永久に parse で
+  落ちていた。
+- **実バグ修正**: 「表が空である」を期待するテストは、実際に能力を獲得した
+  checkout で獲得を壊れたことにしてしまう。「この型が入っていない」へ変更。
+- 配線破壊試験 **7件すべて検出**。初回に素通りした T2（Registry 側の登録
+  呼び出し）は置物だったので、parse を経ない独立ファイルを足して潰した。
+- CI（frontend job）が **skip なしで**実行する。`test_acquired/` は `test/`
+  の外に置き、生成物が無ければ skip ではなく**失敗**する。生成物は commit
+  しない（出荷済み source と区別が付かなくなるため）。
+- 検証: flutter analyze clean（獲得を載せた状態）/ flutter test 562 passed /
+  flutter test test_acquired 7 passed / flutter build web OK /
+  forge_ai 736 passed / backend 1998 passed。
+- **まだ言えないこと**: 実 Model が書いた証拠は無い（Provider は Test
+  Double、**Real Local Model runs = 0 のまま**）。実機 Chrome 表示も未達（TD95）。
+- Evidence: `docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md`
+
 ## 2026-08-31 — FORGE-020F: 獲得したCapabilityがValidatorへ届く（Dart側は未達）
 
 - `backend/app/ai/validators/runtime_attested_widgets.py` を追加。**PROMOTED かつ

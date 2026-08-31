@@ -33,7 +33,7 @@ const String acquiredWidgetType = 'acquired_grid_view';
 Map<String, dynamic> acquiredWidgetJson() => <String, dynamic>{
       'type': acquiredWidgetType,
       'id': 'acquired_grid',
-      'properties': <String, dynamic>{},
+
     };
 
 Future<void> pumpNode(WidgetTester tester, ForgeWidgetNode node,
