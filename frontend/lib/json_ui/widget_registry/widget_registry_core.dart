@@ -61,6 +61,7 @@ String typeNameOf(ForgeWidgetNode node) => switch (node) {
       ForgeAudioMixerWidgetNode() => 'audio_mixer',
       ForgeSimulationLoopWidgetNode() => 'simulation_loop',
       ForgeMapViewWidgetNode() => 'map_view',
+      ForgeAcquiredWidgetNode(:final rawType) => rawType,
       ForgeUnknownWidgetNode() => 'unknown',
     };
 

@@ -48,18 +48,30 @@ CEO 指示の最優先項目
 
 | 区間 | 状態 |
 |---|---|
-| acquired capability → Validator | **CLOSED**（14 tests + 破壊試験9件） |
-| Validator → real Flutter/Dart runtime | **NOT CLOSED** |
+| acquired capability → Validator | **CLOSED**（14 tests + 破壊試験 9件） |
+| Validator → 実 Flutter widget runtime | **CLOSED**（7 tests + 破壊試験 4件） |
+| 生成 Dart source → 実ビルド → 実機 Chrome | **NOT CLOSED**（TD94） |
 
-### 今回の発見（実 Flutter で実行して確認）
+### 途中で見つけたこと（実 Flutter で実行して確認）
 
 * 獲得 widget は Parser の `switch` で `ForgeUnknownWidgetNode` へ倒れ、
-  **Registry へ登録しても描かれません。** 拡張点は Registry ではなく
-  **Parser 側**にあります → **TD93**。
-  Registry を拡張点だと思って作業すると必ず外すので、テストで固定しました。
+  **Registry へ登録しても描かれませんでした。** 拡張点は Registry ではなく
+  **Parser 側**でした（**TD93**）。Registry を拡張点だと思って作業すると
+  必ず外すので、まずテストで固定してから穴を開けました。
 * `ForgeFallbackWidget` は release build では `SizedBox.shrink()`。
   描けない widget が**無言で消えます** → **TD92**（製品方針に触るため
-  勝手に変えていません）。
+  勝手に変えていません。CEO 依頼 3）。
+
+### Dart 側に開けた受け口
+
+`frontend/lib/json_ui/schema/acquired_widget_types.dart`。
+獲得能力の生成コードが、載るときに**2つとも**自分で登録します。
+
+1. Parser 側の宣言（型名と必須 property）
+2. Widget Registry（実際の描き方）
+
+**片方だけでは描きません。** 描けないものを描けたことにしないためです。
+Forge 本体に `if capability_id == ...` の分岐は**ありません**。
 
 ### 検証結果
 
@@ -68,23 +80,35 @@ backend        1998 passed, 16 skipped
 forge_ai        717 passed
 ruff (変更箇所)  All checks passed
 flutter analyze No issues found
-flutter test    550 passed（546 → 550）
+flutter test    557 passed（546 → 550 → 557）
+配線破壊試験      backend 9件 / Dart 4件 = 13件すべて検出（置物テスト0）
 ```
 
 Evidence: `docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md`
-ログ: `logs/forge-020f-guard-break-20260831.log`
+ログ: `logs/forge-020f-guard-break-20260831.log`、
+`logs/forge-020f-dart-guard-break-20260831.log`
+
+### どこまでを「閉じた」と言っているか（過大主張の防止）
+
+閉じたのは**実 Flutter widget runtime**まで（`flutter test` は本物の Dart VM と
+widget tree を動かします）。
+
+**言っていないこと**:
+Chrome 上の Forge アプリで自律生成能力を描いた ——**していません**。
+本番起動経路へ架空の capability を登録するのは偽装なので行いません。
 
 ### 次にやること
 
-1. **TD93 を開ける。** Parser 側に宣言駆動の受け口を作り、獲得能力の
-   Dart source を実生成して**実際に描画**するところまで通す。
-   `if capability_id == ...` の専用分岐は作らない。
-2. その描画を Chrome 実機で撮る（この Linux ホストで可能）。
+1. **TD94。** `SynthesizingBuildTimeImplementer` は今 Python 用の build plan
+   しか持ちません。Dart/Flutter 用を足し、生成された Dart source が上の 2 箇所へ
+   自分で登録する形にすれば「生成 → ビルド → 実描画」が一本に繋がります。
+2. それが繋がってから、Chrome 実機で撮る（この Linux ホストで可能）。
 3. ぱすとらる PC の Puro 問題（CEO 依頼 2）。
 
 ### まだ証明していないこと（推測で埋めない）
 
-* 獲得能力の Dart 実描画
+* 生成された Dart source を実ビルドして載せること（TD94）
+* Chrome 実機での自律生成能力の描画
 * Real Local Model が capability の source を書くこと（**Real Local Model runs = 0 のまま**）
 * 未知の要求からの完全 E2E
 * ぱすとらる PC での `flutter run -d chrome` 成功

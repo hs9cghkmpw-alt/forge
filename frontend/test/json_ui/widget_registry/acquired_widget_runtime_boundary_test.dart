@@ -7,13 +7,18 @@
 //
 // このテストは、今この瞬間の Dart 側の事実を記録して固定する。
 //
-//   1. 未知の型は例外にならず ForgeUnknownWidgetNode になる
+//   1. 宣言していない型は例外にならず ForgeUnknownWidgetNode になる
 //   2. Renderer は Fallback（代替表示）へ倒す — **描かれない**
 //   3. Registry へ後から登録しても**描かれない**
 //      （Parser の switch が先に握り潰しているため）
 //
-// 3 が、獲得能力を Dart まで通すために次に開けるべき穴である。
-// Registry だけを拡張点だと思って作業すると必ず外す。
+// 3 が示すとおり、拡張点は Registry ではなく **Parser 側**である。
+// その受け口は `forgeAcquiredWidgetTypes`（`acquired_widget_types.dart`）で
+// 開けた。**両方を登録して初めて描かれる**ことは
+// `acquired_widget_renders_test.dart` が確かめる。
+//
+// このファイルは「既定は閉じている」側を固定する。
+// Parser 側の宣言が無い限り、Registry をいくら触っても描かれない。
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

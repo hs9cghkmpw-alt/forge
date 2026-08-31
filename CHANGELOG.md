@@ -17,6 +17,23 @@
 - Evidence: `docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md`、
   ログ `logs/forge-020f-guard-break-20260831.log`。
 
+### 後半（Dart）も同日中に開けた — TD93 解消
+
+- `frontend/lib/json_ui/schema/acquired_widget_types.dart` を追加。Parser 側の
+  受け口。`ForgeWidgetNode.fromJson` の `default:` が Unknown へ倒す**前に**引く。
+- 汎用ノード `ForgeAcquiredWidgetNode`（型名 + properties）。capability ごとの
+  専用クラスも `if` 分岐も作らない。
+- **Parser の宣言と Registry の描き方を両方登録して初めて描かれる。**
+  片方だけなら描かない（fail-closed）。必須 property 欠落は parse で落とす。
+  出荷済み型は `switch` が先に一致するので乗っ取れない。
+- 配線破壊試験 **4件すべて検出**（うち1件は sealed class の非網羅 switch による
+  compile error ＝ 型として載っている証拠）。
+  ログ `logs/forge-020f-dart-guard-break-20260831.log`。
+- flutter analyze clean / flutter test **557 passed**（546 → 550 → 557）。
+- **過大主張しない**: 閉じたのは実 Flutter widget runtime までである。
+  Chrome 上の Forge アプリで自律生成能力を描いてはいない。生成 Dart source を
+  実ビルドして載せる経路は未実装（**TD94**）。Real Local Model runs = **0 のまま**。
+
 ## 2026-08-29 — FORGE-020A5: Genuine Real Local Level 0 PASS
 
 - Prompt / provider JSON schema / strict Entity evidence now derive structural limits from the canonical `forge_ai/core/semantics/entity_contract.py` contract.

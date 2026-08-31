@@ -21,10 +21,13 @@ CEO 指示の最優先項目は
 | 区間 | 状態 | 根拠 |
 |---|---|---|
 | acquired capability → Validator | **CLOSED** | `tests/test_forge_020f_runtime_attested_widgets.py`（14 tests）+ 配線破壊 9 件 |
-| Validator → real Flutter/Dart runtime | **NOT CLOSED** | `test/json_ui/widget_registry/acquired_widget_runtime_boundary_test.dart`（4 tests、実 Flutter で実行） |
+| Validator → real Flutter/Dart runtime | **CLOSED（実 Flutter widget runtime まで）** | §8。`test/json_ui/widget_registry/acquired_widget_renders_test.dart`（7 tests）+ 配線破壊 4 件 |
 
-**この文書は「Flutter runtime まで閉じた」という主張ではない。**
-後半が未達であることを、推測ではなく**実行したテストの結果**として記録する。
+§4 で後半が**未達であること**を実測して記録し、§8 でその穴（TD93）を開けた。
+この文書は「Chrome 上の Forge アプリで、自律生成された能力が描かれた」という
+主張では**ない**。閉じたのは**実 Flutter widget runtime**（`flutter test` が
+動かす本物の Dart VM・本物の widget tree・本物の描画）までである。
+その境界を §9 に明記する。
 
 ---
 
@@ -118,6 +121,8 @@ Registry を引く前にそこで短絡する。つまり
 Registry だけを拡張点だと思って作業すると必ず外す。これは次のセッションが
 最初に踏む穴なので、テストとして固定した。
 
+**この節は §8 の作業前に測った事実である。** 穴を開けた後の状態は §8 を見ること。
+
 ### 4.1 併せて記録する懸念（未修正）
 
 `ForgeFallbackWidget` は release build では `SizedBox.shrink()` を返す
@@ -166,3 +171,83 @@ Flutter は `/opt/flutter/bin/flutter`（この Linux 実行ホスト）。
 
 本評価で API キー・token・password は一切使用・出力していない。
 ログにも含まれない。
+
+---
+
+## 8. 後半を開けた — Parser 側の受け口（TD93 解消）
+
+### 8.1 何を足したか
+
+`frontend/lib/json_ui/schema/acquired_widget_types.dart`
+
+* `ForgeAcquiredWidgetSpec` — 獲得 widget 型の**宣言**（型名＋必須 property 名）
+* `ForgeAcquiredWidgetTypeRegistry` / `forgeAcquiredWidgetTypes` — process-local な表
+* `ForgeAcquiredWidgetNode`（`forge_document.dart`）— 型名と properties を
+  持ち回るだけの**汎用**ノード。capability ごとの専用クラスを作らない
+
+`ForgeWidgetNode.fromJson` の `default:` は、Unknown へ倒す**前に**この表を引く。
+
+### 8.2 緩めていないこと
+
+| 不変条件 | 確かめ方 |
+|---|---|
+| 既定は空。何も獲得していなければ何も通らない | `既定では何も登録されていない` |
+| **Parser の宣言だけ**では描かない（描き方が無い） | `Parser だけ登録して描き方が無ければ描かない（fail-closed）` |
+| **Registry の登録だけ**では描かない（宣言が無い） | `Registry だけ登録して Parser の宣言が無ければ描かない` |
+| 必須 property が欠ければ **parse で落ちる** | `必須 property が欠けていれば parse で落ちる` |
+| 出荷済み型は**乗っ取れない**（`switch` が先に一致） | `出荷済みの型は、この表では乗っ取れない` |
+| 空の型名は登録できない | `空の型名は登録できない` |
+
+**両方登録して初めて描かれる。** 獲得能力の生成コードが、載るときに自分で
+両方へ登録する。**Forge 本体に `if capability_id == ...` の分岐は無い。**
+
+### 8.3 配線破壊試験（Dart 側・4件すべて検出）
+
+ログ: `logs/forge-020f-dart-guard-break-20260831.log`
+
+| # | 外した配線 | 結果 | 落ちたテスト |
+|---|---|---|---|
+| D1 | Parser 側の受け口を無効化 | DETECTED | `両方登録すれば…` / `必須 property が…` |
+| D2 | 必須 property 検査を削除 | DETECTED | `必須 property が欠けていれば parse で落ちる` |
+| D3 | `typeNameOf` の獲得ノード対応を削除 | DETECTED（compile error） | sealed class の非網羅 switch。**型として載っている証拠** |
+| D4 | Registry 未登録でも Fallback にしない（fail-open 化） | DETECTED | `Parser だけ登録して描き方が無ければ描かない` |
+
+### 8.4 実行結果
+
+```text
+$ cd frontend && flutter analyze
+No issues found!
+
+$ cd frontend && flutter test
+00:38 +557: All tests passed!   # 546 → 550 → 557
+```
+
+`mock_generator_renderer_contract_test.dart` が持つ `_typeNameOf` の複製にも
+獲得ノードの case を足した（sealed class の非網羅 switch でコンパイルが
+落ちたため。この複製は過去にも同じ失敗を検出しており、今回も効いた）。
+
+---
+
+## 9. どこまでを「閉じた」と言っているか（過大主張の防止）
+
+**言っていること**
+
+* 獲得 widget 型が backend Validator を通る（実測・破壊試験9件）
+* その型が**実 Flutter widget runtime で実際に描画される**
+  （`flutter test` は本物の Dart VM と widget tree を動かす。実測・破壊試験4件）
+* 片方だけの登録では描かれない（fail-closed）
+
+**言っていないこと**
+
+* Chrome 上の Forge アプリで描いた — **していない**。本番起動経路へ
+  架空の capability を登録するのは偽装なので行わない
+* 自律生成された Dart source を実際にビルドして載せた — **していない**
+* Real Local Model が capability の source を書いた — **していない。
+  Real Local Model runs = 0 のまま**
+
+### 9.1 次に必要な最後の一手
+
+`forge_ai` の BUILD_TIME 自己拡張（`SynthesizingBuildTimeImplementer`）は
+現在 Python 用の build plan しか持たない。Dart/Flutter 用の plan を足し、
+生成された Dart source が §8 の 2 箇所へ自分で登録する形にすれば、
+「生成 → ビルド → 実描画」が一本に繋がる。**そこは今回やっていない。**

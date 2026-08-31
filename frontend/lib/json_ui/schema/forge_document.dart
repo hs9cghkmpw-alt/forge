@@ -19,6 +19,7 @@ library;
 import 'dart:ui' show Color;
 
 // v1.9(2026-08-13)。bar_chartのgroup_by/aggregateが参照する。
+import 'acquired_widget_types.dart';
 import '../runtime/forge_aggregate.dart';
 import '../runtime/forge_logic_document.dart';
 
@@ -1038,6 +1039,27 @@ sealed class ForgeWidgetNode {
           maxTicksPerAdvance: rawMaxTicks is num ? rawMaxTicks.toInt() : 40,
         );
       default:
+        // 獲得したCapabilityのwidget型は、ここで受ける。
+        // 出荷済み型は上のcaseが先に一致するので、この表では乗っ取れない。
+        final acquiredType = type is String ? type : null;
+        final acquired = acquiredType == null
+            ? null
+            : forgeAcquiredWidgetTypes.specFor(acquiredType);
+        if (acquired != null && acquiredType != null) {
+          final rawProperties = json['properties'];
+          final properties = rawProperties is Map<String, dynamic>
+              ? Map<String, dynamic>.unmodifiable(rawProperties)
+              : const <String, dynamic>{};
+          for (final required in acquired.requiredProperties) {
+            if (!properties.containsKey(required)) {
+              // 出荷済み型と同じ厳しさで落とす。黙って空のwidgetを描かない。
+              throw ForgeParseException('$path/properties/$required',
+                  '$acquiredType.$required is required');
+            }
+          }
+          return ForgeAcquiredWidgetNode(id,
+              rawType: acquiredType, properties: properties);
+        }
         // 未知Widget: 例外を投げず、専用のFallbackノードとして扱う。
         // (Validatorが既に弾いているはずだが、クライアント側も多重防御する)
         return ForgeUnknownWidgetNode(id, rawType: '$type');
@@ -1384,6 +1406,17 @@ class ForgeSimulationLoopWidgetNode extends ForgeWidgetNode {
 class ForgeUnknownWidgetNode extends ForgeWidgetNode {
   final String rawType;
   const ForgeUnknownWidgetNode(super.id, {required this.rawType});
+}
+
+/// Self-Extensionで獲得したwidget型の汎用ノード。
+///
+/// 出荷済み型ごとの専用クラスと違い、型名とpropertiesを持ち回るだけである。
+/// 描き方はWidget Registry側が持つ。**capabilityごとの分岐をここへ足さない。**
+class ForgeAcquiredWidgetNode extends ForgeWidgetNode {
+  final String rawType;
+  final Map<String, dynamic> properties;
+  const ForgeAcquiredWidgetNode(super.id,
+      {required this.rawType, required this.properties});
 }
 
 class ForgeMapViewWidgetNode extends ForgeWidgetNode {

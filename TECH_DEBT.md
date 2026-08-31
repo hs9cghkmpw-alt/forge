@@ -3988,10 +3988,23 @@ UNKNOWNを「無かったこと」へ倒す設計なので、fail-open側であ�
 CEO判断を仰ぐ（release時も最小限の可視signalを出すか、Validator側の
 attestationにDart binary fingerprintを含めるか）。
 
-## TD93. Dart側の拡張点がParserのswitchに閉じている（2026-08-31）
+## TD93. Dart側の拡張点がParserのswitchに閉じている（2026-08-31）→ **解消**
 
 `ForgeWidgetNode.fromJson`の`switch`が未知typeを`ForgeUnknownWidgetNode`へ
-倒し、`buildForgeWidget`はRegistryを引く前にそこで短絡する。したがって
-**Registryへ登録しただけでは獲得widgetは描けない**。獲得能力をDartまで通す
-には、Parser側にも宣言駆動の受け口が要る。
-実測済み: `frontend/test/json_ui/widget_registry/acquired_widget_runtime_boundary_test.dart`
+倒し、`buildForgeWidget`はRegistryを引く前にそこで短絡していた。したがって
+**Registryへ登録しただけでは獲得widgetは描けなかった**。
+
+同日中に`frontend/lib/json_ui/schema/acquired_widget_types.dart`で
+Parser側の受け口を開けた。Parserの宣言とRegistryの描き方を**両方**登録して
+初めて描かれる（片方だけならfail-closed）。配線破壊試験4件すべて検出。
+実測済み: `frontend/test/json_ui/widget_registry/acquired_widget_renders_test.dart`
+
+**残る負債はTD94**（生成されたDart sourceを実ビルドして載せる経路が無い）。
+
+## TD94. BUILD_TIME自己拡張にDart/Flutter用のbuild planが無い（2026-08-31）
+
+`SynthesizingBuildTimeImplementer`の`_LANGUAGE_COMMAND_PLANS`はPythonのみ。
+獲得能力のDart sourceを生成しても、実際にbuild/testしてFlutter binaryへ
+載せる経路が無いため、「生成 → ビルド → 実描画」が一本に繋がっていない。
+Validator側（020F前半）とDart runtime側（020F後半）はそれぞれ閉じたが、
+その間を実物で繋いだ実績は**0**である。推測で埋めないこと。

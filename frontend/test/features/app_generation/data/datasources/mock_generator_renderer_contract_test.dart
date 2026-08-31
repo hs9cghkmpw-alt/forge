@@ -92,6 +92,8 @@ String _typeNameOf(ForgeWidgetNode node) => switch (node) {
       ForgeAudioMixerWidgetNode() => 'audio_mixer',
       ForgeSimulationProgressWidgetNode() => 'simulation_progress',
       ForgeMapViewWidgetNode() => 'map_view',
+      // Self-Extensionで獲得した型。出荷済みMock生成物には現れない。
+      ForgeAcquiredWidgetNode(:final rawType) => rawType,
       ForgeUnknownWidgetNode() => 'unknown',
     };
 

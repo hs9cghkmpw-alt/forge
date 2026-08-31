@@ -1,0 +1,9 @@
+[D1 Parser側の受け口を無効化（compileは通る形）] DETECTED
+      失敗: /home/user/forge/frontend/test/json_ui/widget_registry/acquired_widget_renders_test.dart: 両方登録すれば、獲得 widget は実
+      失敗: /home/user/forge/frontend/test/json_ui/widget_registry/acquired_widget_renders_test.dart: 必須 property が欠けていれば 
+[D2 必須property検査を削除] DETECTED
+      失敗: /home/user/forge/frontend/test/json_ui/widget_registry/acquired_widget_renders_test.dart: 必須 property が欠けていれば 
+[D3 typeNameOf の獲得ノード対応を削除] DETECTED
+      compile error（型として載っている証拠）
+[D4 Registry未登録でもFallbackにしない（fail-open化）] DETECTED
+      失敗: /home/user/forge/frontend/test/json_ui/widget_registry/acquired_widget_renders_test.dart: Parser だけ登録して描き方が無けれ
