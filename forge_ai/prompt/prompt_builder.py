@@ -172,6 +172,7 @@ class PromptBuilder:
         data_contract: tuple[str, ...],
         host_language: str,
         binding_targets: tuple[str, ...],
+        required_files: tuple[str, ...] = (),
     ) -> Prompt:
         """**足りない Capability の実装そのもの**を書かせる段階（020E）。
 
@@ -206,7 +207,9 @@ class PromptBuilder:
                 "それは別の能力である）。\n"
                 "3. 実装と一緒に、その実装を検証するテストを必ず書く。\n"
                 "4. 既存ファイルの丸写しを返さない。**新しく書く。**\n"
-                "5. 各ファイルは相対パスで返す。絶対パスや `..` を使わない。"
+                "5. 各ファイルは相対パスで返す。絶対パスや `..` を使わない。\n"
+                "6. 実行手順が名指しするファイル名は、その名前で返す"
+                "（名前が違うと検証手順が動かせない）。"
             ),
             instruction=(
                 f"capability_id: {capability_id}\n"
@@ -214,7 +217,12 @@ class PromptBuilder:
                 f"使ってよいデータ契約: {', '.join(data_contract) or '(なし)'}\n"
                 f"実装先の言語: {host_language}\n"
                 f"配線し直す対象: {', '.join(binding_targets)}\n"
-                "\n"
+                + (
+                    f"次の名前のファイルを必ず含めること: {', '.join(required_files)}\n"
+                    if required_files
+                    else ""
+                )
+                + "\n"
                 "実装ファイルとテストファイルを返すこと。"
             ),
             context={
@@ -222,6 +230,7 @@ class PromptBuilder:
                 "data_contract": list(data_contract),
                 "host_language": host_language,
                 "binding_targets": list(binding_targets),
+                "required_files": list(required_files),
             },
         )
 

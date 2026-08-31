@@ -4001,10 +4001,15 @@ Parser側の受け口を開けた。Parserの宣言とRegistryの描き方を**�
 
 **残る負債はTD94**（生成されたDart sourceを実ビルドして載せる経路が無い）。
 
-## TD94. BUILD_TIME自己拡張にDart/Flutter用のbuild planが無い（2026-08-31）
+## TD94. 生成DartをFlutterアプリへ載せて描く経路が無い（2026-08-31）
 
-`SynthesizingBuildTimeImplementer`の`_LANGUAGE_COMMAND_PLANS`はPythonのみ。
-獲得能力のDart sourceを生成しても、実際にbuild/testしてFlutter binaryへ
-載せる経路が無いため、「生成 → ビルド → 実描画」が一本に繋がっていない。
-Validator側（020F前半）とDart runtime側（020F後半）はそれぞれ閉じたが、
-その間を実物で繋いだ実績は**0**である。推測で埋めないこと。
+同日中に`dart`のbuild planを足し、生成Dartが実`dart`で
+`dart run capability_test.dart` / `dart analyze .` / `dart run probe.dart`
+を通ることまでは閉じた（配線破壊試験4件すべて検出。CIのfrontend jobで
+`FORGE_REQUIRE_DART_BUILD=1`を立てて**skipではなく失敗**させる）。
+
+**残っているのはその先である。** 隔離workspaceはFlutterを持たないので、
+生成DartをForgeのFlutterアプリへ組み込んでビルドし、
+`forgeAcquiredWidgetTypes`とWidget Registryへ登録させて**実際に描く**
+経路は未実装。したがって「生成 → ビルド → 実描画」を実物で通した実績は
+まだ**0**である。推測で埋めないこと。

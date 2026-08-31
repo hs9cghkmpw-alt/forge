@@ -65,8 +65,11 @@ from forge_ai.core.orchestration.managed_build_time_implementer import (
 
 __all__ = [
     "CapabilityImplementationUnavailable",
+    "LanguageBuildPlan",
     "SynthesizingBuildTimeImplementer",
+    "build_plan_for_language",
     "command_plan_for_language",
+    "entry_files_for_language",
     "supported_host_languages",
 ]
 
@@ -75,27 +78,67 @@ class CapabilityImplementationUnavailable(BuildTimeExtensionError):
     """**実装を作れなかった。** 作れなかったことを、そう言う。"""
 
 
+@dataclass(frozen=True, slots=True)
+class LanguageBuildPlan:
+    """その言語を**どう試験し、どうビルドし、どう起動確認するか**。
+
+    `entry_files` は手順が名指しで実行するファイルである。宣言しておかないと
+    「生成物にその名前が無く、コマンドがファイル不在で落ちる」形になり、
+    **生成の失敗が build の失敗に化ける**。先に名前を要求して、
+    足りなければ生成側の失敗として落とす。
+    """
+
+    commands: tuple[BuildCommand, ...]
+    entry_files: tuple[str, ...]
+
+
 #: 言語ごとの「試験 / ビルド / 起動確認」の仕方。
 #:
 #: **能力ごとの表ではない。** 行が増えるのは対応言語を足したときだけで
 #: あり、能力を1つ獲得するたびに増えることはない。
-_LANGUAGE_COMMAND_PLANS: dict[str, tuple[BuildCommand, ...]] = {
-    "python": (
-        BuildCommand(
-            kind="test",
-            argv=("python", "-m", "unittest", "discover", "-s", ".", "-p", "*_test.py"),
-            timeout_seconds=120.0,
+_LANGUAGE_COMMAND_PLANS: dict[str, LanguageBuildPlan] = {
+    "python": LanguageBuildPlan(
+        commands=(
+            BuildCommand(
+                kind="test",
+                argv=("python", "-m", "unittest", "discover", "-s", ".", "-p", "*_test.py"),
+                timeout_seconds=120.0,
+            ),
+            BuildCommand(
+                kind="build",
+                argv=("python", "-m", "compileall", "-q", "."),
+                timeout_seconds=120.0,
+            ),
+            BuildCommand(
+                kind="runtime_probe",
+                argv=("python", "probe.py"),
+                timeout_seconds=120.0,
+            ),
         ),
-        BuildCommand(
-            kind="build",
-            argv=("python", "-m", "compileall", "-q", "."),
-            timeout_seconds=120.0,
+        entry_files=("probe.py",),
+    ),
+    # Dart は package を取りに行かない構成にしてある。`dart pub get` を
+    # 挟むと外向き通信が要り、**ネットワークの都合が build の成否に化ける**。
+    # 依存無しで書けるように、テストも probe も素の Dart entrypoint とする。
+    "dart": LanguageBuildPlan(
+        commands=(
+            BuildCommand(
+                kind="test",
+                argv=("dart", "run", "capability_test.dart"),
+                timeout_seconds=300.0,
+            ),
+            BuildCommand(
+                kind="build",
+                argv=("dart", "analyze", "."),
+                timeout_seconds=300.0,
+            ),
+            BuildCommand(
+                kind="runtime_probe",
+                argv=("dart", "run", "probe.dart"),
+                timeout_seconds=300.0,
+            ),
         ),
-        BuildCommand(
-            kind="runtime_probe",
-            argv=("python", "probe.py"),
-            timeout_seconds=120.0,
-        ),
+        entry_files=("capability_test.dart", "probe.dart"),
     ),
 }
 
@@ -105,8 +148,8 @@ def supported_host_languages() -> tuple[str, ...]:
     return tuple(sorted(_LANGUAGE_COMMAND_PLANS))
 
 
-def command_plan_for_language(host_language: str) -> tuple[BuildCommand, ...]:
-    """その言語の試験・ビルド・起動確認の手順。
+def build_plan_for_language(host_language: str) -> LanguageBuildPlan:
+    """その言語の手順一式。
 
     知らない言語は落とす——「とりあえず python で試す」のような
     楽観側への倒し方をしない。
@@ -118,6 +161,16 @@ def command_plan_for_language(host_language: str) -> tuple[BuildCommand, ...]:
             f" supported: {', '.join(supported_host_languages())}",
         )
     return plan
+
+
+def command_plan_for_language(host_language: str) -> tuple[BuildCommand, ...]:
+    """その言語の試験・ビルド・起動確認の手順。"""
+    return build_plan_for_language(host_language).commands
+
+
+def entry_files_for_language(host_language: str) -> tuple[str, ...]:
+    """手順が名指しで実行するファイル名。"""
+    return build_plan_for_language(host_language).entry_files
 
 
 @dataclass(slots=True)
@@ -158,21 +211,31 @@ class SynthesizingBuildTimeImplementer:
             raise BuildTimeExtensionError(
                 "capability contract changed capability identity",
             )
-        commands = command_plan_for_language(contract.host_language)
+        plan = build_plan_for_language(contract.host_language)
 
         self.synthesis_count += 1
         artifact = self.synthesizer.synthesize(
-            contract, known_source_digests=self.known_source_digests,
+            contract,
+            known_source_digests=self.known_source_digests,
+            required_files=plan.entry_files,
         )
         if artifact is None:
             # **作れなかったものを「作れた」と言わない。**
             raise CapabilityImplementationUnavailable(
                 f"no usable implementation was generated for {manifest.capability_id!r}",
             )
+        produced = {source.path for source in artifact.files}
+        missing = tuple(name for name in plan.entry_files if name not in produced)
+        if missing:
+            # 生成の失敗を build の失敗に化けさせない。
+            raise CapabilityImplementationUnavailable(
+                f"generated implementation for {manifest.capability_id!r} is missing"
+                f" required entry files: {', '.join(missing)}",
+            )
 
         managed = ManagedBuildTimeImplementer(
             capability_id=manifest.capability_id,
-            commands=commands,
+            commands=plan.commands,
             runner=self.runner,
         )
         self.build_count += 1

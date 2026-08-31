@@ -245,9 +245,84 @@ $ cd frontend && flutter test
 * Real Local Model が capability の source を書いた — **していない。
   Real Local Model runs = 0 のまま**
 
-### 9.1 次に必要な最後の一手
+### 9.1 次に必要な最後の一手 → §10 で半分を埋めた
 
 `forge_ai` の BUILD_TIME 自己拡張（`SynthesizingBuildTimeImplementer`）は
-現在 Python 用の build plan しか持たない。Dart/Flutter 用の plan を足し、
-生成された Dart source が §8 の 2 箇所へ自分で登録する形にすれば、
-「生成 → ビルド → 実描画」が一本に繋がる。**そこは今回やっていない。**
+Python 用の build plan しか持っていなかった。§10 で Dart 用の plan を足し、
+**生成された Dart が実 `dart` で試験・解析・起動確認を通る**ところまでを
+閉じた。残るのは「その Dart を Forge の Flutter アプリへ載せて描く」段である。
+
+---
+
+## 10. 生成 Dart の実ビルド経路（TD94 の半分）
+
+### 10.1 何を足したか
+
+`_LANGUAGE_COMMAND_PLANS` へ `dart` の行を足した。**能力ごとの表ではない**
+——行が増えるのは対応言語を足したときだけである。
+
+| kind | コマンド |
+|---|---|
+| test | `dart run capability_test.dart` |
+| build | `dart analyze .` |
+| runtime_probe | `dart run probe.dart` |
+
+`dart pub get` を挟まない構成にしてある。挟むと外向き通信が要り、
+**ネットワークの都合が build の成否に化ける**。依存無しの素の Dart で書く。
+
+### 10.2 併せて直した実バグ
+
+Python の plan は `probe.py` を名指しで実行していたが、**その名前を
+生成側へ要求していなかった**。Model が別の名前を返せばコマンドが
+ファイル不在で落ち、**生成の失敗が build の失敗に化ける**。
+
+`LanguageBuildPlan.entry_files` を足し、
+(a) prompt でその名前を要求し、(b) 生成後に不足していれば
+`CapabilityImplementationUnavailable` として落とすようにした。
+
+### 10.3 実測（実 subprocess）
+
+```text
+$ cd forge_ai && FORGE_REQUIRE_DART_BUILD=1 python -m pytest tests/test_dart_build_plan.py -q
+9 passed in 2.94s
+```
+
+* `test` の stdout に `tests ok`、`runtime_probe` の stdout に
+  `runtime probe ok` が出ていることを確かめている
+  （**本当にその Dart が動いた**ことを出力で見る）
+* Negative proof: テストを落とす／`dart analyze` が通らない Dart にする／
+  probe を落とす — いずれも **PROMOTED されず activation も出ない**
+
+### 10.4 配線破壊試験（4件すべて検出）
+
+ログ: `logs/forge-020f-dart-plan-guard-break-20260831.log`
+
+| # | 外した配線 | 結果 |
+|---|---|---|
+| P1 | `dart analyze` を削除 | DETECTED（5件 FAIL） |
+| P2 | entry file の要求を削除 | DETECTED（2件 FAIL） |
+| P3 | `runtime_probe` を削除 | DETECTED（5件 FAIL） |
+| P4 | `test` コマンドを削除 | DETECTED（5件 FAIL） |
+
+### 10.5 CI で skip させない
+
+Python job には `dart` も `flutter` も無いので、この経路はあちらでは
+**skip される**。skip されたテストは何も証明しないので、
+`dart` を持つ frontend job で走らせる step を `.github/workflows/ci.yml`
+へ足した。`FORGE_REQUIRE_DART_BUILD=1` は
+**「dart が無ければ skip ではなく失敗させる」**指定である。
+
+実測（このホスト）:
+
+```text
+dart 不在 + FORGE_REQUIRE_DART_BUILD=1  → 7 failed, 2 passed  （静かに素通りしない）
+dart 不在 + 指定なし                     → 2 passed, 7 skipped
+dart 有り + FORGE_REQUIRE_DART_BUILD=1  → 9 passed
+```
+
+### 10.6 これでもまだ言えないこと
+
+隔離 workspace は **Flutter を持たない**。したがって
+「生成 Dart が Forge の Flutter アプリで描かれる」ことは、
+この経路では**証明していない**。描画側は §8 のテストが別に押さえている。
+**2つは別の事実であり、片方でもう片方を語らない。**

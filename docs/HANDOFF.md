@@ -50,7 +50,8 @@ CEO 指示の最優先項目
 |---|---|
 | acquired capability → Validator | **CLOSED**（14 tests + 破壊試験 9件） |
 | Validator → 実 Flutter widget runtime | **CLOSED**（7 tests + 破壊試験 4件） |
-| 生成 Dart source → 実ビルド → 実機 Chrome | **NOT CLOSED**（TD94） |
+| 生成 Dart → 実 `dart` で試験・解析・起動確認 | **CLOSED**（9 tests + 破壊試験 4件） |
+| 生成 Dart → Flutter アプリへ載せて実描画 | **NOT CLOSED**（TD94 の残り） |
 
 ### 途中で見つけたこと（実 Flutter で実行して確認）
 
@@ -81,7 +82,8 @@ forge_ai        717 passed
 ruff (変更箇所)  All checks passed
 flutter analyze No issues found
 flutter test    557 passed（546 → 550 → 557）
-配線破壊試験      backend 9件 / Dart 4件 = 13件すべて検出（置物テスト0）
+forge_ai(dart)  9 passed（FORGE_REQUIRE_DART_BUILD=1、実 dart subprocess）
+配線破壊試験      backend 9件 / Dart 4件 / build plan 4件 = 17件すべて検出
 ```
 
 Evidence: `docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md`
@@ -97,17 +99,34 @@ widget tree を動かします）。
 Chrome 上の Forge アプリで自律生成能力を描いた ——**していません**。
 本番起動経路へ架空の capability を登録するのは偽装なので行いません。
 
+### Dart の build plan も足しました（TD94 の半分）
+
+生成された Dart が**本物の `dart`** で試験・静的解析・起動確認を通ることを
+実 subprocess で確かめています（`tests ok` / `runtime probe ok` が実際の
+出力に出ることまで見ています）。テストが落ちる／解析が通らない／probe が
+落ちる、のいずれでも PROMOTED されません。
+
+ついでに実バグを1件直しました。Python の手順は `probe.py` を名指しで
+実行しながら、**その名前を生成側へ要求していません**でした。名前が違えば
+コマンドがファイル不在で落ち、**生成の失敗が build の失敗に化けます**。
+
+**CI で skip させない工夫**: Python の job に `dart` は無いので、この経路は
+あちらでは skip されます。skip されたテストは何も証明しないので、
+`dart` を持つ frontend job で走らせる step を足し、
+`FORGE_REQUIRE_DART_BUILD=1`（dart が無ければ skip ではなく**失敗**）を
+立ててあります。
+
 ### 次にやること
 
-1. **TD94。** `SynthesizingBuildTimeImplementer` は今 Python 用の build plan
-   しか持ちません。Dart/Flutter 用を足し、生成された Dart source が上の 2 箇所へ
-   自分で登録する形にすれば「生成 → ビルド → 実描画」が一本に繋がります。
+1. **TD94 の残り。** 隔離 workspace は Flutter を持たないので、生成 Dart を
+   Forge の Flutter アプリへ組み込んでビルドし、上の 2 箇所へ登録させて
+   **実際に描く**ところが未実装です。
 2. それが繋がってから、Chrome 実機で撮る（この Linux ホストで可能）。
 3. ぱすとらる PC の Puro 問題（CEO 依頼 2）。
 
 ### まだ証明していないこと（推測で埋めない）
 
-* 生成された Dart source を実ビルドして載せること（TD94）
+* 生成された Dart を Flutter アプリへ載せて描くこと（TD94 の残り）
 * Chrome 実機での自律生成能力の描画
 * Real Local Model が capability の source を書くこと（**Real Local Model runs = 0 のまま**）
 * 未知の要求からの完全 E2E

@@ -180,6 +180,30 @@ jobs:
         working-directory: frontend
         run: flutter test
 
+      # ---------------------------------------------------------------
+      # 生成した Dart を実 `dart` でビルドする経路（020F / TD94）。
+      #
+      # Python job には dart も flutter も無いので、この経路は
+      # あちらでは **skip される**。skip されたテストは何も証明しない
+      # ので、`dart` を持っているこの job で走らせる。
+      # `FORGE_REQUIRE_DART_BUILD=1` は「dart が無ければ skip ではなく
+      # 失敗させる」指定である——静かに素通りする形にしない。
+      #
+      # 実 API は呼ばない（Provider は Test Double）。
+      # ---------------------------------------------------------------
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 生成 Dart の実ビルド経路
+        working-directory: forge_ai
+        env:
+          FORGE_REQUIRE_DART_BUILD: "1"
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          python -m pytest tests/test_dart_build_plan.py -q
+
       # 013 §7: analyze と test が通っても **Web build は落ちうる**
       # （Web 非対応の依存、条件付き import、dart2js だけが出す型エラー等）。
       # Forge の完成図は Web IDE なので、Web が build できることは

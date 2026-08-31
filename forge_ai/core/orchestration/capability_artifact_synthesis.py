@@ -141,6 +141,7 @@ class CapabilityArtifactSynthesizer:
         contract: CapabilityImplementationContract,
         *,
         known_source_digests: frozenset[str],
+        required_files: tuple[str, ...] = (),
     ) -> BuildTimeCapabilityArtifact | None:
         """実装 Artifact を作る。**作れなければ `None`。**
 
@@ -156,6 +157,7 @@ class CapabilityArtifactSynthesizer:
             data_contract=contract.data_contract,
             host_language=contract.host_language,
             binding_targets=contract.binding_targets,
+            required_files=required_files,
         )
         response = self.provider.complete(prompt)
         structured = response.structured if isinstance(response.structured, dict) else {}

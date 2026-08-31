@@ -34,6 +34,25 @@
   Chrome 上の Forge アプリで自律生成能力を描いてはいない。生成 Dart source を
   実ビルドして載せる経路は未実装（**TD94**）。Real Local Model runs = **0 のまま**。
 
+### 生成 Dart の実ビルド経路 — TD94 の半分
+
+- `_LANGUAGE_COMMAND_PLANS` へ `dart` を追加（`dart run capability_test.dart` /
+  `dart analyze .` / `dart run probe.dart`）。**能力ごとの表ではない。**
+  `dart pub get` を挟まない——ネットワークの都合が build の成否に化けるため。
+- 実バグ修正: Python の plan は `probe.py` を名指しで実行しながら、その名前を
+  生成側へ要求していなかった。`LanguageBuildPlan.entry_files` を足し、prompt で
+  要求し、不足していれば **生成の失敗**として落とす（build の失敗に化けさせない）。
+- 実 subprocess で 9 passed。`tests ok` / `runtime probe ok` が実際の stdout に
+  出ることを確認。Negative proof: test 失敗 / analyze 不通過 / probe 失敗の
+  いずれでも PROMOTED されず activation も出ない。
+- 配線破壊試験 **4件すべて検出**。
+  ログ `logs/forge-020f-dart-plan-guard-break-20260831.log`。
+- **CI で skip させない**: Python job に dart は無いので、frontend job で
+  `FORGE_REQUIRE_DART_BUILD=1` を立てて走らせる step を追加した。dart が無ければ
+  skip ではなく**失敗**する（実測: 7 failed / 2 passed）。
+- **まだ言えないこと**: 隔離 workspace は Flutter を持たないので、生成 Dart が
+  Forge の Flutter アプリで描かれることは**証明していない**（TD94 の残り）。
+
 ## 2026-08-29 — FORGE-020A5: Genuine Real Local Level 0 PASS
 
 - Prompt / provider JSON schema / strict Entity evidence now derive structural limits from the canonical `forge_ai/core/semantics/entity_contract.py` contract.

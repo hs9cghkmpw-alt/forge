@@ -1,0 +1,21 @@
+[P1 dart 用の build コマンドを削除（analyze しない）] DETECTED
+       test_generation_test_analyze_probe_and_activation
+       test_the_output_is_real_dart_process_output
+       test_a_failing_dart_test_blocks_promotion
+       test_a_failing_probe_blocks_promotion
+       test_dart_that_does_not_analyze_blocks_promotion
+[P2 entry file の要求を削除] DETECTED
+       test_a_missing_probe_is_reported_as_generation_failure
+       test_a_wrongly_named_test_file_is_reported_as_generation_failure
+[P3 runtime_probe を削除（起動確認しない）] DETECTED
+       test_generation_test_analyze_probe_and_activation
+       test_the_output_is_real_dart_process_output
+       test_a_failing_dart_test_blocks_promotion
+       test_a_failing_probe_blocks_promotion
+       test_dart_that_does_not_analyze_blocks_promotion
+[P4 test コマンドを削除（試験しない）] DETECTED
+       test_generation_test_analyze_probe_and_activation
+       test_the_output_is_real_dart_process_output
+       test_a_failing_dart_test_blocks_promotion
+       test_a_failing_probe_blocks_promotion
+       test_dart_that_does_not_analyze_blocks_promotion
