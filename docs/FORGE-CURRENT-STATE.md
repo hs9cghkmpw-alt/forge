@@ -180,14 +180,22 @@ Forge now has a production self-extension path that can:
 
 Natural-language acquisition -> retry -> reuse is **PROVEN** using `view.calendar` as the unseen capability example. Compiler-side capability-name branching for widget emission is also removed; an acquired capability can register a document contribution and emit its widget through the production compiler path.
 
+### 020F (2026-08-31) — Validator and Dart runtime, measured separately
+
+Two previously unproven items are now **PROVEN**, each within a stated boundary:
+
+- **Validator PASS for an acquired widget.** Only a capability that is PROMOTED, carries a loaded BUILD_TIME activation, and declares a document contribution may widen the accepted widget set (`backend/app/ai/validators/runtime_attested_widgets.py`). `requested` does not widen it, DECLARATIVE does not widen it, and the default is the empty set. 14 tests, 9 wiring breaks all detected. A real ordering bug was fixed: `WIDGET_TYPES_ALL` was consulted before `allowed_widgets`, so acquired types failed as `unknown_widget`.
+- **Real Flutter widget-runtime rendering of an acquired widget.** The parser, not the widget registry, was the closed extension point (TD93, measured before it was fixed). `frontend/lib/json_ui/schema/acquired_widget_types.dart` opens it. Both a parser declaration and a registry builder are required; either alone renders nothing. 7 tests, 4 wiring breaks all detected.
+- **Generated Dart survives a real `dart` build** (`dart run capability_test.dart` / `dart analyze .` / `dart run probe.dart`), enforced in CI's frontend job with `FORGE_REQUIRE_DART_BUILD=1` so a missing `dart` fails rather than skips. 9 tests, 4 wiring breaks all detected.
+
 Still **UNPROVEN**:
 
 - real-model authorship of the synthesized capability source (`capability_implementation` still uses a Test Double in the proof),
-- Validator PASS for a genuinely new/acquired widget,
-- real Flutter/Dart runtime rendering of a genuinely new/acquired widget,
+- generated Dart loaded into the Forge Flutter app and rendered there — the isolated build workspace has no Flutter (**TD94**),
+- a self-generated capability rendered in Chrome,
 - full unseen request -> self-extension -> working rendered product E2E.
 
-Primary evidence: `docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md` and `docs/HANDOFF.md`.
+Primary evidence: `docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md`, `docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md` and `docs/HANDOFF.md`.
 
 ---
 
@@ -265,7 +273,7 @@ Do not claim these as complete without new evidence:
 - Successful Chrome startup for the 2026-08-31 physical-PC checkpoint
 - Genuine visual PASS for the current generated Golden App gate
 - Real-model authorship of a new capability during self-extension
-- Validator + real Flutter runtime proof for a genuinely acquired/new widget
+- Generated Dart loaded into the Forge Flutter app and rendered there (TD94; the Validator half and the widget-runtime half are each proven separately, which is not the same claim)
 - Local model autonomously diagnosing and selecting a successful repair
 - Complete production API exposure of all internal build/test/runtime/repair evidence
 - Broad generative-software support for simulation/media/game semantics beyond the newly wired primitive
@@ -280,7 +288,8 @@ Order of attack should preserve the Product Direction closed loop and the physic
 
 1. **Resume the physical-PC blocker first**: start PowerShell transcript, capture `git rev-parse HEAD`, `where.exe flutter`, `flutter --version`, `flutter doctor -v`, then fix the Puro/Flutter SDK path issue.
 2. **Get `flutter run -d chrome` to a visibly rendered Forge app** before claiming physical runtime PASS.
-3. **Then run one real unseen request through self-extension to the real Flutter/Dart runtime**, including Validator evidence and a genuinely acquired capability.
+3. **Close TD94**: load generated Dart into the Forge Flutter app (registering into `forgeAcquiredWidgetTypes` and the widget registry) and render it. The Validator half and the Flutter widget-runtime half are each closed; the bridge between them is not.
+4. **Then run one real unseen request through self-extension to the real Flutter/Dart runtime**, including Validator evidence and a genuinely acquired capability.
 4. **Keep every new capability on the production generation/validator/runtime path**, with tests that fail when wiring is removed.
 5. **Run genuine visual/behavioral review** and keep the Golden Gate FAIL until it passes.
 6. **Preserve Generation Episode / evidence lineage** for both successes and repairs.
