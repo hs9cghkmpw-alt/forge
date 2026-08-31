@@ -162,6 +162,9 @@ TD94 の E2E は、**検査した生成物とは別にもう一度生成して**
 
 Evidence: `docs/evidence/REUSE-FIRST-B-20260831.md`
 
+CI: run **33447252973** / head `85e50b7` / 4 jobs すべて success。
+自由文 E2E の step も **skip なしで実行**されています。
+
 ### 次にやること
 
 1. **実機 Chrome 表示**（獲得を載せた状態で撮る）

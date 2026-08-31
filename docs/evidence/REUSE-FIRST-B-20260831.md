@@ -189,6 +189,16 @@ $ cd frontend && flutter build web --debug
 
 ログ: `logs/forge-reuse-first-e2e-seed20260831.log` / `.json`
 
+### CI（canonical）
+
+run **33447252973** / head `85e50b776b55ae707b01e6c62cd84e32f493ea1c` /
+**4 jobs すべて success**。
+
+frontend job の step 9「自由文 E2E（既存能力なら生成0回 / 足りない分だけ1回 /
+2回目は再利用）」が**実際に走って success**（skip ではない）。
+CI 上の seed は毎回変わる——**固定文へ最適化していないことを、CI 自身が
+毎回確かめている。**
+
 ---
 
 ## 8. 各工程の時間（B、獲得を含む1回目）
