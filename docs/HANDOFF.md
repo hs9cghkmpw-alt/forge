@@ -185,6 +185,23 @@ backend          1998 passed, 16 skipped
 Evidence: `docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md`
 ログ: `logs/forge-td94-e2e-20260831.log`、`logs/forge-td94-guard-break-20260831.log`
 
+### CI（canonical）
+
+run **33409772751** / head `a89ea7f4cc93a803efb28098edadf6555db2e60c` /
+**4 jobs すべて success**。
+
+frontend job で TD94 の step が**実際に走って success**しています
+（skip ではありません）。
+
+| # | step | 結果 |
+|---|---|---|
+| 8 | 生成 Dart の実ビルド経路 | success |
+| 9 | 獲得 Capability を Forge アプリへ載せる | success |
+| 10 | flutter analyze（獲得を載せた状態） | success |
+| 11 | flutter test（獲得 Capability が実際に描かれる） | success |
+| 12 | flutter build web（獲得を載せたまま） | success |
+
+
 ### 次にやること
 
 1. **実機 Chrome 表示**（CEO の指示どおり、TD94 の次）。この Linux ホストで

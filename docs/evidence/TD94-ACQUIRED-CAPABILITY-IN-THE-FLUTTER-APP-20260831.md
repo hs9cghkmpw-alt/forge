@@ -208,6 +208,15 @@ $ cd backend && python -m pytest tests -q
 
 ログ: `logs/forge-td94-e2e-20260831.log`
 
+### 7.1 CI（canonical）
+
+run **33409772751** / head `a89ea7f4cc93a803efb28098edadf6555db2e60c` /
+**4 jobs すべて success**。frontend job の step 8〜12（生成 Dart の実ビルド
+経路 / install / analyze / test_acquired / build web）が**すべて実際に走って
+success**。**skip は1件も無い。**
+
+commit SHA（この作業）: `a89ea7f4cc93a803efb28098edadf6555db2e60c`
+
 ---
 
 ## 8. 避けたこと（CEO の指示どおり）
