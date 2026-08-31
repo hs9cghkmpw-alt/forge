@@ -30,6 +30,31 @@ Operational scan term:
 
 `FORGE-GENERAL-APP-MODE.md` is **not a new product goal**. Missing-capability synthesis is cross-cutting and must not be postponed until the end of a phase list.
 
+## Physical-PC checkpoint — 2026-08-31
+
+A real Windows PC at ぱすとらる was used to continue Forge verification. The durable checkpoint is:
+
+- `docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md`
+
+Observed session results:
+
+- `flutter analyze`: **PASS / clean**
+- `flutter test`: **PASS — 546 tests**
+- `flutter build web`: **PASS**
+- `flutter run -d chrome`: **BLOCKED before successful app startup**
+- actual Chrome-rendered app: **UNVERIFIED**
+- manual visual/behavioral interaction: **NOT EXECUTED**
+
+Current physical blocker: Flutter SDK / web SDK path resolution through Puro. An observed path was shaped like:
+
+```text
+../../../.puro/envs/stable/flutter/bin/cache/flutter_web_sdk/
+```
+
+Important evidence boundary: the exact local checkout SHA used for that physical run was **not durably captured**, so the next session must run `git rev-parse HEAD` before attaching the physical results to a specific commit.
+
+**Resume from here, do not repeat completed work by default:** start a PowerShell transcript, capture branch/HEAD and Flutter environment identity (`where.exe flutter`, `flutter --version`, `flutter doctor -v`), fix the Puro/Flutter SDK path issue, then rerun `flutter run -d chrome`. Only after the app visibly loads should physical runtime be marked PASS. After base startup succeeds, continue into the self-extension -> acquired capability -> real Flutter/Dart runtime path.
+
 ## Self-extension: what the build pipeline now actually proves (020E-2/3)
 
 `SynthesizingBuildTimeImplementer` is the **production** `ExtensionImplementer`.
@@ -65,10 +90,11 @@ still produces no coordinate fields.
 |---|---|
 | That a **real model** authored the generated source | **UNPROVEN.** The provider here is a Test Double; the implementation string is supplied by the test |
 | Natural-language request -> acquisition -> retry -> reuse | **PROVEN** (real build; `capability_plan` consults the registry on retry) |
-| Retried document contains the widget; Validator PASS | **UNPROVEN, and now precisely understood.** Acquisition closes the *planning* gap (`plan.views` contains it) but emits **no widget**: the generated artifact targets Python while document emission/runtime are Dart, and `forge_language_compiler.py` still selects widgets with an `if "view.map"` branch that an acquired capability never gets |
-| Flutter runtime rendering evidence | **UNPROVEN** |
+| Acquired capability can contribute a widget to the generated document | **PROVEN at compiler/document-emission level.** Compiler capability-name branching is gone and a registered contribution can emit its widget through the production IR/compiler path |
+| Validator PASS for a genuinely acquired/new widget | **UNPROVEN** |
+| Flutter runtime rendering evidence for a genuinely acquired/new widget | **UNPROVEN** |
 | Second different request reuses without a second build | **PROVEN** (synthesis=1, build=1, provider_calls=1 across two different requests) |
-| Real Local Model runs | **0** |
+| Real model authorship runs for `capability_implementation` | **0** |
 
 Evidence: `docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md`.
 
@@ -128,9 +154,8 @@ between Capability Gap and BUILD_TIME.
   without implementation, empty output, unsafe paths;
 - capability identity comes from the contract, never from model self-report.
 
-**Still unproven:** unseen request → generated source → real build/probe →
-PROMOTED → retry → reuse without a second build. Real Local Model runs
-remain **0**.
+**Still unproven:** real-model-authored unseen capability source -> real build/probe ->
+PROMOTED -> retry -> real Flutter runtime rendering -> reuse without a second build.
 
 ## Self-extension implementation now present
 
@@ -234,7 +259,7 @@ See `docs/reports/FORGE-WHOLE-SCAN-20260830-report.md` for the full scan record.
 
 ## CI evidence
 
-Canonical CI run `33340416175` on head `8ea7fc9d` completed successfully
+Canonical CI run `33340554937` on head `c2ec1529ce1c3eb97d456dc667a03cd1a3ee1ac7` completed successfully
 (4/4 jobs):
 
 - backend + forge_ai Python 3.11: PASS
@@ -242,7 +267,7 @@ Canonical CI run `33340416175` on head `8ea7fc9d` completed successfully
 - backend smoke: PASS
 - Flutter analyze/test/web build: PASS
 
-Earlier green heads in this slice: `33339800860` (`d8a9341`), `33339385724` (`83683e1`), `33339175463` (`5827f2d`),
+Earlier green heads in this slice: `33340416175` (`8ea7fc9d`), `33339800860` (`d8a9341`), `33339385724` (`83683e1`), `33339175463` (`5827f2d`),
 `33338884887` (`2fba6f1`), `33328203164` (`8e3c876`).
 
 A later HEAD must receive its own canonical CI before being called green.
@@ -271,10 +296,11 @@ Do not treat that Golden as a template or as proof of general software-generatio
 
 Do not expand patterns for their own sake. Continue from the real goal backward:
 
-1. prove one real unseen request end-to-end through `Gap -> extension -> promotion -> retry -> working generated product` with runtime evidence;
-2. convert boolean extension evidence flags into stronger evidence references/artifact identities where practical;
-3. continue GA-2 persistent data/navigation and later capabilities only as reusable primitives;
-4. rerun Whole Scan whenever new capability routes or fallbacks are introduced.
+1. **Finish the current physical-PC startup checkpoint first:** fix the Puro/Flutter SDK path issue and get `flutter run -d chrome` to a visibly rendered app while preserving the transcript and exact Git SHA.
+2. **Then prove one real unseen request end-to-end** through `Gap -> extension -> promotion -> retry -> working generated product`, including Validator and real Flutter/Dart runtime evidence.
+3. Convert boolean extension evidence flags into stronger evidence references/artifact identities where practical.
+4. Continue GA-2 persistent data/navigation and later capabilities only as reusable primitives.
+5. Rerun Whole Scan whenever new capability routes or fallbacks are introduced.
 
 ## Final closure rule
 
