@@ -1,3 +1,40 @@
+## 2026-09-01 — 会話入口の決定的な速い道（実機の速度FAIL / 意味判断FAILへの修正）
+
+実機（Ollama + `qwen2.5:1.5b-instruct`）で `/api/v1/ai/converse` が
+**73.54秒**かかり、Flutter の `receiveTimeout` 10秒で先に切れて画面へ到達
+しなかった。さらに「事務所の鍵を誰が持ち出していて、いつ返す予定か記録したい」
+に対し、**記録項目を「聞くべき未知」と誤判定して聞き返していた**。
+
+- **まず既存実装を読んで確かめた**: reuse-first B は本番の入口へ繋がって
+  おらず、`ConversationEngine.step()` は判定の前に**無条件で**大きな
+  prompt + schema をモデルへ渡していた。そこが 73秒である。
+- `backend/app/ai/runtime/conversation_fast_path.py` を新設。
+  **既存資産だけで**判断する——`plan_capabilities()`（capability
+  decomposition）と `detect_risk_signals()`（既存 policy）。
+  新しい分類器も別系統も作らない。
+- 速い道へ入れる条件は8つ。**どれか欠ければ LLM へ渡す**（fail-closed）。
+  足りない能力 / 外部作用・不可逆操作 / 曖昧 / 対象が名指しされていない /
+  複数人で使う前提 / 既存物への変更 / 2ターン目以降 / 既存ツールあり、
+  はいずれも従来どおり LLM 判定へ。
+- **記録項目と聞くべき未知を混同しない。** BUILD時に
+  `tool_fields_are_not_unknowns` を理由付きで NeedModel へ残す。
+- 分野の名詞ではなく**動詞の側**で意図を受ける（TD96 と同じ轍を踏まない）。
+- `ConversationEngine` の既定引数**かつ class 属性**として持たせ、
+  渡し忘れたら遅い道、という形にしていない。
+- **実測 Before/After**: 実機で落ちた文が **73.54秒 → 0.09ミリ秒 /
+  LLM 1回 → 0回 / ASK(誤) → BUILD**。ランダム自由文 A/B/C も seed 付きで実測。
+- 配線破壊試験 **10件すべて検出**。F5 は初回素通り（テストが別の規則で
+  落ちていた）だったので締め直した。
+- **Golden Conversation が2件落ちて設計を直した**: 「家族で予定を管理したい」
+  「家族で何か管理したい」は聞くべき未知である。テストを緩めず規則を直した。
+- 副次的に Flutter の `receiveTimeout` を 10秒 → 60秒。**これは主たる直し
+  ではない**（生成段の実時間は TD98 で別途測る）。
+- 回帰: backend 2014 passed / forge_ai 754 passed / flutter analyze clean /
+  flutter test 562 passed / reuse-first E2E 変化なし。
+- **まだ言えないこと**: BUILD段の生成時間は未計測（TD98）。実機Chrome完走は
+  未確認（TD99）。**Real Local Model runs = 0 のまま**。
+- Evidence: `docs/evidence/CONVERSATION-FAST-PATH-20260901.md`
+
 ## 2026-08-31 — 方式B: 持っているものは組み合わせ、足りないものだけ作る
 
 **実バグ修正（TD94の穴）**: E2E は検査した生成物とは**別に**もう一度生成して

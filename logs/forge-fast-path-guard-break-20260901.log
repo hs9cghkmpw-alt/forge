@@ -1,0 +1,33 @@
+[F1 速い道そのものを外す（実機の73秒へ戻す）] DETECTED
+       test_it_no_longer_asks_about_tool_fields
+       test_a_fast_path_request_reaches_build_without_the_llm
+       test_existing_only_requests_never_call_the_llm
+[F2 足りない能力があっても速い道へ通す] DETECTED
+       test_a_missing_capability_goes_to_the_slow_path
+       test_missing_capability_interrupts_an_otherwise_ready_build
+       test_data_survives_a_view_correction
+[F3 外部作用・不可逆操作でも速い道へ通す] DETECTED
+       test_a_destructive_request_is_not_rushed
+       test_an_external_effect_is_not_rushed
+       test_high_risk_sessions_always_confirm_and_never_build
+[F4 曖昧でも速い道へ通す] DETECTED
+       test_a_vague_request_is_not_rushed
+       test_cosmetic_unknowns_are_recorded_as_safe_assumptions
+       test_a_high_impact_unknown_does_reach_build_after_the_threshold
+[F5 対象が名指しされていなくても通す] DETECTED
+       test_an_unnamed_subject_is_asked_about
+[F6 複数人で使う前提でも通す] DETECTED
+       test_shared_usage_is_asked_about
+       test_shared_usage_is_actually_asked
+[F7 既存物への変更でも新規作成として通す] DETECTED
+       test_a_modification_without_a_tool_is_not_rushed
+       test_update_without_a_tool_and_with_a_blocking_unknown_becomes_a
+[F8 2ターン目以降でも通す] DETECTED
+       test_the_second_turn_is_not_rushed
+       test_data_is_added_not_replaced_and_view_survives
+       test_natural_acceptances_with_capability_words_proceed_to_build
+[F9 既存ツールがあっても通す] DETECTED
+       test_an_existing_tool_is_not_rushed
+       test_update_sessions_use_update_not_build
+[F10 記録項目を未知として残す（実機の誤判定へ戻す）] DETECTED
+       test_it_records_why_it_did_not_ask

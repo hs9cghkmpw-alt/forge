@@ -1,0 +1,62 @@
+{
+  "seed": 20260901,
+  "real_device_case": {
+    "text": "事務所の鍵を誰が持ち出していて、いつ返す予定か記録したい",
+    "action": "build",
+    "llm_calls": 0,
+    "elapsed_ms": 0.06,
+    "fast_path_reason": "既存の能力だけで作れる: 記録・管理の要求である（記録）",
+    "question": null,
+    "before_seconds": 73.54
+  },
+  "A": {
+    "text": "自分用でいいんだけど、読んだ本をためていって、感想つきの一覧を作りたい。続けられる形がいい。",
+    "action": "build",
+    "llm_calls": 0,
+    "elapsed_ms": 0.09,
+    "fast_path_reason": "既存の能力だけで作れる: 要求から作る物の形が決まっている（data.entity, data.text, interact.edit, view.list）",
+    "question": null,
+    "domain": "読書"
+  },
+  "A_misses": [],
+  "B": [
+    {
+      "text": "なんとかしてほしいんだけど",
+      "action": "ask",
+      "llm_calls": 1,
+      "elapsed_ms": 0.44,
+      "fast_path_reason": "記録・管理の意図を読み取れない（本当に曖昧）",
+      "question": "何を残しておきたいですか？"
+    },
+    {
+      "text": "いい感じのやつ作って",
+      "action": "ask",
+      "llm_calls": 1,
+      "elapsed_ms": 0.1,
+      "fast_path_reason": "記録・管理の意図を読み取れない（本当に曖昧）",
+      "question": "何を残しておきたいですか？"
+    },
+    {
+      "text": "いろいろ記録して一覧で見返したい",
+      "action": "ask",
+      "llm_calls": 1,
+      "elapsed_ms": 0.04,
+      "fast_path_reason": "何を扱うのかが名指しされていない",
+      "question": "何を残しておきたいですか？"
+    }
+  ],
+  "C": {
+    "text": "自分用でいいんだけど、釣れた魚をメモして、釣りに行った日を月単位で振り返れるようにしたい。",
+    "action": "ask",
+    "llm_calls": 1,
+    "elapsed_ms": 0.11,
+    "fast_path_reason": "足りない能力がある: view.calendar",
+    "question": "何を残しておきたいですか？",
+    "missing": [
+      "view.calendar"
+    ]
+  },
+  "C_misses": [
+    "釣れた魚を残しておいて、どの月に何回あったか分かるようにしたい。"
+  ]
+}

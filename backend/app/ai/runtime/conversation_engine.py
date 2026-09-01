@@ -235,6 +235,18 @@ def _parse_assumptions(raw: object) -> tuple[SafeAssumption, ...]:
     return tuple(items)
 
 
+def _default_fast_path(session, *, has_existing_tool: bool = False):  # noqa: ANN001, ANN202
+    """既定の速い道。**遅延 import** で循環参照を避ける。"""
+    from app.ai.runtime.conversation_fast_path import (  # noqa: PLC0415
+        deterministic_step,
+    )
+
+    return deterministic_step(session, has_existing_tool=has_existing_tool)
+
+
+_DEFAULT_FAST_PATH = _default_fast_path
+
+
 def _fallback_brief(session: ConversationSession) -> str:
     """LLMが`build_brief`を空で返した場合の安全網。会話全体を素朴に
     連結する(クラッシュより、質の落ちるbriefの方がまだ良い)。"""
@@ -244,8 +256,37 @@ def _fallback_brief(session: ConversationSession) -> str:
 class ConversationEngine:
     """`ConversationSession`を受け取り、1ステップ進める。"""
 
-    def __init__(self, provider: AIProvider) -> None:
+    # **class 属性として既定を持つ。**
+    #
+    # `__init__` を差し替えるテストが既にあり、そこで属性が生えていないと
+    # 本番経路が AttributeError で落ちる。既定を class 側へ置けば、
+    # どんな作り方をしても速い道が有効なまま立ち上がる。
+    _fast_path = staticmethod(_DEFAULT_FAST_PATH)
+    last_fast_path_reason: str | None = None
+    last_llm_calls: int = 0
+
+    def __init__(
+        self,
+        provider: AIProvider,
+        *,
+        fast_path: object | None = _DEFAULT_FAST_PATH,
+    ) -> None:
+        """`fast_path`: LLM を呼ばずに決められるかを見る層。
+
+        **既定で有効である。** 呼び出し側が渡し忘れたら遅い道へ落ちる、
+        という形にしない（「忘れずに呼ぶ」設計は忘れられる）。
+        無効にしたいテストだけが `fast_path=None` を渡す。
+        """
         self._provider = provider
+        self._fast_path = fast_path
+        self.last_fast_path_reason: str | None = None
+        """直前のターンで速い道を通ったか / 通らなかった理由。
+
+        Evidence と診断のために外から読む。**測れないものは直せない。**
+        """
+
+        self.last_llm_calls: int = 0
+        """直前のターンで LLM を呼んだ回数。速い道なら 0 である。"""
 
     def step(self, session: ConversationSession, *, has_existing_tool: bool = False) -> ConversationStepResult:
         """`has_existing_tool`(FORGE-PRODUCT-VISION-002続き、2026-08-11
@@ -257,10 +298,29 @@ class ConversationEngine:
 
         user_turn_count = sum(1 for t in session.turns if t.role == "user")
         latest_user_text = session.turns[-1].text
+        self.last_llm_calls = 0
+
+        # --- 速い道 ---------------------------------------------------
+        #
+        # いま持っている能力の組み合わせだけで成立すると**決定的に**
+        # 言い切れる要求は、大きな LLM 判定を通さずに BUILD へ進める。
+        # 実機で 73.54 秒かかっていた judgement が、ここでは 0 回になる。
+        #
+        # 迷ったら速い道へ倒さない（`deterministic_step` は fail-closed）。
+        if self._fast_path is not None:
+            outcome = self._fast_path(  # type: ignore[operator]
+                session, has_existing_tool=has_existing_tool,
+            )
+            self.last_fast_path_reason = outcome.reason
+            if outcome.result is not None:
+                return outcome.result
+        else:
+            self.last_fast_path_reason = "fast path disabled"
 
         # 質問戦略の切り替え(指示書1章)。**これはBUILD条件ではない**。
         narrowed = DecisionContext(user_turn_count=user_turn_count).at_or_over_turn_threshold
         prompt = _build_prompt(session, has_existing_tool=has_existing_tool, narrowed=narrowed)
+        self.last_llm_calls += 1
         raw = self._provider.complete_structured(prompt, _RESPONSE_SCHEMA)
 
         need_model = NeedModel(

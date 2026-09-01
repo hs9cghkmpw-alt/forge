@@ -43,3 +43,4 @@ frontend/test_acquired/generated_document.json
 
 # 直近の自由文E2Eの生ログ（seed 付きのものだけ証拠として残す）
 logs/forge-reuse-first-e2e-latest.json
+logs/forge-fast-path-e2e-latest.json
