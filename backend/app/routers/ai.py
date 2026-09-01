@@ -53,6 +53,12 @@ from app.ai.gateway.generation_evidence import default_generation_store
 from app.ai.gateway.learning_foundation import AcceptanceSignal
 from app.ai.gateway.tasks import ForgeTask
 from app.ai.runtime.conversation_engine import ConversationEngine
+from app.ai.runtime.stage_timing import (
+    StageTimings,
+    count as _timing_count,
+)
+from app.ai.runtime.stage_timing import measuring as _timing_measuring
+from app.ai.runtime.stage_timing import stage as _timing_stage
 from app.ai.runtime.conversation_metrics import record_conversation_event
 from app.ai.runtime.conversation_policy import classify_build_failure
 from app.ai.runtime.conversation_store import ConversationNotFoundError, default_conversation_store
@@ -79,6 +85,7 @@ from app.schemas.ai import (
     ConfirmationAnswerRequest,
     ConfirmationDTO,
     ConverseAskResponse,
+    StageTimingsDTO,
     ConverseBuildResponse,
     ConverseConfirmResponse,
     ConverseRequest,
@@ -460,6 +467,30 @@ _BUILD_FAILURE_ASK_PREFIX = "少しだけ確認させて。"
 
 @router.post("/converse", response_model=_CONVERSE_RESPONSE_MODEL, responses=_GENERATE_ERROR_RESPONSES)
 def converse(request: ConverseRequest):
+    """**段ごとの実測時間を付けて**1ターン進める。
+
+    実機で 73.54 秒かかったとき、内訳が分からなかった。合計だけ見て
+    「速い道を入れたから速い」と丸めないために、ここで計測を始める。
+    どの段が何ミリ秒かは `timings` として応答に載る。
+    """
+    with _timing_measuring() as timings:
+        response = _converse_step(request)
+    return _with_timings(response, timings)
+
+
+def _with_timings(response, timings: StageTimings):  # noqa: ANN001, ANN202
+    """測れたものだけを応答へ載せる。**測れなければ何も足さない。**"""
+    if not timings.stages_ms and not timings.counters:
+        return response
+    try:
+        return response.model_copy(
+            update={"timings": StageTimingsDTO(**timings.to_dict())},
+        )
+    except Exception:  # noqa: BLE001 — 計測の都合で本番の応答を壊さない
+        return response
+
+
+def _converse_step(request: ConverseRequest):
     """1ターン進める。`session_id`が無ければ新規セッションを作る
     (`ConfirmationAnswerRequest.request_id`と同じ往復パターン)。
 
@@ -523,9 +554,11 @@ def converse(request: ConverseRequest):
         provider=request.provider,
     )
     try:
-        step_result = ConversationEngine(provider).step(
-            session, has_existing_tool=request.current_document is not None
-        )
+        with _timing_stage("conversation_step"):
+            engine = ConversationEngine(provider)
+            step_result = engine.step(
+                session, has_existing_tool=request.current_document is not None
+            )
     except Exception as exc:  # noqa: BLE001 — Provider呼び出し失敗を、既存の/generate系と同じ
         # ForgeAIPipelineError系(友好的な日本語メッセージ・友好的な
         # HTTPステータス)へ変換する。実機確認(2026-08-11)で発見した
@@ -647,7 +680,9 @@ def converse(request: ConverseRequest):
         # **`request.provider`(利用者の明示指定、通常はNone)**を渡す。
         # 以前は解決済みの名前を渡していたため、`PromptPipeline`側では
         # 常に「明示指定あり」となり、Routingが一度も働かなかった。
-        result = PromptPipeline().run(
+        _timing_count("build_pipeline_runs")
+        with _timing_stage("build_pipeline"):
+          result = PromptPipeline().run(
             build_brief, engine="forge_ai", provider=request.provider, injection_report=injection_report,
             # FORGE-HANDOFF-LOCAL-AI-UX-004(2026-08-13): アプリのタイトルは
             # `build_brief`(Forgeが書いた説明文)ではなく、**ユーザー自身の

@@ -274,6 +274,14 @@ class GenerateNeedsConfirmationResponse(BaseModel):
     confirmation: ConfirmationDTO
     diagnostics: DiagnosticsDTO | None = None
 
+    timings: StageTimingsDTO | None = None
+    """段ごとの実測時間（計測できたときだけ載る）。UI は使わない。
+
+    実機で本当に曖昧な要求はここへ落ちうる。**そこで内訳が消えると、
+    どの段が遅いのか分からなくなる。**
+    """
+
+
 
 class ConfirmationAnswerRequest(BaseModel):
     """`POST /api/v1/ai/generate/confirm`のリクエストボディ
@@ -422,6 +430,25 @@ class SimulatedOutputMixin(BaseModel):
     """`True`なら、この結果は実際の推論ではなくMockが組み立てた模擬出力。"""
 
 
+class StageTimingsDTO(BaseModel):
+    """**どの段に何ミリ秒かかったか。**
+
+    実機で `/converse` が 73.54 秒かかったとき、内訳が分からなかった。
+    合計だけでは「1つ速くしたから全部速い」と丸めてしまう。段ごとに
+    分けて返すので、**次に何を速くすべきかが実測で決まる。**
+
+    * `stages_ms` … 段の名前 → 合計ミリ秒（同じ段を複数回通ったら足す）
+    * `stage_calls` … 段ごとの通過回数
+    * `counters` … LLM 呼び出し回数など
+    * `notes` … 速い道を通ったか、などの短い事実
+    """
+
+    stages_ms: dict[str, float] = {}
+    stage_calls: dict[str, int] = {}
+    counters: dict[str, int] = {}
+    notes: dict[str, str] = {}
+
+
 class ConverseAskResponse(SimulatedOutputMixin):
     version: Literal["1.0"] = "1.0"
     status: Literal["ask"] = "ask"
@@ -432,6 +459,10 @@ class ConverseAskResponse(SimulatedOutputMixin):
     """FORGE-CONVERSATION-READY-001(2026-08-12)新設。この質問に至った
     Readiness(`needs_question` / `insufficient_information`)。Metrics・
     Golden Test・Debugのために返す(指示書2章)。"""
+
+    timings: StageTimingsDTO | None = None
+    """段ごとの実測時間（計測できたときだけ載る）。UI は使わない。"""
+
 
 
 class ConverseConfirmResponse(SimulatedOutputMixin):
@@ -454,6 +485,10 @@ class ConverseConfirmResponse(SimulatedOutputMixin):
 
     need_model: NeedModelDTO
     readiness: str = "needs_confirmation"
+
+    timings: StageTimingsDTO | None = None
+    """段ごとの実測時間（計測できたときだけ載る）。UI は使わない。"""
+
 
 
 class ConverseBuildResponse(SimulatedOutputMixin):
@@ -478,6 +513,10 @@ class ConverseBuildResponse(SimulatedOutputMixin):
 # POST /api/v1/ai/update — Forming Operation(FORGE-PRODUCT-VISION-002
 # TD40対応、2026-08-11)。Held状態のアプリを、会話で「育てる」。
 # ---------------------------------------------------------------------------
+
+    timings: StageTimingsDTO | None = None
+    """段ごとの実測時間（計測できたときだけ載る）。UI は使わない。"""
+
 
 
 class UpdateRequest(BaseModel):
@@ -545,6 +584,10 @@ class ConverseUpdateResponse(SimulatedOutputMixin):
 # (`app/ai/gateway/artifact_feedback.py`の冒頭を参照)。入口が増えるたび
 # に記録の意味が経路ごとにずれ、集計が静かに嘘になる。
 # ---------------------------------------------------------------------------
+
+    timings: StageTimingsDTO | None = None
+    """段ごとの実測時間（計測できたときだけ載る）。UI は使わない。"""
+
 
 
 class FeedbackRequest(BaseModel):

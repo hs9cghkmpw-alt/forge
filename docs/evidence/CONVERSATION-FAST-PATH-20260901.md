@@ -13,6 +13,41 @@ Branch: `claude/forge-master-handoff-k46jns`
 
 ---
 
+---
+
+## 0. この数字が何の数字か（2026-09-01 CEO 指摘により明確化）
+
+**73.54 秒 → 0.09 ミリ秒は、Forge 全体の処理時間ではない。**
+
+これは最初の「ASK か BUILD か」を決める判定が、速い道に入って
+**LLM 0 回**になった結果である。そのあと `PromptPipeline` が実際に
+画面を作る時間は**まだ計測していない**。
+
+```text
+利用者の入力
+  ├─ ASK / BUILD 判定   ← ここが 73.54 秒 → 0.09 ミリ秒（測った）
+  └─ PromptPipeline     ← ここは未計測（TD98）
+       └─ 画面生成 / Validator / repair
+```
+
+**「高速化完了」ではない。** 判定が速くなっただけである。
+
+### `Real Local Model runs = 0` の意味（同上）
+
+これは「Local Model を動かしていない」という意味では**ない**。
+
+* 実モデル（`qwen2.5:1.5b-instruct`）による**会話経路は実機 PASS 済み**
+* HTTP 200 / `simulated=false` も実機で確認済み
+
+**0 なのは**、実 Local Model が
+
+> 新 Capability を生成 → 検証 → 取り込み → 再利用まで**完走した回数**
+
+である。その一連が実モデルで通った実績が 0 という意味であり、
+モデルが動いていないという意味ではない。
+
+---
+
 ## 1. 実機で確認された事実（丸めない）
 
 | 項目 | 結果 |
@@ -143,8 +178,9 @@ reason : 「誰が」「いつ」のような項目は、利用開始前に確�
 | LLM 呼び出し | 1 回（大きな prompt + schema） | **0 回** |
 | 判定 | **ASK（誤り）** | **BUILD** |
 
-約 **81 万倍**速い。ただしこれは**会話の判定だけ**の数字である
-（BUILD の先の生成時間は別。§8 参照）。
+**これは会話の判定だけの数字である。** Forge 全体の処理時間ではない。
+BUILD の先の生成時間は未計測（§0 / TD98）。倍率で語ると全体が速くなったように
+読めるので、**倍率ではなく「判定が 0.09 ミリ秒」とだけ言う。**
 
 ### ランダム自由文 A / B / C（seed 20260901）
 
@@ -335,6 +371,101 @@ run **33471061839** / head `d34ffd6c89c7a5938cafe5dc667acf38f7cf47f8` /
 
 ---
 
+## 12. 段ごとの計測を本番経路へ入れた（2026-09-01 追記）
+
+### なぜ
+
+実機で 73.54 秒かかったとき、**内訳が無かった**。合計しか見えないと
+「1つ速くしたから全部速い」と丸めてしまう。次に何を速くすべきかも
+決まらない。
+
+### 何を入れたか
+
+`backend/app/ai/runtime/stage_timing.py`。context variable に計測器を置き、
+測りたい場所は `with stage("validator"):` と書くだけでよい。引数を通して
+回らないので、深いところ（Validator）もそこだけ見て測れる。
+
+**計測していないときは何もしない。** 計測のために本番の形を変えない。
+
+`/api/v1/ai/converse` の応答へ `timings` として載る。
+
+| 出るもの | 中身 |
+|---|---|
+| `stages_ms` | `fast_path` / `conversation_step` / `conversation_llm` / `build_pipeline` / `validator` |
+| `stage_calls` | 段ごとの通過回数（Validator は repair のたびに走る） |
+| `counters` | `conversation_llm_calls` / `build_pipeline_runs` |
+| `notes` | 速い道を通ったか、その理由 |
+
+### この環境で確かめたこと（**実モデルではない**）
+
+Ollama はこのコンテナに無い。したがって以下は `provider=mock` の数字であり、
+**実機の数字ではない**。確かめたのは「計測が本番経路で動き、段が分かれて
+返ること」だけである。
+
+```text
+$ python3 scripts/measure_real_device_converse.py --provider mock
+
+A. 事務所の鍵を誰が持ち出していて、いつ返す予定なのか記録できるようにしたい
+   HTTP 200  status=build   provider_used=mock  simulated=True
+   速い道の判定              0.173 ms
+   会話ステップ全体            0.197 ms
+   会話の LLM 呼び出し        —（0 回）
+   生成（PromptPipeline）    3.851 ms
+   Validator               0.159 ms
+   HTTP 全体                86.2 ms
+   Forge Document          返った（画面 1 / Validator PASS=True）
+
+B. 家族で予定を管理したい
+   status=needs_confirmation  ← 雑に BUILD せず、確認を求めた
+```
+
+**B が BUILD になっていないことが重要である。** 速い道は共有範囲が
+未確定な要求を通さない。
+
+### 配線破壊試験（7件すべて検出）
+
+ログ: `logs/forge-stage-timing-guard-break-20260901.log`
+
+| # | 外した配線 | 結果 |
+|---|---|---|
+| M1 | 計測そのものを止める | DETECTED |
+| M2 | 応答へ載せない（測っても見えない） | DETECTED |
+| M3 | 生成段を測らない | DETECTED |
+| M4 | Validator を測らない | DETECTED |
+| M5 | 速い道を測らない | DETECTED |
+| M6 | LLM 呼び出しを数えない | DETECTED |
+| M7 | 速い道を通ったかを記録しない | DETECTED |
+
+---
+
+## 13. 実機で実行していただく手順
+
+**この環境に Ollama は無い。実機の数字は私には取れない。**
+以下は CEO の実機で1コマンドである。
+
+```bash
+# Backend を起動した状態で
+python3 scripts/measure_real_device_converse.py
+```
+
+既定で `provider=local`、`--base-url http://127.0.0.1:8000`。
+2件（実機で落ちた文 / 共有範囲が未確定な文）を投げて、段ごとの実測を
+画面と `logs/forge-real-device-converse-<日時>.json` へ残す。
+
+**遅かったときに timeout を伸ばして「解決」にしない。**
+script は一番遅い段を名指しする。そこを速くする。
+
+### そのあと Chrome で（人が見る）
+
+1. Forge を Chrome で開く
+2. 「事務所の鍵を誰が持ち出していて、いつ返す予定なのか記録できるようにしたい」と入力
+3. **画面が出るところまで人が見る**
+4. 「家族で予定を管理したい」を入力し、**聞き返してくることを人が見る**
+
+**見ていないものを PASS にしない。**
+
+---
+
 ## 9. 残る問題
 
 1. **BUILD の先の生成時間を測っていない。** 会話の判定は速くなったが、
@@ -346,8 +477,10 @@ run **33471061839** / head `d34ffd6c89c7a5938cafe5dc667acf38f7cf47f8` /
 3. **要求理解の取りこぼし（TD96）** は残っている。速い道は
    `plan_capabilities` に乗っているので、あちらが読み取れない言い方は
    こちらでも読み取れない。
-4. **Real Local Model runs = 0 のまま。** 実 Model が capability の実装を
-   書いた証拠は無い。
+4. **Real Local Model runs = 0 のまま。** これは Local Model を動かして
+   いないという意味ではない（会話経路は実機 PASS 済み）。0 なのは、
+   **実 Local Model が新 Capability を生成 → 検証 → 取り込み → 再利用まで
+   完走した回数**である。
 
 ---
 

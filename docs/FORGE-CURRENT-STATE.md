@@ -207,7 +207,8 @@ existing capabilities already cover the request, judging with what was already h
 conditions must all hold; anything else goes to the model as before.
 
 Measured after: the same sentence takes **0.09ms with zero model calls and reaches
-BUILD**. Vague sentences still ASK and still cost a call; a missing capability is still
+BUILD**. That number covers **only the ASK/BUILD decision**, not Forge's whole
+request — what `PromptPipeline` costs is still unmeasured (TD98, TD102). Vague sentences still ASK and still cost a call; a missing capability is still
 named. Guard-break 10/10 detected.
 
 Still **UNPROVEN**:
@@ -215,7 +216,10 @@ Still **UNPROVEN**:
 - build-stage generation time on real hardware (**TD98**),
 - Chrome driven end to end (**TD99**) — the wall should be gone, but it has not been watched,
 - keyword-shaped comprehension gaps (**TD96**),
-- **Real Local Model runs = 0** — no real model has authored a capability.
+- **Real Local Model runs = 0** — this does not mean the local model is unused;
+  the conversation path passed on real hardware. It counts how many times a real
+  local model has carried a new capability all the way through generation,
+  verification, installation and reuse (TD103).
 
 Two CI failures during this work were **my own process mistakes, not the fast path**
 (committing acquired artifacts, and placing a script in a job without its dependencies).

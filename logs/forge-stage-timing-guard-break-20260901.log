@@ -1,0 +1,15 @@
+[M1 計測そのものを止める（内訳が消える）] DETECTED
+[M2 応答へ載せない（測っても見えない）] DETECTED
+       test_a_slow_path_request_reports_the_llm_call
+       test_it_reports_that_the_llm_was_not_called
+       test_the_stages_are_reported_separately
+[M3 生成段を測らない] DETECTED
+       test_the_stages_are_reported_separately
+[M4 Validator を測らない] DETECTED
+       test_the_stages_are_reported_separately
+[M5 速い道を測らない] DETECTED
+       test_the_stages_are_reported_separately
+[M6 LLM 呼び出しを数えない] DETECTED
+       test_a_slow_path_request_reports_the_llm_call
+[M7 速い道を通ったかを記録しない] DETECTED
+       test_it_reports_that_the_llm_was_not_called

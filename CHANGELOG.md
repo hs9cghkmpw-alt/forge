@@ -1,3 +1,28 @@
+## 2026-09-01 — 段ごとの実測を本番経路へ入れる（実機計測の準備）
+
+**前回の言い方を訂正する。** 73.54秒 → 0.09ミリ秒は Forge 全体の時間ではなく、
+最初の「ASK/BUILD判定」だけの数字である。倍率で書いたため全体が速くなったよう
+に読める報告になっていた（TD102）。また `Real Local Model runs = 0` は
+「Local Modelを動かしていない」という意味ではなく、**実Local Modelが新Capability
+を生成→検証→取り込み→再利用まで完走した回数**が0という意味である（TD103）。
+
+- `backend/app/ai/runtime/stage_timing.py` を新設。context variable に計測器を
+  置き、`with stage("validator"):` と書くだけで測れる。**計測していないときは
+  何もしない**（計測のために本番の形を変えない）。
+- `/api/v1/ai/converse` の応答へ `timings` を追加。段ごとのミリ秒 /
+  通過回数 / LLM呼び出し回数 / 速い道を通ったか。`needs_confirmation` の
+  応答にも載せた（実機で曖昧な要求はここへ落ちうるため）。
+- `scripts/measure_real_device_converse.py` を新設。実機で**1コマンド**、
+  CEO指定の2文を投げて段ごとの実測をログへ残す。**一番遅い段を名指しする**
+  ——timeoutを伸ばして誤魔化さないため。
+- 配線破壊試験 **7件すべて検出**（計測を止める / 応答へ載せない / 各段を
+  測らない / 回数を数えない）。
+- この環境で確認したのは `provider=mock` の動作のみ。**Ollamaが無いので
+  実機の数字は取れていない**（TD98）。
+- 検証: backend 2022 passed / forge_ai 747 passed / flutter analyze clean /
+  flutter test 562 passed。
+- Evidence: `docs/evidence/CONVERSATION-FAST-PATH-20260901.md` §0 / §12 / §13
+
 ## 2026-09-01 — 会話入口の決定的な速い道（実機の速度FAIL / 意味判断FAILへの修正）
 
 実機（Ollama + `qwen2.5:1.5b-instruct`）で `/api/v1/ai/converse` が

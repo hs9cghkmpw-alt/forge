@@ -27,6 +27,11 @@ from app.ai.runtime.conversation_policy import (
     select_phase,
     user_delegated_decision,
 )
+# `note` は同じ関数の中に同名のローカル変数があるので、別名で入れる
+# （import を上書きされると計測が静かに壊れる）。
+from app.ai.runtime.stage_timing import count as _timing_count
+from app.ai.runtime.stage_timing import note as _timing_note
+from app.ai.runtime.stage_timing import stage as _timing_stage
 from app.ai.runtime.conversation_types import (
     ConversationAction,
     ConversationReadiness,
@@ -308,12 +313,16 @@ class ConversationEngine:
         #
         # 迷ったら速い道へ倒さない（`deterministic_step` は fail-closed）。
         if self._fast_path is not None:
-            outcome = self._fast_path(  # type: ignore[operator]
-                session, has_existing_tool=has_existing_tool,
-            )
+            with _timing_stage("fast_path"):
+                outcome = self._fast_path(  # type: ignore[operator]
+                    session, has_existing_tool=has_existing_tool,
+                )
             self.last_fast_path_reason = outcome.reason
+            _timing_note("fast_path_reason", outcome.reason)
             if outcome.result is not None:
+                _timing_note("fast_path_taken", "yes")
                 return outcome.result
+            _timing_note("fast_path_taken", "no")
         else:
             self.last_fast_path_reason = "fast path disabled"
 
@@ -321,7 +330,9 @@ class ConversationEngine:
         narrowed = DecisionContext(user_turn_count=user_turn_count).at_or_over_turn_threshold
         prompt = _build_prompt(session, has_existing_tool=has_existing_tool, narrowed=narrowed)
         self.last_llm_calls += 1
-        raw = self._provider.complete_structured(prompt, _RESPONSE_SCHEMA)
+        _timing_count("conversation_llm_calls")
+        with _timing_stage("conversation_llm"):
+            raw = self._provider.complete_structured(prompt, _RESPONSE_SCHEMA)
 
         need_model = NeedModel(
             problem=str(raw.get("problem", "")),

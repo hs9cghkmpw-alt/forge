@@ -88,6 +88,7 @@ from app.ai.runtime.pipeline_errors import (
     UnsupportedEngineError,
 )
 from app.ai.runtime.provider_router import ProviderRouter
+from app.ai.runtime.stage_timing import stage as _timing_stage
 from app.ai.validators.schema_validator import ValidationResult, validate_forge_document
 
 # 共通指示書6.5節「修正回数には上限を設ける。推奨は最大2回。無限修正
@@ -1006,7 +1007,8 @@ class PromptPipeline:
         # false にする——**「仕上がっている」とは言わない。**
 
         # 6. Validator(1回目)
-        validation = validate_forge_document(forge_document)
+        with _timing_stage("validator"):
+            validation = validate_forge_document(forge_document)
 
         # 7/8. 不合格時Repair、再Validation(最大 self._max_repair_attempts 回)
         # Schema Repair Loopは、Cognitive Revision Loop(context.revision_attempt、
@@ -1027,7 +1029,8 @@ class PromptPipeline:
             to_backend_repair_result(forge_ai_repair_result, repair_attempts)  # 診断用途
             current_ir = forge_ai_repair_result.ir
             forge_document = current_ir.to_json_dict()
-            validation = validate_forge_document(forge_document)
+            with _timing_stage("validator"):
+                validation = validate_forge_document(forge_document)
 
         # 9. Repair後Quality再評価 / CriticResult変換
         critic_result: CriticResult | None = None
