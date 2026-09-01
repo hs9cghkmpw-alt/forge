@@ -227,6 +227,9 @@ ModuleNotFoundError: No module named 'httpx'
 
 Evidence: `docs/evidence/CONVERSATION-FAST-PATH-20260901.md`
 
+CI: run **33471061839** / head `d34ffd6` / **4 jobs すべて success**。
+会話入口の速い道の step は backend job で実際に走っています（skip なし）。
+
 ---
 
 ## 方式B を本線にしました（2026-08-31 / 同日 追記）

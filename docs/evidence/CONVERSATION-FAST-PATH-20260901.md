@@ -303,6 +303,38 @@ ModuleNotFoundError: No module named 'httpx'
 
 ---
 
+### CI（canonical）
+
+run **33471061839** / head `d34ffd6c89c7a5938cafe5dc667acf38f7cf47f8` /
+**4 jobs すべて success**。
+
+会話入口の速い道を測る step は **backend job**（Python 3.11 / 3.12 の両方）で
+**実際に走って success**。frontend job の 6 step も全部 success である。
+
+| job | step | 結果 |
+|---|---|---|
+| backend (3.11 / 3.12) | 会話入口の速い道（簡単な要求で LLM 0 回） | success |
+| frontend | flutter test | success |
+| frontend | 生成 Dart の実ビルド経路 | success |
+| frontend | 自由文 E2E | success |
+| frontend | 獲得 Capability を Forge アプリへ載せる | success |
+| frontend | flutter analyze（獲得を載せた状態） | success |
+| frontend | flutter test（獲得 Capability が実際に描かれる） | success |
+| frontend | flutter build web | success |
+
+**skip は1件も無い。**
+
+途中経過（丸めない）:
+
+| run | SHA | 結果 |
+|---|---|---|
+| 33469325234 | `e3c4a34` | **failure**（獲得物を commit した） |
+| 33470175316 | `0d5415e` | **failure**（script の置き場所を間違えた） |
+| 33470964425 | `22bcd5f` | cancelled（後続 push により中断） |
+| **33471061839** | **`d34ffd6`** | **success** |
+
+---
+
 ## 9. 残る問題
 
 1. **BUILD の先の生成時間を測っていない。** 会話の判定は速くなったが、

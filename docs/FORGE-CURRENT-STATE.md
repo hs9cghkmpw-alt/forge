@@ -180,6 +180,50 @@ Forge now has a production self-extension path that can:
 
 Natural-language acquisition -> retry -> reuse is **PROVEN** using `view.calendar` as the unseen capability example. Compiler-side capability-name branching for widget emission is also removed; an acquired capability can register a document contribution and emit its widget through the production compiler path.
 
+### 2026-09-01 — Real-hardware run: what passed, what failed
+
+Measured on real hardware (Ollama + `qwen2.5:1.5b-instruct`), recorded without rounding:
+
+| | |
+|---|---|
+| Frontend display / Frontend → Backend / Backend start / Ollama / real model | **PASS** |
+| `/api/v1/ai/converse` with `provider=local` | **PASS** (HTTP 200, `simulated=false`) |
+| Response time | **73.54s — FAIL** |
+| Semantic judgement | **FAIL** |
+| Chrome end to end | **FAIL** (Dio `receiveTimeout` was 10s) |
+
+The semantic failure: for 「事務所の鍵を誰が持ち出していて、いつ返す予定か記録したい」
+the engine treated who holds the key and when it returns as blocking unknowns and asked
+back. Those are the **input fields of the tool being built**, not unknowns to resolve
+before use.
+
+Reading the code showed **reuse-first had never reached the product entry**.
+`ConversationEngine.step()` built a large prompt and schema and called the model
+unconditionally, before any decision. That call is the 73 seconds.
+
+`backend/app/ai/runtime/conversation_fast_path.py` decides before that call whether
+existing capabilities already cover the request, judging with what was already here
+(`plan_capabilities` and `detect_risk_signals`) rather than a new classifier. Eight
+conditions must all hold; anything else goes to the model as before.
+
+Measured after: the same sentence takes **0.09ms with zero model calls and reaches
+BUILD**. Vague sentences still ASK and still cost a call; a missing capability is still
+named. Guard-break 10/10 detected.
+
+Still **UNPROVEN**:
+
+- build-stage generation time on real hardware (**TD98**),
+- Chrome driven end to end (**TD99**) — the wall should be gone, but it has not been watched,
+- keyword-shaped comprehension gaps (**TD96**),
+- **Real Local Model runs = 0** — no real model has authored a capability.
+
+Two CI failures during this work were **my own process mistakes, not the fast path**
+(committing acquired artifacts, and placing a script in a job without its dependencies).
+Both are now checked by tests rather than by memory (**TD100**, **TD101**).
+
+Primary evidence: `docs/evidence/CONVERSATION-FAST-PATH-20260901.md`.
+Canonical CI: run **33471061839** / head `d34ffd6` / 4 jobs green.
+
 ### 020F (2026-08-31) — Validator and Dart runtime, measured separately
 
 Two previously unproven items are now **PROVEN**, each within a stated boundary:
@@ -273,7 +317,8 @@ Do not claim these as complete without new evidence:
 - Successful Chrome startup for the 2026-08-31 physical-PC checkpoint
 - Genuine visual PASS for the current generated Golden App gate
 - Real-model authorship of a new capability during self-extension
-- Generated Dart loaded into the Forge Flutter app and rendered there (TD94; the Validator half and the widget-runtime half are each proven separately, which is not the same claim)
+- Build-stage generation time on real hardware: the conversation decision is now fast, but what `PromptPipeline` costs on a small local model is unmeasured (TD98)
+- Chrome driven end to end on real hardware (TD99): the 10s wall should be gone, but it has not been watched, so it is not a PASS
 - Local model autonomously diagnosing and selecting a successful repair
 - Complete production API exposure of all internal build/test/runtime/repair evidence
 - Broad generative-software support for simulation/media/game semantics beyond the newly wired primitive
@@ -288,7 +333,7 @@ Order of attack should preserve the Product Direction closed loop and the physic
 
 1. **Resume the physical-PC blocker first**: start PowerShell transcript, capture `git rev-parse HEAD`, `where.exe flutter`, `flutter --version`, `flutter doctor -v`, then fix the Puro/Flutter SDK path issue.
 2. **Get `flutter run -d chrome` to a visibly rendered Forge app** before claiming physical runtime PASS.
-3. **Close TD94**: load generated Dart into the Forge Flutter app (registering into `forgeAcquiredWidgetTypes` and the widget registry) and render it. The Validator half and the Flutter widget-runtime half are each closed; the bridge between them is not.
+3. **Measure the build stage on real hardware** (TD98) and drive Chrome end to end (TD99). The conversation decision is fast now; what remains unmeasured is what generation itself costs on a small local model.
 4. **Then run one real unseen request through self-extension to the real Flutter/Dart runtime**, including Validator evidence and a genuinely acquired capability.
 4. **Keep every new capability on the production generation/validator/runtime path**, with tests that fail when wiring is removed.
 5. **Run genuine visual/behavioral review** and keep the Golden Gate FAIL until it passes.
