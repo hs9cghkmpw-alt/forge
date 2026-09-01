@@ -35,6 +35,19 @@
   未確認（TD99）。**Real Local Model runs = 0 のまま**。
 - Evidence: `docs/evidence/CONVERSATION-FAST-PATH-20260901.md`
 
+### 自分で落としたCIを直した（同日）
+
+- CI run 33469325234 の `flutter test` が48件失敗。**原因は速い道ではなく、
+  回帰確認でE2Eを走らせたまま commit したこと。** 獲得能力を指す
+  `acquired_registrations.g.dart` が commit され、獲得したDart本体は
+  `.gitignore` で除外されているため、新しいcheckoutで存在しないファイルを
+  importしていた。
+- 登録表を出荷状態（空）へ戻した。
+- **同じ失敗を機械に見させる**: `test_shipped_acquired_registrations.py` を追加。
+  出荷する登録表が空であること / import先が実在すること / 獲得物の
+  ディレクトリが残っていないこと。CIを落とした状態を再現して落ちることを
+  確認済み（TD100）。
+
 ## 2026-08-31 — 方式B: 持っているものは組み合わせ、足りないものだけ作る
 
 **実バグ修正（TD94の穴）**: E2E は検査した生成物とは**別に**もう一度生成して

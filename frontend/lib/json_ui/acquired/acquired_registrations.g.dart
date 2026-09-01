@@ -6,9 +6,7 @@
 //
 // **出荷状態では空である。** 何も獲得していないのだから、何も登録しない。
 
-import 'acquired_capability.dart';
-import 'view_calendar/forge_binding.dart' as capability_0;
 
 void registerAcquiredCapabilities() {
-  registerAcquiredCapability(capability_0.capability);
+  // 獲得した Capability はここへ書き出される。
 }

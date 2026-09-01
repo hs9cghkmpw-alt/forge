@@ -4072,6 +4072,17 @@ Dart側は再起動後も描ける。ずれるのはPython側のRegistryであ�
 「タイムアウトを伸ばしただけ」で終わらせないため、次は生成段の実時間を
 測り、遅ければそちらを速くする。
 
+## TD100. 獲得物を出荷物と一緒にcommitしてCIを落とした（2026-09-01）→ **解消**
+
+回帰確認のためにE2Eを走らせたまま`git add -A`し、獲得能力を指す状態の
+`acquired_registrations.g.dart`をcommitした。獲得したDart本体は`.gitignore`
+で除外されているので、新しいcheckoutでは**存在しないファイルをimportする
+登録表**だけが残り、`flutter test`が48件落ちた（CI run 33469325234）。
+
+「commit前にrestoreするのを忘れない」は忘れる。実際に忘れた。
+`forge_ai/tests/test_shipped_acquired_registrations.py`で機械に見させる。
+E2Eを走らせたまま`pytest`を回すと落ちる——それが正しい合図である。
+
 ## TD99. Chrome完走が未確認のまま（2026-09-01）
 
 実機の失敗は「Frontend表示 PASS / Backend PASS / Ollama PASS / HTTP 200 だが
