@@ -252,6 +252,57 @@ $ python3 scripts/reuse_first_e2e.py --seed 20260831   生成 1 回 / Provider 1
 
 ---
 
+## 8.1 CI を2回落とした（どちらも手順ミス。速い道の不具合ではない）
+
+**丸めない。** この修正を push したあと、CI を2回落とした。
+
+| run | SHA | 落ちた場所 | 原因 |
+|---|---|---|---|
+| 33469325234 | `e3c4a34` | `flutter test` 48件 | 獲得物を出荷物と一緒に commit した |
+| 33470175316 | `0d5415e` | 会話E2Eの step | script の置き場所を間違えた |
+
+### 1回目 — 獲得物を commit した
+
+回帰確認のため `scripts/reuse_first_e2e.py` を走らせたまま `git add -A` した。
+E2E は獲得能力を install して登録表を書き換える。獲得した Dart 本体は
+`.gitignore` で除外されているので、
+
+```text
+lib/json_ui/acquired/acquired_registrations.g.dart:10:8:
+  Error when reading 'lib/json_ui/acquired/view_calendar/forge_binding.dart':
+  No such file or directory
+```
+
+手元（能力あり）では通り、新しい checkout（能力なし）では**コンパイル不能**
+という食い違いが生まれた。
+
+### 2回目 — 置き場所を間違えた
+
+会話入口の速い道を測る script を **frontend job** へ置いた。あの job には
+Flutter しか入っておらず `backend/requirements.txt` が無い。
+
+```text
+ModuleNotFoundError: No module named 'httpx'
+```
+
+`ConversationEngine` → `provider_router` → `cloud_provider` → `httpx` と辿る。
+手元では依存が全部入っているので通っていた。**Flutter も dart も要らない
+試験**だったので、置き場所そのものが誤りだった。backend job へ移した。
+
+### どちらも機械に見させるようにした
+
+「commit 前に restore するのを忘れない」「どの job に何が入っているか覚えて
+おく」——**まさに忘れたこと**である。人の注意力に賭けない。
+
+| テスト | 見るもの | 再現時 |
+|---|---|---|
+| `forge_ai/tests/test_shipped_acquired_registrations.py` | 出荷する登録表が空か / import 先が実在するか / 獲得物が残っていないか | 2件 FAIL |
+| `backend/tests/test_ci_job_dependencies.py` | frontend job の script が backend を import していないか / script が実在するか / 速い道の step が消えていないか | 1件 FAIL |
+
+どちらも**CI を落とした状態を再現して落ちることを確認済み**である。
+
+---
+
 ## 9. 残る問題
 
 1. **BUILD の先の生成時間を測っていない。** 会話の判定は速くなったが、

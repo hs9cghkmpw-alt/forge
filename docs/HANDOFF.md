@@ -189,16 +189,41 @@ risk 検出）。新しい分類器も別系統も作っていません。
 3. Chrome から同じ文 → **画面まで到達するか**
 4. 「家族で予定を管理したい」→ **ちゃんと聞き返すか**
 
-### 一度CIを落としました（同日中に修正）
+### CIを2回落としました（どちらも同日中に修正）
 
-**原因は速い道ではありません。** 回帰確認でE2Eを走らせたまま commit し、
-獲得能力を指す登録表を出荷物に混ぜてしまいました。獲得したDart本体は
-commit しない設計なので、新しいcheckoutでは存在しないファイルをimportする
-状態になり、`flutter test` が48件落ちました。
+**どちらも速い道の不具合ではありません。私の手順ミスです。**
 
-登録表を空へ戻し、**同じ失敗を機械が見るようにしました**
-（`test_shipped_acquired_registrations.py`）。CIを落とした状態を再現すると
-ちゃんと落ちることを確認しています。
+| run | SHA | 落ちた場所 | 原因 |
+|---|---|---|---|
+| 33469325234 | `e3c4a34` | `flutter test` 48件 | 獲得物を出荷物と一緒に commit した |
+| 33470175316 | `0d5415e` | 会話E2Eのstep | script の置き場所を間違えた |
+
+**1回目**: 回帰確認でE2Eを走らせたまま commit し、獲得能力を指す登録表を
+出荷物に混ぜてしまいました。獲得したDart本体は commit しない設計なので、
+新しいcheckoutでは存在しないファイルをimportする状態になりました。
+
+**2回目**: 会話入口の速い道を測る script を **frontend job** へ置きました。
+あのjobには Flutter しか入っておらず `backend/requirements.txt` がありません。
+script は `ConversationEngine` を import し、そこから `httpx` まで辿ります。
+
+```text
+ModuleNotFoundError: No module named 'httpx'
+```
+
+手元では依存が全部入っているので通っていました。Flutterもdartも要らない
+試験なので、**置き場所そのものが誤り**でした。backend job へ移しました。
+
+### 同じ失敗を機械に見させるようにしました
+
+「commit前にrestoreするのを忘れない」「どのjobに何が入っているか覚えておく」
+——**まさに私が忘れたこと**です。両方ともテストにしました。
+
+| テスト | 見るもの |
+|---|---|
+| `test_shipped_acquired_registrations.py` | 出荷する登録表が空か / import先が実在するか / 獲得物が残っていないか |
+| `test_ci_job_dependencies.py` | frontend job が呼ぶ script が backend の実装を import していないか / CIが呼ぶscriptが実在するか / 速い道のstepが消えていないか |
+
+どちらも**CIを落とした状態を再現すると落ちる**ことを確認しています。
 
 Evidence: `docs/evidence/CONVERSATION-FAST-PATH-20260901.md`
 
