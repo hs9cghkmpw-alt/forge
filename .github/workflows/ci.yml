@@ -73,6 +73,19 @@ jobs:
         # 実APIは呼ばない（FORGE_LIVE_TEST を設定しない = test_live_api.py は自分でSKIPする）。
         run: python -m pytest tests -q
 
+      # 会話の入口が、簡単な要求で LLM を呼ばないこと（実機の速度 FAIL）。
+      #
+      # **この job に置く。** Conversation Engine は backend の依存
+      # （`httpx` 等）を要るので、Flutter しか入っていない job では
+      # 動かない。実際に frontend job へ置いて CI を落とした
+      # （run 33470175316: `ModuleNotFoundError: No module named 'httpx'`）。
+      # Flutter も dart も要らない試験なので、ここが正しい置き場所である。
+      #
+      # ランダム自由文で測る。落ちたらログの seed を `--seed` へ渡す。
+      # 実 API は呼ばない（Provider は呼び出し回数を数える Test Double）。
+      - name: 会話入口の速い道（簡単な要求で LLM 0 回）
+        run: python3 scripts/converse_fast_path_e2e.py
+
   # ---------------------------------------------------------------------
   # Backend smoke（013 §7）
   #
@@ -218,11 +231,6 @@ jobs:
       #
       # 実 API は呼ばない（Provider は Test Double）。
       # ---------------------------------------------------------------
-      # 会話の入口が、簡単な要求で LLM を呼ばないこと（実機の速度 FAIL）。
-      # ランダム自由文で測る。落ちたらログの seed を `--seed` へ渡す。
-      - name: 会話入口の速い道（簡単な要求で LLM 0 回）
-        run: python3 scripts/converse_fast_path_e2e.py
-
       # 自由文はランダムに作る。**固定文へ Forge を最適化させない。**
       # 落ちたらログに出た seed を `--seed` へ渡せば完全に同じ試験を再実行できる。
       - name: 自由文 E2E（既存能力なら生成0回 / 足りない分だけ1回 / 2回目は再利用）

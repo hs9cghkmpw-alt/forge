@@ -48,6 +48,17 @@
   ディレクトリが残っていないこと。CIを落とした状態を再現して落ちることを
   確認済み（TD100）。
 
+### CIをもう一度落とした（同日、置き場所の誤り）
+
+- CI run 33470175316: `flutter test` は通ったが、会話入口の速い道を測るstepが
+  **frontend job** で `ModuleNotFoundError: No module named 'httpx'`。
+  あのjobには `backend/requirements.txt` が入っていない。
+- Flutterもdartも要らない試験なので、**backend jobへ移した**（置き場所の誤り）。
+- **同じ失敗を機械に見させる**: `test_ci_job_dependencies.py` を追加。
+  frontend jobが呼ぶscriptがbackendの実装をimportしていないこと /
+  CIが呼ぶscriptが実在すること / 速い道のstepがCIから消えていないこと。
+  CIを落とした配置を再現して落ちることを確認済み（TD101）。
+
 ## 2026-08-31 — 方式B: 持っているものは組み合わせ、足りないものだけ作る
 
 **実バグ修正（TD94の穴）**: E2E は検査した生成物とは**別に**もう一度生成して

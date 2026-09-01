@@ -4083,6 +4083,18 @@ Dart側は再起動後も描ける。ずれるのはPython側のRegistryであ�
 `forge_ai/tests/test_shipped_acquired_registrations.py`で機械に見させる。
 E2Eを走らせたまま`pytest`を回すと落ちる——それが正しい合図である。
 
+## TD101. CIのjobと依存の食い違いでCIを落とした（2026-09-01）→ **解消**
+
+会話入口の速い道を測るscriptをfrontend jobへ置いた。あのjobにはFlutterしか
+入っておらず`backend/requirements.txt`が無いため、`ModuleNotFoundError:
+No module named 'httpx'`で落ちた（CI run 33470175316）。手元では依存が全部
+入っているので通っていた。Flutterもdartも要らない試験だったので、置き場所
+そのものが誤りだった。backend jobへ移した。
+
+「どのjobに何が入っているか」を毎回覚えていられない。実際に間違えた。
+`backend/tests/test_ci_job_dependencies.py`で機械に見させる。
+CIを落とした配置を再現すると落ちることを確認済み。
+
 ## TD99. Chrome完走が未確認のまま（2026-09-01）
 
 実機の失敗は「Frontend表示 PASS / Backend PASS / Ollama PASS / HTTP 200 だが
