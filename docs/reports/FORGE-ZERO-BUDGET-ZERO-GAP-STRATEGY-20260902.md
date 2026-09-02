@@ -50,6 +50,26 @@
 
 また、詳細Roadmapの「Conversation is the product」「Capability ≠ Widget」「自由と精密さ・安全性を同時に守る」を、TC-01、TC-03、TC-09とHard Gateへ直接入れている。
 
+### 0.2 CEO方針のUniversal Quality Invariant（全員同一品質の不変条件）
+
+この計画では、利用者のPC、GPU、RAM、OS、端末、無料・有料、Local・別Hostを
+**品質Tier（品質の階層）にしない**。同じ要求と合意済みScope（作る範囲）には、
+全員へ同じ Product Quality Contract（製品品質の合格基準）を適用する。
+
+| 変えてよいもの | 変えてはならないもの |
+|---|---|
+| 内部Runtime、実行場所、処理分割、Queue、Cache、消費電力、公開上限内の待ち時間 | 意味理解、機能、生成物、Design、安全性、Privacy、Reliability、Accessibility、保存性、Evidence基準 |
+| 利用量、同時実行数、追加の高度Capability | 提供対象となった同一Taskの成功率と品質下限 |
+
+低資源端末では Execution Resolver（実行経路の選択機構）が、Reuse、CPU最適化、
+分割実行、または利用者が許可した別のExecution Hostを選ぶ。低品質Model、機能削除、
+粗いDesign、弱い安全基準へ自動的に切り替えない。高性能端末は同じ品質へ速く到達
+し得るが、より高品質な別製品を受け取るわけではない。
+
+「最小限の道具から始める」は、利用者とScopeを合意して小さく始める意味であり、
+品質を下げる意味ではない。合意した小さなScopeでも、全Hard Gateを満たす。
+要求された意味を黙って削った結果は成功として扱わない。
+
 ---
 
 ## 1. 先に修正する比較の誤差
@@ -58,7 +78,7 @@
 
 そこで比較対象を次へ固定する。
 
-> **同じ未知要求、同じ端末条件、同じ安全条件、同じ品質条件、同じ時間条件で、利用者が目的を達成できるか。**
+> **同じ未知要求と同じ合意済みScopeに対し、端末条件や実行経路が違っても、同じ安全・機能・Design・信頼性・Accessibility基準で、公開時間上限内に利用者が目的を達成できるか。**
 
 これを **Target Contract（目標合格契約）** と呼ぶ。資金、人員、Model名、Cloud利用量は入力条件であり、採点項目ではない。Target Contractをすべて満たした時だけ能力差0とする。
 
@@ -101,6 +121,11 @@ G = \max_{i \in C} g_i
 - データ破損後に復元できない事例: **0件**
 - 未計測をPASSにした項目: **0件**
 - 利用者に知らせずCapabilityを消した事例: **0件**
+- Hardware / OS / Device / Model / Execution Hostによる品質Gate差: **0件**
+- 無料・有料で同一提供Taskの品質Gateを変えた事例: **0件**
+- 合意済みScopeを端末都合で無断縮小した事例: **0件**
+- 音声/文字、Mobile/Tablet/Desktop/WebでCore UXを欠落させた事例: **0件**
+- 押せるが動かないControl、偽の完了説明、古い状態からの再生成: **0件**
 
 ### 2.1 全体成功率99%の判定
 
@@ -257,8 +282,8 @@ Tier Cを除外して能力を削るのではない。Tier Cの正解は「何�
 | LOC-07 | Routing | ≥99% | Model/Tool/Deterministic Route正解率 |
 | LOC-08 | Local優先判断 | ≥99% | 品質Gateを満たす時だけLocal Promotion |
 | LOC-09 | オフライン利用 | ≥99% | 7日Network denyの生成・保存・修正 |
-| LOC-10 | 低性能PC対応 | ≥99% | Minimum Hardware ProfileでOOM/Crashなし |
-| LOC-11 | 自動モデル選択 | ≥99% | RAM/VRAM/Backend/品質/速度を使う選択Task |
+| LOC-10 | 低資源PC対応 | ≥99%同一品質 | Minimum Hardware ProfileでOOM/Crashなし、かつ標準Profileと同じ全Task/Visual/Safety Gate |
+| LOC-11 | 自動実行経路選択 | ≥99%同一品質 | RAM/VRAM/Backend/品質/速度から、同一品質を証明済みの経路だけを選ぶTask |
 
 #### E. 学習・成長能力 — 13/13項目を個別99%以上
 
@@ -392,7 +417,7 @@ Tier Cを除外して能力を削るのではない。Tier Cの正解は「何�
 | QA | HEAD報告でbackend 2022、forge_ai 747、Flutter 562、Analyze clean | 未見10,000件、実機、長時間、分布外、Visualの幅が不足 | 公開CI Matrix、Firebase Test Lab、Fuzz/Mutation、分散Evidence Host |
 | Security | Fail-closed Validator、Digest、Trust/Promotion境界、配線破壊試験がある | 広域Sandbox、Permission、AI/Model/Data Supply Chainの完全Gate不足 | WASI/制限Process、OWASP試験表、CodeQL、SBOM、Artifact Attestation、Default Deny |
 | Product | Windows実機でAnalyze/Test/Web BuildはPASS | Puro経路でChrome起動未完、Installer/Update/Recovery/Syncは未完成 | Doctor、Clean-machine CI、Self-contained Bundle、PWA、Local-first同期、再現Build |
-| Performance | 本番経路にStage Timingを実装 | 実Model BUILD p95、Project規模、並列、低スペックの実測不足 | 毎Commit Budget、Profile別基準、増分Build、Cache、Small/Medium Model Cascade |
+| Performance | 本番経路にStage Timingを実装 | 実Model BUILD p95、Project規模、並列、低資源端末の実測不足 | 毎Commit時間Budget、全Profile共通品質基準、増分Build、Cache、Small/Medium Model Cascade |
 
 重要な読み方は次である。
 
@@ -618,12 +643,12 @@ Route Aを開発と判定の正本、Route Bを実Hardware・Human UX・長時�
 
 ### 7.3 Local AI / Performance
 
-1. `Model Profile Manager` がRAM、VRAM、CPU命令、GPU Backend、Battery、Thermalを測る。
-2. Small Modelは分類/構造化、Medium ModelはPlan/Repair、決定可能部分はModelなしにする。
+1. `Execution Resolver` がRAM、VRAM、CPU命令、GPU Backend、Battery、Thermalを測り、同一品質Gateを通った経路だけを選ぶ。
+2. Small Modelを分類/構造化へ使う場合も標準と同じ最終Task Gateを通す。単体で不足する時はMedium Model、Tool、別Hostへ内部委譲し、利用者の成果物品質を変えない。決定可能部分はModelなしにする。
 3. Promptを段ごとに分離し、Forge全Documentを毎回送らない。
 4. GBNF/JSON Schemaで構造を制約し、Repair回数を減らす。
 5. Semantic Cacheは入力文字列ではなく、正規化Contract + Capability版本でKeyを作る。
-6. Quantization（量子化）はSizeだけで採用せず、TC-01〜TC-07の非劣化を測る。
+6. Quantization（量子化）はSizeだけで採用せず、TC-01〜TC-12と全Hard Gateの非劣化を測る。
 7. `llama.cpp`、OllamaなどRuntimeをAdapterの後ろへ置き、PrimaryとFallbackが同じRuntime故障へ巻き込まれないようにする。
 8. p50/p95/p99、Peak RAM、Token量、Model call数、Build/Validator時間を毎回記録する。
 9. Timeoutを広げる変更は、遅いStageの改善Evidenceが無ければRejectする。
@@ -717,14 +742,14 @@ Accessibilityの基準は [WCAG 2.2](https://www.w3.org/TR/WCAG22/) を使う。
 |---|---|---|---:|
 | Z0 Truth Lock | 用語、HEAD、証拠状態、Target Contract、Benchmark Manifestを固定 | `unknown`と`fail`を含むBaseline生成。Self-ExtensionのCanonical Lifecycleと`Real Local Model runs`定義を一本化 | 0円 |
 | Z1 Physical Runtime | Puro/Flutter経路修復、Doctor、実Windows Chrome起動 | Git SHA付きTranscript、見えるForge、同一要求のFrontend→Backend→Local Model→画面Evidence | 0円 |
-| Z2 Measurement Spine | すべてのStage、RAM、CPU/GPU、Model calls、Build、Visualを計測 | 実機2要求、通常/低性能Profileでp50/p95。未計測Stage 0 | 0円 |
+| Z2 Measurement Spine | すべてのStage、RAM、CPU/GPU、Model calls、Build、Visualを計測 | 実機2要求、通常/低資源Profileでp50/p95。未計測Stage 0。同一要求の品質差0 | 0円 |
 | Z3 Semantic Generalization | Semantic IR、Field/Unknown区別、日本語構文、Paraphrase/反例 | 月別200/200を含み、未見2,000→10,000件でTC-01の95%信頼下限99%以上 | 0円 |
 | Z4 Persistent Reuse | Capability/Trust/Evidence Registryを永続化 | Process/OS再起動、別Project、別表現で再生成0回・Digest一致100% | 0円 |
 | Z5 Sandbox & Trust | Permission、本物の隔離実行、Source Policy、SBOM、Dependency/License/Secret Gate | Network/File/Process/Secretの脱出0、未検証Code実行0、OWASP適用項目の自動試験、Guard-break全検出 | 0円 |
 | Z6 Real-model Self-extension | 実Local ModelがContractと実装候補を作る | 1件→20件→100件→400件の未見要求で生成→検証→取込→描画→再利用。TC-03の95%信頼下限99%以上 | 0円 |
 | Z7 Autonomous Repair | 実ModelがEvidenceを読み、制限内で修復候補を選ぶ | 独立Failure set 400件で3回以内の最終成功率の95%信頼下限99%以上、意味削除0 | 0円 |
 | Z8 Generated App Quality | Design Grammar、Visual、Accessibility、Task試験 | Golden Gate真正PASS、WCAG 2.2 AA適用項目、400人以上の独立した初見Human EpisodeでTC-06下限99%以上 | 0円 |
-| Z9 Local Intelligence | Model Profile、RAG、Skill、Cache、量子化比較 | Cloudなし、通常/低性能ProfileでTC-05/TC-07。品質劣化量子化を不採用 | 0円 |
+| Z9 Local Intelligence | Execution Profile、RAG、Skill、Cache、量子化比較 | Cloudなし、通常/低資源ProfileでTC-01〜TC-12と全Hard Gateが同一。品質差のあるProfileを不採用 | 0円 |
 | Z10 Learning Loop | Episode、Dataset、Candidate、Promotion/Rollback | 3世代以上のCandidateで系譜100%、Hard Gate悪化0、削除/同意E2E | 0円 |
 | Z11 Product & Platform | Bundle、PWA Client、Native Execution Host、Update、Backup、Sync、OS/Device Matrix | Clean-machine、3 Desktop OS、Web、Android実機、Recovery/UpgradeでTC-08/10の下限99%以上 | 0円 |
 | Z12 Zero-gap Closeout | 10,000要求、121詳細能力、Security、Soak、Visual、Human Panel、Clean releaseを凍結版で3回 | 121詳細すべて、10分類、12 TC、End-to-End、全Sliceの95%信頼下限99%以上。Hard Gate違反0、未計測0、未所有Issue 0 | 0円 |
@@ -737,7 +762,7 @@ Accessibilityの基準は [WCAG 2.2](https://www.w3.org/TR/WCAG22/) を使う。
 | 2 | `Real Local Model runs`等の矛盾を機械検査 | TD103 / TC-12 |
 | 3 | Windows DoctorにPuro/SDK path検出と修復案 | Physical checkpoint / Z1 |
 | 4 | 実機Chrome StartupとScreenshot Evidence | TD99 / Z1 |
-| 5 | 実機Stage timingを通常/低性能Profileで採取 | TD98 / Z2 |
+| 5 | 実機Stage timingと同一品質を通常/低資源Profileで採取 | TD98 / Z2 |
 | 6 | Release時の未知Widget無言消失を廃止 | TD92 / TC-06 |
 | 7 | Persistent Capability Registry v1 | TD97 / TC-04 |
 | 8 | Restart/Project-crossing Reuse E2E | TD97 / TC-04 |
@@ -753,7 +778,7 @@ Accessibilityの基準は [WCAG 2.2](https://www.w3.org/TR/WCAG22/) を使う。
 | 18 | Evidence-driven Repair Agent | Z7 / TC-03 |
 | 19 | Visual OracleとGolden Gate再実行 | TC-06 |
 | 20 | Accessibility Matrix | TC-06/09 |
-| 21 | Model Profile/Cascade/Prompt Budget | TC-05/07 |
+| 21 | Execution Resolver/Cascade/Prompt Budget/端末間同一品質 | TC-01〜12 |
 | 22 | Generation Episode永続Store | TC-11 |
 | 23 | Self-contained Native Host + PWA Client + Clean-machine Bundle | TC-10 |
 | 24 | 10,000件・400人Human Episode・72時間Local Soak・3回Closeout | Z12 |
@@ -814,7 +839,7 @@ Accessibilityの基準は [WCAG 2.2](https://www.w3.org/TR/WCAG22/) を使う。
 | 意味理解 | Semantic IR + Small Model | Deterministic parser + RAG | 必要最小限ASK | 必須意味を削らない |
 | 未知Capability | Tier B生成 | Tier A Primitive Composition | Capability Contractを分割して再生成 | 同じTask Contractを完走 |
 | Sandbox | WASI/制限Process | 宣言DSLのみ | 高Risk RouteをPermission付き別Hostへ | 未検証Codeを実行しない |
-| Local Model品質 | Small Model Cascade | Medium Model Profile | Compiler/Skill/ReuseでModel処理を除去 | Cloud必須にしない |
+| Local Model品質 | 同一品質を通るSmall Model Cascade | Medium Model Profile | Compiler/Skill/Reuse/許可済み別Host | 端末別品質Tierを作らずCloudを必須にしない |
 | Local Model速度 | GPU/Hybrid | CPU量子化 | 非同期Build + Cache/Reuse | TC-07内で完了 |
 | Desktop導入 | Self-contained Bundle | PWA Client + Native Host | Offline Bundle | 利用者にSDK導入を要求しない |
 | Code signing | OSS署名経路 | PWA | Digest/Attestation付き再現Bundle | Install Task下限99%を実測 |
@@ -1018,9 +1043,9 @@ Accessibilityの基準は [WCAG 2.2](https://www.w3.org/TR/WCAG22/) を使う。
 
 | ID | 疑い | 改善 | 閉鎖証拠 |
 |---|---|---|---|
-| Q081 | 小型Modelでは複雑要求を解けないのでは | 決定/検索/計画/実装を分解し、各段に適したModel/Tool | Small-only ProfileでHard Gate合格 |
+| Q081 | 小型Modelでは複雑要求を解けないのでは | 決定/検索/計画/実装を分解し、最終成果は全Profile共通Gateで判定 | Small経由でも標準と同じHard Gate合格。単体不足時は内部委譲 |
 | Q082 | 実機で73.54秒のように遅くならないか | Stage timing、Reuse、Prompt縮小、Cache、Cascade | 実機Profile別TC-07 |
-| Q083 | RAMが少ないPCで起動しないのでは | Model Profile、量子化候補、部分Offload、最小Model | 最低ProfileでOOM 0 |
+| Q083 | RAMが少ないPCで起動しないのでは | Execution Profile、量子化候補、部分Offload、分割実行、許可済み別Host | 最低ProfileでOOM 0、標準ProfileとのTask/Visual/Safety品質差0 |
 | Q084 | 量子化で意味品質が落ちないか | 各QuantをFull precision/現行とBlind比較 | 非劣化Margin外のQuant不採用 |
 | Q085 | NVIDIA最適化がAMD/Intel/Appleで逆効果では | Backend別Auto-benchmarkと選択 | CUDA/HIP/Metal/Vulkan/CPU evidence |
 | Q086 | 初回だけModel loadで極端に遅いのでは | Cold/Warmを分け、事前検査と進捗表示 | Cold-start p95と取消/再開試験 |
@@ -1096,7 +1121,7 @@ Accessibilityの基準は [WCAG 2.2](https://www.w3.org/TR/WCAG22/) を使う。
 | Q141 | 特殊UIをCRUDへすり替えないか | Encoding/View/Interaction Gapを保持しSelf-extensionへ | Special UI holdoutで代替成功0 |
 | Q142 | Game/Simulation/Mediaを固定Widgetで誤魔化さないか | Reusable simulation/effect/encoding primitiveで構成 | Genre未見TaskのRuntime evidence |
 | Q143 | Visual Oracleの誤検出で良いDesignを落とさないか | Human calibration、Metric別説明、false-positive set | 人判定との一致率の下限99%以上と差分記録 |
-| Q144 | 描けないWidgetがReleaseで無言消失しないか | Visible degraded state、原因、修復/戻るActionを表示 | TD92 mutationで無言消失を検出 |
+| Q144 | 描けないCapabilityがReleaseで無言消失しないか | 未対応/修復中を正直に示し、原因、能力獲得、修復、戻るActionを表示。低品質生成物を成功扱いしない | TD92 mutationで無言消失・偽成功を検出 |
 
 ### J. QA・Benchmark・Evidence（Q145–Q160）
 
@@ -1180,7 +1205,7 @@ Accessibilityの基準は [WCAG 2.2](https://www.w3.org/TR/WCAG22/) を使う。
 | Q205 | 長時間でMemory/File handleがLeakしないか | Soak metricsとresource ceiling | 72時間で傾向上限内 |
 | Q206 | Outbox/Queueを二重処理しないか | Idempotency key、ack、dedupe、transactional outbox | duplicate/reorder property tests |
 | Q207 | Retryが副作用を二重実行しないか | Effect contractとexactly-onceでなく安全なat-least-once設計 | Payment類似effectの重複0 |
-| Q208 | 一部Capability停止で全Forgeが落ちないか | Circuit breaker、隔離、degraded state、core継続 | Capability crash時に他Project操作可能 |
+| Q208 | 一部Capability停止で全Forgeが落ちないか | Circuit breaker、故障箇所の隔離、健全なcore継続。生成品質を下げず、失敗Taskは修復へ送る | Capability crash時に他Project操作可能、低品質な代替成功0 |
 
 ### N. Legal・License・Governance（Q209–Q224）
 
@@ -1212,7 +1237,7 @@ Accessibilityの基準は [WCAG 2.2](https://www.w3.org/TR/WCAG22/) を使う。
 | Q227 | Hostから個人情報を集めないか | Evidence allowlist、Local redaction、Raw file非送信 | Privacy canary漏洩0 |
 | Q228 | 中央が任意Codeを協力PCで実行しないか | SHA/Digest固定Test bundle、Sandbox、利用者preview | 未承認Command実行0 |
 | Q229 | 協力者が0人ならCoverageが止まらないか | Route AのCI/Emulator/既存端末で機械Matrixを継続し、Z12 Human Gateを分離 | Zero-volunteerで機械Gate継続、Human Gate未達を偽PASSにしない |
-| Q230 | 高性能PC利用者だけに偏らないか | Low-end profileを優先募集/CI emulateしweight調整 | Hardware distribution coverage |
+| Q230 | 高性能PC利用者だけに偏らないか | Low-end profileを優先募集/CI emulateしweight調整 | Hardware distribution coverageとProfile間のTask/Visual/Safety品質差0 |
 | Q231 | 署名鍵を盗まれたHostを信じ続けないか | Short-lived identity、revocation、behavior anomaly | Revoked host resultを拒否 |
 | Q232 | 同じ結果を大量送信し投票を操作されないか | Host identity/Artifact/Environment単位dedupe | Replay/Sybil simulation耐性 |
 | Q233 | 古いBranch/Modelの結果が混ざらないか | Required SHA、contract version、model digestを照合 | Version mismatch自動拒否 |

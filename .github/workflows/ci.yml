@@ -55,6 +55,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 全端末・全利用者の同一品質方針を検査
+        run: python3 scripts/check_universal_quality_policy.py
+
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}

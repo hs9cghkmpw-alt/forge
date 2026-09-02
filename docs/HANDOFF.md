@@ -20,8 +20,46 @@
    flutter doctor -v
    ```
 
-3. **TD92 の判断。** 描けない widget が release build で無言で消えます
-   （下記「今回の発見」参照）。現状維持か、可視 signal を出すか。
+3. ~~Universal QualityのConstitution追記承認~~ — **完了。** CEOが提案の
+   正確な文面を確認し、2026-09-02に「いいよ、すべて承認」と明示承認した。
+   Constitution §13へ追記済み。
+
+---
+
+## 全方針の厳格監査とUniversal Quality固定（2026-09-02）
+
+CEOの過去方針、添付構想、Constitution、Product Direction、Local AI Vision、
+0円・全項目99%戦略を照合し、端末性能差が製品品質差へ漏れる記述を修正した。
+
+- 新しい正本: `docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md`
+- 監査報告: `docs/reports/FORGE-POLICY-ALIGNMENT-AUDIT-20260902.md`
+- 憲法変更提案: `docs/reports/FORGE-CONSTITUTION-CHANGE-PROPOSAL-UNIVERSAL-QUALITY-20260902.md`
+- 機械Gate: `python3 scripts/check_universal_quality_policy.py`
+
+固定した原則:
+
+- PC、GPU、RAM、OS、端末、無料・有料、Local・別Hostを品質Tierにしない。
+- 全Profileへ同じTask、Visual、Safety、Privacy、Recovery、Accessibility Gateを適用。
+- 変えてよいのは実行場所、Runtime、分割方法、消費資源、公開上限内の待ち時間。
+- 最小限の道具は合意したScopeの段階化であり、品質縮小や無断の意味削除ではない。
+- 未対応Capabilityを黙って消した低品質生成物は成功に数えない。
+- 音声/文字、Mobile/Tablet/Desktop/Web、Navigation/History/Retry等のCore UXも
+  横断Hard Gateにした。
+
+`FORGE-SELF-CONTAINED-DISTRIBUTION.md`の`Low resource PC -> 小型モデル`は、
+Reuse/CPU最適化/分割実行/許可済み別Hostへ修正した。Local Model Policy、
+Machine-independent Policy、Agent pre-work checklist、0円戦略のLOC-10/11、Z2/Z9、
+Q081/Q083/Q144/Q208/Q230も同じ方針へ統一した。
+
+TD92の製品判断は確定した。releaseで無言消失を維持せず、未対応/修復中を正直に
+示し、能力獲得・修復・戻るActionを提供する。低品質な代替生成物を成功表示しない。
+Runtime修正そのものは次の実装Taskで行い、実RenderとVisual Evidenceを必須にする。
+
+このTaskは方針・計画・CI Guardの修正であり、端末間同一品質の実製品Evidenceを
+達成済みとはしていない。Z2/Z9/Z12で実証する。
+
+CEOは提案の正確な英文と日本語の意味を確認後、「いいよ、すべて承認」と回答した。
+その承認に基づき、Universal Quality InvariantをConstitution §13へ正式追記した。
 
 ---
 
@@ -108,8 +146,8 @@ CEO 指示の最優先項目
   **Parser 側**でした（**TD93**）。Registry を拡張点だと思って作業すると
   必ず外すので、まずテストで固定してから穴を開けました。
 * `ForgeFallbackWidget` は release build では `SizedBox.shrink()`。
-  描けない widget が**無言で消えます** → **TD92**（製品方針に触るため
-  勝手に変えていません。CEO 依頼 3）。
+  描けない widget が**無言で消えます** → **TD92**。2026-09-02のCEO方針で
+  無言消失は禁止と決定した。実装修正とVisual Evidenceは次Task。
 
 ### Dart 側に開けた受け口
 

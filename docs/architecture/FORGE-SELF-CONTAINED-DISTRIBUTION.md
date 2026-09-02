@@ -147,19 +147,21 @@ Forge が依存する契約は Local Model Runtime そのものではなく、Fo
 - 空き Disk
 - Local Runtime の利用可否
 
-その結果から、Forge が検証済み Model Profile を選ぶ。
+その結果から、Forge が検証済み Execution Profile（実行構成）を選ぶ。
+これは品質を選ぶ処理ではない。**全Profileへ同じProduct Quality Contractを適用し、
+端末差はRuntime・実行場所・分割方法・待ち時間で吸収する。**
 
 例:
 
 ```text
 Low resource PC
-    → 小型モデル
+    → Reuse / CPU最適化 / 分割実行 / 許可済み別Host
 
 Mid-range PC
-    → 中型モデル
+    → 同一品質Gateを通ったLocal Profile
 
 GPU / high-memory PC
-    → 高性能モデル
+    → 同一品質Gateを通った高速Local Profile
 ```
 
 ただし、**モデルの大きさだけで採用しない**。
@@ -174,7 +176,10 @@ GPU / high-memory PC
 - startup / warm-up time
 - error rate
 
-「高性能 PC だから最大モデルを入れる」のではなく、Forge Task に対して Evidence 上もっとも適切な構成を選ぶ。
+「高性能 PC だから最大モデルを入れる」「低性能 PC だから品質を下げる」のではなく、
+Forge Task に対して同一品質を満たす構成の中から Evidence 上もっとも効率的な構成を
+選ぶ。同一品質をLocal単体で満たさない場合は、その構成を低品質版として出さず、
+利用者が許可したExecution Hostへ委譲するか、同じ品質のまま処理を分割する。
 
 ---
 

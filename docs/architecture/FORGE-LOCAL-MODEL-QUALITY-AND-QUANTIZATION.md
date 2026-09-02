@@ -70,7 +70,11 @@ Forge は、配布容量・RAM 使用量・推論速度を改善するために 
 
 **Disk 容量だけを理由に上位の品質項目を犠牲にしない。**
 
-低性能 PC 用の小型モデルは必要になれば提供してよいが、標準モデルを単純に小型化することを既定の容量対策にしない。
+低資源 PC で小型モデルを候補にしてよいのは、**標準と同一の Forge Task、
+生成品質、安全性、Design、Reliability の全 Gate を通過した場合だけ**である。
+小型モデルを「低品質モード」として利用者へ提供してはならない。単体で同一基準を
+満たせない場合は、Reuse-first、別 Runtime、分割実行、利用者が許可した別の
+Execution Host（実行を担当する端末）へ切り替え、成果物の品質を下げない。
 
 ---
 
@@ -224,6 +228,11 @@ Disk 容量、RAM 使用量、Runtime latency を別々の問題として扱う�
 
 将来、PC 性能に応じて Model Profile を選択する場合も、単純に「低性能 PC = 小型モデル」で決めない。
 
+Hardware Profile（端末性能の分類）は**品質の分類ではなく、同一品質へ到達する
+実行経路の分類**である。変えてよいのは、内部 Runtime、実行場所、分割方法、
+待ち時間（公開上限内）、電力・メモリ使用量だけである。利用者へ渡す意味、機能、
+見た目、安全性、Privacy、保存性、Accessibility、Evidence の基準は変えてはならない。
+
 各 Hardware Profile について、Forge Benchmark を満たした Model / Quantization の組み合わせのみ Approved Profile に登録する。
 
 例:
@@ -236,10 +245,12 @@ Hardware Profile A
 Hardware Profile B
   → 7B 4-bit は遅すぎる
   → 別 Runtime / Quantization / offload を比較
-  → それでも不成立なら軽量モデルを検証
+  → それでも不成立なら別の許可済み Execution Host / 分割実行を選ぶ
 ```
 
-小型モデルへの切替は最初の解決策ではなく、**品質 Evidence を伴うフォールバック候補**とする。
+小型モデルへの切替は最初の解決策ではなく、**標準と同じ品質 Evidence を持つ
+実行候補**とする。同一 Gate を通らない Profile は Approved にせず、端末別の
+品質差を作らない。
 
 ---
 
@@ -290,5 +301,9 @@ Forge の Local AI 最適化は、次の原則に従う。
 > **容量削減のために Forge の知能を意図的に劣化させない。**  
 > **高品質モデルを必要なときだけ効率よく使う。**  
 > **判断は印象ではなく Evidence / Benchmark で行う。**
+
+同じ要求に対して、PC、GPU、RAM、OS、無料・有料、Local・別Hostの違いを理由に
+成果物品質を上下させない。性能差は Execution Resolver（実行経路の選択機構）が
+吸収し、全利用者へ同じ Product Quality Contract を適用する。
 
 これは Local Model、Runtime、Installer、Hardware Profile の設計変更時にも維持する。

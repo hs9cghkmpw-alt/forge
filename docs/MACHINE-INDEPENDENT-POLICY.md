@@ -3,6 +3,10 @@
 > **上位文書**: `docs/PRODUCT-DIRECTION.md` / `docs/LEARNABLE-LOCAL-AI-VISION.md`
 > **記録日**: 2026-08-26（FORGE-020A1、CEO指示）
 
+本書のExecution Host選択には
+`docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md`を適用する。
+マシン差はEvidenceと実行経路の差であり、利用者へ渡す品質Tierの差ではない。
+
 ---
 
 ## 1. 前提

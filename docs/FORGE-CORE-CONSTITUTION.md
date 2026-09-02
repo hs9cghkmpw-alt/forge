@@ -190,6 +190,20 @@ Differences may be imposed mainly on breadth, usage volume, advanced capabilitie
 
 > **Same essential experience; different capability envelope.**
 
+**Universal quality invariant.** For the same supported task and agreed scope,
+Forge must apply the same product-quality floor regardless of computer
+specifications, GPU/RAM, operating system, client device, free/paid plan, model
+profile, or execution location. Hardware and plan differences may change usage
+volume, breadth, execution route, resource use, or time within a published limit;
+they must not lower meaning, functionality, generated-app quality, safety,
+privacy, reliability, accessibility, data protection, or evidence standards.
+Forge must resolve resource differences internally or through an explicitly
+permitted execution host, not by silently producing a lower-quality result.
+
+A smaller agreed scope may be delivered first, but that scope must meet the same
+quality floor. Silent semantic deletion or degraded substitutes are not successful
+completion.
+
 ---
 
 ## 14. Multi-device access is part of the product boundary

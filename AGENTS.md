@@ -12,7 +12,8 @@ Read order:
 4. `docs/LEARNABLE-LOCAL-AI-VISION.md` — what Forge-owned Local / Native Intelligence must become.
 5. `docs/FORGE-CURRENT-STATE.md` — **mutable** current implementation/evidence snapshot.
 6. `docs/HANDOFF.md` — operational handoff / current task evidence.
-7. root `AGENTS.md`, `CLAUDE.md` when applicable, relevant Architecture/Spec/Report/Evidence, then latest GitHub HEAD/diff/CI.
+7. `docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md` — all users and devices receive the same quality floor.
+8. root `AGENTS.md`, `CLAUDE.md` when applicable, relevant Architecture/Spec/Report/Evidence, then latest GitHub HEAD/diff/CI.
 
 If newer GitHub evidence contradicts `FORGE-CURRENT-STATE.md` or `HANDOFF.md`, newer evidence wins and the stale Markdown must be updated in the same task.
 
@@ -46,8 +47,17 @@ Source of Truthとする。Codex/Claude固有のローカルhandoffは補助情�
 - 客観的に検証できるか
 - TECH_DEBTを隠していないか
 - Constitution / Product Directionと矛盾していないか
+- PC、GPU、RAM、OS、端末、無料・有料、Local・別Hostによって、利用者へ
+  渡す品質・機能・安全性・Privacy・Design・Accessibilityを上下させていないか
+- Hardware / Model Profileを品質Tierとして扱わず、同一品質へ到達する実行経路
+  として扱っているか
+- 「最小限の道具」を無断の意味削除や低品質な成功表示へすり替えていないか
 
 問題が無ければ、可逆な技術判断のたびにCEO確認を挟まず進める。
+
+端末資源が不足する場合、実行場所、Runtime、処理分割、待ち時間（公開上限内）は
+変更できるが、Product Quality Contractは変更しない。未対応の要求は低品質な
+生成物を成功表示せず、必要な能力の獲得・修復・許可済み別Hostへの委譲へ進める。
 
 未commit差分は別Agentまたは利用者の作業かもしれない。監査せずに
 reset、delete、overwriteしてはならない。
