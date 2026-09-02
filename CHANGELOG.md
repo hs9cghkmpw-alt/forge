@@ -1,3 +1,32 @@
+## 2026-09-02 — 0円・能力差0戦略を設計（DESIGNED）
+
+- `docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md` を追加。
+- 独立Review後、計画を **v3 / All-Items 99% Outcome Architecture** へ改訂。各項目を
+  99%と置くだけでは12項目同時成功が約88.6%になるため、同一End-to-End
+  Episodeで全Gateを通過した最終Task成功率の95%信頼下限を99%以上とした。
+- 以前の能力比較にあった10大分類・121詳細能力をすべてID化し、各項目へ
+  個別99%以上、またはSecurity/Data/TrustのHard Gate 100%を設定した。平均で
+  相殺せず、1項目でも未達ならZ12をFAILにする。
+- Primary→Repair→Independent Fallback、Capability Tier A/B/C、400件以上の
+  主要Slice、独立した初見参加者400人のHuman Calibration、99% Program
+  Recovery Matrixを追加した。
+- Temporary WorkspaceをSandboxとみなさず、Source AST/Import、Network、File、
+  Process、Environment、CPU/RAM/時間の隔離をZ5の必須条件へ追加した。
+- PWAとNative Execution Host、AttestationとWindows reputation、Hosted CIと
+  72時間Local Soakを分離した。
+- 以前の仮想成熟度点ではなく、観測可能な12のTarget ContractとHard Gateで
+  能力差0を判定する形へ修正した。
+- 人材、Cloud/GPU、Device Lab、QA、Security、配布、同期を、Automation、
+  Reuse-first、Local Model、OSS、公開CI、無償実端末、既存/分散Host、
+  Local-firstへ置き換える0円経路を定義した。
+- Route A（単一Repositoryの自動証拠工場）とRoute B（分散Evidence Network）を
+  独立比較し、Aを正本、BをHuman/Physical Closeoutの必須経路とした。
+- 16分野×16件、合計**256件**の疑義に、改善策と閉鎖Evidenceを割り当てた。
+- `Z0〜Z12`、最初の24 Work Package、10,000未見要求Benchmark、Fallback
+  Matrix、能力差0の最終宣言条件を定義した。
+- 文書は**設計のみ**。製品Codeの挙動、現行Gate、Golden Quality Gateの状態を
+  変更しておらず、能力差0を達成済みとはしていない。
+
 ## 2026-09-01 — 段ごとの実測を本番経路へ入れる（実機計測の準備）
 
 **前回の言い方を訂正する。** 73.54秒 → 0.09ミリ秒は Forge 全体の時間ではなく、

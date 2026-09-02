@@ -25,6 +25,53 @@
 
 ---
 
+## 0円・能力差0の実行戦略を設計（2026-09-02）
+
+追加資金0円のまま、以前の2億円完成想定と**観測可能な製品成果を同じにする**
+戦略を、次へ保存した。
+
+- `docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md`
+
+重要な境界:
+
+- Reviewを反映し、Targetを **全121詳細能力それぞれ99%以上**へ更新した。
+  AI理解10、生成14、Self-Extension 14、Local AI 11、学習13、UI 14、QA 12、
+  Security 10、製品化15、Performance 8を個別Gate化した。各部品の
+  点推定ではなく、Primary→Repair→Independent Fallback後に、同一Episodeで
+  TC-01〜12を全て通したEnd-to-End成功率の95%信頼下限である。
+- 10大分類も配下121項目が全てPASSした場合だけ合格。平均点で弱い項目を
+  相殺せず、`UNKNOWN`、`SKIP`、標本不足、古いEvidenceは未達とする。
+- 主要Sliceは原則400件以上、総合10,000要求、Human Calibrationは異なる
+  初見参加者400人以上。同一人物の複数Taskを独立標本にせず、各Sliceも個別に
+  下限99%以上でなければならない。
+- Capability Tier A/B/Cを固定し、Tier Cは無承認自動実行ではなくPermissionと
+  Human Gateを含む安全完了として採点する。意味削除・無言代替・単純拒否を
+  Task成功に数えない。
+- 現行のTemporary WorkspaceはSecurity Sandboxの証明ではない。Z5はSource
+  AST/Import、Network/File/Process/Environment、CPU/RAM/時間の隔離とSandbox
+  escape suiteを必須とする。
+- Route Aは機械Gateの正本、Route BはHuman/Physical Closeoutの必須経路。
+  PWAはClient、Local Model/BuildはNative Execution Hostとして分離する。
+- 72時間SoakはGitHub-hosted Job一回へ載せず、既存PC/Self-hostedでCheckpoint
+  付き実行する。AttestationとWindows SmartScreen reputationも分離した。
+- 以前の `46.8 → 94.5` は実在する2億円版Binaryの実測ではなく成熟度推定。
+  今後の差0判定は `TC-01〜TC-12` のTarget Contractで行う。
+- 12能力面、Hard Gate、10,000未見要求、実機/Visual/Security/Recoveryを含め、
+  一項目でも不足すれば差0にしない。
+- 0円置換は、Automation / OSS / Reuse-first / Local Model / 公開CI /
+  無償実端末枠 / 既存端末 / 分散Evidenceで行う。無償枠は必須依存にしない。
+- Route A（単一Repositoryの自動証拠工場）を正本、Route B（分散Evidence
+  Network）をHuman/Physical Closeoutの必須経路とする。
+- 疑義を **256件**、16分野から列挙し、全件へ改善策と閉鎖Evidenceを割り当てた。
+- Roadmapは `Z0〜Z12`。最初はTruth Lock、Physical Chrome、実機Stage timing、
+  TD92/95/96/97/98/99の順に現在の具体的な穴を閉じる。
+
+**この文書の状態はDESIGNEDであり、能力差0を達成済みとはしていない。**
+能力差0を名乗れるのはZ12で全Target Contractを同一Release Candidateが
+3回連続で通した時だけである。今回は製品Codeの挙動を変更していない。
+
+---
+
 ## 直近の作業（2026-08-31 / FORGE-020F）
 
 ### やったこと
