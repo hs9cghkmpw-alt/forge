@@ -3977,7 +3977,7 @@ identifier不正・field不採用等のどのsanitizer条件で落ちたかを�
 raw model outputを保存せず、閉じたreason codeとstage attempt/acceptedをdurableに
 残し、再現性と改善判断を得る必要がある。Level 0判定を緩めてはならない。
 
-## TD92. 描けないwidgetがrelease buildで無言で消える（2026-08-31）
+## TD92. 描けないwidgetがrelease buildで無言で消える（2026-08-31）→ **解消**（2026-09-02）
 
 `ForgeFallbackWidget`は`kDebugMode`でのみ理由を表示し、release buildでは
 `SizedBox.shrink()`を返す。Registry未登録・未知typeのwidgetが**利用者に何も
@@ -3989,9 +3989,18 @@ UNKNOWNを「無かったこと」へ倒す設計なので、fail-open側であ�
 修復中の状態、原因、能力獲得/修復/戻るActionを正直に示し、低品質な代替生成物を
 成功表示しない。PC性能・端末・無料/有料による品質差にもしてはならない。
 
-残る実装は、release fallbackのProduct UX、Validator/Runtime attestation、
-実Render、Visual Evidence、無言消失と偽成功を検出するmutation testである。
-方針確定だけでTD92を解消扱いにはしない。
+**解消（2026-09-02）**: `ForgeFallbackWidget`はReleaseでも必ず描く。
+出すのは利用者の言葉（「この部分はまだ表示できません」＋会話で直せる旨）で
+あり、Widget type名や例外文字列などの内部語彙は出さない。技術的な理由は
+debugビルドでだけ画面に出す。
+
+`kDebugMode`はcompile time定数で`flutter test`から分岐を確かめられないため、
+`showTechnicalReason`という注入口を1つ足した（本番の呼び出し側は渡さず、
+`kDebugMode`がそのまま使われる）。
+
+- テスト: `frontend/test/json_ui/widget_registry/fallback_visibility_test.dart`
+- 配線破壊試験: Release分岐を`SizedBox.shrink()`へ戻すと2件FAIL（確認済み）
+- 実描画: `docs/evidence/visual/provider-independent-ui-20260902/`
 
 ## TD93. Dart側の拡張点がParserのswitchに閉じている（2026-08-31）→ **解消**
 
@@ -4136,3 +4145,20 @@ CIを落とした配置を再現すると落ちることを確認済み。
 
 正しい定義: **実Local Modelが新Capabilityを生成→検証→取り込み→再利用まで
 完走した回数**が0。以後この定義で数える。
+
+
+## TD104. 呼んでいないProviderの名前をEvidenceが名乗る（2026-09-02、新規）
+
+`POST /api/v1/ai/converse` を fast path（LLM 0回）で通したとき、応答の
+`provider` が `"gemini"` になる場面を実機で観測した。`provider` は
+どの画面にも表示していないので**表示の問題ではない**が、**Evidenceの
+正確さの問題**である。「実測と公称を分ける」「呼んでいないものを呼んだ
+ことにしない」に反する。
+
+Provider帰属の修正はPipeline側（`result.diagnostics.provider_used` と
+`_BoundAdapter.last_provider_used` の意味）に及び、Provider非依存UIの
+範囲を超えるため分離した。
+
+**追試は未実施**。作業ホストの `backend/.env` に実APIキーが入っており、
+backendを起動すると実Gemini APIを呼んでしまうため（同日の事故報告参照）、
+このホストでは再現確認を行わない。CEO環境またはキー未設定の環境で追試する。

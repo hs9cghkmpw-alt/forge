@@ -298,10 +298,29 @@ class TestTheMessageMatchesWhatTheUserShouldDo(unittest.TestCase):
         outage = _no_provider_message(self._error(ErrorKind.PROVIDER_SERVER_ERROR))
         self.assertNotEqual(quota, outage)
         self.assertNotIn(
-            "しばらく待って", quota,
+            "しばらく", quota,
             "1日単位の枠切れに「しばらく待って」と案内している。5分後も同じ結果になる。",
         )
-        self.assertIn("しばらく待って", outage)
+        self.assertIn("しばらく", outage)
+
+    def test_neither_message_names_a_provider(self) -> None:
+        """FORGE-PROVIDER-INDEPENDENT-UI(2026-09-02)。
+
+        以前この文言は「別のAI Providerを設定してください」と書き、
+        `(内訳: {exc})` で Provider 名の一覧まで見せていた。
+        **利用者に Provider 選択を担当させない**(Constitution §4・§9)。
+        """
+        from app.ai.runtime.provider_independent_messages import (  # noqa: PLC0415
+            mentions_provider_identity,
+        )
+        from app.routers.ai import _no_provider_message  # noqa: PLC0415
+
+        for kind in (ErrorKind.QUOTA_EXHAUSTED, ErrorKind.PROVIDER_SERVER_ERROR):
+            message = _no_provider_message(self._error(kind))
+            self.assertFalse(
+                mentions_provider_identity(message),
+                f"利用者向け文言に Provider の身元が出ている: {message}",
+            )
 
 
 class TestProviderIdentityIsUnchanged(unittest.TestCase):

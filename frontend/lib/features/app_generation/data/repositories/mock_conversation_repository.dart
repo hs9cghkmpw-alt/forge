@@ -36,6 +36,10 @@ class MockConversationRepository implements ConversationRepository {
     final document = _dataSource.generate(message);
     ForgeLogger.success(_scope, 'mock document ready');
     return ConversationBuilt(
+      // **疑似出力だと名乗る。** 付け忘れていたために、Mock ビルドでも
+      // `SimulatedOutputBanner` が出ず、疑似データが実 AI の生成物と
+      // 同じ見た目で表示されていた（2026-09-02 実機描画で発見）。
+      simulated: true,
       buildBrief: message,
       result: GenerationSuccess(
         forgeDocument: document,

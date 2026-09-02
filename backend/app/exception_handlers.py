@@ -39,6 +39,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.ai.runtime.pipeline_errors import ForgeAIPipelineError, ProviderError
+from app.ai.runtime.provider_independent_messages import user_facing_message
 from app.schemas.ai import ErrorDetailDTO, ErrorEnvelope
 
 
@@ -88,11 +89,24 @@ async def forge_ai_pipeline_error_handler(request: Request, exc: ForgeAIPipeline
     status_code = exc.http_status if isinstance(exc, ProviderError) else 422
     if exc.category == "runtime_error":
         status_code = 500
+    # FORGE-PROVIDER-INDEPENDENT-UI(2026-09-02)。
+    #
+    # **ここは利用者の画面に出る文言が通る、唯一の場所である。**
+    # Provider が投げた文字列(「Gemini APIの無料枠の…」等)がそのまま
+    # 運ばれていたので、ここで Provider 非依存の文言へ差し替える
+    # (Constitution §9「Forge はどれか1つの base model ではない」)。
+    #
+    # 個々の Provider 実装側で消して回らないのは、**呼び出し側が
+    # 忘れずに消す設計は忘れられる**からである(CLAUDE.md §3)。
+    # 本番が必ず通るこの1箇所へ置く。
+    #
+    # 内部の `exc.message` は変えない。Evidence・ログ・診断は実 Provider
+    # 名を持ち続ける。
     envelope = ErrorEnvelope(
         error=ErrorDetailDTO(
             category=exc.category,
             sub_reason=exc.sub_reason,
-            message=exc.message,
+            message=user_facing_message(exc.message, sub_reason=exc.sub_reason),
             retryable=exc.retryable,
             reached_stage=getattr(exc, "stage", None),
         )

@@ -6,6 +6,7 @@ import '../../../../json_ui/schema/forge_document.dart';
 import '../../../../shared_widgets/forge_sparkle_mark.dart';
 import '../../../../shared_widgets/generated_app_host_shell.dart';
 import '../../../../shared_widgets/responsive_app_shell.dart';
+import '../../../../shared_widgets/ai_mode.dart';
 import '../../../../shared_widgets/simulated_output_banner.dart';
 import '../../../app_library/domain/entities/generation_history_entry.dart';
 import '../../../app_library/domain/entities/saved_forge_app.dart';
@@ -347,7 +348,9 @@ class _ConversationFlowScreenState extends ConsumerState<ConversationFlowScreen>
             forgeDocument: result.forgeDocument,
             onBack: () => Navigator.of(routeContext).pop(),
             // §9: 生成されたTool側でも、模擬データであることを隠さない。
-            simulated: _simulated,
+            // Backend の返事だけでなく**ビルド自体が疑似モードか**も見る
+            // （`isSimulatedOutput` の docstring 参照）。
+            simulated: isSimulatedOutput(backendSaidSimulated: _simulated),
             provider: widget.provider,
             onDocumentUpdated: (updated) => repository.saveApp(SavedForgeApp(
               id: id, title: title, originalPrompt: _originalPrompt, forgeDocument: updated,
@@ -405,11 +408,32 @@ class _ConversationFlowScreenState extends ConsumerState<ConversationFlowScreen>
           elevation: 0,
           foregroundColor: ForgeTheme.consoleInk,
           title: Text(widget.isUpdateMode ? 'ここを変える' : 'Forgeと話す'),
+          actions: [
+            // FORGE-PROVIDER-INDEPENDENT-UI(2026-09-02): 表示は**実状態**
+            // に従う。応答待ちなら「AIが考えています…」、Backendが
+            // `simulated: true`を返したなら「お試しモード」、接続に失敗
+            // したなら「AIに接続できません」。
+            // **Provider名は出さない。**
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: AiModeIndicator(
+                state: resolveAiModeState(
+                  simulatedFromBackend: isSimulatedOutput(
+                    backendSaidSimulated: _simulated,
+                  ),
+                  unreachable: _errorMessage != null || streamError != null,
+                  busy: isThinking,
+                ),
+              ),
+            ),
+          ],
         ),
         body: SafeArea(
           child: Column(
             children: [
-              SimulatedOutputBanner(simulated: _simulated),
+              SimulatedOutputBanner(
+                simulated: isSimulatedOutput(backendSaidSimulated: _simulated),
+              ),
               Expanded(
                 child: _errorMessage != null || streamError != null
                     ? _ConversationErrorView(

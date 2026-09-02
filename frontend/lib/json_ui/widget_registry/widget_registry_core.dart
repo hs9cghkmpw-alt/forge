@@ -89,15 +89,99 @@ Widget buildForgeWidget(
 }
 
 /// 未知Widget・構築失敗時の安全なFallback。
-/// development: 理由を可視化する。production: 静かに空スペースへ倒す(方針12章)。
+///
+/// ---
+///
+/// ## TD92 の修正(FORGE-PROVIDER-INDEPENDENT-UI、2026-09-02)
+///
+/// 以前ここは `!kDebugMode` のとき `SizedBox.shrink()` を返していた。
+/// つまり **Release では、描けなかった部分が黙って消えていた**。
+/// 利用者から見ると「無い」と「作られなかった」の区別が付かず、
+/// 画面は成功したように見える。これは Universal Quality Invariant §3
+/// 「未対応Capabilityを黙って削り、生成成功として表示する」の禁止事項
+/// そのものであり、§9「Completion summary は、実際に作成・保存・検証した
+/// 内容だけを示す」にも反する。
+///
+/// したがって Release でも**必ず何かを描く**。ただし描くのは
+/// 「まだこの部分は出せていない」という**利用者の言葉**であって、
+/// Widget type 名や例外文字列（内部語彙）ではない
+/// （§9「内部の Model、Runtime、Port、SDK、環境変数を通常利用者へ
+/// 見せない」）。技術的な `reason` は debug ビルドでだけ画面に出す。
+///
+/// **`SizedBox.shrink()` へ戻してはならない。**
+/// `test/json_ui/widget_registry/fallback_visibility_test.dart` が
+/// Release 相当の描画で本文が存在することを検査する。
 class ForgeFallbackWidget extends StatelessWidget {
   final String reason;
-  const ForgeFallbackWidget({super.key, required this.reason});
+
+  /// 技術的な `reason` を画面に出すかどうか。**テストのための注入口**で
+  /// ある。`kDebugMode` は compile time 定数なので、`flutter test`
+  /// （常に debug）から Release 相当の描画を確認する手段がこれしか無い。
+  ///
+  /// 本番の呼び出し側は渡さず、`kDebugMode` がそのまま使われる。
+  final bool? showTechnicalReason;
+
+  const ForgeFallbackWidget({
+    super.key,
+    required this.reason,
+    this.showTechnicalReason,
+  });
+
+  /// Release で利用者へ見せる文言。**内部語彙を含まない。**
+  static const String unavailableMessage = 'この部分はまだ表示できません';
+
+  static const String unavailableDetail =
+      'Forgeがこの部分をまだ作れていません。会話で「ここをこうしたい」と伝えると作り直せます。';
 
   @override
   Widget build(BuildContext context) {
-    if (!kDebugMode) {
-      return const SizedBox.shrink();
+    if (!(showTechnicalReason ?? kDebugMode)) {
+      // **黙って消さない。** 消えた部分があることを、利用者が見て
+      // 分かる形で残す。
+      return Semantics(
+        label: unavailableMessage,
+        hint: unavailableDetail,
+        readOnly: true,
+        container: true,
+        // 子の `Text` と同じ文字なので、除外しないと二重に読まれる。
+        excludeSemantics: true,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF3F1EC),
+            border: Border.all(color: const Color(0xFFBFB8A8)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.build_outlined, size: 16, color: Color(0xFF5C5647)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      unavailableMessage,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF3A3529),
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      unavailableDetail,
+                      style: TextStyle(fontSize: 12, color: Color(0xFF5C5647)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),

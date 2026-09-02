@@ -132,16 +132,19 @@ def _no_provider_message(exc: NoProviderAvailableError) -> str:
     直し方も違う——待つのではなく、翌日にするか、別のProviderを
     足す必要がある。**打つ手が違うものを同じ文言で案内しない。**
     """
+    # FORGE-PROVIDER-INDEPENDENT-UI(2026-09-02): 文言から Provider の
+    # 身元を外した。以前は「別のAI Providerを設定してください」と書き、
+    # `(内訳: {exc})` で Provider 名の一覧まで見せていた——**利用者に
+    # Provider 選択を担当させない**(Constitution §4・§9)。
+    #
+    # 内訳は捨てるのではなく、Evidence とログが持つ
+    # (`app/exception_handlers.py` を通っても `exc.message` は変えない)。
     if exc.is_quota_exhaustion:
         return (
-            "今日のAI利用枠を使い切りました。日付が変わるまで待つか、"
-            "別のAI Providerを設定してください。"
-            f"(内訳: {exc})"
+            "今日のAI利用枠を使い切りました。"
+            "日付が変わってからもう一度お試しください。"
         )
-    return (
-        "今どのAIも利用できませんでした。しばらく待ってからもう一度お試しください。"
-        f"(内訳: {exc})"
-    )
+    return "いまAIを利用できませんでした。しばらくしてからもう一度お試しください。"
 
 
 def _note_update_outcome(bound, result) -> None:  # noqa: ANN001 — _BoundAdapter / UpdateResult

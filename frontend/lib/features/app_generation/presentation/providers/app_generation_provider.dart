@@ -69,10 +69,23 @@ class GenerationRequest {
 /// いずれか)のたびに`nextNonce()`を呼び、新しい`GenerationRequest`を作る。
 final generationNonceProvider = StateProvider<int>((ref) => 0);
 
-/// FORGE-AI-CONNECT-001対応(2026-08-10)。ホーム画面のクイック切り替えで
-/// 選ばれているProvider名(`null`=Backend既定のmock、`"gemini"`=実際の
-/// Gemini APIを使う)。永続化はしない(アプリ再起動で既定のmockへ戻る、
-/// 意図的な設計。「設定より会話」の方針上、恒久的な設定画面にはしない)。
+/// 明示指定されたProvider名。**通常の製品ビルドでは常に`null`である。**
+///
+/// FORGE-PROVIDER-INDEPENDENT-UI(2026-09-02)で意味を変えた。
+///
+/// 以前はホーム画面の`_ProviderToggle`が、利用者のタップでここへ
+/// `"gemini"`を書き込んでいた。Forgeの憲法は利用者にProvider選択を
+/// 担当させない(§4「内部の複雑さは外部の単純さになる」・§9「Forgeは
+/// どれか1つのbase modelではない」)ので、その経路を削除した。
+///
+/// `null`は「Backend既定のmock」という意味では**ない**。`null`のとき
+/// Frontendは`provider`フィールドを送らず、Backendの`ProviderRouter`が
+/// Local-first / quota / fallbackで**Forge自身が**経路を決める
+/// (`backend/app/routers/ai.py`の`default_router().bind(...)`)。
+///
+/// 値が入るのは`FORGE_DEVELOPER_MODE=true`でビルドした開発者向けの
+/// `DeveloperProviderOverride`から指定した場合だけで、そのときはRouterを
+/// 迂回する。永続化はしない。
 final selectedAiProviderProvider = StateProvider<String?>((ref) => null);
 
 /// 生成結果を保持する。`FutureProvider.autoDispose.family`にすることで、
