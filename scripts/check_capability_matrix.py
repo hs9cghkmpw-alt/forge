@@ -47,9 +47,20 @@ ORDER = [
     "PARTIAL",
     "IMPLEMENTED",
     "VERIFIED",
+    # Human Evidence が要る Capability の踊り場。
+    #
+    # **Human 0 人は Implementation blocker ではない**（CEO 指示 2026-09-04）。
+    # 自動・内部検証まで終わり、あとは人間の評価だけ、という状態を
+    # `99_PROVEN` と混ぜずに置ける段を用意する。ここで止まっている
+    # Capability は「作業が止まっている」のではなく「募集待ち」である。
+    "PRE_HUMAN_READY",
     "99_PROVEN",
     "HARD_GATE_PROVEN",
 ]
+
+#: Human Evidence を必要としない Capability が `PRE_HUMAN_READY` を
+#: 名乗るのは意味が無い（人を待っていないため）。
+HUMAN_EVIDENCE_MARKER = "human_evidence_required"
 
 #: `99_PROVEN` を名乗るのに最低限必要な独立 Episode 数。
 #:
@@ -147,6 +158,12 @@ def check(manifest: dict) -> list[str]:
                 problems.append(
                     f"{cid}: 99_PROVEN なのに Wilson 95% 下限が {recorded_lb}（0.99 未満）"
                 )
+
+        if status == "PRE_HUMAN_READY" and not entry.get("human_evidence_required"):
+            problems.append(
+                f"{cid}: Human Evidence を要求しない Capability が PRE_HUMAN_READY を"
+                "名乗っている（人を待っていないなら VERIFIED から先へ進める）"
+            )
 
         is_hard_gate = bool((entry.get("target_contract") or {}).get("hard_gate"))
         if status == "HARD_GATE_PROVEN" and not is_hard_gate:

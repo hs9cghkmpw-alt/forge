@@ -1,3 +1,56 @@
+# 2026-09-04 — Sandbox 実装と 121 能力の実態確定
+
+**今回は測り方ではなく、実際に穴を塞いだ。**
+
+- **Sandbox W1 を実装**（`forge_ai/core/sandbox/`）。生成物の test/build は
+  これまで**ホスト権限**で走っていた（network 可、env 継承）。いまは
+  Network namespace / PID namespace / env 作り直し / RLIMIT_CPU / RLIMIT_AS /
+  RLIMIT_FSIZE / 壁時計 timeout / 明示 workspace / shell 不使用 の中でしか
+  動かない。**AST の禁止語チェックを Sandbox と呼んでいない。**
+- **本番経路へ配線**（`build_time_workspace._execute`）。`CommandEvidence` へ
+  `sandbox_backend` を足し、**どこで動かしたか**を Evidence が持つ。
+  素の `subprocess.run` へ戻すと 2 件 FAIL。
+- **Windows を「あとで」にしない。** Windows / macOS backend は未実装であり、
+  その環境では `SandboxUnavailable` で**実行を拒否**する（fail closed）。
+  したがって EXT-08 / SEC-04 は `PARTIAL` であって `IMPLEMENTED` ではない。
+- **Permission Manifest と Tier 強制**（`sandbox/policy.py`）。Permission は
+  列挙型。**Tier は権限から計算し、申告を信じない**。Tier C（Network /
+  Credential / OS / 決済 / 不可逆 / process 起動）は Human Gate 必須で、
+  Promotion には承認の出所も要る。利用者へは「インターネットへ接続します」
+  のような普通の言葉で見せる。
+- **依存の閉鎖**（SEC-06）。allowlist に無い依存を拒否し、`pub get` /
+  `pip install` / `npm i` / `curl` / `git clone` 等の取得行為を拒否。
+  **argv の list 形**も検出する（試験で取りこぼしたため直した）。
+- **配線破壊試験 13 種、13/13 検出。** 途中で**自分の置物を 2 件発見**した
+  （CPU 上限と Memory 上限が壁時計 timeout に拾われていた）。両方直した。
+- **実測で判明**: `RLIMIT_NPROC` は実効 UID が root のとき強制されない
+  （上限 16 で fork 400 が通った）。process 防御は PID namespace が本体であり、
+  `describe_environment()['nproc_limit_effective']` で事実を Evidence へ出す。
+- **ADR-015 を `ACCEPTED` → `PROVISIONAL` へ格下げ。** 初版は「現在の Typed IR
+  では GEN-09/10/11 を表現できない」を根拠にしていたが、**「いま無い」と
+  「原理的にできない」は別**である。14 軸で A（Extended Typed IR）/
+  B（Generated Source）/ C（Hybrid）を比較し、GEN-09/10/11 は Game Rule IR /
+  Interaction IR / Encoding IR で届く見込みが高いと判断し直した。暫定決定は
+  C だが**「Typed IR を先に拡張する」を既定の向き**とする。
+  既存の Generated Dart 経路は削除していない。
+- **Frozen Holdout / Human 400 を Implementation blocker から外した**（CEO 指示）。
+  Holdout は RC Freeze 後に独立生成し、Repository には仕様・割り当て・採点規則・
+  runner・結果 schema だけを置く（`docs/evidence/holdout/`）。
+  `holdout_runner.py` は開発 Agent が作った Holdout と、Repository 内の問題集合を
+  **拒否する**。Human 用に `PRE_HUMAN_READY` を Status 語彙へ追加。
+- **121 の実態確定を進めた。** `NOT_ASSESSED` 102 → **58**。
+  Mapping Index（`scripts/build_capability_mapping_index.py`）を追加。
+  **候補抽出までが仕事**であり、Status は意味を確認して決める。
+- **自分の誤配置を 4 件訂正した。** Capability 名を読まずに検索語を置いたため、
+  SEC-06 / SEC-07 / QA-05 / UI-11 を別の能力の実装で埋めていた。訂正の結果
+  `IMPLEMENTED` は 21 → **17 に減った**。数字は悪くなったが、それが実態である。
+- Gap / Priority 欄を全 121 へ追加（gap_steps × blast_radius × hard_gate ÷ cost）。
+- 検証: forge_ai **783 passed**（前回 747）/ backend **2066 passed** /
+  flutter **589 passed** + analyze clean / Universal Quality PASS / Matrix PASS。
+  Real Provider calls **0** / Real Local Model runs **0** / Human Evidence **0 人**。
+- 新規 TD110〜TD114。
+- **`99_PROVEN` は 0 件。** 能力差 0・121項目 99%・Z12 完了は宣言していない。
+
 # 2026-09-03 — 121能力 Gap Matrix と Evidence 整合性
 
 - **121能力を機械可読な台帳にした**（`docs/evidence/capability_matrix/capabilities.json`）。

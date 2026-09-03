@@ -1,6 +1,6 @@
 # 121 能力 Matrix と、99% を「作る」のではなく「証明する」ための仕組み
 
-**Status:** ACTIVE（2026-09-03 新設）
+**Status:** ACTIVE（2026-09-03 新設 / 2026-09-04 更新）
 
 **機械 Gate:** `python3 scripts/check_capability_matrix.py --summary`
 
@@ -35,6 +35,7 @@ Statistical Evaluation → Hard Gate → `99_PROVEN` を 1 本通し、それが
 | `PARTIAL` | 一部だけ動く | `zero_budget_approach` |
 | `IMPLEMENTED` | 本番経路に実物がある | 実在する `implementation_evidence` パス |
 | `VERIFIED` | 実際に動かした Episode がある | `episodes >= 1` |
+| `PRE_HUMAN_READY` | 自動・内部検証は終わり、**あとは人の評価だけ** | `human_evidence_required: true` |
 | `99_PROVEN` | Wilson 95% 下限が 0.99 以上 | `episodes >= 300` かつ下限 >= 0.99 |
 | `HARD_GATE_PROVEN` | Hard Gate 項目で違反 0 件 | Hard Gate 項目であること |
 
@@ -129,22 +130,52 @@ Development と Holdout の両方に入ってはならない——入ると、Ho
 3. 割り当てを Family ID の hash で固定し、後から動かさない
 4. 個々の言い換えは、所属 Family と同じ Set にしか入れない
 
-### 3.2 Holdout を開発 Agent から隠す運用
+### 3.2 Holdout の暫定運用（2026-09-04 確定）
 
-**この Repository は開発 Agent が全部読める。** したがって Holdout の
-中身を同じ Repository へ平文で置いた時点で、隠したことにならない。
+**訂正:** 前回この節は「Holdout が無いので Z12 の 99% 証明は開始できない」と
+書き、それを開発の停止理由のように扱った。**誤りである。**
 
-採れる 0 円の手段は次のいずれかであり、**現時点ではどれも未実装**である。
+```text
+Implementation blocker          ≠ Frozen Holdout
+Final 99% certification blocker = Frozen Holdout
+```
 
-| 手段 | 内容 | 状態 |
-|---|---|---|
-| H1 | Holdout を別 Repository（開発 Agent が access できない）に置き、CEO だけが実行する | 未実装 |
-| H2 | Holdout の内容を CEO 手元にだけ置き、Repository には Family ID と結果だけを commit する | 未実装 |
-| H3 | Holdout を生成規則ごと封じ、Seed を CEO が保持する | 未実装 |
+Holdout が無いことは、Capability の実装・評価・改善を止める理由にならない。
+いまは Development / Validation / Regression Evidence で能力を上げ続ける。
 
-**したがって現在、Frozen Final Holdout は存在しない。**
-Z12 の 99% 証明は開始できない。これは実装の問題ではなく運用設計の問題で
-あり、CEO の決定が要る（H1 / H2 / H3 のどれを採るか）。
+採る運用は次で確定した（`docs/evidence/holdout/HOLDOUT-SPECIFICATION.md`）。
+
+```text
+Development → RC Freeze → Independent Holdout creation
+  → Hash / provenance → Final execution → Result only persisted
+```
+
+**Repository には問題本体を置かない。** 置くのは specification、
+family allocation、scoring contract、runner、result schema、
+hash/provenance format だけである。問題は RC Freeze 後に独立生成する。
+
+| Repository にある | まだ無い（RC Freeze 後） |
+|---|---|
+| `HOLDOUT-SPECIFICATION.md` | Holdout 問題本体 |
+| `family_allocation.json` | Hash / provenance の実値 |
+| `result_schema.json` | Final execution の結果 |
+| `scripts/holdout_runner.py` | — |
+
+`holdout_runner.py` は `--created-by` が開発 Agent を指す場合と、問題集合が
+Repository の中にある場合を**拒否する**。自分で作った問題を自分で解いた
+結果は Holdout ではない。
+
+### 3.3 Human Evidence も同じ扱い
+
+Human 400 人が未確保なのも **Implementation blocker ではない**。
+自動・内部検証まで終わった Capability は `PRE_HUMAN_READY` で置く。
+
+```text
+IMPLEMENTED → 自動/内部検証 → PRE_HUMAN_READY → Human Evidence → 99_PROVEN
+```
+
+`PRE_HUMAN_READY` を名乗れるのは `human_evidence_required: true` の
+Capability だけである（人を待っていないなら、そのまま先へ進める）。
 
 ---
 
@@ -174,16 +205,30 @@ Episode は最低限これを記録する。
 
 ---
 
-## 5. いまの状態（2026-09-03）
+## 5. Capability ↔ Code / Test / Evidence の索引
+
+`mapping_index.json`（生成器: `scripts/build_capability_mapping_index.py`）。
+
+Capability ID から Source / Test / Evidence / TECH_DEBT の**候補**を引く。
+**候補抽出までが仕事である。** 最終 Status は意味を確認して人が決める。
+
+> **単純 Keyword 一致で状態を決めない。** 2026-09-04 に実際に事故った——
+> Capability 名を読まずに検索語を置いたため、SEC-06 / SEC-07 / QA-05 / UI-11
+> の 4 件を**別の能力の実装で埋めていた**。索引は出発点であって結論ではない。
+
+---
+
+## 6. いまの状態
 
 `python3 scripts/check_capability_matrix.py --summary` の出力が正である。
 この README に数字を焼き込まない（古くなるため）。
 
 確かなことだけ書く。
 
-- `99_PROVEN` は **0 件**
-- `HARD_GATE_PROVEN` は **0 件**
-- 大半は `NOT_ASSESSED`（見ていない）であり、`NOT_STARTED`（無い）ではない
-- Frozen Final Holdout が無いため、最終証明は**開始できていない**
+- `99_PROVEN` は **0 件**、`HARD_GATE_PROVEN` は **0 件**
+- `NOT_ASSESSED`（見ていない）と `NOT_STARTED`（無い）を分けている
+- Frozen Final Holdout は **RC Freeze 後に独立生成する**（§3.2）。
+  無いことは実装を止める理由ではない
+- Human Evidence は **0 人**。これも実装を止める理由ではない（§3.3）
 
 **「能力差 0 達成」「全体 99% 達成」と書ける状態ではない。**

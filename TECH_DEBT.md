@@ -4209,7 +4209,7 @@ Geminiを名乗った」と書いたが、あの応答はBUILD/CONFIRMであり�
 利用者向け文言としては妥当だが、Evidenceとしては誤りである。
 実際、テスト作成中に差し替えたstepのsignature不一致が503として現れた。
 
-## TD107. Self-ExtensionにSandboxが無い（2026-09-03、新規、EXT-08）
+## TD107. Self-ExtensionにSandboxが無い（2026-09-03）→ **Linux分は解消**（2026-09-04）
 
 生成されたDartのtest/buildを**ホスト権限**で実行している
 （`forge_ai/core/orchestration/`にsandbox実装が存在しない）。
@@ -4229,3 +4229,61 @@ Benchmarkを平文で置いた時点でHoldoutにならない。
 **現在どの能力も`99_PROVEN`へ到達できない。**
 実装の問題ではなく運用設計の問題であり、CEO決定が要る
 （`docs/evidence/capability_matrix/README.md` §3.2 の H1/H2/H3）。
+
+
+**Linux 分は解消（2026-09-04）**: `forge_ai/core/sandbox/`。
+Network namespace / PID namespace / env 作り直し / RLIMIT_CPU / RLIMIT_AS /
+RLIMIT_FSIZE / 壁時計 timeout / 明示 workspace / shell 不使用。
+本番経路（`build_time_workspace._execute`）へ配線済み。
+escape corpus 8/8 遮断、配線破壊 7 種で検出。
+**Windows / macOS は未実装であり TD110 として残る。**
+
+## TD110. Windows / macOS の Sandbox backend が無い（2026-09-04、新規）
+
+`forge_ai/core/sandbox/runner.py` の隔離は Linux の namespace + rlimit に依存する。
+Windows と macOS では `available_backend()` が `None` を返し、
+`SandboxUnavailable` で**実行を拒否する**（fail closed）。安全側ではあるが、
+**その環境では Self-Extension が動かない**。
+
+Windows は主配布対象である（PRD-12）。Linux だけ通ったことを
+「Sandbox 完成」と読まないこと。EXT-08 / SEC-04 が `PARTIAL` に留まる理由。
+
+必要なもの: Windows Job Object（memory / process 上限）、restricted token、
+WFP かループバック遮断による network deny、環境変数の作り直し。
+
+## TD111. RLIMIT_NPROC が root 実行で効かない（2026-09-04、新規、実測）
+
+上限 16 を設定して fork 400 が通った（2026-09-04 実測）。root は
+`RLIMIT_NPROC` を迂回する。したがって process 防御は **PID namespace が本体**で
+あり、数の上限は補助にすぎない。
+
+`describe_environment()['nproc_limit_effective']` でこの事実を Evidence 側から
+見えるようにした。**効かない制限を「効く」と書かない。**
+非 root 実行（本番の想定）では効く見込みだが、**未実測**である。
+
+## TD112. Permission Manifest が Promotion 判定へ配線されていない（2026-09-04、新規）
+
+`PermissionManifest` と Tier 強制（`assert_execution_allowed` /
+`assert_promotion_allowed`）は実装したが、`extension_registry` の Promotion 判定
+から呼んでいない。**Manifest を作れるが、無いまま Promotion できる。**
+「作ったが本番から呼ばれない」の形であり、次の Task で閉じる。
+
+## TD113. 依存 allowlist の中身が空（2026-09-04、新規）
+
+`assert_dependencies_allowed` の機構は動くが、Forge が保持・検証した依存の
+実リスト（License / Digest / Provenance / 脆弱性情報）が無い。
+SEC-06 の Target「Unknown/禁止/重大脆弱 Dependency 0 件」は、
+脆弱性情報が無いと判定できない。
+
+## TD114. Capability 名を読まずに Mapping を作り、4 件を誤配置した（2026-09-04）→ **解消**
+
+`scripts/build_capability_mapping_index.py` の検索語を、Capability の**実名を
+読まずに**自分の記憶で置いた。その結果 SEC-06（Dependency検査）/
+SEC-07（Secret管理）/ QA-05（配線破壊試験）/ UI-11（特殊UI）へ、
+まったく別の能力の実装を割り当てていた。
+
+訂正済み。`IMPLEMENTED` は 21 → 17 へ減った。
+
+再発防止: Mapping Index は**候補抽出まで**であり結論ではない、と
+`docs/evidence/capability_matrix/README.md` §5 へ明記した。
+Status を決める前に必ず Capability の実名と closing evidence を読む。

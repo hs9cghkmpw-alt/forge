@@ -5,7 +5,7 @@
 **Detailed product authority:** `docs/PRODUCT-DIRECTION.md`  
 **Operational handoff:** `docs/HANDOFF.md`
 
-Last reviewed against GitHub code HEAD: **2026-09-03**
+Last reviewed against GitHub code HEAD: **2026-09-04**
 
 ---
 
@@ -378,6 +378,42 @@ test/build steps run with host privileges. EXT-08 was therefore lowered to
 
 ---
 
+## 10.3 Generated code now runs isolated — 2026-09-04
+
+Until this date, generated Dart's test/build steps ran **with host privileges**:
+network reachable, host environment inherited, no CPU/memory ceiling. That is
+now closed on Linux (`forge_ai/core/sandbox/`), and the isolation sits on the
+one path that actually executes generated code
+(`build_time_workspace._execute`), with `CommandEvidence.sandbox_backend`
+recording where each command ran — empty means it was not isolated.
+
+Closed: network namespace, PID namespace, environment rebuilt from empty,
+`RLIMIT_CPU` / `RLIMIT_AS` / `RLIMIT_FSIZE`, wall-clock timeout, explicit
+workspace, no shell. Escape corpus 8/8 blocked; 13 wiring mutations all
+detected — including two placebos in the tests themselves (CPU and memory
+limits were being caught by the wall clock rather than by their own rlimit).
+
+Alongside it: a Permission Manifest whose **tier is computed from permissions
+rather than declared**, a human gate on tier C, and a dependency allowlist that
+also refuses build-time acquisition (`pub get`, `pip install`, `curl`, …).
+
+**Not complete.** Windows and macOS have no backend, so Self-Extension refuses
+to run there (fail closed) — Windows is a primary distribution target, so
+EXT-08 and SEC-04 stay `PARTIAL`, not `IMPLEMENTED`. `RLIMIT_NPROC` is not
+enforced for root (measured), so process defence rests on the PID namespace.
+
+ADR-015 dropped from `ACCEPTED` to `PROVISIONAL`: its original case rested on
+"the current typed IR cannot express GEN-09/10/11", which is a different claim
+from "an extended typed IR cannot". A 14-axis comparison now favours extending
+the IR first and treating source synthesis as the last resort.
+
+Four capability assignments made on 2026-09-02/03 were wrong (SEC-06, SEC-07,
+QA-05, UI-11 had been filled with unrelated implementations because the search
+terms were written without reading the capability names). Correcting them
+lowered `IMPLEMENTED` from 21 to 17.
+
+---
+
 ## 11. Current unverified / incomplete boundaries
 
 Do not claim these as complete without new evidence:
@@ -396,9 +432,9 @@ Do not claim these as complete without new evidence:
 - Real-device Mobile/Tablet rendering: only Chromium viewport emulation has been run (2026-09-02)
 - The `AIモード` `unavailable` / `preparing` states under a live backend: unrendered, because this host must not start the backend (a real `GEMINI_API_KEY` sits in its `backend/.env`)
 - ~~Provider attribution in Evidence (TD104)~~ — closed 2026-09-03
-- **Frozen Final Holdout does not exist.** The repository is fully readable by the development agent, so a benchmark committed in plaintext is not held out. No capability can reach `99_PROVEN` until this is resolved (TD109; CEO decision required)
-- **Human Evidence: 0 participants.** No zero-budget route to 400 independent first-time participants is secured; even the 3-5 person H0 stage is unstarted
-- **No sandbox in the self-extension path** (TD107). Generated test/build run with host privileges, so EXT-08's `0 escapes` hard gate is unverified, not satisfied
+- **Frozen Final Holdout is created only after RC freeze**, outside the repository (`docs/evidence/holdout/`). Its absence blocks final 99% certification, **not implementation** — that distinction was wrong in the 2026-09-03 entry and is corrected here
+- **Human Evidence: 0 participants.** Still unsecured, but this too blocks certification rather than implementation; capabilities needing it stop at `PRE_HUMAN_READY`
+- **Sandbox exists on Linux only** (TD110). Windows and macOS refuse to run rather than running unprotected, so Self-Extension does not work there at all
 - **Capability Tier is not enforced in code** (TD108); Tier C can traverse the Tier A path
 - Security corpora are undefined, so no security item can claim `HARD_GATE_PROVEN`
 - Outcome metrics beyond success rate (repair count, p95 latency, peak RSS, crash, data loss) are not recorded in episodes

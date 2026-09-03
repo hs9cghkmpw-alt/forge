@@ -20,6 +20,13 @@ from hashlib import sha256
 from pathlib import Path
 import shutil
 import subprocess
+
+from forge_ai.core.sandbox import (
+    SandboxPolicy,
+    SandboxUnavailable,
+    SandboxViolation,
+    run_in_sandbox,
+)
 import tempfile
 from typing import Iterable
 from uuid import uuid4
@@ -56,6 +63,14 @@ class CommandEvidence:
     timed_out: bool
     stdout: str
     stderr: str
+
+    sandbox_backend: str = ""
+    """どの隔離 backend で走ったか。**空なら走っていない。**
+
+    EXT-08 / SEC-04（2026-09-04）。生成物を「どこで動かしたか」は
+    Evidence の一部である。隔離せずに動かした結果を、隔離した結果と
+    同じ扱いにしない。
+    """
 
     @property
     def passed(self) -> bool:
@@ -189,42 +204,49 @@ class ManagedBuildWorkspaceRunner:
             target.write_text(source.content, encoding="utf-8", newline="\n")
 
     def _execute(self, workspace: Path, command: BuildCommand) -> CommandEvidence:
+        """生成物を**隔離して**走らせる（EXT-08 / SEC-04、2026-09-04）。
+
+        ここが「AI が書いたコードを実際に動かす」唯一の場所である。
+        以前はここが素の `subprocess.run` で、**ホストの権限と環境変数を
+        そのまま**渡していた。生成物から見れば、network も secret も
+        ファイルシステムも開いていた。
+
+        隔離できない環境（Windows / macOS backend は未実装）では
+        **実行せずに失敗として返す**。`passed` が False になるので
+        Promotion まで進まない——fail closed である。
+        「Sandbox が無いから素通しで動かす」は最悪の設計であり、
+        それをしないことがこの分岐の目的である。
+        """
         try:
-            completed = subprocess.run(
+            result = run_in_sandbox(
                 list(command.argv),
-                cwd=workspace,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=command.timeout_seconds,
-                shell=False,
+                workspace=workspace,
+                policy=SandboxPolicy(
+                    timeout_seconds=float(command.timeout_seconds),
+                    # CPU 秒は壁時計より短く取る。壁時計だけだと、
+                    # 「速く回り続けるもの」を CPU 側で止められない。
+                    cpu_seconds=max(1, int(command.timeout_seconds)),
+                ),
             )
-            return CommandEvidence(
-                kind=command.kind,
-                argv=command.argv,
-                exit_code=completed.returncode,
-                timed_out=False,
-                stdout=self._bounded(completed.stdout),
-                stderr=self._bounded(completed.stderr),
-            )
-        except subprocess.TimeoutExpired as exc:
-            return CommandEvidence(
-                kind=command.kind,
-                argv=command.argv,
-                exit_code=None,
-                timed_out=True,
-                stdout=self._bounded(self._decode_timeout_stream(exc.stdout)),
-                stderr=self._bounded(self._decode_timeout_stream(exc.stderr)),
-            )
-        except OSError as exc:
+        except (SandboxUnavailable, SandboxViolation) as exc:
             return CommandEvidence(
                 kind=command.kind,
                 argv=command.argv,
                 exit_code=None,
                 timed_out=False,
                 stdout="",
-                stderr=self._bounded(str(exc)),
+                stderr=self._bounded(f"sandbox unavailable, refused to run: {exc}"),
+                sandbox_backend="",
             )
+        return CommandEvidence(
+            kind=command.kind,
+            argv=command.argv,
+            exit_code=result.exit_code,
+            timed_out=result.timed_out,
+            stdout=self._bounded(result.stdout),
+            stderr=self._bounded(result.stderr),
+            sandbox_backend=result.backend,
+        )
 
     @staticmethod
     def _decode_timeout_stream(value: str | bytes | None) -> str:

@@ -1,0 +1,4473 @@
+{
+ "schema_version": "1.0",
+ "generated_at": "2026-09-04",
+ "purpose": "Capability ID から Source/Test/Evidence/TD の**候補**を引く索引。候補抽出までが仕事であり、最終Statusは意味を確認して人が決める。",
+ "generator": "scripts/build_capability_mapping_index.py",
+ "capabilities": {
+  "AI-01": {
+   "search_terms": [
+    "intent_parser",
+    "semantic",
+    "need_model",
+    "natural_language"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/gateway/conversation_dataset.py",
+    "backend/app/ai/native/_01_intent/intent_recognizer.py",
+    "backend/app/ai/runtime/conversation_engine.py",
+    "backend/app/ai/runtime/conversation_fast_path.py",
+    "backend/app/ai/runtime/conversation_policy.py",
+    "backend/app/ai/runtime/conversation_types.py",
+    "backend/app/ai/runtime/native_ai_runtime.py",
+    "backend/app/exception_handlers.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py"
+   ],
+   "test_candidates": [
+    "backend/tests/revision_fixtures.py",
+    "backend/tests/test_conversation_engine.py",
+    "backend/tests/test_conversation_fast_path.py",
+    "backend/tests/test_conversation_golden.py",
+    "backend/tests/test_conversation_readiness_http.py",
+    "backend/tests/test_forge_020a2_capability_sot.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a3b_partial_is_not_success.py",
+    "backend/tests/test_forge_020a3b_quality_gate_truthfulness.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_forge_golden_game_vertical_slice.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-006-provider-independence-must-be-preserved.md",
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/audio-mix-phase1-20260829.md",
+    "docs/evidence/simulate-loop-production-20260829.md",
+    "docs/reports/FORGE-MERGE-001-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD83"
+   ]
+  },
+  "AI-02": {
+   "search_terms": [
+    "conversation_fast_path",
+    "ASK",
+    "BUILD",
+    "readiness"
+   ],
+   "source_candidates": [
+    "backend/app/ai/runtime/capability_definition.py",
+    "backend/app/ai/runtime/conversation_engine.py",
+    "backend/app/ai/runtime/conversation_fast_path.py",
+    "backend/app/ai/runtime/conversation_metrics.py",
+    "backend/app/ai/runtime/conversation_policy.py",
+    "backend/app/ai/runtime/conversation_store.py",
+    "backend/app/ai/runtime/conversation_types.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/intent_model.py",
+    "forge_ai/core/lexicon.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_capability_definition.py",
+    "backend/tests/test_ci_job_dependencies.py",
+    "backend/tests/test_conversation_engine.py",
+    "backend/tests/test_conversation_fast_path.py",
+    "backend/tests/test_conversation_golden.py",
+    "backend/tests/test_conversation_policy.py",
+    "backend/tests/test_conversation_readiness_http.py",
+    "backend/tests/test_converse_stage_timings.py",
+    "backend/tests/test_forge_020a4b_bridge_routing.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-008-preliminary-final-template-selection-split.md",
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md"
+   ],
+   "tech_debt_candidates": [
+    "TD46",
+    "TD47",
+    "TD50",
+    "TD75",
+    "TD92",
+    "TD98"
+   ]
+  },
+  "AI-03": {
+   "search_terms": [
+    "question_strategy",
+    "blocking_unknown",
+    "open_question"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/gateway/conversation_dataset.py",
+    "backend/app/ai/runtime/conversation_engine.py",
+    "backend/app/ai/runtime/conversation_metrics.py",
+    "backend/app/ai/runtime/conversation_policy.py",
+    "backend/app/ai/runtime/conversation_types.py",
+    "backend/app/ai/runtime/forge_ai_adapter.py",
+    "backend/app/ai/runtime/prompt_pipeline.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/confirmation/escalation_handler.py",
+    "forge_ai/core/intent_model.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_conversation_engine.py",
+    "backend/tests/test_conversation_golden.py",
+    "backend/tests/test_conversation_policy.py",
+    "backend/tests/test_conversation_readiness_http.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_stateful_correction.py",
+    "frontend/test/features/app_generation/data/repositories/api_app_generation_repository_test.dart",
+    "frontend/test/features/app_generation/data/repositories/api_conversation_repository_test.dart"
+   ],
+   "evidence_candidates": [],
+   "tech_debt_candidates": []
+  },
+  "AI-04": {
+   "search_terms": [
+    "correction",
+    "hypothesis",
+    "stateful"
+   ],
+   "source_candidates": [
+    "backend/app/ai/gateway/ai_router.py",
+    "backend/app/ai/gateway/generation_evidence.py",
+    "backend/app/ai/gateway/learning_events.py",
+    "backend/app/ai/gateway/learning_foundation.py",
+    "backend/app/ai/gateway/revision_evidence.py",
+    "backend/app/ai/gateway/tasks.py",
+    "backend/app/ai/learning/dataset_builder.py",
+    "backend/app/ai/runtime/capability.py",
+    "backend/app/ai/runtime/conversation_engine.py",
+    "backend/app/ai/runtime/conversation_policy.py",
+    "backend/app/ai/runtime/conversation_store.py",
+    "backend/app/ai/runtime/conversation_types.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_capability.py",
+    "backend/tests/test_experience_wiring.py",
+    "backend/tests/test_field_metadata_preservation.py",
+    "backend/tests/test_forge_019_mutations.py",
+    "backend/tests/test_forge_019a_revision_integrity.py",
+    "backend/tests/test_forge_019b_revision_transaction.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_learning_foundation.py",
+    "backend/tests/test_router_anti_bypass.py",
+    "backend/tests/test_semantic_capability.py",
+    "backend/tests/test_semantic_revision.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md",
+    "docs/reports/FORGE-018-GROWING-AI-LEARNING-EVENT-FOUNDATION-report.md",
+    "docs/reports/FORGE-019-SEMANTIC-DESIGN-REVISION-report.md",
+    "docs/reports/FORGE-020D-GENERATED-REPAIR-LOOP-report.md",
+    "docs/reports/FORGE-AI-FOUNDATION-011-report.md",
+    "docs/reports/FORGE-MILESTONE-003-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD56"
+   ]
+  },
+  "AI-05": {
+   "search_terms": [
+    "capability_plan",
+    "decompos",
+    "goal",
+    "constraint"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/learning/knowledge_acquisition.py",
+    "backend/app/ai/learning/novel_benchmark.py",
+    "backend/app/domain/entities/folder.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/confirmation/escalation_handler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/intent_model.py",
+    "forge_ai/core/ir/capability_ir.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/ir/ir_generator.py",
+    "forge_ai/core/ir/solution_shape.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_forge_020a2_capability_sot.py",
+    "backend/tests/test_forge_020a3b_capability_id_integrity.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_forge_qg_v2_r4_capability_planning.py",
+    "backend/tests/test_gemini_provider.py",
+    "backend/tests/test_generation_evidence.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_schema_validator_v1_2.py",
+    "forge_ai/tests/golden_cognitive_complex/01_shared_shopping.json",
+    "forge_ai/tests/golden_cognitive_complex/02_photo_mood_diary.json"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-020A1-QG-V2-R4-report.md",
+    "docs/reports/FORGE-020A2-QG-V2-R5-report.md",
+    "docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md",
+    "docs/reports/FORGE-AI-CONNECT-001-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "AI-06": {
+   "search_terms": [
+    "capability_gap",
+    "unknown_capability",
+    "tier"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/permission.py",
+    "backend/app/ai/agent/production.py",
+    "backend/app/ai/agent/tools.py",
+    "backend/app/ai/agent/toolset.py",
+    "backend/app/ai/gateway/ai_router.py",
+    "backend/app/ai/gateway/learning_events.py",
+    "backend/app/ai/gateway/provider_registry.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/orchestration/capability_gate.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "forge_ai/core/semantics/capability_plan.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_capability.py",
+    "backend/tests/test_forge_019a_revision_integrity.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_forge_020a2_capability_disclosure.py",
+    "backend/tests/test_forge_020a3b_capability_id_integrity.py",
+    "backend/tests/test_forge_020a3b_quality_gate_truthfulness.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_forge_golden_game_vertical_slice.py",
+    "backend/tests/test_learning_events.py",
+    "backend/tests/test_model_fallback.py",
+    "backend/tests/test_semantic_capability.py",
+    "forge_ai/tests/test_capability_gate.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/quality-gate-v2/manifest.json",
+    "docs/reports/FORGE-020A2-QG-V2-R5-report.md",
+    "docs/reports/FORGE-020A3B-CLOSEOUT-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD108"
+   ]
+  },
+  "AI-07": {
+   "search_terms": [
+    "conversation_store",
+    "session",
+    "turn",
+    "long_context"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/web.py",
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/gateway/learning_foundation.py",
+    "backend/app/ai/runtime/conversation_metrics.py",
+    "backend/app/ai/runtime/conversation_store.py",
+    "backend/app/ai/runtime/conversation_types.py",
+    "backend/app/core/di.py",
+    "backend/app/core/env_settings.py",
+    "backend/app/core/feature_flags.py",
+    "backend/app/core/security.py",
+    "backend/app/domain/entities/folder.py",
+    "backend/app/domain/entities/workspace.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_capability.py",
+    "backend/tests/test_conversation_engine.py",
+    "backend/tests/test_conversation_golden.py",
+    "backend/tests/test_conversation_policy.py",
+    "backend/tests/test_conversation_readiness_http.py",
+    "backend/tests/test_conversation_store.py",
+    "backend/tests/test_experience_wiring.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_forge_v1_14_audio_mixer.py",
+    "backend/tests/test_gateway_boundary.py",
+    "backend/tests/test_generation_evidence.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-013-template-selection-mismatch-severity.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md",
+    "docs/reports/FORGE-020A2-QG-V2-R5-report.md",
+    "docs/reports/FORGE-020A3-report.md",
+    "docs/reports/FORGE-020A4-LEVEL0-PREFLIGHT-GUARD-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "AI-08": {
+   "search_terms": [
+    "wrong_meaning",
+    "semantic_design",
+    "must_mean",
+    "required_semantics"
+   ],
+   "source_candidates": [
+    "backend/app/ai/runtime/prompt_pipeline.py",
+    "backend/app/ai/runtime/semantic_revision.py",
+    "forge_ai/core/critic/semantic_design_critic.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "forge_ai/tests/golden_cognitive_complex/01_shared_shopping.json",
+    "forge_ai/tests/golden_cognitive_complex/02_photo_mood_diary.json",
+    "forge_ai/tests/golden_cognitive_complex/03_deadline_priority_task.json",
+    "forge_ai/tests/golden_cognitive_complex/04_low_stock_alert.json",
+    "forge_ai/tests/golden_cognitive_complex/05_survey_results_list.json",
+    "forge_ai/tests/golden_cognitive_complex/06_weekly_monday_schedule.json"
+   ],
+   "test_candidates": [
+    "backend/tests/test_golden_finance_e2e.py",
+    "backend/tests/test_semantic_design_critic.py",
+    "forge_ai/tests/golden_cognitive_complex/01_shared_shopping.json",
+    "forge_ai/tests/golden_cognitive_complex/02_photo_mood_diary.json",
+    "forge_ai/tests/golden_cognitive_complex/03_deadline_priority_task.json",
+    "forge_ai/tests/golden_cognitive_complex/04_low_stock_alert.json",
+    "forge_ai/tests/golden_cognitive_complex/05_survey_results_list.json",
+    "forge_ai/tests/golden_cognitive_complex/06_weekly_monday_schedule.json"
+   ],
+   "evidence_candidates": [
+    "docs/reports/FORGE-R1-CLOSURE-015-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "AI-09": {
+   "search_terms": [
+    "ai_router",
+    "routing",
+    "ForgeTask",
+    "bind("
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/production.py",
+    "backend/app/ai/foundation/cloud_provider.py",
+    "backend/app/ai/foundation/model_choice.py",
+    "backend/app/ai/foundation/openai_compatible.py",
+    "backend/app/ai/gateway/__init__.py",
+    "backend/app/ai/gateway/ai_router.py",
+    "backend/app/ai/gateway/benchmark.py",
+    "backend/app/ai/gateway/benchmark_evidence.py",
+    "backend/app/ai/gateway/generation_evidence.py",
+    "backend/app/ai/gateway/intelligence_context.py",
+    "backend/app/ai/gateway/learning_events.py",
+    "backend/app/ai/gateway/learning_foundation.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_router.py",
+    "backend/tests/test_benchmark_evidence.py",
+    "backend/tests/test_experience_wiring.py",
+    "backend/tests/test_extra_cloud_provider.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a4b_bridge_routing.py",
+    "backend/tests/test_forge_020a4c_real_structure_integrity.py",
+    "backend/tests/test_forge_020a_local_model_path.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_gateway_boundary.py",
+    "backend/tests/test_knowledge.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md",
+    "docs/reports/FORGE-017A-LEARNING-CONTRACT-HARDENING-report.md",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md",
+    "docs/reports/FORGE-020A1-QG-V2-R4-report.md",
+    "docs/reports/FORGE-020A3B-CLOSEOUT-report.md",
+    "docs/reports/FORGE-020A4B-STAGE-AWARE-STRUCTURE-ROUTING-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD63"
+   ]
+  },
+  "AI-10": {
+   "search_terms": [
+    "benchmark",
+    "blind",
+    "provider_comparison",
+    "a_b"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/cloud_provider.py",
+    "backend/app/ai/foundation/local_provider.py",
+    "backend/app/ai/foundation/model_choice.py",
+    "backend/app/ai/foundation/openai_compatible.py",
+    "backend/app/ai/gateway/artifact_feedback.py",
+    "backend/app/ai/gateway/learning_foundation.py",
+    "backend/app/ai/gateway/provider_registry.py",
+    "backend/app/ai/gateway/tasks.py",
+    "backend/app/ai/learning/__init__.py",
+    "backend/app/ai/learning/adapter.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/ai/learning/gym.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_router.py",
+    "backend/tests/test_benchmark_evidence.py",
+    "backend/tests/test_conversation_engine.py",
+    "backend/tests/test_conversation_golden.py",
+    "backend/tests/test_conversation_policy.py",
+    "backend/tests/test_env_settings.py",
+    "backend/tests/test_extra_cloud_provider.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a4c_real_structure_integrity.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md",
+    "docs/reports/FORGE-020A3-report.md",
+    "docs/reports/FORGE-121-CAPABILITY-GAP-AND-EVIDENCE-INTEGRITY-20260903.md"
+   ],
+   "tech_debt_candidates": [
+    "TD63",
+    "TD84"
+   ]
+  },
+  "GEN-01": {
+   "search_terms": [
+    "converse",
+    "ConversationBuilt",
+    "end_to_end",
+    "e2e"
+   ],
+   "source_candidates": [
+    "backend/app/ai/runtime/capability.py",
+    "backend/app/ai/runtime/capability_definition.py",
+    "backend/app/exception_handlers.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/pipeline.py",
+    "forge_ai/core/understanding/intent_recognizer.py",
+    "forge_ai/tests/test_build_time_workspace.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "forge_ai/tests/test_shipped_acquired_registrations.py",
+    "frontend/lib/core/config/app_config.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/revision_fixtures.py",
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_capability_definition.py",
+    "backend/tests/test_ci_job_dependencies.py",
+    "backend/tests/test_conversation_golden.py",
+    "backend/tests/test_conversation_readiness_http.py",
+    "backend/tests/test_converse_and_update_http.py",
+    "backend/tests/test_converse_stage_timings.py",
+    "backend/tests/test_forge_019b_revision_transaction.py",
+    "backend/tests/test_golden_finance_e2e.py",
+    "backend/tests/test_stateful_correction.py",
+    "forge_ai/tests/test_build_time_workspace.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-014-conversation-engine-wraps-not-replaces-pipeline.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md",
+    "docs/reports/FORGE-019A-REVISION-INTEGRITY-HARDENING-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD42",
+    "TD43",
+    "TD47"
+   ]
+  },
+  "GEN-02": {
+   "search_terms": [
+    "forge_ir",
+    "forge_language",
+    "ir_builder"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/production.py",
+    "backend/app/ai/runtime/prompt_pipeline.py",
+    "backend/app/routers/ai.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/ir/capability_document_contribution.py",
+    "forge_ai/core/ir/ir_generator.py",
+    "forge_ai/core/ir/shipped_contributions.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_pipeline.py",
+    "frontend/lib/forge_019a_visual_fixture.dart",
+    "scripts/acquired_capability_flutter_e2e.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_benchmark_evidence.py",
+    "backend/tests/test_generation_evidence.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_measure_semantics.py",
+    "backend/tests/test_semantic_revision.py",
+    "forge_ai/tests/test_audio_mix_capability_generation.py",
+    "forge_ai/tests/test_capability_document_contribution.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_compiler.py",
+    "forge_ai/tests/test_entity_synthesizer.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "forge_ai/tests/test_ir_generator.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md",
+    "docs/reports/FORGE-020A1-QG-V2-R4-report.md",
+    "docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md",
+    "docs/reports/FORGE-R1-HERO-METRIC-AND-DESIGN-INTENT-report.md",
+    "docs/reports/GENERATED-UI-QUALITY-GATE-V2-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "GEN-03": {
+   "search_terms": [
+    "schema_validator",
+    "validate_forge_document"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/permission.py",
+    "backend/app/ai/agent/production.py",
+    "backend/app/ai/agent/toolset.py",
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/generators/mock_generator.py",
+    "backend/app/ai/runtime/forge_operation.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "forge_ai/IMPLEMENTATION_REPORT.md",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/ir/entity_synthesizer.py",
+    "forge_ai/repair/repair_engine.py",
+    "forge_ai/tests/test_compiler.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_forge_020a2_capability_sot.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_forge_v1_14_audio_mixer.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_mock_generator_v2.py",
+    "backend/tests/test_schema_validator.py",
+    "backend/tests/test_schema_validator_v1_5.py",
+    "backend/tests/test_schema_validator_v1_6.py",
+    "backend/tests/test_schema_validator_v1_7.py",
+    "backend/tests/test_schema_validator_v1_9.py",
+    "backend/tests/test_visual_fixture_provenance.py"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/agent020b/agent020b-20260829-015345.json",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-020B-TOOL-USING-LOCAL-AGENT-report.md",
+    "docs/reports/FORGE-MERGE-001-report.md",
+    "docs/reports/FORGE-MERGE-002-report.md",
+    "docs/reports/FORGE-MILESTONE-002-report.md",
+    "docs/reports/FORGE-MILESTONE-003-report.md",
+    "docs/reports/FORGE-MILESTONE-004-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "GEN-04": {
+   "search_terms": [
+    "validator",
+    "mutation"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/generated_repair.py",
+    "backend/app/ai/gateway/learning_outbox.py",
+    "backend/app/ai/runtime/revision_service.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/pipeline.py",
+    "forge_ai/tests/test_self_extension_loop.py",
+    "frontend/lib/forge_019a_visual_fixture.dart",
+    "frontend/lib/json_ui/validation/forge_record_validator.dart",
+    "scripts/_acquired_calendar_source.py",
+    "scripts/export_quality_gate_fixtures.py",
+    "scripts/export_revision_visual_fixture.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_converse_stage_timings.py",
+    "backend/tests/test_forge_019_mutations.py",
+    "backend/tests/test_forge_019b_revision_transaction.py",
+    "backend/tests/test_forge_019c_operation_support.py",
+    "backend/tests/test_forge_020a2_capability_sot.py",
+    "backend/tests/test_forge_020a4_level0_preflight.py",
+    "backend/tests/test_forge_020d_generated_repair.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_forge_v1_14_audio_mixer.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_learning_events.py",
+    "backend/tests/test_schema_validator_extended.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-003-rule-before-prompt.md",
+    "docs/adr/ADR-014-conversation-engine-wraps-not-replaces-pipeline.md",
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/audio-mix-phase1-20260829.md",
+    "docs/evidence/capability_matrix/capabilities.json"
+   ],
+   "tech_debt_candidates": [
+    "TD1",
+    "TD13",
+    "TD47",
+    "TD5",
+    "TD8"
+   ]
+  },
+  "GEN-05": {
+   "search_terms": [
+    "repair",
+    "forge_operation",
+    "attempts"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/openai_compatible.py",
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/gateway/generation_evidence.py",
+    "backend/app/ai/gateway/learning_foundation.py",
+    "backend/app/ai/gateway/learning_outbox.py",
+    "backend/app/ai/gateway/tasks.py",
+    "backend/app/ai/learning/dataset_builder.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/ai/learning/gym.py",
+    "backend/app/ai/learning/novel_benchmark.py",
+    "backend/app/ai/runtime/pipeline_errors.py",
+    "backend/app/routers/ai.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_router.py",
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_converse_and_update_http.py",
+    "backend/tests/test_forge_019a_revision_integrity.py",
+    "backend/tests/test_forge_019c_outbox_and_cas.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a4b_bridge_routing.py",
+    "backend/tests/test_forge_020a4c_real_structure_integrity.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_forge_020c_episode_verification_steps.py",
+    "backend/tests/test_forge_operation.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-004-cognitive-revision-separate-from-schema-repair.md",
+    "docs/adr/ADR-008-preliminary-final-template-selection-split.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD020",
+    "TD17",
+    "TD32"
+   ]
+  },
+  "GEN-06": {
+   "search_terms": [
+    "widget_registry",
+    "forge_renderer",
+    "json_ui"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/flutter_generated_workspace.py",
+    "backend/app/ai/runtime/semantic_capability.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/orchestration/flutter_capability_installer.py",
+    "forge_ai/tests/test_build_time_extension.py",
+    "forge_ai/tests/test_shipped_acquired_registrations.py",
+    "frontend/lib/core/theme/forge_theme.dart",
+    "frontend/lib/features/app_generation/domain/repositories/app_generation_repository.dart",
+    "frontend/lib/json_ui/acquired/acquired_capability.dart",
+    "frontend/lib/json_ui/renderer/design_language.dart",
+    "frontend/lib/json_ui/schema/forge_document.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_design_language.py",
+    "backend/tests/test_forge_020a2_round5_capture.py",
+    "backend/tests/test_forge_020c_flutter_generated_workspace.py",
+    "backend/tests/test_schema_validator_v1_9.py",
+    "forge_ai/tests/test_build_time_extension.py",
+    "forge_ai/tests/test_shipped_acquired_registrations.py",
+    "frontend/test/features/app_generation/data/datasources/mock_generation_datasource_test.dart",
+    "frontend/test/features/app_generation/data/datasources/mock_generation_datasource_v2_test.dart",
+    "frontend/test/features/app_generation/data/datasources/mock_generator_renderer_contract_test.dart",
+    "frontend/test/json_ui/acquired/acquired_capability_registration_test.dart",
+    "frontend/test/json_ui/add_item_regression_test.dart",
+    "frontend/test/json_ui/forge_audio_mixer_widget_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-020A2-QG-V2-R5-report.md",
+    "docs/reports/FORGE-MERGE-001-report.md",
+    "docs/reports/FORGE-MERGE-002-report.md",
+    "docs/reports/FORGE-MERGE-004-report.md",
+    "docs/reports/FORGE-MERGE-005-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD37"
+   ]
+  },
+  "GEN-07": {
+   "search_terms": [
+    "crud",
+    "record_list_view",
+    "persistence",
+    "form"
+   ],
+   "source_candidates": [
+    "backend/app/ai/learning/gym.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "backend/app/core/security.py",
+    "backend/app/domain/entities/workspace_factory.py",
+    "backend/app/domain/repositories/workspace_repository.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/critic/semantic_design_critic.py",
+    "forge_ai/core/ir/capability_document_contribution.py",
+    "forge_ai/core/ir/capability_ir.py",
+    "forge_ai/core/ir/entity_synthesizer.py",
+    "forge_ai/core/ir/forge_language_compiler.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_capability_definition.py",
+    "backend/tests/test_confirmation_store.py",
+    "backend/tests/test_forge_020a2_capability_disclosure.py",
+    "backend/tests/test_forge_doctor.py",
+    "backend/tests/test_hero_metric.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_learning_events.py",
+    "backend/tests/test_schema_validator_v1_3.py",
+    "backend/tests/test_schema_validator_v1_4.py",
+    "backend/tests/test_schema_validator_v1_5.py",
+    "backend/tests/test_schema_validator_v1_6.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-012-forge-ir-excludes-widget-and-state-ref.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/quality-gate-v2/analytics.json",
+    "docs/evidence/quality-gate-v2/finance.json",
+    "docs/evidence/quality-gate-v2/game.json",
+    "docs/evidence/quality-gate-v2/manifest.json"
+   ],
+   "tech_debt_candidates": [
+    "TD14",
+    "TD29",
+    "TD33",
+    "TD40"
+   ]
+  },
+  "GEN-08": {
+   "search_terms": [
+    "workflow",
+    "approval",
+    "inventory",
+    "reservation"
+   ],
+   "source_candidates": [
+    "backend/app/routers/ai.py",
+    "forge_ai/CHANGELOG.md",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/domain_model.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/ir/ir_generator.py",
+    "forge_ai/core/planning/template_selector.py",
+    "forge_ai/docs/DESIGN_DECISIONS.md",
+    "forge_ai/tests/golden_cognitive/06_inventory.json",
+    "forge_ai/tests/golden_cognitive_complex/04_low_stock_alert.json",
+    "forge_ai/tests/test_domain_model.py",
+    "forge_ai/tests/test_forge_language_compiler.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ci_job_dependencies.py",
+    "backend/tests/test_cors_contract.py",
+    "backend/tests/test_measure_semantics.py",
+    "forge_ai/tests/golden_cognitive/06_inventory.json",
+    "forge_ai/tests/golden_cognitive_complex/04_low_stock_alert.json",
+    "forge_ai/tests/test_cognitive_pipeline_golden.py",
+    "forge_ai/tests/test_domain_model.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "forge_ai/tests/test_ir_generator.py",
+    "forge_ai/tests/test_planning_and_critic.py",
+    "forge_ai/tests/test_v03_domain_inference_golden.py",
+    "forge_ai/tests/test_world_model.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-011-forge-ir-incremental-adoption.md",
+    "docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/golden/forge-golden-game-closure-20260830.json",
+    "docs/evidence/simulate-loop-production-20260829.md",
+    "docs/reports/FORGE-020A3-report.md",
+    "docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD39"
+   ]
+  },
+  "GEN-09": {
+   "search_terms": [
+    "special_ui",
+    "encoding",
+    "view.map",
+    "map_view"
+   ],
+   "source_candidates": [
+    "backend/app/ai/validators/runtime_attested_widgets.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "forge_ai/core/ir/capability_document_contribution.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/ir/shipped_contributions.py",
+    "forge_ai/core/orchestration/capability_artifact_synthesis.py",
+    "forge_ai/core/orchestration/synthesizing_build_time_implementer.py",
+    "forge_ai/core/semantics/capabilities.py",
+    "forge_ai/core/semantics/capability_plan.py",
+    "forge_ai/prompt/prompt_builder.py",
+    "forge_ai/tests/test_build_time_extension.py",
+    "forge_ai/tests/test_capability_document_contribution.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_capability.py",
+    "backend/tests/test_ci_job_dependencies.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_forge_020a2_capability_sot.py",
+    "backend/tests/test_forge_020a2_round5_capture.py",
+    "backend/tests/test_forge_doctor.py",
+    "backend/tests/test_forge_v1_16_map_view.py",
+    "backend/tests/test_gateway_boundary.py",
+    "backend/tests/test_golden_mock_generator.py",
+    "backend/tests/test_schema_validator_v1_9.py",
+    "backend/tests/test_semantic_capability.py",
+    "backend/tests/test_stateful_correction.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-020E-CAPABILITY-ARTIFACT-SYNTHESIS-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "GEN-10": {
+   "search_terms": [
+    "game",
+    "simulation_loop",
+    "collision",
+    "rule"
+   ],
+   "source_candidates": [
+    "backend/app/ai/learning/gym.py",
+    "backend/app/ai/learning/novel_benchmark.py",
+    "backend/app/ai/learning/self_extension.py",
+    "backend/app/ai/runtime/capability.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/critic/revision_engine.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/ir/ir_generator.py",
+    "forge_ai/core/ir/ir_types.py"
+   ],
+   "test_candidates": [
+    "backend/tests/golden/survey.json",
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_forge_020a2_capability_disclosure.py",
+    "backend/tests/test_forge_020a3b_quality_gate_truthfulness.py",
+    "backend/tests/test_forge_golden_game_vertical_slice.py",
+    "backend/tests/test_forge_qg_v2_r4_capability_planning.py",
+    "backend/tests/test_forge_v1_13_simulation_loop.py",
+    "backend/tests/test_forge_v1_14_audio_mixer.py",
+    "backend/tests/test_forge_v1_15_simulation_progress.py",
+    "backend/tests/test_schema_validator_v1_5.py",
+    "backend/tests/test_schema_validator_v1_6.py",
+    "backend/tests/test_schema_validator_v1_7.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-003-rule-before-prompt.md",
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/audio-mix-phase1-20260829.md",
+    "docs/evidence/capability_matrix/capabilities.json"
+   ],
+   "tech_debt_candidates": []
+  },
+  "GEN-11": {
+   "search_terms": [
+    "drag",
+    "animation",
+    "realtime",
+    "gesture"
+   ],
+   "source_candidates": [
+    "backend/app/ai/learning/gym.py",
+    "backend/app/ai/learning/knowledge_acquisition.py",
+    "backend/app/ai/learning/self_extension.py",
+    "frontend/lib/features/app_generation/presentation/screens/conversation_flow_screen.dart",
+    "frontend/lib/features/app_generation/presentation/screens/generation_flow_screen.dart",
+    "frontend/lib/features/app_generation/presentation/widgets/example_picker_sheet.dart",
+    "frontend/lib/json_ui/widget_registry/widget_registry.dart",
+    "frontend/lib/json_ui/widget_registry/widget_registry_v1_1.dart",
+    "frontend/lib/json_ui/widget_registry/widget_registry_v1_11.dart",
+    "frontend/lib/json_ui/widget_registry/widget_registry_v1_15.dart",
+    "frontend/lib/json_ui/widget_registry/widget_registry_v1_16.dart",
+    "frontend/lib/json_ui/widget_registry/widget_registry_v1_3.dart"
+   ],
+   "test_candidates": [
+    "frontend/test/json_ui/widget_registry/v1_8_widget_vocabulary_expansion_test.dart",
+    "frontend/test/shared_widgets/ai_mode_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-RUNTIME-002-report.md",
+    "docs/reports/FORGE-RUNTIME-003-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "GEN-12": {
+   "search_terms": [
+    "screen",
+    "navigation",
+    "route",
+    "back_stack",
+    "tab_view"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/native/_02_planner/rule_based_planner.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "backend/app/core/README.md",
+    "backend/app/core/env_settings.py",
+    "backend/app/core/exceptions.py",
+    "backend/app/core/feature_flags.py",
+    "backend/app/domain/README.md",
+    "backend/app/domain/entities/workspace.py",
+    "backend/app/exception_handlers.py",
+    "forge_ai/core/compiler.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_foundation.py",
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_ci_job_dependencies.py",
+    "backend/tests/test_converse_stage_timings.py",
+    "backend/tests/test_forge_020a4b_bridge_routing.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_forge_v1_14_audio_mixer.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_latency_budget.py",
+    "backend/tests/test_local_promotion.py",
+    "backend/tests/test_mock_llm_adapter.py",
+    "backend/tests/test_schema_validator.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-006-provider-independence-must-be-preserved.md",
+    "docs/adr/ADR-010-forge-ir-introduction.md",
+    "docs/adr/ADR-012-forge-ir-excludes-widget-and-state-ref.md",
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md"
+   ],
+   "tech_debt_candidates": [
+    "TD36",
+    "TD60"
+   ]
+  },
+  "GEN-13": {
+   "search_terms": [
+    "external_service",
+    "tool_broker",
+    "permission_broker",
+    "web"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/permission.py",
+    "backend/app/ai/agent/tools.py",
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/foundation/local_provider.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/ai/learning/knowledge_acquisition.py",
+    "backend/app/schemas/ai.py",
+    "scripts/capture_quality_gate_r5.py",
+    "scripts/capture_quality_gate_v2.py",
+    "scripts/capture_visual_evidence.py",
+    "scripts/forge_doctor.py",
+    "scripts/start_dev.ps1"
+   ],
+   "test_candidates": [
+    "backend/tests/test_cors_contract.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_ai_adapter.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_native_ai_phase1.py",
+    "backend/tests/test_schema_validator_extended.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/RUNTIME-CHROME-EVIDENCE-20260831.md",
+    "docs/evidence/audio-mix-phase1-20260829.md",
+    "docs/evidence/golden/forge-golden-game-closure-20260830.json",
+    "docs/reports/FORGE-MILESTONE-002.2-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD75",
+    "TD84"
+   ]
+  },
+  "GEN-14": {
+   "search_terms": [
+    "web",
+    "fetch_url",
+    "injection_scan",
+    "untrusted"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/permission.py",
+    "backend/app/ai/agent/toolset.py",
+    "backend/app/ai/agent/untrusted.py",
+    "backend/app/ai/agent/web.py",
+    "backend/app/ai/foundation/local_provider.py",
+    "backend/app/ai/gateway/learning_events.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/ai/learning/knowledge_acquisition.py",
+    "backend/app/ai/runtime/prompt_pipeline.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/orchestration/synthesizing_build_time_implementer.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_cors_contract.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_ai_adapter.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_learning_events.py",
+    "backend/tests/test_native_ai_phase1.py",
+    "backend/tests/test_schema_validator_extended.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/audio-mix-phase1-20260829.md",
+    "docs/evidence/capability_matrix/capabilities.json"
+   ],
+   "tech_debt_candidates": [
+    "TD75",
+    "TD84"
+   ]
+  },
+  "EXT-01": {
+   "search_terms": [
+    "capability_gap",
+    "missing_capability",
+    "gap_detect"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/production.py",
+    "backend/app/ai/agent/toolset.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/orchestration/capability_gate.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "forge_ai/core/semantics/capability_plan.py",
+    "forge_ai/tests/test_capability_gate.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_entity_synthesizer.py",
+    "forge_ai/tests/test_semantic_view_gap_detection.py",
+    "scripts/export_quality_gate_fixtures.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_capability.py",
+    "backend/tests/test_conversation_fast_path.py",
+    "backend/tests/test_forge_020a2_capability_disclosure.py",
+    "backend/tests/test_forge_020a3b_capability_id_integrity.py",
+    "backend/tests/test_forge_020a3b_partial_is_not_success.py",
+    "backend/tests/test_forge_020a3b_quality_gate_truthfulness.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_forge_golden_game_vertical_slice.py",
+    "forge_ai/tests/test_capability_gate.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_entity_synthesizer.py",
+    "forge_ai/tests/test_extension_cycle.py"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/quality-gate-v2/manifest.json",
+    "docs/reports/FORGE-020A2-QG-V2-R5-report.md",
+    "docs/reports/FORGE-020A3B-CLOSEOUT-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "EXT-02": {
+   "search_terms": [
+    "capability_decomposition",
+    "semantic_capability"
+   ],
+   "source_candidates": [
+    "backend/app/ai/learning/novel_benchmark.py",
+    "backend/app/ai/runtime/capability.py",
+    "backend/app/ai/runtime/capability_definition.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_capability_definition.py",
+    "backend/tests/test_semantic_capability.py"
+   ],
+   "evidence_candidates": [],
+   "tech_debt_candidates": []
+  },
+  "EXT-03": {
+   "search_terms": [
+    "extension_manifest",
+    "contract",
+    "permission"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/openai_compatible.py",
+    "backend/app/core/exceptions.py",
+    "backend/app/core/security.py",
+    "backend/app/exception_handlers.py",
+    "backend/app/routers/ai.py",
+    "backend/app/routers/folder.py",
+    "backend/app/routers/workspace.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/confirmation/escalation_handler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/ir/design_intent.py",
+    "forge_ai/core/ir/entity_synthesizer.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_router.py",
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_confirmation_store.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_gateway_boundary.py",
+    "backend/tests/test_golden_mock_generator.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_schema_validator_v1_9.py",
+    "backend/tests/test_security.py",
+    "backend/tests/test_semantic_revision.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-002-domain-before-ui.md",
+    "docs/adr/ADR-005-decision-trace-is-required.md",
+    "docs/adr/ADR-007-confidence-must-affect-control-flow.md",
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md"
+   ],
+   "tech_debt_candidates": [
+    "TD020",
+    "TD16"
+   ]
+  },
+  "EXT-04": {
+   "search_terms": [
+    "capability_artifact_synthesis",
+    "synthesizing_build_time"
+   ],
+   "source_candidates": [
+    "forge_ai/core/orchestration/capability_artifact_synthesis.py",
+    "forge_ai/core/orchestration/flutter_capability_installer.py",
+    "forge_ai/core/orchestration/reuse_first_pipeline.py",
+    "forge_ai/core/orchestration/synthesizing_build_time_implementer.py",
+    "forge_ai/prompt/prompt_builder.py",
+    "forge_ai/tests/test_capability_artifact_synthesis.py",
+    "forge_ai/tests/test_dart_build_plan.py",
+    "forge_ai/tests/test_flutter_capability_installer.py",
+    "forge_ai/tests/test_reuse_first_integrity.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "forge_ai/tests/test_self_extension_e2e_real_build.py",
+    "forge_ai/tests/test_synthesizing_build_time_implementer.py"
+   ],
+   "test_candidates": [
+    "forge_ai/tests/test_capability_artifact_synthesis.py",
+    "forge_ai/tests/test_dart_build_plan.py",
+    "forge_ai/tests/test_flutter_capability_installer.py",
+    "forge_ai/tests/test_reuse_first_integrity.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "forge_ai/tests/test_self_extension_e2e_real_build.py",
+    "forge_ai/tests/test_synthesizing_build_time_implementer.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/reports/FORGE-020E-CAPABILITY-ARTIFACT-SYNTHESIS-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "EXT-05": {
+   "search_terms": [
+    "runtime_attested_widgets",
+    "validator_binding"
+   ],
+   "source_candidates": [
+    "backend/app/ai/validators/schema_validator.py",
+    "forge_ai/core/orchestration/build_time_extension.py",
+    "forge_ai/core/orchestration/declarative_extension.py",
+    "forge_ai/core/orchestration/extension_manifest.py",
+    "forge_ai/tests/test_build_time_workspace.py",
+    "forge_ai/tests/test_declarative_activation.py",
+    "forge_ai/tests/test_declarative_extension.py",
+    "forge_ai/tests/test_extension_cycle.py",
+    "forge_ai/tests/test_extension_manifest.py",
+    "forge_ai/tests/test_extension_registry.py",
+    "forge_ai/tests/test_extension_store.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "forge_ai/tests/test_build_time_workspace.py",
+    "forge_ai/tests/test_declarative_activation.py",
+    "forge_ai/tests/test_declarative_extension.py",
+    "forge_ai/tests/test_extension_cycle.py",
+    "forge_ai/tests/test_extension_manifest.py",
+    "forge_ai/tests/test_extension_registry.py",
+    "forge_ai/tests/test_extension_store.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "forge_ai/tests/test_self_extension_loop.py",
+    "frontend/test/json_ui/widget_registry/acquired_widget_renders_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json"
+   ],
+   "tech_debt_candidates": []
+  },
+  "EXT-06": {
+   "search_terms": [
+    "flutter_capability_installer",
+    "acquired"
+   ],
+   "source_candidates": [
+    "forge_ai/core/orchestration/build_time_extension.py",
+    "forge_ai/core/orchestration/extension_manifest.py",
+    "forge_ai/core/orchestration/extension_registry.py",
+    "forge_ai/core/orchestration/flutter_capability_installer.py",
+    "forge_ai/core/orchestration/reuse_first_pipeline.py",
+    "forge_ai/core/orchestration/self_extension_loop.py",
+    "forge_ai/tests/test_capability_document_contribution.py",
+    "forge_ai/tests/test_dart_build_plan.py",
+    "forge_ai/tests/test_flutter_capability_installer.py",
+    "forge_ai/tests/test_reuse_first_integrity.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "forge_ai/tests/test_shipped_acquired_registrations.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_capability_definition.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "forge_ai/tests/test_capability_document_contribution.py",
+    "forge_ai/tests/test_dart_build_plan.py",
+    "forge_ai/tests/test_flutter_capability_installer.py",
+    "forge_ai/tests/test_reuse_first_integrity.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "forge_ai/tests/test_self_extension_loop.py",
+    "forge_ai/tests/test_shipped_acquired_registrations.py",
+    "frontend/test/features/app_generation/data/datasources/mock_generator_renderer_contract_test.dart",
+    "frontend/test/json_ui/acquired/acquired_capability_registration_test.dart",
+    "frontend/test_acquired/acquired_capability_e2e_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json"
+   ],
+   "tech_debt_candidates": [
+    "TD94"
+   ]
+  },
+  "EXT-07": {
+   "search_terms": [
+    "capability_test.dart",
+    "dart run",
+    "generated test"
+   ],
+   "source_candidates": [
+    "backend/app/ai/runtime/README.md",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/orchestration/synthesizing_build_time_implementer.py",
+    "forge_ai/tests/test_dart_build_plan.py",
+    "forge_ai/tests/test_flutter_capability_installer.py",
+    "forge_ai/tests/test_reuse_first_integrity.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "scripts/_acquired_calendar_source.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_all_categories_action_contract.py",
+    "forge_ai/tests/test_dart_build_plan.py",
+    "forge_ai/tests/test_flutter_capability_installer.py",
+    "forge_ai/tests/test_reuse_first_integrity.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-MERGE-001-report.md",
+    "docs/reports/FORGE-MILESTONE-003.1-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "EXT-08": {
+   "search_terms": [
+    "sandbox",
+    "isolat",
+    "seccomp",
+    "unshare"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/flutter_generated_workspace.py",
+    "backend/app/ai/agent/generated_repair.py",
+    "backend/app/ai/agent/generated_verification.py",
+    "backend/app/ai/agent/generated_workspace.py",
+    "backend/app/ai/agent/sandbox.py",
+    "backend/app/ai/agent/tools.py",
+    "backend/app/ai/agent/toolset.py",
+    "backend/app/ai/learning/__init__.py",
+    "backend/app/ai/learning/self_extension.py",
+    "backend/app/core/di.py",
+    "backend/app/core/security.py",
+    "backend/app/plugins/README.md"
+   ],
+   "test_candidates": [
+    "backend/tests/test_confirmation_store.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020c_generated_verification.py",
+    "backend/tests/test_forge_020c_generated_workspace.py",
+    "backend/tests/test_forge_020c_objective_observations.py",
+    "backend/tests/test_forge_020d_generated_repair.py",
+    "backend/tests/test_learning_events.py",
+    "backend/tests/test_multi_provider_identity.py",
+    "forge_ai/tests/test_flutter_capability_installer.py",
+    "frontend/test_acquired/registry_without_parsing_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/RUNTIME-CHROME-EVIDENCE-20260831.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-018A-LEARNING-BOUNDARY-HARDENING-report.md",
+    "docs/reports/FORGE-019-SEMANTIC-DESIGN-REVISION-report.md",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD107"
+   ]
+  },
+  "EXT-09": {
+   "search_terms": [
+    "safety_review",
+    "p0",
+    "p1",
+    "danger"
+   ],
+   "source_candidates": [
+    "backend/app/ai/runtime/confirmation_store.py",
+    "backend/app/ai/runtime/design_language.py",
+    "backend/app/ai/runtime/forge_ai_adapter.py",
+    "backend/app/ai/runtime/pipeline_errors.py",
+    "backend/app/ai/runtime/prompt_pipeline.py",
+    "backend/app/exception_handlers.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/confirmation/escalation_handler.py",
+    "forge_ai/core/critic/semantic_design_critic.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/orchestration/build_time_extension.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_confirmation_store.py",
+    "backend/tests/test_design_language.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_forge_ai_adapter.py",
+    "backend/tests/test_golden_finance_e2e.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_schema_validator.py",
+    "backend/tests/test_semantic_design_critic.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_extension_manifest.py",
+    "forge_ai/tests/test_pipeline.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/level0/level0-20260827-103251.json",
+    "docs/evidence/level0/level0-20260827-103709.json",
+    "docs/evidence/level0/level0-20260827-104126.json",
+    "docs/evidence/level0/level0-20260827-104538.json",
+    "docs/reports/FORGE-017A-LEARNING-CONTRACT-HARDENING-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "EXT-10": {
+   "search_terms": [
+    "promotion",
+    "PROMOTED",
+    "extension_registry"
+   ],
+   "source_candidates": [
+    "backend/app/ai/learning/__init__.py",
+    "backend/app/ai/learning/adapter.py",
+    "backend/app/ai/learning/dataset_builder.py",
+    "backend/app/ai/learning/knowledge_acquisition.py",
+    "backend/app/ai/learning/self_extension.py",
+    "backend/app/ai/validators/runtime_attested_widgets.py",
+    "forge_ai/core/ir/capability_document_contribution.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/ir/shipped_contributions.py",
+    "forge_ai/core/orchestration/build_time_extension.py",
+    "forge_ai/core/orchestration/declarative_activation.py",
+    "forge_ai/core/orchestration/extension_cycle.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_local_promotion.py",
+    "backend/tests/test_semantic_revision.py",
+    "forge_ai/tests/test_build_time_extension.py",
+    "forge_ai/tests/test_capability_document_contribution.py",
+    "forge_ai/tests/test_dart_build_plan.py",
+    "forge_ai/tests/test_declarative_activation.py",
+    "forge_ai/tests/test_declarative_extension.py",
+    "forge_ai/tests/test_extension_cycle.py",
+    "forge_ai/tests/test_extension_manifest.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/audio-mix-phase1-20260829.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "EXT-11": {
+   "search_terms": [
+    "reuse_first",
+    "PROMOTED_CAPABILITIES",
+    "reuse"
+   ],
+   "source_candidates": [
+    "backend/app/ai/learning/self_extension.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/ir/capability_document_contribution.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/orchestration/declarative_activation.py",
+    "forge_ai/core/orchestration/extension_activation.py",
+    "forge_ai/core/orchestration/extension_cycle.py",
+    "forge_ai/core/orchestration/extension_registry.py",
+    "forge_ai/core/orchestration/extension_store.py",
+    "forge_ai/core/orchestration/flutter_capability_installer.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "forge_ai/core/orchestration/reuse_first_pipeline.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_multi_provider_identity.py",
+    "backend/tests/test_provider_attribution.py",
+    "backend/tests/test_router_anti_bypass.py",
+    "forge_ai/tests/test_capability_document_contribution.py",
+    "forge_ai/tests/test_dart_build_plan.py",
+    "forge_ai/tests/test_declarative_activation.py",
+    "forge_ai/tests/test_extension_cycle.py",
+    "forge_ai/tests/test_extension_registry.py",
+    "forge_ai/tests/test_extension_store.py",
+    "forge_ai/tests/test_promoted_capability_compiler_boundary.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json"
+   ],
+   "tech_debt_candidates": []
+  },
+  "EXT-12": {
+   "search_terms": [
+    "improve",
+    "non_regression",
+    "capability_version"
+   ],
+   "source_candidates": [
+    "backend/app/ai/learning/adapter.py"
+   ],
+   "test_candidates": [],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/reports/FORGE-020A4-LEVEL0-PREFLIGHT-GUARD-report.md",
+    "docs/reports/FORGE-020A4B-STAGE-AWARE-STRUCTURE-ROUTING-report.md",
+    "docs/reports/FORGE-MERGE-001-report.md",
+    "docs/reports/FORGE-POLICY-ALIGNMENT-AUDIT-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "EXT-13": {
+   "search_terms": [
+    "retire",
+    "removal",
+    "migration",
+    "rollback"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/learning/adapter.py",
+    "backend/app/ai/runtime/capability_definition.py",
+    "backend/app/ai/runtime/revision_unit_of_work.py",
+    "backend/app/core/exceptions.py",
+    "backend/app/core/feature_flags.py",
+    "backend/app/domain/entities/folder.py",
+    "backend/app/repositories/supabase_folder_repository.py",
+    "backend/app/repositories/supabase_workspace_repository.py",
+    "forge_ai/tests/test_compiler.py",
+    "forge_ai/tests/test_forge_language_compiler.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_folders_migration.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_live_api.py",
+    "backend/tests/test_model_fallback.py",
+    "backend/tests/test_schema_validator_extended.py",
+    "forge_ai/tests/test_compiler.py",
+    "forge_ai/tests/test_forge_language_compiler.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-011-forge-ir-incremental-adoption.md",
+    "docs/adr/ADR-013-template-selection-mismatch-severity.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-018-GROWING-AI-LEARNING-EVENT-FOUNDATION-report.md",
+    "docs/reports/FORGE-019B-REVISION-TRANSACTION-RETRY-HARDENING-report.md",
+    "docs/reports/FORGE-AI-INTELLIGENCE-001-PHASE0-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "EXT-14": {
+   "search_terms": [
+    "self_extension_loop",
+    "extension_cycle"
+   ],
+   "source_candidates": [
+    "forge_ai/core/orchestration/extension_cycle.py",
+    "forge_ai/core/orchestration/self_extension_loop.py",
+    "forge_ai/core/orchestration/synthesizing_build_time_implementer.py",
+    "forge_ai/tests/test_extension_cycle.py",
+    "forge_ai/tests/test_self_extension_loop.py"
+   ],
+   "test_candidates": [
+    "forge_ai/tests/test_extension_cycle.py",
+    "forge_ai/tests/test_self_extension_loop.py"
+   ],
+   "evidence_candidates": [
+    "docs/reports/FORGE-020E-CAPABILITY-ARTIFACT-SYNTHESIS-report.md",
+    "docs/reports/FORGE-WHOLE-SCAN-20260830-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LOC-01": {
+   "search_terms": [
+    "local_provider",
+    "ollama",
+    "FORGE_LOCAL"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/local_provider.py",
+    "backend/app/ai/foundation/openai_compatible.py",
+    "backend/app/ai/gateway/external_call_policy.py",
+    "backend/app/ai/gateway/provider_registry.py",
+    "backend/app/ai/learning/adapter.py",
+    "backend/app/ai/learning/dataset_builder.py",
+    "backend/app/ai/learning/teacher.py",
+    "backend/app/ai/runtime/provider_router.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "frontend/lib/core/network/dio_client.dart",
+    "frontend/lib/shared_widgets/ai_mode.dart",
+    "scripts/converse_fast_path_e2e.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_env_settings.py",
+    "backend/tests/test_external_call_policy.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020a2_machine_policy.py",
+    "backend/tests/test_forge_020a2_structure_provenance.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a4_level0_preflight.py",
+    "backend/tests/test_forge_020a4c_real_structure_integrity.py",
+    "backend/tests/test_forge_020a_local_model_path.py",
+    "backend/tests/test_gateway_boundary.py",
+    "backend/tests/test_generation_evidence.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/level0/level0-20260827-104126.json",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md",
+    "docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md",
+    "docs/reports/FORGE-020B-TOOL-USING-LOCAL-AGENT-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LOC-02": {
+   "search_terms": [
+    "model_choice",
+    "quantization",
+    "model_profile"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/model_choice.py",
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/gateway/ai_router.py",
+    "backend/app/ai/gateway/local_model_evidence.py",
+    "scripts/check_universal_quality_policy.py",
+    "scripts/verify_local_agent_020b.py",
+    "scripts/verify_local_model_level0.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a_local_model_path.py",
+    "backend/tests/test_model_fallback.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/agent020b/agent020b-20260829-015345.json",
+    "docs/evidence/level0/level0-20260827-103251.json",
+    "docs/evidence/level0/level0-20260827-104126.json",
+    "docs/evidence/level0/level0-20260827-104538.json",
+    "docs/evidence/level0/level0-20260828-225229.json",
+    "docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LOC-03": {
+   "search_terms": [
+    "local_model_evidence",
+    "local_promotion"
+   ],
+   "source_candidates": [
+    "backend/app/ai/gateway/ai_router.py",
+    "scripts/verify_local_model_level0.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a4c_real_structure_integrity.py",
+    "backend/tests/test_forge_020a_local_model_path.py",
+    "backend/tests/test_local_promotion.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LOC-04": {
+   "search_terms": [
+    "warm",
+    "cache",
+    "preload"
+   ],
+   "source_candidates": [
+    "backend/app/ai/runtime/conversation_fast_path.py",
+    "backend/app/ai/runtime/forge_ai_provider_bridge.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/ir/capability_ir.py",
+    "forge_ai/core/ir/entity_synthesizer.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/ir/ir_generator.py",
+    "forge_ai/core/ir/ir_types.py",
+    "forge_ai/prompt/prompt_builder.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "forge_ai/tests/test_ir_generator.py",
+    "forge_ai/tests/test_solution_shape.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_dependency_boundary.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "forge_ai/tests/test_ir_generator.py",
+    "forge_ai/tests/test_solution_shape.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-R1-CLOSURE-015-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LOC-05": {
+   "search_terms": [
+    "offline"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LOC-06": {
+   "search_terms": [
+    "peak_rss",
+    "memory",
+    "resource"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/foundation/local_provider.py",
+    "backend/app/ai/foundation/model_choice.py",
+    "backend/app/ai/foundation/openai_compatible.py",
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/gateway/intelligence_context.py",
+    "backend/app/ai/gateway/learning_outbox.py",
+    "backend/app/ai/gateway/local_model_evidence.py",
+    "backend/app/ai/gateway/provider_registry.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/core/di.py",
+    "backend/app/domain/usecases/get_or_create_workspace_usecase.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_router.py",
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_di.py",
+    "backend/tests/test_folder_service.py",
+    "backend/tests/test_forge_020a2_structure_provenance.py",
+    "backend/tests/test_forge_020a3_typed_provenance.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a4_level0_preflight.py",
+    "backend/tests/test_forge_020a4c_real_structure_integrity.py",
+    "backend/tests/test_forge_020a_local_model_path.py",
+    "backend/tests/test_gemini_provider.py",
+    "backend/tests/test_in_memory_folder_repository.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/level0/level0-20260827-103251.json",
+    "docs/reports/FORGE-020A2-QG-V2-R5-report.md",
+    "docs/reports/FORGE-GOVERNANCE-001-CONSTITUTION-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD78",
+    "TD80"
+   ]
+  },
+  "LOC-07": {
+   "search_terms": [
+    "gpu",
+    "cpu",
+    "device_profile"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/local_provider.py",
+    "backend/app/ai/gateway/benchmark.py",
+    "backend/app/ai/learning/adapter.py",
+    "backend/app/ai/runtime/conversation_fast_path.py",
+    "scripts/forge_doctor.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020a2_machine_policy.py",
+    "backend/tests/test_forge_doctor.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/RUNTIME-CHROME-EVIDENCE-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-020A1-QG-V2-R4-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LOC-08": {
+   "search_terms": [
+    "execution_resolver",
+    "host",
+    "delegat"
+   ],
+   "source_candidates": [
+    "backend/app/ai/gateway/conversation_dataset.py",
+    "backend/app/ai/runtime/conversation_engine.py",
+    "backend/app/ai/runtime/conversation_policy.py",
+    "backend/app/ai/runtime/conversation_types.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "frontend/lib/core/config/app_config.dart",
+    "frontend/lib/shared_widgets/forge_sparkle_mark.dart",
+    "scripts/_acquired_calendar_source.py",
+    "scripts/acquired_capability_flutter_e2e.py",
+    "scripts/capture_forge_019_visual.ps1",
+    "scripts/check_universal_quality_policy.py",
+    "scripts/forge_doctor.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_conversation_golden.py",
+    "backend/tests/test_extra_cloud_provider.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_native_ai_phase1.py",
+    "forge_ai/tests/test_capability_artifact_synthesis.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_entity_synthesizer.py",
+    "forge_ai/tests/test_reuse_first_integrity.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "forge_ai/tests/test_self_extension_e2e_real_build.py",
+    "frontend/test/e2e/kids_checklist_generation_flow_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/agent020b/agent020b-20260829-015345.json",
+    "docs/evidence/level0-preflight/README.md",
+    "docs/reports/FORGE-020A4B-STAGE-AWARE-STRUCTURE-ROUTING-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LOC-09": {
+   "search_terms": [
+    "privacy",
+    "local_first"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/gateway/ai_router.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/contracts/cognitive_interfaces.py",
+    "forge_ai/core/confirmation/escalation_handler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/input_processing/ambiguity_detector.py",
+    "forge_ai/core/ir/entity_synthesizer.py",
+    "forge_ai/core/orchestration/cognitive_types.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "forge_ai/core/planning/application_planner.py",
+    "forge_ai/core/understanding/requirement_extractor.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_conversation_readiness_http.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_qg_v2_r4_capability_planning.py",
+    "backend/tests/test_generation_evidence.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_stateful_correction.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_input_processing.py",
+    "forge_ai/tests/test_planning_and_critic.py",
+    "forge_ai/tests/test_understanding.py",
+    "forge_ai/tests/test_v03_domain_inference_golden.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-007-confidence-must-affect-control-flow.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md",
+    "docs/reports/FORGE-020A3-report.md",
+    "docs/reports/FORGE-020A4-LEVEL0-PREFLIGHT-GUARD-report.md",
+    "docs/reports/FORGE-PRODUCT-VISION-002-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD60"
+   ]
+  },
+  "LOC-10": {
+   "search_terms": [
+    "low_resource",
+    "profile"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/deadline.py",
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/gateway/ai_router.py",
+    "scripts/capture_forge_019_visual.ps1",
+    "scripts/check_universal_quality_policy.py",
+    "scripts/start_dev.ps1",
+    "scripts/verify.bat"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_router.py",
+    "backend/tests/test_latency_budget.py",
+    "backend/tests/test_router_anti_bypass.py",
+    "backend/tests/test_schema_validator_v1_2.py",
+    "frontend/test/features/app_generation/presentation/screens/home_screen_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md",
+    "docs/reports/FORGE-PROVIDER-INDEPENDENT-UI-20260902-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LOC-11": {
+   "search_terms": [
+    "model_digest",
+    "model_swap"
+   ],
+   "source_candidates": [
+    "backend/app/ai/gateway/local_model_evidence.py",
+    "scripts/verify_local_agent_020b.py",
+    "scripts/verify_local_model_level0.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a_local_model_path.py"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/level0/level0-20260827-103251.json",
+    "docs/evidence/level0/level0-20260827-103709.json",
+    "docs/evidence/level0/level0-20260827-104126.json",
+    "docs/evidence/level0/level0-20260827-104538.json",
+    "docs/evidence/level0/level0-20260828-225229.json",
+    "docs/evidence/level0/level0-20260828-230922.json",
+    "docs/reports/FORGE-020A1-QG-V2-R4-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LRN-01": {
+   "search_terms": [
+    "experience",
+    "ExperienceStore",
+    "episode"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/generated_repair.py",
+    "backend/app/ai/agent/generated_verification.py",
+    "backend/app/ai/agent/production.py",
+    "backend/app/ai/foundation/model_choice.py",
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/gateway/ai_router.py",
+    "backend/app/ai/gateway/generation_evidence.py",
+    "backend/app/ai/gateway/intelligence_context.py",
+    "backend/app/ai/gateway/learning_contract.py",
+    "backend/app/ai/gateway/learning_events.py",
+    "backend/app/ai/gateway/learning_foundation.py",
+    "backend/app/ai/gateway/provider_registry.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_design_language.py",
+    "backend/tests/test_experience_wiring.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_020a4_level0_preflight.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_forge_020c_episode_verification_steps.py",
+    "backend/tests/test_forge_020c_generated_verification.py",
+    "backend/tests/test_forge_020c_objective_observations.py",
+    "backend/tests/test_forge_020d_generated_repair.py",
+    "backend/tests/test_forge_020d_workspace_integrity.py",
+    "backend/tests/test_forge_020e_generated_runtime_verification.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/agent020b/agent020b-20260829-015345.json",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md",
+    "docs/reports/FORGE-018-GROWING-AI-LEARNING-EVENT-FOUNDATION-report.md",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LRN-02": {
+   "search_terms": [
+    "dataset",
+    "training"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/production.py",
+    "backend/app/ai/agent/web.py",
+    "backend/app/ai/gateway/generation_evidence.py",
+    "backend/app/ai/gateway/impact_benchmark.py",
+    "backend/app/ai/gateway/knowledge.py",
+    "backend/app/ai/gateway/learning_events.py",
+    "backend/app/ai/gateway/learning_foundation.py",
+    "backend/app/ai/gateway/local_promotion.py",
+    "backend/app/ai/learning/__init__.py",
+    "backend/app/ai/learning/adapter.py",
+    "backend/app/ai/learning/dataset_builder.py",
+    "backend/app/ai/learning/episode.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_artifact_feedback.py",
+    "backend/tests/test_benchmark_evidence.py",
+    "backend/tests/test_capability.py",
+    "backend/tests/test_conversation_golden.py",
+    "backend/tests/test_design_intent_wiring.py",
+    "backend/tests/test_forge_019_mutations.py",
+    "backend/tests/test_forge_019a_revision_integrity.py",
+    "backend/tests/test_forge_019b_revision_transaction.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_020a3b_partial_is_not_success.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/agent020b/agent020b-20260829-015345.json",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/level0-preflight/README.md",
+    "docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md",
+    "docs/reports/FORGE-018-GROWING-AI-LEARNING-EVENT-FOUNDATION-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD79",
+    "TD84"
+   ]
+  },
+  "LRN-03": {
+   "search_terms": [
+    "teacher",
+    "distill"
+   ],
+   "source_candidates": [
+    "backend/app/ai/gateway/generation_evidence.py",
+    "backend/app/ai/gateway/learning_foundation.py",
+    "backend/app/ai/learning/__init__.py",
+    "backend/app/ai/learning/dataset_builder.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/ai/learning/teacher.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_learning_foundation.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/evidence/agent020b/agent020b-20260829-015345.json",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md",
+    "docs/reports/FORGE-GOVERNANCE-001-CONSTITUTION-report.md",
+    "docs/reports/FORGE-POLICY-ALIGNMENT-AUDIT-20260902.md",
+    "docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": [
+    "TD84"
+   ]
+  },
+  "LRN-04": {
+   "search_terms": [
+    "benchmark",
+    "novel_benchmark"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/cloud_provider.py",
+    "backend/app/ai/foundation/local_provider.py",
+    "backend/app/ai/foundation/model_choice.py",
+    "backend/app/ai/foundation/openai_compatible.py",
+    "backend/app/ai/gateway/tasks.py",
+    "backend/app/ai/learning/__init__.py",
+    "backend/app/ai/learning/adapter.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/ai/learning/gym.py",
+    "backend/app/ai/learning/novel_benchmark.py",
+    "scripts/forge_doctor.py",
+    "scripts/verify_local_model_level0.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_router.py",
+    "backend/tests/test_benchmark_evidence.py",
+    "backend/tests/test_extra_cloud_provider.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a4c_real_structure_integrity.py",
+    "backend/tests/test_gateway_boundary.py",
+    "backend/tests/test_learning_foundation.py",
+    "backend/tests/test_live_api.py",
+    "backend/tests/test_local_promotion.py",
+    "backend/tests/test_openai_compatible.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md",
+    "docs/reports/FORGE-020A3-report.md",
+    "docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD63",
+    "TD84"
+   ]
+  },
+  "LRN-05": {
+   "search_terms": [
+    "evaluator",
+    "critic",
+    "design_critic"
+   ],
+   "source_candidates": [
+    "backend/app/ai/learning/knowledge_acquisition.py",
+    "backend/app/ai/learning/teacher.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/confirmation/escalation_handler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/critic/revision_engine.py",
+    "forge_ai/core/critic/semantic_design_critic.py",
+    "forge_ai/core/lexicon.py",
+    "forge_ai/core/orchestration/cognitive_dependencies.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "forge_ai/core/pipeline.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_019c_operation_support.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020a4_level0_preflight.py",
+    "backend/tests/test_semantic_design_critic.py",
+    "backend/tests/test_semantic_revision.py",
+    "forge_ai/tests/golden_cognitive_complex/01_shared_shopping.json",
+    "forge_ai/tests/golden_cognitive_complex/02_photo_mood_diary.json",
+    "forge_ai/tests/golden_cognitive_complex/03_deadline_priority_task.json",
+    "forge_ai/tests/golden_cognitive_complex/04_low_stock_alert.json",
+    "forge_ai/tests/golden_cognitive_complex/05_survey_results_list.json",
+    "forge_ai/tests/golden_cognitive_complex/06_weekly_monday_schedule.json",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-003-rule-before-prompt.md",
+    "docs/adr/ADR-004-cognitive-revision-separate-from-schema-repair.md",
+    "docs/adr/ADR-008-preliminary-final-template-selection-split.md",
+    "docs/adr/ADR-013-template-selection-mismatch-severity.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/quality-gate-v2/manifest.json",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD28"
+   ]
+  },
+  "LRN-06": {
+   "search_terms": [
+    "gym",
+    "episode"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/production.py",
+    "backend/app/ai/learning/__init__.py",
+    "backend/app/ai/learning/dataset_builder.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/ai/learning/gym.py",
+    "backend/app/ai/learning/knowledge_acquisition.py",
+    "backend/app/ai/learning/novel_benchmark.py",
+    "backend/app/ai/learning/self_extension.py",
+    "backend/app/ai/learning/teacher.py",
+    "backend/app/schemas/ai.py",
+    "scripts/check_capability_matrix.py",
+    "scripts/verify_generated_flutter_repair_020d.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_forge_020c_episode_verification_steps.py",
+    "backend/tests/test_forge_020c_generated_verification.py",
+    "backend/tests/test_forge_020c_objective_observations.py",
+    "backend/tests/test_forge_020d_generated_repair.py",
+    "backend/tests/test_forge_020d_workspace_integrity.py",
+    "backend/tests/test_forge_020e_generated_runtime_verification.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/agent020b/agent020b-20260829-015345.json",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md",
+    "docs/reports/FORGE-121-CAPABILITY-GAP-AND-EVIDENCE-INTEGRITY-20260903.md",
+    "docs/reports/FORGE-GOVERNANCE-001-CONSTITUTION-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD84"
+   ]
+  },
+  "LRN-07": {
+   "search_terms": [
+    "knowledge",
+    "rag",
+    "retrieval"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/web.py",
+    "backend/app/ai/gateway/generation_evidence.py",
+    "backend/app/ai/gateway/intelligence_context.py",
+    "backend/app/ai/gateway/knowledge.py",
+    "backend/app/ai/gateway/learning_contract.py",
+    "backend/app/ai/gateway/learning_events.py",
+    "backend/app/ai/gateway/provider_registry.py",
+    "backend/app/ai/gateway/provider_state.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/ai/learning/gym.py",
+    "backend/app/ai/learning/knowledge_acquisition.py",
+    "backend/app/ai/learning/self_extension.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_ci_job_dependencies.py",
+    "backend/tests/test_design_language.py",
+    "backend/tests/test_forge_019c_operation_support.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_generation_evidence.py",
+    "backend/tests/test_knowledge.py",
+    "backend/tests/test_learning_events.py",
+    "backend/tests/test_schema_validator_v1_9.py",
+    "backend/tests/test_semantic_design_critic.py",
+    "backend/tests/test_stateful_correction.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-001-hybrid-cognitive-architecture.md",
+    "docs/adr/ADR-003-rule-before-prompt.md",
+    "docs/adr/ADR-007-confidence-must-affect-control-flow.md",
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/agent020b/agent020b-20260829-015345.json",
+    "docs/evidence/capability_matrix/capabilities.json"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LRN-08": {
+   "search_terms": [
+    "acceptance_signal",
+    "feedback"
+   ],
+   "source_candidates": [
+    "backend/app/ai/gateway/generation_evidence.py",
+    "backend/app/ai/gateway/learning_events.py",
+    "backend/app/ai/gateway/learning_outbox.py",
+    "backend/app/ai/learning/dataset_builder.py",
+    "backend/app/ai/learning/teacher.py",
+    "backend/app/ai/runtime/revision_unit_of_work.py",
+    "backend/app/ai/runtime/template_engine.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "frontend/lib/features/app_generation/domain/entities/generation_outcome.dart",
+    "frontend/lib/shared_widgets/generated_app_host_shell.dart",
+    "scripts/export_revision_visual_fixture.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_design_language.py",
+    "backend/tests/test_forge_019_mutations.py",
+    "backend/tests/test_forge_019a_revision_integrity.py",
+    "backend/tests/test_forge_019b_revision_transaction.py",
+    "backend/tests/test_forge_019c_operation_support.py",
+    "backend/tests/test_forge_019c_outbox_and_cas.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_gemini_provider.py",
+    "backend/tests/test_learning_contract.py",
+    "backend/tests/test_learning_events.py",
+    "backend/tests/test_semantic_revision.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md",
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md",
+    "docs/reports/FORGE-018-GROWING-AI-LEARNING-EVENT-FOUNDATION-report.md",
+    "docs/reports/FORGE-019-SEMANTIC-DESIGN-REVISION-report.md",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md",
+    "docs/reports/FORGE-R1-DESIGN-LANGUAGE-014-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD76"
+   ]
+  },
+  "LRN-09": {
+   "search_terms": [
+    "promotion_rule",
+    "promote"
+   ],
+   "source_candidates": [
+    "backend/app/ai/learning/adapter.py",
+    "backend/app/ai/learning/self_extension.py",
+    "forge_ai/core/ir/capability_document_contribution.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/orchestration/build_time_extension.py",
+    "forge_ai/core/orchestration/declarative_activation.py",
+    "forge_ai/core/orchestration/extension_manifest.py",
+    "forge_ai/core/orchestration/extension_store.py",
+    "forge_ai/testing/free_text_requests.py",
+    "scripts/acquired_capability_flutter_e2e.py",
+    "scripts/reuse_first_e2e.py",
+    "scripts/verify_local_model_level0.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020_production_wiring.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_local_promotion.py",
+    "backend/tests/test_semantic_revision.py",
+    "forge_ai/tests/test_build_time_extension.py",
+    "forge_ai/tests/test_capability_document_contribution.py",
+    "forge_ai/tests/test_declarative_extension.py",
+    "forge_ai/tests/test_extension_registry.py",
+    "forge_ai/tests/test_extension_store.py",
+    "forge_ai/tests/test_promoted_capability_compiler_boundary.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "forge_ai/tests/test_semantic_view_gap_detection.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/audio-mix-phase1-20260829.md",
+    "docs/evidence/capability_matrix/capabilities.json"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LRN-10": {
+   "search_terms": [
+    "provenance",
+    "lineage"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/cloud_provider.py",
+    "backend/app/ai/foundation/model_choice.py",
+    "backend/app/ai/gateway/artifact_feedback.py",
+    "backend/app/ai/gateway/generation_evidence.py",
+    "backend/app/ai/gateway/revision_evidence.py",
+    "backend/app/ai/learning/dataset_builder.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/ai/runtime/revision_service.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/ir/entity_synthesizer.py",
+    "forge_ai/core/orchestration/cognitive_context.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_artifact_feedback.py",
+    "backend/tests/test_forge_019a_revision_integrity.py",
+    "backend/tests/test_forge_019c_operation_support.py",
+    "backend/tests/test_forge_019c_outbox_and_cas.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020a2_structure_provenance.py",
+    "backend/tests/test_forge_020a3_typed_provenance.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_generation_evidence.py",
+    "backend/tests/test_knowledge.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/agent020b/agent020b-20260829-015345.json",
+    "docs/evidence/level0/level0-20260827-104126.json",
+    "docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md",
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD020"
+   ]
+  },
+  "LRN-11": {
+   "search_terms": [
+    "skill"
+   ],
+   "source_candidates": [
+    "backend/app/ai/learning/knowledge_acquisition.py",
+    "backend/app/ai/learning/self_extension.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020_learning_assets.py"
+   ],
+   "evidence_candidates": [
+    "docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "LRN-12": {
+   "search_terms": [
+    "curriculum"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [],
+   "tech_debt_candidates": []
+  },
+  "LRN-13": {
+   "search_terms": [
+    "regression",
+    "non_regression"
+   ],
+   "source_candidates": [
+    "backend/app/ai/gateway/ai_router.py",
+    "backend/app/ai/learning/adapter.py",
+    "backend/app/ai/runtime/prompt_pipeline.py",
+    "backend/app/ai/runtime/provider_router.py",
+    "forge_ai/core/planning/template_selector.py",
+    "forge_ai/tests/test_domain_resolution.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020a3b_partial_is_not_success.py",
+    "backend/tests/test_forge_020a3b_quality_gate_truthfulness.py",
+    "backend/tests/test_router_anti_bypass.py",
+    "backend/tests/test_stateful_correction.py",
+    "backend/tests/test_structured_output_modes.py",
+    "forge_ai/tests/test_domain_resolution.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-019-SEMANTIC-DESIGN-REVISION-report.md",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md",
+    "docs/reports/FORGE-MILESTONE-003.1-report.md",
+    "docs/reports/FORGE-POLICY-ALIGNMENT-AUDIT-20260902.md",
+    "docs/reports/FORGE-R1-DESIGN-LANGUAGE-014-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-01": {
+   "search_terms": [
+    "design_language",
+    "theme",
+    "forge_theme"
+   ],
+   "source_candidates": [
+    "backend/app/ai/gateway/generation_evidence.py",
+    "backend/app/ai/gateway/learning_events.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "forge_ai/contracts/design_language_contract.py",
+    "forge_ai/core/ir/design_intent.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/pipeline.py",
+    "frontend/lib/core/README.md",
+    "frontend/lib/core/theme/forge_theme.dart",
+    "frontend/lib/features/app_generation/presentation/screens/conversation_flow_screen.dart",
+    "frontend/lib/features/app_generation/presentation/screens/home_screen.dart",
+    "frontend/lib/features/app_generation/presentation/widgets/developer_provider_override.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_dependency_boundary.py",
+    "backend/tests/test_design_intent_wiring.py",
+    "backend/tests/test_design_language.py",
+    "backend/tests/test_forge_019c_operation_support.py",
+    "backend/tests/test_knowledge.py",
+    "backend/tests/test_learning_events.py",
+    "backend/tests/test_measure_semantics.py",
+    "backend/tests/test_model_fallback.py",
+    "backend/tests/test_schema_validator_extended.py",
+    "frontend/test/features/app_generation/presentation/screens/conversation_flow_screen_test.dart",
+    "frontend/test/json_ui/add_item_regression_test.dart",
+    "frontend/test/json_ui/button_layout_regression_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md",
+    "docs/reports/FORGE-017A-LEARNING-CONTRACT-HARDENING-report.md",
+    "docs/reports/FORGE-019A-REVISION-INTEGRITY-HARDENING-report.md",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md",
+    "docs/reports/FORGE-MERGE-001-report.md",
+    "docs/reports/FORGE-MERGE-004-report.md",
+    "docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-02": {
+   "search_terms": [
+    "design_critic",
+    "visual"
+   ],
+   "source_candidates": [
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/confirmation/escalation_handler.py",
+    "forge_ai/core/critic/semantic_design_critic.py",
+    "forge_ai/core/ir/ir_generator.py",
+    "forge_ai/core/ir/ir_types.py",
+    "forge_ai/core/orchestration/cognitive_dependencies.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "forge_ai/core/pipeline.py",
+    "forge_ai/tests/golden_cognitive_complex/01_shared_shopping.json",
+    "forge_ai/tests/golden_cognitive_complex/02_photo_mood_diary.json",
+    "forge_ai/tests/golden_cognitive_complex/03_deadline_priority_task.json",
+    "forge_ai/tests/golden_cognitive_complex/04_low_stock_alert.json"
+   ],
+   "test_candidates": [
+    "backend/tests/test_external_call_policy.py",
+    "backend/tests/test_forge_019a_revision_integrity.py",
+    "backend/tests/test_forge_020a4b_bridge_routing.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_forge_020c_episode_verification_steps.py",
+    "backend/tests/test_forge_020c_generated_verification.py",
+    "backend/tests/test_forge_doctor.py",
+    "backend/tests/test_semantic_design_critic.py",
+    "backend/tests/test_visual_fixture_provenance.py",
+    "forge_ai/tests/golden_cognitive_complex/01_shared_shopping.json",
+    "forge_ai/tests/golden_cognitive_complex/02_photo_mood_diary.json",
+    "forge_ai/tests/golden_cognitive_complex/03_deadline_priority_task.json"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/evidence/agent020b/agent020b-20260829-015345.json",
+    "docs/reports/FORGE-020A3-report.md",
+    "docs/reports/FORGE-GOVERNANCE-001-CONSTITUTION-report.md",
+    "docs/reports/FORGE-MERGE-004-report.md",
+    "docs/reports/FORGE-MILESTONE-007-PHASE1-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-03": {
+   "search_terms": [
+    "responsive",
+    "ResponsiveAppShell"
+   ],
+   "source_candidates": [
+    "frontend/lib/features/app_generation/presentation/screens/conversation_flow_screen.dart",
+    "frontend/lib/features/app_generation/presentation/screens/generation_flow_screen.dart",
+    "frontend/lib/features/app_generation/presentation/screens/home_screen.dart",
+    "frontend/lib/features/app_library/presentation/screens/history_screen.dart",
+    "frontend/lib/features/app_library/presentation/screens/my_apps_screen.dart",
+    "frontend/lib/shared_widgets/responsive_app_shell.dart"
+   ],
+   "test_candidates": [],
+   "evidence_candidates": [
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-04": {
+   "search_terms": [
+    "accessibility",
+    "Semantics",
+    "Tooltip"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/learning/knowledge_acquisition.py",
+    "backend/app/ai/learning/self_extension.py",
+    "forge_ai/contracts/cognitive_interfaces.py",
+    "forge_ai/core/confirmation/escalation_handler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/ir/capability_ir.py",
+    "forge_ai/core/ir/entity_synthesizer.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/ir/ir_generator.py",
+    "forge_ai/core/ir/ir_types.py",
+    "forge_ai/core/orchestration/cognitive_types.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020a2_capability_sot.py",
+    "backend/tests/test_forge_020a4b_bridge_routing.py",
+    "forge_ai/tests/test_audio_mix_capability_generation.py",
+    "forge_ai/tests/test_build_time_extension.py",
+    "forge_ai/tests/test_capability_document_contribution.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_declarative_extension.py",
+    "forge_ai/tests/test_extension_registry.py",
+    "forge_ai/tests/test_forge_020a4c_entity_contract_evidence.py",
+    "forge_ai/tests/test_map_capability_prerequisites.py",
+    "forge_ai/tests/test_planning_and_critic.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-020A1-QG-V2-R4-report.md",
+    "docs/reports/FORGE-020A3-report.md",
+    "docs/reports/FORGE-MILESTONE-007-PHASE1.1-report.md",
+    "docs/reports/FORGE-MILESTONE-007-PHASE1.2-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-05": {
+   "search_terms": [
+    "contrast",
+    "color"
+   ],
+   "source_candidates": [
+    "backend/app/ai/runtime/capability.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/tests/test_entity_synthesizer.py",
+    "frontend/lib/core/theme/forge_theme.dart",
+    "frontend/lib/features/app_library/presentation/screens/history_screen.dart",
+    "frontend/lib/features/app_library/presentation/screens/my_apps_screen.dart",
+    "frontend/lib/forge_quality_gate_fixture.dart",
+    "frontend/lib/forge_quality_gate_visual.dart",
+    "frontend/lib/shared_widgets/ai_mode.dart",
+    "frontend/lib/shared_widgets/generated_app_host_shell.dart",
+    "frontend/lib/shared_widgets/responsive_app_shell.dart",
+    "frontend/lib/shared_widgets/simulated_output_banner.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_conversation_engine.py",
+    "backend/tests/test_conversation_golden.py",
+    "backend/tests/test_conversation_policy.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_schema_validator_v1_1.py",
+    "backend/tests/test_schema_validator_v1_5.py",
+    "backend/tests/test_stateful_correction.py",
+    "forge_ai/tests/test_compiler.py",
+    "forge_ai/tests/test_entity_synthesizer.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "forge_ai/tests/test_solution_shape.py",
+    "frontend/test/json_ui/renderer/semantic_visual_hierarchy_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/quality-gate-v2/analytics.json",
+    "docs/evidence/quality-gate-v2/finance.json",
+    "docs/evidence/quality-gate-v2/game.json",
+    "docs/evidence/quality-gate-v2/kids.json",
+    "docs/evidence/quality-gate-v2/map.json",
+    "docs/evidence/quality-gate-v2/photo.json",
+    "docs/evidence/quality-gate-v2/study.json",
+    "docs/evidence/quality-gate-v2/worklog.json"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-06": {
+   "search_terms": [
+    "typography",
+    "font"
+   ],
+   "source_candidates": [
+    "backend/app/ai/runtime/design_language.py",
+    "forge_ai/core/ir/design_intent.py",
+    "forge_ai/prompt/prompt_builder.py",
+    "frontend/lib/core/theme/forge_theme.dart",
+    "frontend/lib/features/app_library/presentation/screens/history_screen.dart",
+    "frontend/lib/features/app_library/presentation/screens/my_apps_screen.dart",
+    "frontend/lib/forge_quality_gate_visual.dart",
+    "frontend/lib/json_ui/renderer/design_language.dart",
+    "frontend/lib/shared_widgets/ai_mode.dart",
+    "frontend/lib/shared_widgets/generated_app_host_shell.dart",
+    "frontend/lib/shared_widgets/simulated_output_banner.dart",
+    "scripts/capture_quality_gate_r5.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_design_intent_wiring.py",
+    "frontend/test/json_ui/renderer/semantic_visual_hierarchy_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/RUNTIME-CHROME-EVIDENCE-20260831.md",
+    "docs/reports/FORGE-018-GROWING-AI-LEARNING-EVENT-FOUNDATION-report.md",
+    "docs/reports/FORGE-020A1-QG-V2-R4-report.md",
+    "docs/reports/FORGE-MILESTONE-003.1-report.md",
+    "docs/reports/FORGE-PROVIDER-INDEPENDENT-UI-20260902-report.md",
+    "docs/reports/FORGE-R1-DESIGN-LANGUAGE-014-report.md",
+    "docs/reports/FORGE-R1-HERO-METRIC-AND-DESIGN-INTENT-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": [
+    "TD18"
+   ]
+  },
+  "UI-07": {
+   "search_terms": [
+    "layout",
+    "overflow"
+   ],
+   "source_candidates": [
+    "backend/app/ai/runtime/semantic_revision.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "forge_ai/core/ir/capability_ir.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "forge_ai/tests/test_020a2_compositional_plan.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "frontend/lib/features/app_generation/presentation/screens/home_screen.dart",
+    "frontend/lib/features/app_library/presentation/screens/my_apps_screen.dart",
+    "frontend/lib/forge_quality_gate_fixture.dart",
+    "frontend/lib/json_ui/schema/forge_document.dart",
+    "frontend/lib/json_ui/widget_registry/widget_registry_v1_3.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020a2_round5_capture.py",
+    "backend/tests/test_schema_validator_extended.py",
+    "backend/tests/test_schema_validator_v1_3.py",
+    "backend/tests/test_schema_validator_v1_5.py",
+    "forge_ai/tests/test_020a2_compositional_plan.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "frontend/test/json_ui/schema/forge_design_tokens_test.dart",
+    "frontend/test/json_ui/widget_registry/v1_0_typed_schema_widget_test.dart",
+    "frontend/test/json_ui/widget_registry/v1_3_record_crud_test.dart",
+    "frontend/test/json_ui/widget_registry/v1_3_record_list_view_test.dart",
+    "frontend/test/json_ui/widget_registry/v1_4_record_schema_widget_test.dart",
+    "frontend/test/json_ui/widget_registry/v1_5_product_quality_widget_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/quality-gate-v2/analytics.json",
+    "docs/evidence/quality-gate-v2/finance.json",
+    "docs/evidence/quality-gate-v2/game.json",
+    "docs/evidence/quality-gate-v2/map.json",
+    "docs/evidence/quality-gate-v2/photo.json",
+    "docs/evidence/quality-gate-v2/study.json",
+    "docs/reports/FORGE-019-SEMANTIC-DESIGN-REVISION-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-08": {
+   "search_terms": [
+    "empty_state",
+    "error_state"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/native/_02_planner/rule_based_planner.py",
+    "backend/app/ai/runtime/forge_ai_adapter.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/critic/revision_engine.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/planner.py",
+    "forge_ai/core/planning/application_planner.py",
+    "frontend/lib/features/app_generation/data/datasources/templates.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/golden/budget.json",
+    "backend/tests/golden/child.json",
+    "backend/tests/golden/dinner.json",
+    "backend/tests/golden/gift.json",
+    "backend/tests/golden/household.json",
+    "backend/tests/golden/pet.json",
+    "backend/tests/golden/schedule.json",
+    "backend/tests/golden/shopping.json",
+    "backend/tests/golden/todo.json",
+    "backend/tests/golden/travel.json",
+    "backend/tests/test_forge_ai_adapter.py",
+    "forge_ai/tests/test_forge_language_compiler.py"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/quality-gate-v2/analytics.json",
+    "docs/evidence/quality-gate-v2/finance.json",
+    "docs/evidence/quality-gate-v2/game.json",
+    "docs/evidence/quality-gate-v2/kids.json",
+    "docs/evidence/quality-gate-v2/map.json",
+    "docs/evidence/quality-gate-v2/photo.json",
+    "docs/evidence/quality-gate-v2/study.json",
+    "docs/evidence/quality-gate-v2/worklog.json"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-09": {
+   "search_terms": [
+    "loading",
+    "progress",
+    "thinking"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/flutter_generated_workspace.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "forge_ai/core/domain_model.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/orchestration/extension_store.py",
+    "forge_ai/core/orchestration/self_extension_loop.py",
+    "forge_ai/core/planning/template_selector.py",
+    "forge_ai/tests/test_audio_mix_capability_generation.py",
+    "forge_ai/tests/test_self_extension_loop.py",
+    "forge_ai/tests/test_simulation_capability_generation.py",
+    "frontend/lib/features/app_generation/data/repositories/mock_app_generation_repository.dart",
+    "frontend/lib/features/app_generation/presentation/screens/conversation_flow_screen.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_v1_15_simulation_progress.py",
+    "backend/tests/test_main_env_loading.py",
+    "forge_ai/tests/test_audio_mix_capability_generation.py",
+    "forge_ai/tests/test_self_extension_loop.py",
+    "forge_ai/tests/test_simulation_capability_generation.py",
+    "frontend/test/e2e/kids_checklist_generation_flow_test.dart",
+    "frontend/test/e2e/survey_form_validation_flow_test.dart",
+    "frontend/test/features/app_generation/data/datasources/mock_generator_renderer_contract_test.dart",
+    "frontend/test/json_ui/forge_simulation_progress_widget_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/golden/forge-golden-game-closure-20260830.json",
+    "docs/reports/FORGE-GOLDEN-GAME-CLOSURE-report.md",
+    "docs/reports/FORGE-GOVERNANCE-001-CONSTITUTION-report.md",
+    "docs/reports/FORGE-POLICY-ALIGNMENT-AUDIT-20260902.md",
+    "docs/reports/FORGE-RUNTIME-001-report.md",
+    "docs/reports/FORGE-RUNTIME-002-report.md",
+    "docs/reports/FORGE-WHOLE-SCAN-20260830-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-10": {
+   "search_terms": [
+    "information_architecture",
+    "section_header"
+   ],
+   "source_candidates": [
+    "backend/app/ai/validators/schema_validator.py",
+    "forge_ai/core/critic/semantic_design_critic.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/tests/test_declarative_activation.py",
+    "forge_ai/tests/test_extension_store.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "frontend/lib/forge_019a_visual_fixture.dart",
+    "frontend/lib/forge_quality_gate_fixture.dart",
+    "frontend/lib/json_ui/schema/forge_document.dart",
+    "frontend/lib/json_ui/widget_registry/widget_registry_core.dart",
+    "frontend/lib/json_ui/widget_registry/widget_registry_v1_5.dart",
+    "scripts/export_revision_visual_fixture.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_schema_validator_v1_5.py",
+    "backend/tests/test_semantic_design_critic.py",
+    "forge_ai/tests/test_declarative_activation.py",
+    "forge_ai/tests/test_extension_store.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "frontend/test/features/app_generation/data/datasources/mock_generator_renderer_contract_test.dart",
+    "frontend/test/json_ui/schema/forge_design_tokens_test.dart",
+    "frontend/test/json_ui/widget_registry/v1_5_product_quality_widget_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/quality-gate-v2/analytics.json",
+    "docs/evidence/quality-gate-v2/finance.json",
+    "docs/evidence/quality-gate-v2/game.json",
+    "docs/evidence/quality-gate-v2/manifest.json",
+    "docs/evidence/quality-gate-v2/map.json",
+    "docs/evidence/quality-gate-v2/photo.json",
+    "docs/evidence/quality-gate-v2/study.json",
+    "docs/reports/FORGE-R1-DESIGN-LANGUAGE-014-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-11": {
+   "search_terms": [
+    "ai_mode",
+    "provider_independent"
+   ],
+   "source_candidates": [
+    "backend/app/exception_handlers.py",
+    "frontend/lib/features/app_generation/presentation/screens/conversation_flow_screen.dart",
+    "frontend/lib/features/app_generation/presentation/screens/home_screen.dart",
+    "frontend/lib/shared_widgets/generated_app_host_shell.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_model_fallback.py",
+    "backend/tests/test_provider_independent_user_messages.py",
+    "frontend/test/features/app_generation/presentation/screens/home_screen_provider_independence_test.dart",
+    "frontend/test/shared_widgets/ai_mode_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-PROVIDER-INDEPENDENT-UI-20260902-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-12": {
+   "search_terms": [
+    "voice",
+    "speech_to_text"
+   ],
+   "source_candidates": [
+    "frontend/lib/features/app_generation/presentation/providers/voice_input_provider.dart",
+    "frontend/lib/features/app_generation/presentation/screens/home_screen.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_openai_compatible.py",
+    "frontend/test/features/app_generation/presentation/screens/home_screen_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/reports/FORGE-POLICY-ALIGNMENT-AUDIT-20260902.md",
+    "docs/reports/FORGE-UI-REFRESH-002-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": [
+    "TD25"
+   ]
+  },
+  "UI-13": {
+   "search_terms": [
+    "navigation",
+    "history",
+    "my_apps"
+   ],
+   "source_candidates": [
+    "backend/app/ai/README.md",
+    "backend/app/ai/agent/generated_repair.py",
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/native/_01_intent/intent_recognizer.py",
+    "backend/app/ai/native/_02_planner/rule_based_planner.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "forge_ai/core/confirmation/escalation_handler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/core/ir/ir_generator.py",
+    "forge_ai/core/ir/ir_types.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_foundation.py",
+    "backend/tests/test_artifact_feedback.py",
+    "backend/tests/test_conversation_engine.py",
+    "backend/tests/test_mock_llm_adapter.py",
+    "backend/tests/test_schema_validator.py",
+    "backend/tests/test_schema_validator_extended.py",
+    "backend/tests/test_schema_validator_v1_1.py",
+    "backend/tests/test_schema_validator_v1_2.py",
+    "backend/tests/test_stateful_correction.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "forge_ai/tests/test_ir_generator.py",
+    "forge_ai/tests/test_planning_and_critic.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-010-forge-ir-introduction.md",
+    "docs/adr/ADR-012-forge-ir-excludes-widget-and-state-ref.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/reports/FORGE-MERGE-001-report.md",
+    "docs/reports/FORGE-MILESTONE-004-report.md",
+    "docs/reports/FORGE-MILESTONE-007-PHASE1-report.md",
+    "docs/reports/FORGE-MILESTONE-007-PHASE1.1-report.md",
+    "docs/reports/FORGE-MILESTONE-007-PREPARATION-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "UI-14": {
+   "search_terms": [
+    "golden",
+    "visual_evidence",
+    "screenshot"
+   ],
+   "source_candidates": [
+    "backend/app/ai/README.md",
+    "backend/app/ai/agent/permission.py",
+    "backend/app/ai/agent/web.py",
+    "backend/app/ai/gateway/revision_evidence.py",
+    "backend/app/ai/runtime/revision_service.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/input_processing/ambiguity_detector.py",
+    "forge_ai/core/ir/domain_resolution.py",
+    "forge_ai/core/lexicon.py",
+    "forge_ai/core/logic/ga1_logic.py",
+    "forge_ai/core/orchestration/declarative_extension.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_019a_revision_integrity.py",
+    "backend/tests/test_forge_020a3b_quality_gate_truthfulness.py",
+    "backend/tests/test_forge_golden_game_vertical_slice.py",
+    "backend/tests/test_golden_finance_e2e.py",
+    "forge_ai/tests/test_cognitive_pipeline_complex_golden.py",
+    "forge_ai/tests/test_cognitive_pipeline_golden.py",
+    "forge_ai/tests/test_confidence_model_comparison.py",
+    "forge_ai/tests/test_input_processing.py",
+    "forge_ai/tests/test_planning_and_critic.py",
+    "forge_ai/tests/test_semantic_roles_and_capability_plan.py",
+    "forge_ai/tests/test_solution_shape.py",
+    "forge_ai/tests/test_v03_domain_inference_golden.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-007-confidence-must-affect-control-flow.md",
+    "docs/adr/ADR-009-cognitive-pipeline-separate-facade.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/audio-mix-phase1-20260829.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/simulate-loop-production-20260829.md",
+    "docs/reports/FORGE-019-SEMANTIC-DESIGN-REVISION-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "QA-01": {
+   "search_terms": [
+    "pytest",
+    "flutter test",
+    "unit"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/native/README.md",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/CHANGELOG.md",
+    "forge_ai/IMPLEMENTATION_REPORT.md",
+    "forge_ai/core/ir/ir_generator.py",
+    "forge_ai/core/orchestration/capability_gate.py",
+    "forge_ai/core/orchestration/cognitive_types.py",
+    "forge_ai/core/orchestration/synthesizing_build_time_implementer.py",
+    "forge_ai/core/understanding/meaning_extractor.py",
+    "forge_ai/docs/DESIGN_DECISIONS.md"
+   ],
+   "test_candidates": [
+    "backend/tests/conftest.py",
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_extra_cloud_provider.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_gateway_boundary.py",
+    "backend/tests/test_gemini_provider.py",
+    "backend/tests/test_golden_mock_generator.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_in_memory_workspace_repository.py",
+    "backend/tests/test_latency_budget.py",
+    "backend/tests/test_learning_foundation.py",
+    "backend/tests/test_schema_validator.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/audio-mix-phase1-20260829.md",
+    "docs/evidence/simulate-loop-production-20260829.md"
+   ],
+   "tech_debt_candidates": [
+    "TD16",
+    "TD37",
+    "TD9"
+   ]
+  },
+  "QA-02": {
+   "search_terms": [
+    "integration",
+    "e2e"
+   ],
+   "source_candidates": [
+    "backend/app/ai/native/README.md",
+    "backend/app/ai/runtime/README.md",
+    "backend/app/ai/runtime/capability.py",
+    "backend/app/ai/runtime/capability_definition.py",
+    "forge_ai/tests/test_build_time_workspace.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_confidence_model.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "forge_ai/tests/test_shipped_acquired_registrations.py",
+    "frontend/lib/core/config/app_config.dart",
+    "scripts/converse_fast_path_e2e.py",
+    "scripts/forge_doctor.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_capability.py",
+    "backend/tests/test_capability_definition.py",
+    "backend/tests/test_ci_job_dependencies.py",
+    "backend/tests/test_conversation_readiness_http.py",
+    "backend/tests/test_external_call_policy.py",
+    "backend/tests/test_golden_finance_e2e.py",
+    "backend/tests/test_stateful_correction.py",
+    "forge_ai/tests/test_build_time_workspace.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_confidence_model.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "forge_ai/tests/test_shipped_acquired_registrations.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/simulate-loop-production-20260829.md",
+    "docs/reports/FORGE-020A4-LEVEL0-PREFLIGHT-GUARD-report.md",
+    "docs/reports/FORGE-GOVERNANCE-001-CONSTITUTION-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "QA-03": {
+   "search_terms": [
+    "mutation",
+    "guard_break",
+    "配線破壊"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/generated_repair.py",
+    "backend/app/ai/gateway/learning_outbox.py",
+    "backend/app/ai/runtime/prompt_pipeline.py",
+    "backend/app/ai/runtime/revision_service.py",
+    "forge_ai/core/semantics/capability_plan.py",
+    "forge_ai/tests/test_capability_prerequisites_are_declared.py",
+    "forge_ai/tests/test_reuse_first_integrity.py",
+    "forge_ai/tests/test_self_extension_loop.py",
+    "forge_ai/tests/test_semantic_roles_and_capability_plan.py",
+    "frontend/lib/json_ui/validation/forge_record_validator.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_artifact_feedback.py",
+    "backend/tests/test_external_call_policy.py",
+    "backend/tests/test_forge_019_mutations.py",
+    "backend/tests/test_forge_019b_revision_transaction.py",
+    "backend/tests/test_forge_019c_operation_support.py",
+    "backend/tests/test_forge_020a2_capability_sot.py",
+    "backend/tests/test_forge_020a4_level0_preflight.py",
+    "backend/tests/test_forge_020a_local_model_path.py",
+    "backend/tests/test_forge_020d_generated_repair.py",
+    "backend/tests/test_learning_events.py",
+    "backend/tests/test_provider_attribution.py",
+    "backend/tests/test_provider_independent_user_messages.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md",
+    "docs/reports/FORGE-018-GROWING-AI-LEARNING-EVENT-FOUNDATION-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD74"
+   ]
+  },
+  "QA-04": {
+   "search_terms": [
+    "ci",
+    ".github/workflows"
+   ],
+   "source_candidates": [
+    "backend/app/core/exceptions.py",
+    "backend/app/domain/entities/folder.py",
+    "backend/app/exception_handlers.py",
+    "backend/app/routers/ai.py",
+    "forge_ai/core/lexicon.py",
+    "forge_ai/core/pipeline.py",
+    "forge_ai/docs/DESIGN_DECISIONS.md",
+    "frontend/lib/core/di/network_providers.dart",
+    "scripts/_acquired_calendar_source.py",
+    "scripts/check_capability_matrix.py",
+    "scripts/export_quality_gate_fixtures.py",
+    "scripts/export_revision_visual_fixture.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ci_job_dependencies.py",
+    "backend/tests/test_cors_contract.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_golden_mock_generator.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_latency_budget.py",
+    "backend/tests/test_learning_foundation.py",
+    "forge_ai/tests/test_entity_synthesizer.py",
+    "forge_ai/tests/test_map_capability_prerequisites.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "forge_ai/tests/test_shipped_acquired_registrations.py",
+    "forge_ai/tests/test_v03_domain_inference_golden.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/quality-gate-v2/kids.json",
+    "docs/evidence/quality-gate-v2/map.json",
+    "docs/evidence/quality-gate-v2/study.json"
+   ],
+   "tech_debt_candidates": [
+    "TD100",
+    "TD101",
+    "TD71"
+   ]
+  },
+  "QA-05": {
+   "search_terms": [
+    "model_call_ledger",
+    "attribution",
+    "evidence_integrity"
+   ],
+   "source_candidates": [
+    "backend/app/ai/gateway/ai_router.py",
+    "backend/app/ai/gateway/model_call_ledger.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_019b_revision_transaction.py",
+    "backend/tests/test_provider_attribution.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-019B-REVISION-TRANSACTION-RETRY-HARDENING-report.md",
+    "docs/reports/FORGE-020A4-LEVEL0-PREFLIGHT-GUARD-report.md",
+    "docs/reports/FORGE-020A4B-STAGE-AWARE-STRUCTURE-ROUTING-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "QA-06": {
+   "search_terms": [
+    "coverage"
+   ],
+   "source_candidates": [
+    "forge_ai/core/confirmation/escalation_handler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/critic/revision_engine.py",
+    "forge_ai/core/critic/semantic_design_critic.py",
+    "forge_ai/core/orchestration/cognitive_types.py",
+    "forge_ai/core/orchestration/confidence.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "forge_ai/docs/DESIGN_DECISIONS.md",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_confidence_model.py",
+    "forge_ai/tests/test_confidence_model_comparison.py",
+    "forge_ai/tests/test_planning_and_critic.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_golden_finance_e2e.py",
+    "backend/tests/test_schema_validator_extended.py",
+    "backend/tests/test_semantic_design_critic.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_confidence_model.py",
+    "forge_ai/tests/test_confidence_model_comparison.py",
+    "forge_ai/tests/test_planning_and_critic.py",
+    "forge_ai/tests/test_quality_engine.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-007-confidence-must-affect-control-flow.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-020B-TOOL-USING-LOCAL-AGENT-report.md",
+    "docs/reports/FORGE-MILESTONE-007-PHASE1-report.md",
+    "docs/reports/FORGE-MILESTONE-007-PHASE1.1-report.md",
+    "docs/reports/FORGE-R1-CLOSURE-015-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "QA-07": {
+   "search_terms": [
+    "soak",
+    "stress"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "QA-08": {
+   "search_terms": [
+    "flaky",
+    "determinism"
+   ],
+   "source_candidates": [],
+   "test_candidates": [
+    "backend/tests/test_capability_definition.py"
+   ],
+   "evidence_candidates": [
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "QA-09": {
+   "search_terms": [
+    "golden_conversation"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [],
+   "tech_debt_candidates": []
+  },
+  "QA-10": {
+   "search_terms": [
+    "quality_gate"
+   ],
+   "source_candidates": [
+    "frontend/lib/forge_quality_gate_fixture.dart",
+    "frontend/lib/forge_quality_gate_visual.dart",
+    "scripts/capture_quality_gate_r5.py",
+    "scripts/capture_quality_gate_v2.py",
+    "scripts/export_quality_gate_fixtures.py",
+    "scripts/forge_doctor.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020a2_round5_capture.py",
+    "backend/tests/test_forge_020a3b_quality_gate_truthfulness.py",
+    "backend/tests/test_forge_doctor.py",
+    "backend/tests/test_generated_app_naming.py"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/RUNTIME-CHROME-EVIDENCE-20260831.md",
+    "docs/reports/FORGE-020A2-QG-V2-R5-report.md",
+    "docs/reports/FORGE-020A3B-CLOSEOUT-report.md",
+    "docs/reports/GENERATED-UI-QUALITY-GATE-V2-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "QA-11": {
+   "search_terms": [
+    "regression_suite"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [],
+   "tech_debt_candidates": []
+  },
+  "QA-12": {
+   "search_terms": [
+    "release_gate",
+    "freeze"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/generators/templates/base.py",
+    "backend/app/ai/native/README.md",
+    "backend/app/ai/validators/schema_validator.py",
+    "backend/app/domain/usecases/get_or_create_workspace_usecase.py",
+    "backend/app/routers/workspace.py",
+    "backend/app/services/folder_service.py",
+    "forge_ai/core/ir/forge_language_compiler.py",
+    "forge_ai/docs/DESIGN_DECISIONS.md",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "frontend/lib/core/di/network_providers.dart",
+    "frontend/lib/json_ui/widget_registry/widget_registry_v1_6.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_schema_validator_extended.py",
+    "backend/tests/test_schema_validator_v1_6.py",
+    "backend/tests/test_workspace_usecases.py",
+    "forge_ai/tests/test_forge_language_compiler.py"
+   ],
+   "evidence_candidates": [
+    "docs/reports/ARCHITECTURE_FREEZE_M004_report.md",
+    "docs/reports/FORGE-GOVERNANCE-001-CONSTITUTION-report.md",
+    "docs/reports/FORGE-MERGE-001-report.md",
+    "docs/reports/FORGE-MERGE-002-report.md",
+    "docs/reports/FORGE-MERGE-003-report.md",
+    "docs/reports/FORGE-MILESTONE-003-report.md",
+    "docs/reports/FORGE-MILESTONE-003-v2-report.md",
+    "docs/reports/FORGE-MILESTONE-004-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD20",
+    "TD22",
+    "TD34"
+   ]
+  },
+  "SEC-01": {
+   "search_terms": [
+    "injection_scan",
+    "prompt_injection"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/untrusted.py",
+    "backend/app/ai/runtime/prompt_pipeline.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py"
+   ],
+   "test_candidates": [],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "SEC-02": {
+   "search_terms": [
+    "output_safety",
+    "safety_checker"
+   ],
+   "source_candidates": [
+    "backend/app/ai/runtime/prompt_pipeline.py",
+    "backend/app/schemas/ai.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_output_safety.py"
+   ],
+   "evidence_candidates": [
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md",
+    "docs/reports/FORGE-AI-INTELLIGENCE-001-PHASE0-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "SEC-03": {
+   "search_terms": [
+    "permission_broker",
+    "permission"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/permission.py",
+    "backend/app/ai/agent/tools.py",
+    "backend/app/ai/foundation/openai_compatible.py",
+    "backend/app/core/exceptions.py",
+    "backend/app/core/security.py",
+    "backend/app/routers/folder.py",
+    "backend/app/routers/workspace.py",
+    "forge_ai/core/confirmation/escalation_handler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/ir/solution_shape.py",
+    "forge_ai/core/orchestration/cognitive_types.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_router.py",
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_confirmation_store.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_security.py",
+    "forge_ai/tests/test_cognitive_orchestrator_integration.py",
+    "forge_ai/tests/test_input_processing.py",
+    "forge_ai/tests/test_planning_and_critic.py",
+    "forge_ai/tests/test_understanding.py",
+    "forge_ai/tests/test_v03_domain_inference_golden.py",
+    "frontend/test/features/app_generation/data/repositories/api_conversation_repository_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-002-domain-before-ui.md",
+    "docs/adr/ADR-007-confidence-must-affect-control-flow.md",
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-MILESTONE-007-PHASE1.2-report.md",
+    "docs/reports/FORGE-PRODUCT-VISION-002-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "SEC-04": {
+   "search_terms": [
+    "tool_broker",
+    "bounded_tool"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [],
+   "tech_debt_candidates": []
+  },
+  "SEC-05": {
+   "search_terms": [
+    "secret",
+    "api_key",
+    "redact"
+   ],
+   "source_candidates": [
+    "backend/app/ai/README.md",
+    "backend/app/ai/agent/permission.py",
+    "backend/app/ai/agent/sandbox.py",
+    "backend/app/ai/agent/tools.py",
+    "backend/app/ai/agent/toolset.py",
+    "backend/app/ai/agent/untrusted.py",
+    "backend/app/ai/foundation/cloud_provider.py",
+    "backend/app/ai/foundation/local_provider.py",
+    "backend/app/ai/foundation/openai_compatible.py",
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/gateway/ai_errors.py",
+    "backend/app/ai/gateway/ai_router.py"
+   ],
+   "test_candidates": [
+    "backend/tests/conftest.py",
+    "backend/tests/test_ai_router.py",
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_external_call_policy.py",
+    "backend/tests/test_extra_cloud_provider.py",
+    "backend/tests/test_forge_019c_outbox_and_cas.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_forge_020c_flutter_generated_workspace.py",
+    "backend/tests/test_forge_doctor.py",
+    "backend/tests/test_gemini_provider.py",
+    "backend/tests/test_knowledge.py",
+    "backend/tests/test_latency_budget.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-018-GROWING-AI-LEARNING-EVENT-FOUNDATION-report.md",
+    "docs/reports/FORGE-020A1-QG-V2-R4-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD35"
+   ]
+  },
+  "SEC-06": {
+   "search_terms": [
+    "external_call_policy",
+    "default_deny"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/local_provider.py",
+    "backend/app/ai/foundation/openai_compatible.py",
+    "backend/app/ai/foundation/providers.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_external_call_policy.py",
+    "backend/tests/test_extra_cloud_provider.py",
+    "backend/tests/test_gateway_boundary.py",
+    "backend/tests/test_openai_compatible.py",
+    "backend/tests/test_structured_output_modes.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-121-CAPABILITY-GAP-AND-EVIDENCE-INTEGRITY-20260903.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "SEC-07": {
+   "search_terms": [
+    "supply_chain",
+    "dependency",
+    "allowlist"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/providers.py",
+    "backend/app/ai/runtime/context_builder.py",
+    "backend/app/ai/runtime/provider_router.py",
+    "forge_ai/contracts/design_language_contract.py",
+    "forge_ai/contracts/interfaces.py",
+    "forge_ai/core/meaning_model.py",
+    "forge_ai/core/orchestration/extension_registry.py",
+    "forge_ai/provider/provider_interface.py",
+    "forge_ai/tests/test_input_processing.py",
+    "forge_ai/tests/test_pipeline.py",
+    "frontend/lib/core/utils/forge_logger.dart",
+    "scripts/verify.ps1"
+   ],
+   "test_candidates": [
+    "backend/tests/test_http_api.py",
+    "forge_ai/tests/test_input_processing.py",
+    "forge_ai/tests/test_pipeline.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-020A3-report.md",
+    "docs/reports/FORGE-121-CAPABILITY-GAP-AND-EVIDENCE-INTEGRITY-20260903.md",
+    "docs/reports/FORGE-AI-CONNECT-001-report.md",
+    "docs/reports/FORGE-GOLDEN-GAME-CLOSURE-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "SEC-08": {
+   "search_terms": [
+    "sandbox",
+    "escape"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/generated_verification.py",
+    "backend/app/ai/agent/generated_workspace.py",
+    "backend/app/ai/agent/sandbox.py",
+    "backend/app/ai/agent/tools.py",
+    "backend/app/ai/agent/toolset.py",
+    "backend/app/ai/agent/web.py",
+    "backend/app/ai/learning/__init__.py",
+    "backend/app/ai/learning/self_extension.py",
+    "backend/app/core/di.py",
+    "backend/app/core/security.py",
+    "backend/app/plugins/README.md",
+    "forge_ai/core/input_processing/ambiguity_detector.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_cors_contract.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020c_generated_workspace.py",
+    "backend/tests/test_forge_020c_objective_observations.py",
+    "backend/tests/test_forge_020d_generated_repair.py",
+    "backend/tests/test_multi_provider_identity.py",
+    "forge_ai/tests/test_build_time_extension.py",
+    "forge_ai/tests/test_planner.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/RUNTIME-CHROME-EVIDENCE-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md",
+    "docs/reports/FORGE-121-CAPABILITY-GAP-AND-EVIDENCE-INTEGRITY-20260903.md",
+    "docs/reports/FORGE-POLICY-ALIGNMENT-AUDIT-20260902.md",
+    "docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD107"
+   ]
+  },
+  "SEC-09": {
+   "search_terms": [
+    "audit",
+    "provenance"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/cloud_provider.py",
+    "backend/app/ai/foundation/model_choice.py",
+    "backend/app/ai/learning/dataset_builder.py",
+    "backend/app/ai/learning/episode.py",
+    "forge_ai/core/ir/entity_synthesizer.py",
+    "forge_ai/core/ir/ir_generator.py",
+    "forge_ai/core/orchestration/flutter_capability_installer.py",
+    "forge_ai/core/orchestration/managed_build_time_implementer.py",
+    "forge_ai/core/planning/template_selector.py",
+    "forge_ai/docs/DESIGN_DECISIONS.md",
+    "forge_ai/tests/test_forge_020a4c_entity_contract_evidence.py",
+    "forge_ai/tests/test_reuse_first_integrity.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020_learning_assets.py",
+    "backend/tests/test_forge_020a2_structure_provenance.py",
+    "backend/tests/test_forge_020a3_typed_provenance.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_generation_evidence.py",
+    "backend/tests/test_knowledge.py",
+    "backend/tests/test_learning_events.py",
+    "backend/tests/test_learning_foundation.py",
+    "backend/tests/test_visual_fixture_provenance.py",
+    "forge_ai/tests/test_forge_020a4c_entity_contract_evidence.py",
+    "forge_ai/tests/test_reuse_first_integrity.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/level0/level0-20260827-104126.json",
+    "docs/reports/FORGE-016A-B-FEEDBACK-FOUNDATION-report.md",
+    "docs/reports/FORGE-020A3-report.md",
+    "docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD020"
+   ]
+  },
+  "SEC-10": {
+   "search_terms": [
+    "threat_model"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [],
+   "tech_debt_candidates": []
+  },
+  "PRD-01": {
+   "search_terms": [
+    "distribution",
+    "installer",
+    "self_contained"
+   ],
+   "source_candidates": [
+    "forge_ai/core/orchestration/flutter_capability_installer.py",
+    "forge_ai/core/orchestration/reuse_first_pipeline.py",
+    "forge_ai/tests/test_dart_build_plan.py",
+    "forge_ai/tests/test_flutter_capability_installer.py",
+    "forge_ai/tests/test_reuse_first_integrity.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py",
+    "frontend/lib/json_ui/acquired/acquired_registrations.g.dart",
+    "scripts/acquired_capability_flutter_e2e.py",
+    "scripts/check_universal_quality_policy.py",
+    "scripts/reuse_first_e2e.py",
+    "scripts/verify.ps1"
+   ],
+   "test_candidates": [
+    "forge_ai/tests/test_dart_build_plan.py",
+    "forge_ai/tests/test_flutter_capability_installer.py",
+    "forge_ai/tests/test_reuse_first_integrity.py",
+    "forge_ai/tests/test_reuse_first_pipeline.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/REUSE-FIRST-B-20260831.md",
+    "docs/evidence/TD94-ACQUIRED-CAPABILITY-IN-THE-FLUTTER-APP-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-POLICY-ALIGNMENT-AUDIT-20260902.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PRD-02": {
+   "search_terms": [
+    "onboarding",
+    "first_run"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [],
+   "tech_debt_candidates": []
+  },
+  "PRD-03": {
+   "search_terms": [
+    "saved_app",
+    "app_library",
+    "persistence"
+   ],
+   "source_candidates": [
+    "backend/app/ai/learning/gym.py",
+    "backend/app/domain/repositories/workspace_repository.py",
+    "frontend/lib/features/app_generation/presentation/screens/conversation_flow_screen.dart",
+    "frontend/lib/features/app_generation/presentation/screens/generation_flow_screen.dart",
+    "frontend/lib/features/app_generation/presentation/screens/home_screen.dart",
+    "frontend/lib/features/app_library/data/repositories/shared_preferences_app_library_repository.dart",
+    "frontend/lib/features/app_library/presentation/providers/app_library_provider.dart",
+    "frontend/lib/features/app_library/presentation/screens/history_screen.dart",
+    "frontend/lib/features/app_library/presentation/screens/my_apps_screen.dart",
+    "frontend/lib/json_ui/schema/forge_document.dart",
+    "frontend/lib/main.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_confirmation_store.py",
+    "frontend/test/e2e/kids_checklist_generation_flow_test.dart",
+    "frontend/test/e2e/survey_form_validation_flow_test.dart",
+    "frontend/test/features/app_generation/presentation/screens/conversation_flow_screen_test.dart",
+    "frontend/test/features/app_generation/presentation/screens/home_screen_provider_independence_test.dart",
+    "frontend/test/features/app_generation/presentation/screens/home_screen_test.dart",
+    "frontend/test/features/app_library/data/repositories/shared_preferences_app_library_repository_test.dart",
+    "frontend/test/smoke_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-WHOLE-SCAN-20260830-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PRD-04": {
+   "search_terms": [
+    "update",
+    "migration"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/core/exceptions.py",
+    "backend/app/domain/entities/folder.py",
+    "backend/app/domain/usecases/update_workspace_settings_usecase.py",
+    "backend/app/exception_handlers.py",
+    "backend/app/repositories/supabase_folder_repository.py",
+    "backend/app/repositories/supabase_workspace_repository.py",
+    "backend/app/routers/ai.py",
+    "backend/app/routers/workspace.py",
+    "backend/app/schemas/workspace.py",
+    "backend/app/services/folder_service.py",
+    "forge_ai/core/ir/ir_generator.py"
+   ],
+   "test_candidates": [
+    "backend/tests/revision_fixtures.py",
+    "backend/tests/test_folders_migration.py",
+    "backend/tests/test_forge_019b_revision_transaction.py",
+    "backend/tests/test_forge_019c_operation_support.py",
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_gateway_boundary.py",
+    "backend/tests/test_in_memory_workspace_repository.py",
+    "backend/tests/test_schema_validator_extended.py",
+    "backend/tests/test_semantic_revision.py",
+    "forge_ai/tests/test_capability_document_contribution.py",
+    "forge_ai/tests/test_compiler.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-011-forge-ir-incremental-adoption.md",
+    "docs/adr/ADR-012-forge-ir-excludes-widget-and-state-ref.md",
+    "docs/adr/ADR-013-template-selection-mismatch-severity.md",
+    "docs/adr/ADR-014-conversation-engine-wraps-not-replaces-pipeline.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/capability_matrix/capabilities.json"
+   ],
+   "tech_debt_candidates": [
+    "TD40",
+    "TD42",
+    "TD43",
+    "TD68"
+   ]
+  },
+  "PRD-05": {
+   "search_terms": [
+    "backup",
+    "recovery"
+   ],
+   "source_candidates": [
+    "forge_ai/core/critic/design_critic.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_router.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-020A3B-CLOSEOUT-report.md",
+    "docs/reports/FORGE-020A4-LEVEL0-PREFLIGHT-GUARD-report.md",
+    "docs/reports/FORGE-CONSTITUTION-CHANGE-PROPOSAL-UNIVERSAL-QUALITY-20260902.md",
+    "docs/reports/FORGE-POLICY-ALIGNMENT-AUDIT-20260902.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PRD-06": {
+   "search_terms": [
+    "sync"
+   ],
+   "source_candidates": [
+    "backend/app/exception_handlers.py",
+    "frontend/lib/features/app_generation/data/datasources/ai_conversation_api.dart",
+    "frontend/lib/features/app_generation/data/datasources/ai_generation_api.dart",
+    "frontend/lib/features/app_library/data/repositories/shared_preferences_app_library_repository.dart",
+    "frontend/lib/features/app_library/presentation/screens/history_screen.dart",
+    "frontend/lib/features/app_library/presentation/screens/my_apps_screen.dart",
+    "frontend/lib/shared_widgets/generated_app_host_shell.dart",
+    "scripts/capture_quality_gate_r5.py",
+    "scripts/capture_quality_gate_v2.py",
+    "scripts/capture_visual_evidence.py",
+    "scripts/forge_doctor.py",
+    "scripts/verify_generated_flutter_repair_020d.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_019c_revision_closure.py",
+    "backend/tests/test_forge_doctor.py",
+    "frontend/test/e2e/kids_checklist_generation_flow_test.dart",
+    "frontend/test/e2e/survey_form_validation_flow_test.dart",
+    "frontend/test/features/app_generation/data/repositories/api_app_generation_repository_test.dart",
+    "frontend/test/features/app_generation/data/repositories/api_conversation_repository_test.dart",
+    "frontend/test/features/app_generation/data/repositories/mock_conversation_repository_honesty_test.dart",
+    "frontend/test/features/app_generation/presentation/widgets/developer_provider_override_test.dart",
+    "frontend/test/features/app_library/data/repositories/shared_preferences_app_library_repository_test.dart",
+    "frontend/test/shared_widgets/ai_mode_test.dart",
+    "frontend/test/smoke_test.dart",
+    "frontend/test_acquired/acquired_capability_e2e_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PRD-07": {
+   "search_terms": [
+    "multi_device",
+    "cross_device"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [],
+   "tech_debt_candidates": []
+  },
+  "PRD-08": {
+   "search_terms": [
+    "offline"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PRD-09": {
+   "search_terms": [
+    "error_message",
+    "friendly"
+   ],
+   "source_candidates": [
+    "backend/app/ai/runtime/forge_operation.py",
+    "backend/app/routers/ai.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_operation.py",
+    "backend/tests/test_gemini_provider.py"
+   ],
+   "evidence_candidates": [],
+   "tech_debt_candidates": []
+  },
+  "PRD-10": {
+   "search_terms": [
+    "settings",
+    "config"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/cloud_provider.py",
+    "backend/app/ai/foundation/local_provider.py",
+    "backend/app/core/README.md",
+    "backend/app/core/di.py",
+    "backend/app/core/env_settings.py",
+    "backend/app/core/feature_flags.py",
+    "backend/app/domain/usecases/update_workspace_settings_usecase.py",
+    "backend/app/routers/workspace.py",
+    "backend/app/schemas/workspace.py",
+    "backend/app/services/folder_service.py",
+    "frontend/lib/core/config/app_config.dart",
+    "frontend/lib/core/network/dio_client.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_env_settings.py",
+    "backend/tests/test_extra_cloud_provider.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_gateway_boundary.py",
+    "backend/tests/test_gemini_provider.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_live_api.py",
+    "backend/tests/test_schema_validator_extended.py",
+    "backend/tests/test_workspace_usecases.py",
+    "forge_ai/tests/test_declarative_extension.py",
+    "forge_ai/tests/test_extension_store.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-020A1-QG-V2-R4-report.md",
+    "docs/reports/FORGE-020A4-LEVEL0-PREFLIGHT-GUARD-report.md",
+    "docs/reports/FORGE-121-CAPABILITY-GAP-AND-EVIDENCE-INTEGRITY-20260903.md",
+    "docs/reports/FORGE-MERGE-004-report.md",
+    "docs/reports/FORGE-PRE-R1-INTEGRITY-GATE-013-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PRD-11": {
+   "search_terms": [
+    "export",
+    "share"
+   ],
+   "source_candidates": [
+    "forge_ai/IMPLEMENTATION_REPORT.md",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/lexicon.py",
+    "forge_ai/core/semantics/capability_plan.py",
+    "forge_ai/core/understanding/meaning_extractor.py",
+    "forge_ai/core/understanding/requirement_extractor.py",
+    "forge_ai/docs/DESIGN_DECISIONS.md",
+    "forge_ai/docs/KNOWN_LIMITATIONS.md",
+    "forge_ai/tests/test_audio_mix_capability_generation.py",
+    "frontend/lib/features/app_library/domain/repositories/app_library_repository.dart",
+    "frontend/lib/forge_019a_visual_fixture.dart",
+    "frontend/lib/forge_quality_gate_fixture.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_folder_router.py",
+    "backend/tests/test_forge_019_mutations.py",
+    "backend/tests/test_forge_019a_revision_integrity.py",
+    "backend/tests/test_forge_020a3b_partial_is_not_success.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_gateway_boundary.py",
+    "backend/tests/test_generated_app_naming.py",
+    "backend/tests/test_latency_budget.py",
+    "backend/tests/test_learning_events.py",
+    "backend/tests/test_main_env_loading.py",
+    "backend/tests/test_schema_validator_v1_9.py",
+    "backend/tests/test_visual_fixture_provenance.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/evidence/RUNTIME-CHROME-EVIDENCE-20260831.md",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-018-GROWING-AI-LEARNING-EVENT-FOUNDATION-report.md",
+    "docs/reports/FORGE-018A-LEARNING-BOUNDARY-HARDENING-report.md",
+    "docs/reports/FORGE-019-SEMANTIC-DESIGN-REVISION-report.md",
+    "docs/reports/FORGE-019A-REVISION-INTEGRITY-HARDENING-report.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PRD-12": {
+   "search_terms": [
+    "licence",
+    "license"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-MILESTONE-003.1-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PRD-13": {
+   "search_terms": [
+    "telemetry",
+    "metrics"
+   ],
+   "source_candidates": [
+    "backend/app/ai/gateway/conversation_dataset.py",
+    "backend/app/ai/gateway/learning_events.py",
+    "backend/app/ai/gateway/learning_outbox.py",
+    "backend/app/ai/runtime/conversation_metrics.py",
+    "backend/app/ai/runtime/conversation_types.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "frontend/lib/json_ui/schema/forge_document.dart",
+    "scripts/capture_quality_gate_r5.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_artifact_feedback.py",
+    "backend/tests/test_conversation_golden.py",
+    "backend/tests/test_conversation_readiness_http.py",
+    "backend/tests/test_field_metadata_preservation.py",
+    "backend/tests/test_forge_020a2_round5_capture.py",
+    "backend/tests/test_hero_metric.py",
+    "backend/tests/test_measure_semantics.py",
+    "backend/tests/test_semantic_design_critic.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/reports/FORGE-PRODUCT-VISION-002-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PRD-14": {
+   "search_terms": [
+    "support",
+    "docs"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/cloud_provider.py",
+    "backend/app/ai/foundation/model_choice.py",
+    "backend/app/ai/foundation/openai_compatible.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/ai/learning/gym.py",
+    "backend/app/ai/learning/novel_benchmark.py",
+    "backend/app/ai/learning/teacher.py",
+    "backend/app/core/di.py",
+    "backend/app/core/security.py",
+    "backend/app/exception_handlers.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/ir/ir_generator.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_artifact_feedback.py",
+    "backend/tests/test_capability.py",
+    "backend/tests/test_forge_019b_revision_transaction.py",
+    "backend/tests/test_forge_019c_operation_support.py",
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_forge_020a2_capability_sot.py",
+    "backend/tests/test_forge_020c_episode_verification_steps.py",
+    "backend/tests/test_forge_qg_v2_r4_capability_planning.py",
+    "backend/tests/test_gemini_provider.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_latency_budget.py"
+   ],
+   "evidence_candidates": [
+    "docs/adr/ADR-010-forge-ir-introduction.md",
+    "docs/adr/ADR-011-forge-ir-incremental-adoption.md",
+    "docs/adr/ADR-013-template-selection-mismatch-severity.md",
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/SELF-EXTENSION-BUILD-PIPELINE-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json"
+   ],
+   "tech_debt_candidates": [
+    "TD16",
+    "TD94"
+   ]
+  },
+  "PRD-15": {
+   "search_terms": [
+    "release",
+    "version"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/core/exceptions.py",
+    "backend/app/routers/ai.py",
+    "backend/app/schemas/ai.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/critic/design_critic.py",
+    "forge_ai/core/lexicon.py",
+    "forge_ai/core/orchestration/cognitive_types.py",
+    "forge_ai/core/orchestration/errors.py",
+    "forge_ai/core/orchestration/pipeline_orchestrator.py",
+    "forge_ai/tests/golden_cognitive_complex/02_photo_mood_diary.json",
+    "frontend/lib/core/config/developer_mode.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_foundation.py",
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_design_language.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a3b_quality_gate_truthfulness.py",
+    "backend/tests/test_forge_020b_local_agent_production.py",
+    "backend/tests/test_forge_020e_generated_runtime_verification.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py",
+    "backend/tests/test_forge_golden_game_vertical_slice.py",
+    "backend/tests/test_hero_metric.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_schema_validator.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/architecture/FORGE-THREAT-MODEL.md",
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/ACQUIRED-CAPABILITY-VALIDATOR-BOUNDARY-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/quality-gate-v2/finance.json"
+   ],
+   "tech_debt_candidates": [
+    "TD13",
+    "TD8",
+    "TD92"
+   ]
+  },
+  "PER-01": {
+   "search_terms": [
+    "latency",
+    "p95",
+    "timing",
+    "stage_timing"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/deadline.py",
+    "backend/app/ai/gateway/ai_router.py",
+    "backend/app/ai/gateway/generation_evidence.py",
+    "backend/app/ai/gateway/intelligence_context.py",
+    "backend/app/ai/gateway/learning_events.py",
+    "backend/app/ai/gateway/learning_foundation.py",
+    "backend/app/ai/gateway/local_model_evidence.py",
+    "backend/app/ai/gateway/local_promotion.py",
+    "backend/app/ai/gateway/model_call_ledger.py",
+    "backend/app/ai/gateway/provider_state.py",
+    "backend/app/ai/learning/teacher.py",
+    "backend/app/ai/runtime/conversation_engine.py"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_router.py",
+    "backend/tests/test_benchmark_evidence.py",
+    "backend/tests/test_converse_stage_timings.py",
+    "backend/tests/test_experience_wiring.py",
+    "backend/tests/test_forge_020a3b_level0_provider_integrity.py",
+    "backend/tests/test_forge_020a4c_real_structure_integrity.py",
+    "backend/tests/test_latency_budget.py",
+    "backend/tests/test_learning_foundation.py",
+    "backend/tests/test_live_api.py",
+    "backend/tests/test_local_promotion.py",
+    "backend/tests/test_model_fallback.py",
+    "backend/tests/test_multi_provider_identity.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/CONVERSATION-FAST-PATH-20260901.md",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/evidence/level0/level0-20260827-103251.json",
+    "docs/evidence/level0/level0-20260827-104126.json"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PER-02": {
+   "search_terms": [
+    "throughput"
+   ],
+   "source_candidates": [],
+   "test_candidates": [],
+   "evidence_candidates": [],
+   "tech_debt_candidates": []
+  },
+  "PER-03": {
+   "search_terms": [
+    "startup",
+    "boot"
+   ],
+   "source_candidates": [
+    "forge_ai/core/orchestration/extension_store.py",
+    "scripts/capture_quality_gate_v2.py",
+    "scripts/capture_visual_evidence.py"
+   ],
+   "test_candidates": [
+    "frontend/test/smoke_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/reports/FORGE-020B-TOOL-USING-LOCAL-AGENT-report.md",
+    "docs/reports/FORGE-MERGE-004-report.md",
+    "docs/reports/FORGE-MILESTONE-002.2-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PER-04": {
+   "search_terms": [
+    "memory",
+    "rss"
+   ],
+   "source_candidates": [
+    "backend/app/ai/foundation/interfaces.py",
+    "backend/app/ai/gateway/intelligence_context.py",
+    "backend/app/ai/gateway/learning_outbox.py",
+    "backend/app/ai/gateway/local_model_evidence.py",
+    "backend/app/ai/learning/episode.py",
+    "backend/app/ai/runtime/context_builder.py",
+    "backend/app/core/di.py",
+    "backend/app/domain/usecases/get_or_create_workspace_usecase.py",
+    "backend/app/repositories/in_memory_folder_repository.py",
+    "backend/app/repositories/in_memory_workspace_repository.py",
+    "backend/app/routers/folder.py",
+    "forge_ai/CHANGELOG.md"
+   ],
+   "test_candidates": [
+    "backend/tests/test_ai_runtime.py",
+    "backend/tests/test_di.py",
+    "backend/tests/test_folder_service.py",
+    "backend/tests/test_in_memory_folder_repository.py",
+    "backend/tests/test_in_memory_workspace_repository.py",
+    "backend/tests/test_schema_validator_extended.py",
+    "backend/tests/test_workspace_usecases.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-LOCAL-MODEL-QUALITY-AND-QUANTIZATION.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/capability_matrix/README.md",
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md",
+    "docs/reports/FORGE-019C-020-LOCAL-GENERATIVE-INTELLIGENCE-FOUNDATION-report.md",
+    "docs/reports/FORGE-GOVERNANCE-001-CONSTITUTION-report.md",
+    "docs/reports/FORGE-MERGE-001-report.md"
+   ],
+   "tech_debt_candidates": [
+    "TD78",
+    "TD80"
+   ]
+  },
+  "PER-05": {
+   "search_terms": [
+    "scale",
+    "large"
+   ],
+   "source_candidates": [
+    "backend/app/ai/agent/sandbox.py",
+    "backend/app/ai/validators/schema_validator.py",
+    "forge_ai/core/compiler.py",
+    "forge_ai/core/orchestration/self_extension_loop.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "frontend/lib/core/theme/forge_theme.dart",
+    "frontend/lib/features/app_generation/presentation/widgets/example_picker_sheet.dart",
+    "frontend/lib/features/app_library/presentation/screens/history_screen.dart",
+    "frontend/lib/features/app_library/presentation/screens/my_apps_screen.dart",
+    "frontend/lib/forge_quality_gate_fixture.dart",
+    "frontend/lib/json_ui/renderer/forge_renderer.dart",
+    "frontend/lib/json_ui/schema/forge_document.dart"
+   ],
+   "test_candidates": [
+    "backend/tests/test_forge_020_agent_security.py",
+    "backend/tests/test_forge_ai_adapter.py",
+    "backend/tests/test_http_api.py",
+    "backend/tests/test_schema_validator_v1_5.py",
+    "forge_ai/tests/test_forge_language_compiler.py",
+    "frontend/test/json_ui/schema/forge_design_tokens_test.dart",
+    "frontend/test/json_ui/widget_registry/v1_5_product_quality_widget_test.dart"
+   ],
+   "evidence_candidates": [
+    "docs/evidence/quality-gate-v2/analytics.json",
+    "docs/evidence/quality-gate-v2/finance.json",
+    "docs/evidence/quality-gate-v2/game.json",
+    "docs/evidence/quality-gate-v2/kids.json",
+    "docs/evidence/quality-gate-v2/map.json",
+    "docs/evidence/quality-gate-v2/photo.json",
+    "docs/evidence/quality-gate-v2/study.json",
+    "docs/evidence/quality-gate-v2/worklog.json"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PER-06": {
+   "search_terms": [
+    "cache"
+   ],
+   "source_candidates": [],
+   "test_candidates": [
+    "backend/tests/test_dependency_boundary.py",
+    "backend/tests/test_forge_020f_runtime_attested_widgets.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-UNIVERSAL-QUALITY-INVARIANT.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-R1-CLOSURE-015-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PER-07": {
+   "search_terms": [
+    "concurrency",
+    "parallel"
+   ],
+   "source_candidates": [
+    "backend/app/ai/gateway/intelligence_context.py",
+    "forge_ai/core/semantics/entity_contract.py",
+    "scripts/verify.ps1"
+   ],
+   "test_candidates": [
+    "backend/tests/test_learning_events.py"
+   ],
+   "evidence_candidates": [
+    "docs/architecture/FORGE-GROWING-AI-ARCHITECTURE.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/capability_matrix/capabilities.json",
+    "docs/reports/FORGE-017-ARCHITECTURE-REVIEW-report.md",
+    "docs/reports/FORGE-020A5-REAL-LOCAL-LEVEL0-CLOSEOUT-report.md",
+    "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md"
+   ],
+   "tech_debt_candidates": []
+  },
+  "PER-08": {
+   "search_terms": [
+    "battery",
+    "power"
+   ],
+   "source_candidates": [
+    "scripts/preflight_local_model_level0.py",
+    "scripts/start_dev.ps1",
+    "scripts/verify.bat",
+    "scripts/verify.ps1",
+    "scripts/verify_local_agent_020b.py",
+    "scripts/verify_local_model_level0.py"
+   ],
+   "test_candidates": [],
+   "evidence_candidates": [
+    "docs/adr/ADR-015-generated-source-is-evolution-not-drift.md",
+    "docs/architecture/FORGE-SELF-CONTAINED-DISTRIBUTION.md",
+    "docs/evidence/PHYSICAL-EXECUTION-CHECKPOINT-20260831.md",
+    "docs/reports/FORGE-MERGE-001-report.md",
+    "docs/reports/FORGE-MERGE-004-report.md",
+    "docs/reports/FORGE-MILESTONE-002-report.md",
+    "docs/reports/FORGE-MILESTONE-002.2-report.md",
+    "docs/reports/FORGE-UI-REFRESH-report.md"
+   ],
+   "tech_debt_candidates": []
+  }
+ }
+}

@@ -47,7 +47,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "AI-02",
@@ -80,7 +91,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 1,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 0.6
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "AI-03",
@@ -92,22 +114,36 @@
         "closing_evidence": "不要質問率1%以下、必要質問欠落率1%以下",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "決定論的 fast path が「不要な質問」を構造的に減らす",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/runtime/conversation_fast_path.py",
+        "backend/tests/test_conversation_fast_path.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "不要質問率 1% 以下 / 必要質問欠落率 1% 以下 を測っていない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "不要質問率と欠落率の測定",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.667
       }
     },
     {
@@ -136,7 +172,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "AI-05",
@@ -164,7 +211,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "AI-06",
@@ -180,7 +238,9 @@
       "implementation_status": "PARTIAL",
       "evidence_status": "UNIT_AND_INTEGRATION",
       "implementation_evidence": [
-        "forge_ai/core/orchestration/capability_gate.py"
+        "forge_ai/core/orchestration/capability_gate.py",
+        "forge_ai/core/sandbox/policy.py",
+        "forge_ai/tests/test_capability_permission_policy.py"
       ],
       "measured": {
         "episodes": 0,
@@ -188,13 +248,24 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "**Capability Tier がコードで強制されていない。** Tier C が Tier A と同じ経路を通れる",
+      "remaining_gap": "Tier A/B/C の**計算と強制**は入った。Gap 検出から Tier 判定への配線と、Tier 別の 400 件測定が無い",
       "blocking_tech_debt": [],
-      "next_proof": "Tier をコードで強制し、Tier C の無承認自動実行 0 件を示す",
+      "next_proof": "Tier 別 Gap→完了 / 正しい Policy 処理の測定",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 3,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 2.0
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "AI-07",
@@ -222,7 +293,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "AI-08",
@@ -234,22 +316,35 @@
         "closing_evidence": "Wrong-meaning success 0件",
         "hard_gate": true
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "Semantic Design Critic と Golden 会話で必須意味を検査",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/runtime/critic.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Wrong-meaning success 0 件（Hard Gate）を Corpus で示していない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Wrong-meaning Corpus に対する 0 件",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 1.333
       }
     },
     {
@@ -281,7 +376,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 4,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 2.4
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "AI-10",
@@ -309,7 +415,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "GEN-01",
@@ -337,7 +454,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "GEN-02",
@@ -365,7 +493,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "GEN-03",
@@ -395,7 +534,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 4,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 4.8
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "GEN-04",
@@ -426,7 +576,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 4,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 4.8
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "GEN-05",
@@ -454,7 +615,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "GEN-06",
@@ -487,7 +659,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 3,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 2.0
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "GEN-07",
@@ -499,22 +682,36 @@
         "closing_evidence": "Create/Read/Update/Delete/Persistence E2E",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "Typed IR の record_list_view / form と SharedPreferences 永続化",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "E2E_SINGLE_CASE",
+      "implementation_evidence": [
+        "frontend/lib/json_ui/renderer/forge_renderer.dart",
+        "frontend/test/e2e"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Create/Read/Update/Delete/Persistence の E2E は Mock ビルドの 2 本のみ。独立 Family での測定が無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "独立 Requirement Family n>=30 の CRUD E2E",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 1,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 0.6
       }
     },
     {
@@ -543,7 +740,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "GEN-09",
@@ -571,7 +779,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "GEN-10",
@@ -599,7 +818,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "GEN-11",
@@ -627,7 +857,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "GEN-12",
@@ -639,22 +880,35 @@
         "closing_evidence": "Route graph、Deep link、Back stack、State保持",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "Typed IR の initial_screen_id / screens と Navigator による画面遷移",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "frontend/lib/json_ui/renderer/forge_renderer.dart"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Route graph は動くが、Deep link と Back stack の State 保持を検証していない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Route graph / Deep link / Back stack / State 保持の Task",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.667
       }
     },
     {
@@ -667,22 +921,36 @@
         "closing_evidence": "Permission付きMock/実Sandbox API Contract Task",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "Tool Broker + Permission Broker による境界付き外部呼び出し",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/agent/tools.py",
+        "backend/app/ai/agent/permission.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Mock API での Contract Task が無い。実 Sandbox API も未接続",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Permission 付き Mock API Contract Task",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.667
       }
     },
     {
@@ -695,22 +963,36 @@
         "closing_evidence": "Untrusted Web→検証→Task、Injection違反0件",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "Untrusted Web 取得と injection scan",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/agent/web.py",
+        "backend/app/ai/runtime/injection_scan.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Injection 違反 0 件を Corpus で示していない（Corpus 自体が未定義）",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Adversarial Corpus に対する Injection 違反 0 件",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.667
       }
     },
     {
@@ -739,7 +1021,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-02",
@@ -767,7 +1060,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-03",
@@ -779,11 +1083,13 @@
         "closing_evidence": "完全なTyped ContractとPermission Manifest",
         "hard_gate": false
       },
-      "zero_budget_approach": "Typed Contract は既存の extension_manifest。Permission Manifest は未実装",
-      "implementation_status": "PARTIAL",
+      "zero_budget_approach": "Typed Contract（extension_manifest）+ Permission Manifest（列挙型、自由文字列を許さない）",
+      "implementation_status": "IMPLEMENTED",
       "evidence_status": "UNIT_AND_INTEGRATION",
       "implementation_evidence": [
-        "forge_ai/core/orchestration/extension_manifest.py"
+        "forge_ai/core/orchestration/extension_manifest.py",
+        "forge_ai/core/sandbox/policy.py",
+        "forge_ai/tests/test_capability_permission_policy.py"
       ],
       "measured": {
         "episodes": 0,
@@ -791,13 +1097,24 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "Typed Contract はあるが **Permission Manifest が無い**（ADR-015 §4.2 W2）",
+      "remaining_gap": "Permission Manifest は出来たが、**Promotion 判定へまだ配線していない**（ADR-015 §6）",
       "blocking_tech_debt": [],
-      "next_proof": "Permission Manifest を Contract の必須要素にし、欠落で Promotion が落ちることを示す",
+      "next_proof": "Manifest 欠落で Promotion が落ちることを配線破壊で示す",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 3,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 1.8
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-04",
@@ -827,7 +1144,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 1,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 0.6
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-05",
@@ -858,7 +1186,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 1,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 1.2
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-06",
@@ -889,7 +1228,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 1,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 0.6
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-07",
@@ -901,22 +1251,35 @@
         "closing_evidence": "Generated test + independent property test",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "生成物と一緒に生成した capability_test.dart を build plan の中で実行する",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "forge_ai/core/orchestration/synthesizing_build_time_implementer.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "生成テストは走るが independent property test が無い（生成物が自分の書いたテストを通るだけ）",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "生成物と独立に書かれた property test",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 1,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 0.6
       }
     },
     {
@@ -929,23 +1292,39 @@
         "closing_evidence": "Network/File/Process/Secret escape 0件",
         "hard_gate": true
       },
-      "zero_budget_approach": "OS 標準の隔離機構（namespace / seccomp 等）で生成物の test/build を落とした権限で実行する",
-      "implementation_status": "NOT_STARTED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "OS 標準の namespace（network / PID）+ rlimit + env 作り直し。追加費用 0",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "HARD_GATE_PARTIAL",
+      "implementation_evidence": [
+        "forge_ai/core/sandbox/runner.py",
+        "forge_ai/core/sandbox/policy.py",
+        "forge_ai/tests/test_sandbox_escape_corpus.py",
+        "forge_ai/core/orchestration/build_time_workspace.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "**Sandbox が存在しない。** 生成物の test/build をホスト権限で実行している（ADR-015 §4.2）",
+      "remaining_gap": "**Linux backend のみ。** Windows / macOS backend は未実装で、その環境では実行を拒否する（fail closed）。root 実行では RLIMIT_NPROC が効かない（PID namespace で隔離はする）。AST / Import / Secret / Effect の静的検査は別途未実装（SEC-05）",
       "blocking_tech_debt": [],
-      "next_proof": "escape を試みる Corpus に対して Network/File/Process/Secret escape 0 件",
+      "next_proof": "Windows backend の実装と、Windows 上での escape corpus 全遮断",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 5,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 6.667
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-09",
@@ -957,25 +1336,39 @@
         "closing_evidence": "P0/P1 false negative 0件",
         "hard_gate": true
       },
-      "zero_budget_approach": "静的解析 + Sandbox 観測 + Permission 判定の合議",
-      "implementation_status": "NOT_STARTED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "権限から Tier を計算し、Tier C は Human Gate。申告を信じない",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "forge_ai/core/sandbox/policy.py",
+        "forge_ai/tests/test_capability_permission_policy.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "Sandbox が無いため、P0/P1 の自動安全性判断そのものが成立していない",
+      "remaining_gap": "Tier 判定は動くが、P0/P1 の危険検出そのもの（AST/Effect 解析）が無い",
       "blocking_tech_debt": [
-        "EXT-08 依存"
+        "SEC-05 未実装"
       ],
       "next_proof": "P0/P1 Corpus に対する false negative 0 件",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 3,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 4.0
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-10",
@@ -1005,7 +1398,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 4,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 4.8
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-11",
@@ -1038,7 +1442,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 3,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 2.0
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-12",
@@ -1066,7 +1481,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-13",
@@ -1094,7 +1520,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "EXT-14",
@@ -1127,7 +1564,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 3,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 2.0
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LOC-01",
@@ -1159,7 +1607,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 3,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 1.8
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LOC-02",
@@ -1187,7 +1646,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LOC-03",
@@ -1215,7 +1685,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LOC-04",
@@ -1243,7 +1724,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LOC-05",
@@ -1256,7 +1748,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -1265,12 +1757,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Profile 別の応答速度 Budget を定義も測定もしていない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Profile 別 p99 併記",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -1299,7 +1802,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LOC-07",
@@ -1327,7 +1841,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LOC-08",
@@ -1355,7 +1880,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LOC-09",
@@ -1368,7 +1904,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -1377,12 +1913,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Network deny 下の 7 日運用を検証していない。Offline 専用経路が無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "7日 Network deny の生成・保存・修正",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -1411,7 +1958,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LOC-11",
@@ -1439,7 +1997,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LRN-01",
@@ -1451,22 +2020,35 @@
         "closing_evidence": "Episode必須Field完全性",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "Episode を ExperienceStore へ記録する",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/learning/episode.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Episode の必須 Field 完全性を検査していない。Outcome 指標（Repair / p95 / RAM）が未収録",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Episode 必須 Field 完全性の検査",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 3,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 2.0
       }
     },
     {
@@ -1495,7 +2077,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 1.5
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LRN-03",
@@ -1523,7 +2116,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LRN-04",
@@ -1551,7 +2155,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LRN-05",
@@ -1563,22 +2178,35 @@
         "closing_evidence": "Crash/再起動/Migrationで喪失0件",
         "hard_gate": true
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "SharedPreferences / JSON への保存と schema_version による migration",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/gateway/learning_events.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Migration は一部にあるが、Crash / 再起動 / Migration での喪失 0 件（Hard Gate）を示していない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Crash / 再起動 / Migration での喪失 0 件",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 1.333
       }
     },
     {
@@ -1591,22 +2219,35 @@
         "closing_evidence": "Episode→Curated Candidateの正しい変換",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "Episode から Curated Candidate への変換",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/learning/dataset_builder.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "変換の正しさを独立に検証していない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Episode→Candidate 変換の正しさ",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.667
       }
     },
     {
@@ -1635,7 +2276,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LRN-08",
@@ -1647,22 +2299,35 @@
         "closing_evidence": "TeacherをTruthにしない同一Oracle比較",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "Teacher 出力を Truth にせず、同一 Oracle で比較する",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/learning/teacher.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "同一 Oracle 比較の実施記録が無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Teacher と Local の同一 Oracle 比較",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.667
       }
     },
     {
@@ -1676,7 +2341,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "DESIGNED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -1685,12 +2350,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "`adapter.py` が「実 LoRA training は行っていない。NOT IMPLEMENTED」と自己申告している。契約のみ",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Dataset/Config/Digest 付きの再現 Run",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "DESIGNED",
+        "gap_steps": 5,
+        "blast_radius": 1,
+        "implementation_cost": 4,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.714
       }
     },
     {
@@ -1719,7 +2395,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LRN-11",
@@ -1747,7 +2434,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 1.5
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "LRN-12",
@@ -1760,7 +2458,7 @@
         "hard_gate": true
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -1769,12 +2467,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "改悪検出（Critical regression 見逃し0件）の仕組みが無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "既知の改悪を注入して検出率を測る",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 1.5
       }
     },
     {
@@ -1803,7 +2512,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "UI-01",
@@ -1831,7 +2551,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "UI-02",
@@ -1859,7 +2590,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "UI-03",
@@ -1887,6 +2629,17 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": true,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 5,
+        "risk": "medium",
+        "priority_score": 0.6
       }
     },
     {
@@ -1915,7 +2668,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "UI-05",
@@ -1927,22 +2691,36 @@
         "closing_evidence": "Mobile/Tablet/Desktop/Orientation Matrix",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "ResponsiveAppShell による単一 Layout の可変適応（端末別 Design を作らない）",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "REAL_RENDER_PARTIAL",
+      "implementation_evidence": [
+        "frontend/lib/shared_widgets/responsive_app_shell.dart",
+        "docs/evidence/visual/provider-independent-ui-20260902"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "4 viewport の実描画はあるが Orientation を含む Matrix ではない。実端末未確認",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Mobile/Tablet/Desktop × Orientation Matrix",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.667
       }
     },
     {
@@ -1971,7 +2749,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "UI-07",
@@ -1983,22 +2772,35 @@
         "closing_evidence": "状態理解と次ActionのHuman Task",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "Typed IR の Empty State を Renderer 側で持つ",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "frontend/lib/json_ui/renderer/forge_renderer.dart"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "状態理解と次 Action の Human Task が無い（Human 0 人）",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Empty State の Human Task",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": true,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 5,
+        "risk": "medium",
+        "priority_score": 0.5
       }
     },
     {
@@ -2027,6 +2829,17 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": true,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 5,
+        "risk": "medium",
+        "priority_score": 0.6
       }
     },
     {
@@ -2055,7 +2868,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "UI-10",
@@ -2083,7 +2907,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "UI-11",
@@ -2093,37 +2928,6 @@
       "target_contract": {
         "target": "≥99%",
         "closing_evidence": "Canvas/Timeline/Grid/Scene等の未見Task",
-        "hard_gate": false
-      },
-      "zero_budget_approach": "Provider 非依存 UI（AIモード）と、表示＝実状態の一致",
-      "implementation_status": "IMPLEMENTED",
-      "evidence_status": "REAL_RENDER_PARTIAL",
-      "implementation_evidence": [
-        "frontend/lib/shared_widgets/ai_mode.dart",
-        "frontend/test/shared_widgets/ai_mode_test.dart"
-      ],
-      "measured": {
-        "episodes": 0,
-        "successes": 0,
-        "success_rate": null,
-        "wilson_lower_bound_95": null
-      },
-      "remaining_gap": "実端末未確認。Accessibility の系統的検査は未実施",
-      "blocking_tech_debt": [],
-      "next_proof": "実端末 + Accessibility Gate",
-      "evidence_reuse": {
-        "episode_families": [],
-        "shared_with": []
-      }
-    },
-    {
-      "capability_id": "UI-12",
-      "category": "F",
-      "category_name": "UI・Design品質",
-      "name": "Accessibility",
-      "target_contract": {
-        "target": "≥99%",
-        "closing_evidence": "WCAG 2.2 AA適用項目 + Assistive Task",
         "hard_gate": false
       },
       "zero_budget_approach": null,
@@ -2136,12 +2940,65 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "**この Task では評価していない（NOT_ASSESSED）。** 2026-09-02 に「Provider 非依存 UI（AIモード）」をここへ割り当てたのは誤りである。UI-11 は Canvas / Timeline / Grid / Scene 等の未見 Task であり、AIモードとは無関係",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Canvas / Timeline / Grid / Scene の未見 Task を実際に作らせる",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 2,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 1.5
+      },
+      "human_evidence_required": false
+    },
+    {
+      "capability_id": "UI-12",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "Accessibility",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "WCAG 2.2 AA適用項目 + Assistive Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "Flutter 標準の Semantics / Tooltip / Focus を Widget 側で明示",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "frontend/lib/shared_widgets/ai_mode.dart",
+        "frontend/test/shared_widgets/ai_mode_test.dart"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "個別 Widget の Semantics はあるが、WCAG 2.2 AA の適用項目を通しで検査していない",
+      "blocking_tech_debt": [],
+      "next_proof": "WCAG 2.2 AA 適用項目 + Assistive Task",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.667
       }
     },
     {
@@ -2155,7 +3012,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -2164,12 +3021,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Visual 自動評価と Human 判定の一致を測っていない（Human 0 人）",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Human 判定との Participant 単位一致下限",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": true,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 5,
+        "risk": "medium",
+        "priority_score": 0.6
       }
     },
     {
@@ -2183,7 +3051,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -2192,12 +3060,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "初見 400 人の判定が 0 人（Human Evidence 未取得）",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "初見 400 人の公開可能/利用可能判定",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": true,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 5,
+        "risk": "medium",
+        "priority_score": 0.6
       }
     },
     {
@@ -2210,22 +3089,37 @@
         "closing_evidence": "Invariant/Requirement coverage",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "pytest / flutter test を CI で全数実行する",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/tests",
+        "frontend/test",
+        ".github/workflows/ci.yml"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "テストは多いが、Requirement / Invariant への追跡が無い（どの要求を守っているか不明）",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Requirement coverage の追跡",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 1,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 0.6
       }
     },
     {
@@ -2254,7 +3148,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 1.5
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "QA-03",
@@ -2266,22 +3171,36 @@
         "closing_evidence": "Widget/Integration/Goldenの対応Task",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "flutter test（Widget / Integration）を CI で実行",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "frontend/test",
+        ".github/workflows/ci.yml"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Golden が無い（QA-09 と同根）。Widget/Integration のみ",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Golden を含む対応 Task",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 1,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 0.6
       }
     },
     {
@@ -2294,22 +3213,36 @@
         "closing_evidence": "Clean Runner再現、FlakeをRetryで隠さない",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "GitHub Actions の無料枠で Clean Runner 実行",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        ".github/workflows/ci.yml",
+        "backend/tests/test_ci_job_dependencies.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Flake を Retry で隠していないことを示す記録が無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Clean Runner 再現率と Flake 率",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 1,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 0.6
       }
     },
     {
@@ -2322,12 +3255,13 @@
         "closing_evidence": "Critical Guard-break全検出",
         "hard_gate": true
       },
-      "zero_budget_approach": "Evidence integrity（呼んでいない Provider を記録しない）",
-      "implementation_status": "IMPLEMENTED",
+      "zero_budget_approach": "Gate を1つずつ手で壊し、対応テストが落ちることを毎回確認する（手順として運用）",
+      "implementation_status": "PARTIAL",
       "evidence_status": "UNIT_AND_INTEGRATION",
       "implementation_evidence": [
-        "backend/app/ai/gateway/model_call_ledger.py",
-        "backend/tests/test_provider_attribution.py"
+        "forge_ai/tests/test_sandbox_escape_corpus.py",
+        "forge_ai/tests/test_capability_permission_policy.py",
+        "backend/tests/test_external_call_policy.py"
       ],
       "measured": {
         "episodes": 0,
@@ -2335,13 +3269,24 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "Repair 回数・p95 latency・Peak RAM 等の Outcome 指標が Evidence に未収録",
+      "remaining_gap": "**手作業である。** Critical Guard-break の全検出（Target は 100%）を主張するには、壊す対象の一覧と自動実行が要る。現在は「今回壊した分」しか分からない",
       "blocking_tech_debt": [],
-      "next_proof": "§11 の Outcome 指標一式を Episode へ載せる",
+      "next_proof": "Critical Gate の一覧を作り、mutation runner で全数を自動実行する",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 4,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 5.333
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "QA-06",
@@ -2369,7 +3314,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "QA-07",
@@ -2397,7 +3353,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "QA-08",
@@ -2410,7 +3377,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -2419,12 +3386,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Physical Device Matrix が無い。単発の実機 checkpoint はあるが Matrix ではない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Digest 固定の実機 Matrix",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -2438,7 +3416,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -2447,12 +3425,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Visual Regression（pixel diff / golden image）の仕組みが無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Noise 補正後の重大 Visual defect 検出",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -2481,7 +3470,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "QA-11",
@@ -2494,7 +3494,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -2503,12 +3503,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "72時間 Soak / Resource trend / Checkpoint が無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "72時間 Soak の resource trend",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -2537,7 +3548,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "SEC-01",
@@ -2549,22 +3571,35 @@
         "closing_evidence": "Invalid/ambiguous Artifact通過0件",
         "hard_gate": true
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "決定論的 Schema Validator（Invalid Artifact を Runtime へ通さない）",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "HARD_GATE_DESIGNED",
+      "implementation_evidence": [
+        "backend/app/ai/validators/schema_validator.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Invalid/ambiguous Artifact 通過 0 件を独立 Corpus で示していない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Invalid Artifact Corpus で通過 0 件",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 1,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 1.2
       }
     },
     {
@@ -2593,7 +3628,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 1.5
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "SEC-03",
@@ -2605,22 +3651,37 @@
         "closing_evidence": "Default Deny escape 0件",
         "hard_gate": true
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "Permission Broker による Default Deny",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/agent/permission.py",
+        "forge_ai/core/sandbox/policy.py",
+        "forge_ai/tests/test_capability_permission_policy.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Agent Tool と生成 Capability の両方に Permission が入った。Default Deny escape 0 件を Corpus で示していない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Default Deny escape Corpus",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 1.333
       }
     },
     {
@@ -2633,23 +3694,39 @@
         "closing_evidence": "OS別escape corpus全遮断",
         "hard_gate": true
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "EXT-08 と同じ Sandbox。OS 別 escape corpus を Linux から埋める",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "HARD_GATE_PARTIAL",
+      "implementation_evidence": [
+        "forge_ai/core/sandbox/runner.py",
+        "forge_ai/core/sandbox/policy.py",
+        "forge_ai/tests/test_sandbox_escape_corpus.py",
+        "forge_ai/core/orchestration/build_time_workspace.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Target は「OS 別 escape corpus 全遮断」。**Linux しか埋まっていない**",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Windows / macOS の escape corpus",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 5,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 6.667
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "SEC-05",
@@ -2662,7 +3739,7 @@
         "hard_gate": true
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -2671,12 +3748,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "生成コードの AST / Import / Secret / Effect 検査が無い。`dart analyze` は構文・型・lint であって違反検出ではない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "違反 Corpus に対する見逃し0件",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 4,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 6.0
       }
     },
     {
@@ -2689,12 +3777,12 @@
         "closing_evidence": "Unknown/禁止/重大脆弱Dependency 0件",
         "hard_gate": true
       },
-      "zero_budget_approach": "External call default deny（API キーの存在を同意として扱わない）",
-      "implementation_status": "IMPLEMENTED",
-      "evidence_status": "HARD_GATE_DESIGNED",
+      "zero_budget_approach": "Forge が保持・検証した依存だけ許可し、build 時の取得行為（pub get / pip / npm / curl / git clone 等）を拒否",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
       "implementation_evidence": [
-        "backend/app/ai/gateway/external_call_policy.py",
-        "backend/tests/test_external_call_policy.py"
+        "forge_ai/core/sandbox/policy.py",
+        "forge_ai/tests/test_capability_permission_policy.py"
       ],
       "measured": {
         "episodes": 0,
@@ -2702,13 +3790,24 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "Threat Model 全体（Sandbox escape / RAG poisoning / Supply chain 等）は未検査",
+      "remaining_gap": "機構は入ったが **allowlist の中身が空**（License / Digest / 脆弱性情報を持っていない）。Target の「重大脆弱 Dependency 0 件」は脆弱性情報が無いと判定できない",
       "blocking_tech_debt": [],
-      "next_proof": "Threat Model 別 Corpus で Critical Violation 0 を示す",
+      "next_proof": "実 allowlist（License / Digest / Provenance 付き）を作り、Unknown/禁止/脆弱の 0 件を示す",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 4,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 5.333
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "SEC-07",
@@ -2720,23 +3819,38 @@
         "closing_evidence": "Prompt/Log/Dataset/Screenshot漏洩0件",
         "hard_gate": true
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "環境変数名だけを持ち値を持たない方針 + ログの redaction + Sandbox の env 作り直し",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/runtime/provider_independent_messages.py",
+        "backend/app/ai/gateway/external_call_policy.py",
+        "forge_ai/core/sandbox/runner.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Prompt / Log / Dataset / **Screenshot** の 4 経路すべてを Corpus で検査していない。Screenshot の漏洩検査は仕組み自体が無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "4 経路の漏洩 Corpus に対する 0 件",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 3,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 4.0
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "SEC-08",
@@ -2764,7 +3878,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 1.5
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "SEC-09",
@@ -2792,7 +3917,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 1.5
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "SEC-10",
@@ -2805,7 +3941,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -2814,12 +3950,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "独立 Security Review（別 Agent / Community）を実施していない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Attack 再現を含む独立 Review",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -2832,22 +3979,36 @@
         "closing_evidence": "Clean clone→Doctor→起動",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "Clean clone → verify script → 起動",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "E2E_SINGLE_CASE",
+      "implementation_evidence": [
+        "scripts/verify.ps1",
+        ".github/workflows/ci.yml"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Clean clone からの Doctor→起動を毎回検証していない。Windows 実機は未確認（HANDOFF の Puro 問題が未解決）",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Clean clone → Doctor → 起動 の実機記録",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "IMPLEMENTED",
+        "gap_steps": 3,
+        "blast_radius": 1,
+        "implementation_cost": 2,
+        "evidence_cost": 3,
+        "risk": "low",
+        "priority_score": 0.6
       }
     },
     {
@@ -2861,7 +4022,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -2870,12 +4031,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "一般利用者向け Installer が無い（既存の installer は Forge 内部の Capability 取り込み）",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "代行なしの First result（Human Evidence 必須）",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": true,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 5,
+        "risk": "medium",
+        "priority_score": 0.6
       }
     },
     {
@@ -2904,7 +4076,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "PRD-04",
@@ -2932,7 +4115,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "PRD-05",
@@ -2960,7 +4154,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "high",
+        "priority_score": 1.5
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "PRD-06",
@@ -2973,7 +4178,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -2982,12 +4187,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "自動 Backup 生成と Integrity 検査が無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Backup 生成 → 破損検出 → 復元",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -3001,7 +4217,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -3010,12 +4226,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Device 間 Sync の実装が無い（LAN/File/P2P いずれも）",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "LAN/File いずれか1経路で Offline 競合収束を示す",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -3029,7 +4256,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -3038,12 +4265,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Atomic update / Health check / Rollback の実装が無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "更新失敗時に前版へ戻ることを示す",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -3057,7 +4295,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -3066,12 +4304,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "強制終了からの復旧機構が無い（autosave / restore が存在しない）",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "強制終了100地点からの復旧率",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -3100,7 +4349,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "PRD-11",
@@ -3128,7 +4388,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "PRD-12",
@@ -3141,7 +4412,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -3150,12 +4421,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Windows 向け Bundle / PWA / Host Task が無い。開発用 `scripts/verify.ps1` はあるが配布物ではない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Clean Windows での Bundle 起動と Core Task",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -3184,7 +4466,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "PRD-14",
@@ -3212,7 +4505,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "PRD-15",
@@ -3224,22 +4528,35 @@
         "closing_evidence": "Clean LinuxのBuild/Launch/Core Task Matrix",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "CI（Ubuntu）での Build / Test",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        ".github/workflows/ci.yml"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "CI で Build/Test は通るが、Clean Linux での Launch と Core Task Matrix が無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Clean Linux の Launch + Core Task Matrix",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 1,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.667
       }
     },
     {
@@ -3252,22 +4569,35 @@
         "closing_evidence": "Feedback/ASK/BUILDのProfile別分布",
         "hard_gate": false
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "本番経路そのものへ段別の実測を仕込む（stage_timing）",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/runtime/stage_timing.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "計測器はあるが Profile 別の分布も p99 も取っていない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Feedback/ASK/BUILD の Profile 別分布と p99",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "PARTIAL",
+        "gap_steps": 4,
+        "blast_radius": 3,
+        "implementation_cost": 3,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 2.0
       }
     },
     {
@@ -3281,7 +4611,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -3290,12 +4620,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Cloud 候補生成の Stage timing を測っていない",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Optional Teacher 利用時の Stage timing",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -3324,7 +4665,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "PER-04",
@@ -3352,7 +4704,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "PER-05",
@@ -3380,7 +4743,18 @@
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
-      }
+      },
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_ASSESSED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
+      },
+      "human_evidence_required": false
     },
     {
       "capability_id": "PER-06",
@@ -3393,7 +4767,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -3402,12 +4776,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "並列生成（Queue / Cancel / Backpressure / Isolation）が無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "Queue と Cancel の Task",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -3421,7 +4806,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -3430,12 +4815,23 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Bounded concurrency / Overload recovery が無い",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "過負荷からの回復",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
     },
     {
@@ -3449,7 +4845,7 @@
         "hard_gate": false
       },
       "zero_budget_approach": null,
-      "implementation_status": "NOT_ASSESSED",
+      "implementation_status": "NOT_STARTED",
       "evidence_status": "NONE",
       "implementation_evidence": [],
       "measured": {
@@ -3458,13 +4854,35 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "remaining_gap": "Forge の Cache 層（Hit 正当性 / Version invalidation）が無い。Frontend の Riverpod autoDispose は別物",
       "blocking_tech_debt": [],
-      "next_proof": "コードと Evidence から現状を評価する",
+      "next_proof": "stale 0件の invalidation",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
+      },
+      "human_evidence_required": false,
+      "gap": {
+        "target_level": "99_PROVEN / HARD_GATE_PROVEN",
+        "current_level": "NOT_STARTED",
+        "gap_steps": 6,
+        "blast_radius": 1,
+        "implementation_cost": 5,
+        "evidence_cost": 3,
+        "risk": "medium",
+        "priority_score": 0.75
       }
+    }
+  ],
+  "unmapped_work": [
+    {
+      "work": "Provider 非依存 UI（AIモード）と表示=実状態の一致（2026-09-02）",
+      "why_unmapped": "121 詳細能力のどれにも対応しない。Constitution §4（内部の複雑さを外へ出さない）と §9（Forge はどれか1つの base model ではない）の要件であって、能力項目ではない。",
+      "evidence": [
+        "frontend/lib/shared_widgets/ai_mode.dart",
+        "docs/reports/FORGE-PROVIDER-INDEPENDENT-UI-20260902-report.md"
+      ],
+      "correction_note": "2026-09-02 に UI-11 へ割り当てたのは誤りで、2026-09-04 に取り消した。"
     }
   ]
 }

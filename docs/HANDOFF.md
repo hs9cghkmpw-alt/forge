@@ -4,7 +4,16 @@
 
 ## CEOへの依頼（最優先・上から順に）
 
-0. **Frozen Final Holdout の置き方を決めてください（2026-09-03、これが止まっている本体）。**
+0. **【訂正済み】Frozen Final Holdout と Human 400 は、開発の停止理由ではありません。**
+   前回そのように書いたのは誤りでした（CEO 指示 2026-09-04）。
+   `Implementation blocker ≠ Frozen Holdout` として分けました。
+   Holdout は **RC Freeze 後に独立生成**し、Repository には仕様・割り当て・
+   採点規則・runner・結果 schema だけを置きます
+   （`docs/evidence/holdout/HOLDOUT-SPECIFICATION.md`）。
+   **いま CEO の判断待ちで止まっているものはありません。**
+   Human 評価が要る能力は `PRE_HUMAN_READY` で置き、実装は進めます。
+
+0.5 **（参考）旧 0 番の内容 — Holdout の置き方**
    この Repository は開発 Agent が全部読めるので、最終 99% 証明用の
    Benchmark を平文で置いた時点で Holdout になりません。したがって
    **現在どの能力も `99_PROVEN` へ到達できません**。0 円で採れる案は 3 つ
@@ -50,6 +59,84 @@
 3. ~~Universal QualityのConstitution追記承認~~ — **完了。** CEOが提案の
    正確な文面を確認し、2026-09-02に「いいよ、すべて承認」と明示承認した。
    Constitution §13へ追記済み。
+
+---
+
+## Sandbox 実装と 121 能力の実態確定（2026-09-04）
+
+Base HEAD `ba0233f` から実装した。**今回は測り方ではなく、実際に穴を塞いだ。**
+
+### 簡単な言葉で
+
+1. **AI が書いたコードを、隔離した檻の中で動かすようにしました。**
+   これまでは Forge を動かしているパソコンの権限そのままで動いていて、
+   ネットにも出られたし、環境変数（API キーなど）も見えていました。
+   いまは、ネットに出られない・秘密が見えない・時間とメモリに上限がある
+   状態でしか動きません。**檻を作れない環境（Windows）では動かしません。**
+2. **危ない操作（ネット接続・ログイン情報・支払い・取り消せない操作）は
+   人の承認が要る**ようにしました。利用者には「インターネットへ接続します」
+   のような普通の言葉で見せます。
+3. **勝手に外部のコードを取ってくるのを禁止**しました。
+4. 見ていなかった能力を **102 件 → 58 件**へ減らしました。
+
+### Before / After（Target Contract との差）
+
+| ID | Before | After | 残り |
+|---|---|---|---|
+| EXT-08 Sandbox実行 | NOT_STARTED（保護 none） | **PARTIAL**（Linux で escape corpus 8/8 遮断、本番経路へ配線） | Windows backend |
+| SEC-04 Sandbox | NOT_STARTED | **PARTIAL**（Linux corpus のみ） | OS 別 corpus |
+| EXT-03 新Capability定義 | PARTIAL（Contract のみ） | **IMPLEMENTED**（Permission Manifest） | Promotion への配線 |
+| EXT-09 自動安全性判断 | NOT_STARTED | **PARTIAL**（Tier 計算 + Human Gate） | P0/P1 検出（SEC-05 依存） |
+| SEC-06 Dependency検査 | 誤配置 | **PARTIAL**（allowlist 機構） | allowlist の中身 |
+
+### ADR-015 を再監査し、`ACCEPTED` → **`PROVISIONAL`** へ格下げ
+
+初版は「現在の Typed IR では GEN-09/10/11 を表現できない」を根拠にしていた
+が、**「いま無い」と「原理的にできない」は別**である。14 軸で A/B/C を比較し、
+**GEN-09/10/11 は Typed IR の拡張（Game Rule IR / Interaction IR /
+Encoding IR）で届く見込みが高い**と判断し直した。
+
+暫定決定は **C（Hybrid）だが「Typed IR を先に拡張する」を既定の向き**とし、
+Source 生成は最後の手段。落ちた理由を残さない Source 生成を禁止した。
+**既存の Generated Dart 経路は削除していない。**
+
+### 自分の誤配置を 4 件訂正した
+
+Capability 名を読まずに検索語を置いたため、SEC-06 / SEC-07 / QA-05 / UI-11 を
+**別の能力の実装で埋めていました**。訂正の結果 `IMPLEMENTED` は 21 → 17 に
+**減りました**。数字は悪くなりましたが、それが実態です。
+
+### 121 状態
+
+| Status | 2026-09-03 | 2026-09-04 |
+|---|---:|---:|
+| NOT_ASSESSED | 102 | **58** |
+| NOT_STARTED | 2 | 20 |
+| DESIGNED | 0 | 1 |
+| PARTIAL | 5 | 25 |
+| IMPLEMENTED | 12 | 17 |
+| **99_PROVEN** | **0** | **0** |
+| **HARD_GATE_PROVEN** | **0** | **0** |
+
+### 検証
+
+- `pytest forge_ai/tests`: **783 passed**（前回 747）
+- `pytest backend/tests`: **2066 passed**
+- `flutter analyze`: No issues / `flutter test`: **589 passed**
+- **配線破壊試験 13 種、13/13 検出**
+- 試験自体の置物を 2 件発見して直した（CPU 上限 / Memory 上限が
+  timeout に拾われていた）
+- 実測で判明: **`RLIMIT_NPROC` は root では効かない**。PID namespace が本体
+- Real Provider calls **0** / Real Local Model runs **0** / Human Evidence **0 人**
+
+### まだ言えないこと
+
+**Windows に Sandbox はありません。** だから「Sandbox 完成」とは書きません。
+`99_PROVEN` は **0 件**です。能力差 0・121項目 99%・Z12 完了は宣言しません。
+
+新規 TD110〜TD114。
+
+詳細: `docs/reports/FORGE-SANDBOX-AND-CAPABILITY-ASSESSMENT-20260904-report.md`
 
 ---
 

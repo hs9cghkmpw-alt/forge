@@ -10,7 +10,18 @@
 
 > **0 円で独立した初見参加者 400 人を確保する経路は、現時点で存在しない。**
 
-これは実装の問題ではない。**Operational Gap** である。
+これは実装の問題ではない。**最終 Z12 認定の Operational Gap** である。
+
+**訂正（2026-09-04）:** 初版はこれを「実装を進められない理由」のように
+扱っていた。誤りである。Human 0 人は Implementation blocker ではない。
+
+```text
+IMPLEMENTED → 自動/内部検証 → PRE_HUMAN_READY → Human Evidence → 99_PROVEN
+```
+
+Human 評価が要る Capability は `PRE_HUMAN_READY` まで進めてよい。募集・
+Consent・計測手段だけ先に用意し、実募集は後段に残す。
+
 確保できていない以上、
 
 - Z12 を「完成可能」と書かない

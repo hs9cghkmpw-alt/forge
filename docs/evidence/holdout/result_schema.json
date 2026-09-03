@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Forge Frozen Final Holdout Result",
+  "description": "Holdout の実行結果。問題本体は含めない——結果だけを Repository へ残す。",
+  "type": "object",
+  "required": ["provenance", "scoring_contract_version", "capabilities"],
+  "additionalProperties": false,
+  "properties": {
+    "provenance": {
+      "type": "object",
+      "description": "どれか欠けたら結果は無効である。",
+      "required": [
+        "rc_git_sha", "holdout_manifest_sha256", "family_allocation_sha256",
+        "created_at", "created_by", "executed_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "rc_git_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "holdout_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "family_allocation_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "created_at": {"type": "string"},
+        "created_by": {
+          "type": "string",
+          "description": "開発 Agent であってはならない。開発 Agent なら Holdout ではない。"
+        },
+        "executed_at": {"type": "string"}
+      }
+    },
+    "scoring_contract_version": {"type": "string"},
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["capability_id", "episodes", "successes", "wilson_lower_bound_95"],
+        "additionalProperties": false,
+        "properties": {
+          "capability_id": {"type": "string", "pattern": "^[A-Z]{2,4}-[0-9]{2}$"},
+          "episodes": {"type": "integer", "minimum": 0},
+          "successes": {"type": "integer", "minimum": 0},
+          "wilson_lower_bound_95": {"type": "number", "minimum": 0, "maximum": 1},
+          "primary_success": {"type": "integer", "minimum": 0},
+          "repair_attempts_total": {"type": "integer", "minimum": 0},
+          "fallback_used": {"type": "integer", "minimum": 0},
+          "hard_gate_violations": {"type": "integer", "minimum": 0},
+          "latency_p50_ms": {"type": "number", "minimum": 0},
+          "latency_p95_ms": {"type": "number", "minimum": 0},
+          "latency_p99_ms": {"type": "number", "minimum": 0},
+          "model_calls_total": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}
