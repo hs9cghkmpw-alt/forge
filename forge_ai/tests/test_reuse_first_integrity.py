@@ -193,7 +193,13 @@ class TestEvidenceMustDescribeTheArtifact(unittest.TestCase):
             別のものを指している**場合である——下の層は素通しする。
             """
 
-            def run(self, artifact, commands):  # noqa: ANN001, ANN202
+            def run(  # noqa: ANN001, ANN202
+                self, artifact, commands, *, host_projection=None,
+            ):
+                # Test double only: accept the production runner contract so this
+                # test reaches the intended forged-evidence gate rather than failing
+                # on an obsolete method signature.
+                _ = host_projection
                 commands = tuple(commands)
                 lie = "0" * 64
                 evidence = ManagedBuildEvidence(
