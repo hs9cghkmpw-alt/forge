@@ -66,6 +66,41 @@
 
 Base HEAD `ba0233f` から実装した。**今回は測り方ではなく、実際に穴を塞いだ。**
 
+### 最終状態（この Task は完了。CI 緑）
+
+| 項目 | 値 |
+|---|---|
+| 最終 Commit | `59e38d6` |
+| CI | **success**（run `33813646772` / 4 job すべて success） |
+| CI で実際に走った重い step | 「生成 Dart の実ビルド経路」→ `test exit=0` / `build exit=0` / `runtime_probe exit=0` / `PROMOTED` |
+| forge_ai | 811 passed / 10 skipped |
+| backend | 2072 passed / 16 skipped |
+| Capability Matrix / Universal Quality | PASS |
+| 配線破壊試験 | 13/13 検出（**うち 3 件は最初 FAIL しなかった**＝置物を自分で作っていた） |
+
+**CI は 3 回落ちてから緑になった。** 3 回目は原因が別で、
+「また同じだろう」と決めつけず log を取り直したのが分かれ目だった（report §9.2）。
+
+### まだ言えないこと（数字で）
+
+| 項目 | 実数 |
+|---|---|
+| `99_PROVEN` / `HARD_GATE_PROVEN` | **0 件 / 0 件** |
+| Real Local Model runs | **0** |
+| Real Provider 呼び出し | **0**（本 Task 中に実 API は一切呼んでいない） |
+| 実機 Evidence（Windows / Android / iOS） | **0** |
+| Human Evidence | **0 人** |
+| Frozen Final Holdout | 未生成（RC Freeze 後に独立生成） |
+| 0 円違反 | **0 件** |
+
+> **「能力差 0」「121 項目 99%」「Z12 完了」「Sandbox 完成」は、いずれも
+> 言えません。** 縮んだのは **Foundation（Security 層）の差**であって、
+> **生成能力（GEN / UI / LRN）の差は縮んでいません。**
+> CI が緑なのは「壊れていない」証明であって、Target 到達の証明ではありません。
+
+全文は `docs/reports/FORGE-SANDBOX-AND-CAPABILITY-ASSESSMENT-20260904-report.md`
+§11〜§12。
+
 ### 簡単な言葉で
 
 1. **AI が書いたコードを、隔離した檻の中で動かすようにしました。**

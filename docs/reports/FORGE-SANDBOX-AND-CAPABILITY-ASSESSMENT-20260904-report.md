@@ -507,3 +507,249 @@ opt-in あり（`794 passed / 24 skipped`）と opt-in なし（`9 failed` = 拒
 | TD113 | 依存 allowlist の中身が空。License / Digest / 脆弱性情報を持っていない |
 | TD114 | 自分の誤配置（SEC-06/07・QA-05・UI-11）。Capability 名を読まずに検索語を置いた。**Mapping Index を結論として使わない**運用で再発を防ぐ |
 | TD115 | Sandbox を自分のホスト（root・namespace 可）でしか確かめず CI を落とした。`policy-only` 段を足して直したが、**環境差を先に確かめる**手順が要る |
+
+---
+
+## 11. 最終報告（CEO 指示 §12）
+
+### 11.1 事実
+
+| 項目 | 値 |
+|---|---|
+| 開始 HEAD | `ba0233fcb765c7c989fa9cd803150d7087cc08c0` |
+| 最終 Commit | `59e38d6a515cabf56ead22d7e44f6eb15d70fd07` |
+| Commit 数 | 28（別 Agent の 22 commit との merge を含む） |
+| 変更規模 | 49 files / +11,423 / −619 |
+| CI | **success**（run `33813646772` / 4 job すべて success） |
+| CI で実際に走った重い step | 「生成 Dart の実ビルド経路」→ `test exit=0` / `build exit=0` / `runtime_probe exit=0` / `PROMOTED` |
+
+CI は 3 回落ちてから緑になった（§9.2）。**1 回目で緑にはならなかった**。
+
+### 11.2 121 能力の Status（Before → After）
+
+| Status | Before | After | 差 |
+|---|---:|---:|---:|
+| `NOT_ASSESSED` | 102 | **58** | **−44** |
+| `NOT_STARTED` | 2 | 19 | +17 |
+| `DESIGNED` | 0 | 1 | +1 |
+| `PARTIAL` | 5 | 26 | +21 |
+| `IMPLEMENTED` | 12 | 17 | +5 |
+| `VERIFIED` | 0 | 0 | 0 |
+| `PRE_HUMAN_READY` | 0 | 0 | 0 |
+| `99_PROVEN` | **0** | **0** | **0** |
+| `HARD_GATE_PROVEN` | **0** | **0** | **0** |
+
+`NOT_ASSESSED` −44 の内訳で**一番多いのは `NOT_STARTED` と `PARTIAL`**、つまり
+**「見たら無かった」「見たら一部だけだった」**である。上げた数ではなく、
+**見た数**が増えたと読むのが正しい。
+
+### 11.3 検査した / 上げた / 下げた Capability ID
+
+**検査した: 63 件**（121 − 58）。うち状態が動いたのは 51 件。
+
+**上げた: 48 件**
+
+```text
+AI-03 AI-08 / GEN-07 GEN-12 GEN-13 GEN-14
+EXT-03 EXT-07 EXT-08 EXT-09
+LOC-05 LOC-09 / LRN-01 LRN-05 LRN-06 LRN-08 LRN-09 LRN-12
+UI-05 UI-07 UI-12 UI-13 UI-14
+QA-01 QA-03 QA-04 QA-08 QA-09 QA-11
+SEC-01 SEC-03 SEC-04 SEC-05 SEC-07 SEC-10
+PRD-01 PRD-02 PRD-06 PRD-07 PRD-08 PRD-09 PRD-12 PRD-15
+PER-01 PER-02 PER-06 PER-07 PER-08
+```
+
+このうち **17 件は `NOT_ASSESSED → NOT_STARTED`**、つまり
+**「見た結果、無いと確認した」**であって能力が増えたのではない。
+
+**下げた: 3 件**（指示 §11「Evidence 不足を見つけたら下げる」）
+
+| ID | 能力 | Before → After | 理由 |
+|---|---|---|---|
+| UI-11 | 特殊 UI | `IMPLEMENTED` → `NOT_ASSESSED` | 私が別能力の実装で埋めていた（TD114） |
+| QA-05 | 配線破壊試験 | `IMPLEMENTED` → `PARTIAL` | 同上 |
+| SEC-06 | Dependency 検査 | `IMPLEMENTED` → `PARTIAL` | 同上 |
+
+**Matrix の数字は下がる方向にも動かした。** `IMPLEMENTED` は自分の誤配置訂正で
+21 → 17 へ落ちている。
+
+### 11.4 2億円 Target との差を実際に縮めたもの
+
+**架空の「2億円版 Score」とは比較しない**（指示 §10）。Target Contract に対する
+差だけを書く。
+
+| Capability | Target Contract | Before | After | 実際に縮んだか |
+|---|---|---|---|---|
+| SEC-04 Sandbox | 生成物が OS 資源を越えない | 隔離**無し**（素の `subprocess.run`） | network/PID namespace + rlimit + 壁時計、本番経路が通る | **縮んだ** |
+| EXT-08 Sandbox 実行 | 自己拡張が隔離下で動く | `NOT_STARTED` | `PARTIAL`（Linux のみ） | **縮んだ**（Windows は未達） |
+| SEC-03 Permission | 危険能力に Human Gate | 判定機構**無し** | Tier を permission から**計算**、Tier C は承認無しで実行/Promotion 不可 | **縮んだ** |
+| SEC-06 Dependency 検査 | 未検証の依存を入れない | allowlist 無し | allowlist + 獲得行為（`pip install` 等 15 種）を検出し拒否 | **縮んだ（部分）**——allowlist の中身は空（TD113） |
+| SEC-05 生成 Code 検査 | AST/import/secret/effect | 無し | 別 Agent の preflight で `PARTIAL` | 縮んだ（他 Agent 分） |
+| QA-05 配線破壊試験 | Gate が実際に効く | 一部 | Sandbox 13 種の配線破壊で**全件検出**、うち**自分の置物 2 件を発見して修正** | 縮んだ |
+
+**縮んでいないもの:** GEN 系（生成能力そのもの）、UI 系、LRN 系、PRD 系。
+今回は**Foundation を 1 本通した**のであって、生成能力は上がっていない。
+
+### 11.5 ADR-015 の最終 Status
+
+**`PROVISIONAL`**（`ACCEPTED` から格下げ）。
+
+- 格下げ理由: 「現在の Typed IR で表現できない」を「拡張しても表現できない」と
+  読んでいた。根拠が主張に足りていない
+- 14 軸比較の結論: A（Extended Typed IR）が **Security / Determinism /
+  Validation / Reuse / AI dependence / Offline** で強い。これは Forge の
+  中核価値とほぼ一致する
+- GEN-09 / GEN-10 / GEN-11 は **A で届く見込みが高い**（Game Rule IR /
+  Interaction IR / Encoding IR）。B が定義上必要なのは **EXT-04 のみ**
+- 既定の向き: **IR 拡張が先、Source 生成は最後の手段、落ちた理由を必ず記録**
+- **既存 Generated Dart 経路は削除していない**（指示 §3）
+- `ACCEPTED` へ戻す条件: Decision Experiment E1〜E4 の実測
+
+### 11.6 Sandbox / Tier / Permission / 依存 の状態
+
+| 項目 | 状態 |
+|---|---|
+| Sandbox（Linux） | **動作。** network namespace / PID namespace / RLIMIT_CPU・AS・NPROC・FSIZE / 壁時計 timeout / 明示 workspace / env をゼロから再構築 / shell 不使用 |
+| Sandbox（Windows・macOS） | **未実装。拒否する**（fail closed）。**Linux だけ通ったことを「完成」と書かない**（TD110） |
+| 本番経路への配線 | `build_time_workspace._execute` の 1 箇所。ここを素の `subprocess.run` へ戻すと試験 2 件が FAIL |
+| `policy-only` 段 | CI 等 namespace を作れない環境向け。**既定は拒否**、明示 opt-in が要る、Evidence に名前が残る |
+| Tier 強制 | **動作。** Tier は宣言を信じず permission から**計算**。Tier C は `human_approval` 無しで実行不可、`approval_reference` 無しで Promotion 不可 |
+| Permission Manifest | **作れるが、Promotion 判定へ未配線**（TD112）。**Manifest 無しでも Promotion できてしまう** |
+| 依存 allowlist | 機構は動作。**中身が空**（License / Digest / 脆弱性情報を持っていない）(TD113) |
+| 利用者向け言語 | `_USER_FACING` で「インターネットへ接続します」等へ変換。専門用語を利用者へ出さない試験あり |
+
+### 11.7 試験
+
+| 対象 | 結果 |
+|---|---|
+| `forge_ai` | **811 passed / 10 skipped / 0 failed** |
+| `backend` | **2072 passed / 16 skipped / 0 failed** |
+| Capability Matrix 検査 | **PASS** |
+| Universal Quality 検査 | **PASS** |
+| CI（4 job） | **すべて success** |
+
+skip 10 件は OS 層を要する escape corpus（policy-only 環境で正しく skip される分）
+と Live Test（既定 SKIP）である。
+
+### 11.8 配線破壊試験（指示 §9）
+
+Gate を **1 つずつ外して、対応する試験が FAIL することを確認した。**
+
+| 外したもの | 結果 |
+|---|---|
+| network namespace | 検出 |
+| env の再構築 | 検出 |
+| CPU 上限 | **最初は検出しなかった**（壁時計が先に効く置物だった）→ 試験を書き直して検出 |
+| memory 上限 | **最初は検出しなかった**（同上）→ `blocked: MemoryError` を要求して検出 |
+| file size 上限 | 検出 |
+| fail closed（拒否せず素通し） | 検出 |
+| PID namespace | 検出 |
+| Tier 計算 | 検出 |
+| Tier C の Human Gate | 検出 |
+| Permission 検査 | 検出 |
+| 依存 allowlist | 検出 |
+| 獲得行為の禁止 | **最初は `['pip','install',...]` を見逃した** → **試験ではなく検出器を直した** |
+| 本番経路の Sandbox 配線 | 検出（2 件 FAIL） |
+
+**13/13 検出。ただし 3 件は最初 FAIL しなかった。** 置物を 2 つ自分で作って
+いたことになる。破壊試験をしなければ「PASS している」と報告していた。
+
+### 11.9 まだ言えないこと（Evidence が無いもの）
+
+| 項目 | 実数 |
+|---|---|
+| Real Local Model runs | **0** |
+| Real Provider 呼び出し | **0**（本 Task 中に実 API は一切呼んでいない） |
+| 実機（Windows / Android / iOS）Evidence | **0** |
+| Human Evidence | **0 人**（H0 の 3〜5 人も未実施） |
+| Frozen Final Holdout | **未生成**（RC Freeze 後に独立生成する。仕様・割当・runner・result schema のみ Repository にある） |
+| `99_PROVEN` | **0 件** |
+| `HARD_GATE_PROVEN` | **0 件** |
+| 0 円違反 | **0 件**（課金 API・有料 Service を使っていない） |
+
+### 11.10 未解決 Gap Top 10
+
+Priority Score 順（`gap` block より）。
+
+| # | ID | 能力 | 現在 | Score | 残っているもの |
+|---|---|---|---|---:|---|
+| 1 | SEC-04 | Sandbox | `PARTIAL` | 6.67 | **Windows / macOS backend**。主配布対象が未対応 |
+| 2 | EXT-08 | Sandbox 実行 | `PARTIAL` | 6.67 | 同上。Linux 以外で自己拡張が動かない |
+| 3 | SEC-05 | 生成 Code 検査 | `PARTIAL` | 6.00 | secret / effect の検査、Promotion への配線 |
+| 4 | SEC-06 | Dependency 検査 | `PARTIAL` | 5.33 | **allowlist の中身が空**。License / Digest / 脆弱性 |
+| 5 | QA-05 | 配線破壊試験 | `PARTIAL` | 5.33 | Sandbox 以外の Gate へ横展開 |
+| 6 | GEN-04 | Validator | `IMPLEMENTED` | 4.80 | Episode が無い（`VERIFIED` へ上がれない） |
+| 7 | GEN-03 | Schema 正当性 | `IMPLEMENTED` | 4.80 | 同上 |
+| 8 | EXT-10 | 自動 Promotion | `IMPLEMENTED` | 4.80 | **Permission Manifest が未配線**（TD112） |
+| 9 | SEC-07 | Secret 管理 | `PARTIAL` | 4.00 | 実運用での検証 |
+| 10 | EXT-09 | 自動安全性判断 | `PARTIAL` | 4.00 | Tier 判定は出来るが、判断根拠の Evidence が薄い |
+
+**残り 58 件は依然 `NOT_ASSESSED`**——見ていない。これも未解決 Gap である。
+
+---
+
+## 11.11 7 問の自己監査（`PRODUCT-DIRECTION.md` §8）
+
+| # | 問い | 答え |
+|---|---|---|
+| 1 | 生成アプリの**品質**を上げるか | **直接は上げない。** 上げたのは安全性である。ただし「生成物がホスト権限で走る」状態は品質以前の欠陥であり、そこを塞いだ |
+| 2 | Local AI が将来**学習・利用**できる構造か | **一部。** `CommandEvidence.sandbox_backend` により「どの隔離で走ったか」が Evidence に残るので、学習時に policy-only と OS 層を混ぜずに済む。一方 Permission Manifest は Promotion 判定へ未配線のため、学習可能な Evidence として溜まっていない（TD112） |
+| 3 | 片方を改善して**もう片方を後退**させていないか | **後退させた箇所が 1 つある。** Sandbox を fail closed にしたことで、**Windows では Self-Extension が動かなくなった**。これは隠さない（TD110）。以前は「動くが無防備」、いまは「安全だが動かない」。**無防備なまま動かすよりは正しい**と判断したが、Windows は主配布対象なので未達である |
+| 4 | **Template 依存**を増やしていないか | 増やしていない。Widget / Template を 1 つも足していない。ADR-015 の再監査はむしろ逆向き（有限部品ではなく IR 拡張へ）である |
+| 5 | **Production Path** へ本当に接続されているか | **接続されている。** 配線先は `build_time_workspace._execute` の 1 箇所で、ここは生成コードが実行される**唯一の**場所である。素の `subprocess.run` へ戻すと試験 2 件が FAIL する。CI でも実際に通っており（`test/build/runtime_probe exit=0` → `PROMOTED`）、**「作ったが本番から呼ばれない」にはなっていない** |
+| 6 | Local AI 改善へ使える **Evidence** が残るか | **部分的に残る。** `sandbox_backend` は残る。しかし README §4 の Outcome 指標（`primary_success`、`repair_attempts`、`latency_p95`、`peak_rss_mb` 等）は依然**未収録**であり、学習に足りる Episode になっていない |
+| 7 | 実装都合で**最終目標を縮小**していないか | **していない。** むしろ ADR-015 で「現在できない」を「原理的にできない」と読んでいた自分の結論を取り消し、目標側を戻した。Status も緩めず、誤配置 3 件を**下げた** |
+
+**問題として報告するもの:** #3（Windows で動かなくなった）と #6（学習に足る
+Evidence が溜まっていない）。どちらも縮小して済ませず、TD110 / README §4 として
+残した。#3 の代替案は「Windows backend（AppContainer / Job Object）を実装する」
+または「Windows では Cloud 実行へ委譲する」の 2 つで、**Trade-off は前者が
+実装工数、後者が 0 円方針とオフライン性の後退**である。CEO 判断は不要——
+どちらも実装で解けるため、次 Task の候補として Gap Top 1 に置いた。
+
+---
+
+## 12. 「測定方法を作った」のか「差を縮めた」のか
+
+CEO 指示の最後の問いに、分けて答える。
+
+### 12.1 測定方法を作っただけのもの
+
+- 121 能力の `gap` block（Target / Current / Gap steps / Blast Radius /
+  Implementation Cost / Evidence Cost / Risk / Priority Score）
+- Mapping Index（`mapping_index.json`）——**候補抽出まで**の道具
+- `PRE_HUMAN_READY` の新設と、`check_capability_matrix.py` の検査規則
+- Holdout の仕様・Family 割当・result schema・runner
+- Human Panel の段階計画（H0〜H3）
+
+**これらは 2億円 Target との差を 1mm も縮めていない。** 差を**測れるように
+しただけ**である。
+
+### 12.2 実際に差を縮めたもの
+
+- **Sandbox（OS 層）**。Before は隔離**ゼロ**——生成された Dart が
+  `subprocess.run` で素通しに実行されていた。After は network / PID
+  namespace と rlimit の下でしか動かない。**escape corpus 8/8 を実際に阻止**
+- **Tier / Permission の強制**。Before は判定機構が**存在しなかった**。
+  After は Tier C が承認無しで実行も Promotion も出来ない
+- **依存獲得の禁止**。Before は生成物が `pip install` を書けた。After は拒否される
+- **置物試験 2 件の除去**。「PASS していたが何も守っていなかった」試験を
+  破壊試験で見つけて直した
+
+**これは実装の差であって、生成能力の差ではない。**
+
+### 12.3 したがって、いま言えること
+
+> **Foundation（Security 層）の差は縮んだ。生成能力（GEN / UI / LRN）の差は
+> 縮んでいない。**
+
+そして次は言わない。
+
+- **「能力差 0」とは言わない**——`99_PROVEN` が 0 件である
+- **「121 項目 99%」とは言わない**——測定した Episode が無い
+- **「Z12 完了」とは言わない**——Holdout も Human Evidence も無い
+- **「Sandbox 完成」とも言わない**——Windows で動かない
+
+CI が緑になったのは「壊れていない」ことの証明であって、
+**「2億円 Target に届いた」ことの証明ではない。**

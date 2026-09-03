@@ -412,6 +412,22 @@ QA-05, UI-11 had been filled with unrelated implementations because the search
 terms were written without reading the capability names). Correcting them
 lowered `IMPLEMENTED` from 21 to 17.
 
+Verified on CI at `59e38d6` (run `33813646772`, all four jobs green). The heavy
+step — 「生成 Dart の実ビルド経路」 — actually executed inside the sandbox
+(`test exit=0` / `build exit=0` / `runtime_probe exit=0` / `PROMOTED`), so the
+isolation is on the real path rather than only in unit tests. Getting there
+took three red runs whose causes were all different: runners cannot create
+namespaces; the opt-in was set per-step and forgotten in another job; and the
+default `RLIMIT_AS` of 512MB is below what the Dart VM reserves as virtual
+address space (measured, not guessed — a 2GB reservation probe fails at 512MB
+and succeeds at 8GB).
+
+Counts after this task: `NOT_ASSESSED` 102 → 58, `IMPLEMENTED` 12 → 17,
+`PARTIAL` 5 → 26, `NOT_STARTED` 2 → 19. `99_PROVEN` and `HARD_GATE_PROVEN`
+remain **0**. Real local-model runs 0, real provider calls 0, device evidence 0,
+human evidence 0 people. What narrowed is the security foundation; generation
+capability (GEN / UI / LRN) did not move.
+
 ---
 
 ## 11. Current unverified / incomplete boundaries

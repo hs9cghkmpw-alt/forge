@@ -2,6 +2,12 @@
 
 **今回は測り方ではなく、実際に穴を塞いだ。**
 
+**完了。最終 Commit `59e38d6` / CI run `33813646772` success（4 job すべて）。**
+CI は 3 回落ちてから緑になった（namespace 不可 → 別 job の付け忘れ →
+`RLIMIT_AS` が Dart VM に足りない、の 3 つで**原因はそれぞれ別**）。
+`99_PROVEN` は **0 件**のまま、Real Provider 呼び出し **0**、Human Evidence
+**0 人**。**縮んだのは Foundation の差であり、生成能力の差ではない。**
+
 - **Sandbox W1 を実装**（`forge_ai/core/sandbox/`）。生成物の test/build は
   これまで**ホスト権限**で走っていた（network 可、env 継承）。いまは
   Network namespace / PID namespace / env 作り直し / RLIMIT_CPU / RLIMIT_AS /
