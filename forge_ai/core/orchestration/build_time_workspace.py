@@ -1,16 +1,14 @@
 """Concrete managed workspace runner for BUILD_TIME capability acquisition.
 
-This module is intentionally generic: it does not know about map/calendar/game or
-any other product domain.  It materializes an already-decomposed reusable
-BuildTimeCapabilityArtifact into an isolated staging directory, executes an
-explicit allow-listed command plan without shell interpolation, records concrete
-evidence, and returns the exact source/runtime fingerprint used by the promotion
-gate.
+This module materializes an already-decomposed reusable BuildTimeCapabilityArtifact
+into a staging directory, applies the default-deny BuildTimeSandboxPolicy before
+any generated code can execute, runs an explicit allow-listed command plan, and
+records the exact evidence used by the promotion gate.
 
-It is *not* an arbitrary command endpoint.  Callers must provide argv tuples;
-``shell=True`` is never used, cwd is pinned to the generated workspace, execution
-is bounded by timeout, paths are checked before materialization, and output is
-truncated before it can become unbounded evidence.
+The workspace alone is not called a sandbox.  The enforceable sandbox layer lives
+in ``build_time_sandbox.py`` and currently provides source/effect policy, command
+profiles, executable pinning, environment scrubbing, cwd pinning and timeout.
+OS-level network namespaces / AppContainer / VM isolation remain separate proof.
 """
 
 from __future__ import annotations
@@ -29,6 +27,7 @@ from forge_ai.core.orchestration.build_time_extension import (
     BuildTimeCapabilityArtifact,
     BuildTimeExtensionError,
 )
+from forge_ai.core.orchestration.build_time_sandbox import BuildTimeSandboxPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +68,10 @@ class ManagedBuildEvidence:
     source_digest: str
     runtime_fingerprint: str
     commands: tuple[CommandEvidence, ...]
+    sandbox_policy_version: str
+    sandbox_policy_digest: str
+    sandbox_preflight_pass: bool
+    sandbox_environment_names: tuple[str, ...]
 
     def passed(self, kind: str) -> bool:
         matching = [item for item in self.commands if item.kind == kind]
@@ -82,7 +85,7 @@ class ManagedBuildExecution:
 
 
 class ManagedBuildWorkspaceRunner:
-    """Materialize and execute one BUILD_TIME artifact in a controlled workspace."""
+    """Materialize and execute one BUILD_TIME artifact behind sandbox preflight."""
 
     def __init__(
         self,
@@ -90,12 +93,14 @@ class ManagedBuildWorkspaceRunner:
         root: Path | None = None,
         max_output_chars: int = 20_000,
         keep_workspace: bool = False,
+        sandbox_policy: BuildTimeSandboxPolicy | None = None,
     ) -> None:
         if max_output_chars <= 0:
             raise ValueError("max_output_chars must be positive")
         self._root = root
         self._max_output_chars = max_output_chars
         self._keep_workspace = keep_workspace
+        self._sandbox_policy = sandbox_policy or BuildTimeSandboxPolicy()
 
     def run(
         self,
@@ -133,6 +138,14 @@ class ManagedBuildWorkspaceRunner:
                     "materialized workspace digest differs from generated artifact"
                 )
 
+            # Crucial ordering: preflight runs before the first subprocess.  A rejected
+            # artifact therefore cannot obtain a single instruction of host execution.
+            sandbox = self._sandbox_policy.preflight(
+                artifact,
+                command_plan,
+                workspace=workspace,
+            )
+
             evidence: list[CommandEvidence] = []
             for command in command_plan:
                 item = self._execute(workspace, command)
@@ -144,7 +157,11 @@ class ManagedBuildWorkspaceRunner:
 
             build_id = f"build-{uuid4().hex}"
             fingerprint = self._runtime_fingerprint(
-                artifact.capability_id, build_id, workspace_digest, tuple(evidence)
+                artifact.capability_id,
+                build_id,
+                workspace_digest,
+                sandbox.policy_digest,
+                tuple(evidence),
             )
             bundle = ManagedBuildEvidence(
                 build_id=build_id,
@@ -152,6 +169,10 @@ class ManagedBuildWorkspaceRunner:
                 source_digest=artifact.source_digest,
                 runtime_fingerprint=fingerprint,
                 commands=tuple(evidence),
+                sandbox_policy_version=sandbox.policy_version,
+                sandbox_policy_digest=sandbox.policy_digest,
+                sandbox_preflight_pass=True,
+                sandbox_environment_names=sandbox.environment_names,
             )
             result = BuildTimeBuildResult(
                 build_id=build_id,
@@ -189,15 +210,22 @@ class ManagedBuildWorkspaceRunner:
             target.write_text(source.content, encoding="utf-8", newline="\n")
 
     def _execute(self, workspace: Path, command: BuildCommand) -> CommandEvidence:
+        # Resolve the executable against the host once, after the command profile has
+        # already been accepted.  Then run that exact path under a scrubbed environment.
+        # A later PATH change cannot swap the executable we validated.
+        resolved_executable = self._sandbox_policy.resolve_executable(command.argv[0])
+        argv = [resolved_executable, *command.argv[1:]]
+        env = self._sandbox_policy.build_environment(workspace)
         try:
             completed = subprocess.run(
-                list(command.argv),
+                argv,
                 cwd=workspace,
                 check=False,
                 capture_output=True,
                 text=True,
                 timeout=command.timeout_seconds,
                 shell=False,
+                env=env,
             )
             return CommandEvidence(
                 kind=command.kind,
@@ -256,6 +284,7 @@ class ManagedBuildWorkspaceRunner:
         capability_id: str,
         build_id: str,
         source_digest: str,
+        sandbox_policy_digest: str,
         evidence: tuple[CommandEvidence, ...],
     ) -> str:
         h = sha256()
@@ -264,6 +293,11 @@ class ManagedBuildWorkspaceRunner:
         h.update(build_id.encode("utf-8"))
         h.update(b"\0")
         h.update(source_digest.encode("ascii"))
+        h.update(b"\0")
+        # Runtime evidence is meaningful only together with the exact policy that
+        # permitted execution.  Tightening/loosening policy therefore changes the
+        # fingerprint and prevents stale evidence from silently carrying forward.
+        h.update(sandbox_policy_digest.encode("ascii"))
         for item in evidence:
             h.update(item.kind.encode("utf-8"))
             h.update(b"\0")
