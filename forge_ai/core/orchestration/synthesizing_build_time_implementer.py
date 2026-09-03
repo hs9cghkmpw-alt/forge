@@ -49,6 +49,9 @@ from forge_ai.core.orchestration.build_time_extension import (
     BuildTimeExtensionError,
     implement_build_time_extension,
 )
+from forge_ai.core.orchestration.build_time_host_projection import (
+    BuildTimeHostProjection,
+)
 from forge_ai.core.orchestration.build_time_workspace import (
     BuildCommand,
     ManagedBuildExecution,
@@ -293,10 +296,15 @@ class SynthesizingBuildTimeImplementer:
                 f" required entry files: {', '.join(missing)}",
             )
 
+        host_projection = BuildTimeHostProjection(
+            host_prefix=plan.host_prefix,
+            excluded_paths=frozenset(plan.harness_files),
+        )
         managed = ManagedBuildTimeImplementer(
             capability_id=manifest.capability_id,
             commands=plan.commands,
             runner=self.runner,
+            host_projection=host_projection,
         )
         self.build_count += 1
         self.last_verified = None

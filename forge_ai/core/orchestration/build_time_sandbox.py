@@ -9,6 +9,11 @@ concrete host-escape paths that existed in ``ManagedBuildWorkspaceRunner``:
 3. subprocesses inherited the complete host environment, including API keys;
 4. a PATH lookup could select an unexpected executable after validation.
 
+It also binds Dart import validation to the exact Host Projection used when a
+verified artifact is installed.  A binding may therefore refer to a generated
+file that becomes its sibling after projection, but only when that destination
+is explicitly declared, collision-free, and part of the same artifact.
+
 The policy is deliberately capability-based and fail-closed.  A future OS
 backend (AppContainer / namespace / WASI / VM) can sit underneath the same
 contract; this module must not be described as the final EXT-08 proof by itself.
@@ -30,6 +35,9 @@ from forge_ai.core.orchestration.build_time_extension import (
     BuildTimeCapabilityArtifact,
     BuildTimeExtensionError,
 )
+from forge_ai.core.orchestration.build_time_host_projection import (
+    BuildTimeHostProjection,
+)
 
 __all__ = [
     "BUILD_TIME_SANDBOX_POLICY_VERSION",
@@ -39,7 +47,7 @@ __all__ = [
 ]
 
 
-BUILD_TIME_SANDBOX_POLICY_VERSION = "2026-09-03.v1"
+BUILD_TIME_SANDBOX_POLICY_VERSION = "2026-09-03.v2"
 
 
 class SandboxPolicyViolation(BuildTimeExtensionError):
@@ -53,6 +61,7 @@ class SandboxPreflightEvidence:
     source_files_scanned: int
     commands_scanned: int
     environment_names: tuple[str, ...]
+    host_projection_digest: str = ""
 
 
 _PYTHON_ALLOWED_LIBRARY_ROOTS = frozenset(
@@ -217,6 +226,7 @@ class BuildTimeSandboxPolicy:
 
     @property
     def policy_digest(self) -> str:
+        """Digest of the static policy; execution evidence also binds projection."""
         payload = {
             "version": self.policy_version,
             "python_allowed_library_roots": sorted(_PYTHON_ALLOWED_LIBRARY_ROOTS),
@@ -227,9 +237,18 @@ class BuildTimeSandboxPolicy:
             "dart_dangerous_tokens": sorted(_DART_DANGEROUS_TOKENS),
             "command_profiles": ["python-safe", "dart-safe"],
             "environment_mode": "allow-list-private-home-workspace-pythonpath",
+            "host_projection_mode": "explicit-prefix-exclusions-v1",
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return sha256(encoded).hexdigest()
+
+    def effective_policy_digest(self, host_projection: BuildTimeHostProjection) -> str:
+        """Bind the static policy to the exact product-layout projection."""
+        h = sha256()
+        h.update(self.policy_digest.encode("ascii"))
+        h.update(b"\0")
+        h.update(host_projection.digest.encode("ascii"))
+        return h.hexdigest()
 
     def preflight(
         self,
@@ -237,10 +256,12 @@ class BuildTimeSandboxPolicy:
         commands: Iterable[object],
         *,
         workspace: Path,
+        host_projection: BuildTimeHostProjection | None = None,
     ) -> SandboxPreflightEvidence:
         artifact.validate()
+        projection = host_projection or BuildTimeHostProjection()
         command_plan = tuple(commands)
-        self.validate_artifact(artifact)
+        self.validate_artifact(artifact, host_projection=projection)
         for command in command_plan:
             kind = str(getattr(command, "kind", ""))
             argv = tuple(str(value) for value in getattr(command, "argv", ()))
@@ -248,26 +269,41 @@ class BuildTimeSandboxPolicy:
         env = self.build_environment(workspace)
         return SandboxPreflightEvidence(
             policy_version=self.policy_version,
-            policy_digest=self.policy_digest,
+            policy_digest=self.effective_policy_digest(projection),
             source_files_scanned=len(artifact.files),
             commands_scanned=len(command_plan),
             environment_names=tuple(sorted(env)),
+            host_projection_digest=projection.digest,
         )
 
-    def validate_artifact(self, artifact: BuildTimeCapabilityArtifact) -> None:
+    def validate_artifact(
+        self,
+        artifact: BuildTimeCapabilityArtifact,
+        *,
+        host_projection: BuildTimeHostProjection | None = None,
+    ) -> None:
+        projection = host_projection or BuildTimeHostProjection()
         local_python_roots = frozenset(
             PurePosixPath(source.path).stem
             for source in artifact.files
             if source.path.lower().endswith(".py")
         )
         artifact_paths = frozenset(PurePosixPath(source.path).as_posix() for source in artifact.files)
+        projected_by_source = projection.projected_paths(artifact_paths)
+        projected_paths = frozenset(projected_by_source.values())
 
         for source in artifact.files:
             lowered = source.path.lower()
             if lowered.endswith(".py"):
                 self._validate_python(source.path, source.content, local_python_roots)
             elif lowered.endswith(".dart"):
-                self._validate_dart(source.path, source.content, artifact_paths)
+                self._validate_dart(
+                    source.path,
+                    source.content,
+                    artifact_paths,
+                    projected_by_source,
+                    projected_paths,
+                )
             else:
                 raise SandboxPolicyViolation(
                     f"sandbox source policy has no parser for generated file {source.path!r}"
@@ -284,9 +320,7 @@ class BuildTimeSandboxPolicy:
         except SyntaxError:
             # Invalid Python cannot execute.  Treat syntax validity as a build/test
             # concern, not a security-policy verdict: the mandatory compile/test
-            # phases will fail closed and promotion remains impossible.  Raising a
-            # SandboxPolicyViolation here incorrectly converted ordinary bad-source
-            # evidence into a security exception and bypassed the normal failure path.
+            # phases will fail closed and promotion remains impossible.
             return
         _PythonSafetyVisitor(path=path, local_roots=local_roots).visit(tree)
 
@@ -295,6 +329,8 @@ class BuildTimeSandboxPolicy:
         path: str,
         content: str,
         artifact_paths: frozenset[str],
+        projected_by_source: dict[str, str],
+        projected_paths: frozenset[str],
     ) -> None:
         # Remove comments before token checks so prose cannot produce false positives.
         stripped = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
@@ -306,6 +342,7 @@ class BuildTimeSandboxPolicy:
                     f"sandbox source policy rejected {path!r}: Dart effect {token!r} is not permitted"
                 )
 
+        normalized_source = PurePosixPath(path).as_posix()
         for statement, uri in _IMPORT_RE.findall(stripped):
             if statement != "import":
                 raise SandboxPolicyViolation(
@@ -317,11 +354,34 @@ class BuildTimeSandboxPolicy:
                 raise SandboxPolicyViolation(
                     f"sandbox source policy rejected {path!r}: Dart import {uri!r} is not allow-listed"
                 )
-            target = (PurePosixPath(path).parent / PurePosixPath(uri)).as_posix()
-            if uri.startswith("/") or ".." in PurePosixPath(uri).parts or target not in artifact_paths:
+
+            relative = PurePosixPath(uri.replace("\\", "/"))
+            if relative.is_absolute() or ".." in relative.parts:
                 raise SandboxPolicyViolation(
                     f"sandbox source policy rejected {path!r}: relative import {uri!r} escapes artifact"
                 )
+
+            # First accept the literal verification-workspace layout.
+            workspace_target = (
+                PurePosixPath(normalized_source).parent / relative
+            ).as_posix()
+            if workspace_target in artifact_paths:
+                continue
+
+            # Some generated files are verified under a staging prefix but installed
+            # with that prefix removed.  Accept only the exact declared product layout.
+            projected_source = projected_by_source.get(normalized_source)
+            if projected_source is not None:
+                projected_target = (
+                    PurePosixPath(projected_source).parent / relative
+                ).as_posix()
+                if projected_target in projected_paths:
+                    continue
+
+            raise SandboxPolicyViolation(
+                f"sandbox source policy rejected {path!r}: relative import {uri!r} "
+                "resolves to neither verified workspace nor declared host projection"
+            )
 
     def validate_command(self, *, kind: str, argv: tuple[str, ...]) -> None:
         if kind not in {"test", "build", "runtime_probe", "safety"}:

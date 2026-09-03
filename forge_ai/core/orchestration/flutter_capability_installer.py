@@ -33,6 +33,8 @@
 * パスが `frontend/lib/json_ui/acquired/` の外へ出る artifact は**落とす**
 * binding が無い artifact は**落とす**。描けないものを載せない
 * 生成物を書く先は**この1ディレクトリだけ**。既存の出荷 source は触らない
+* Sandbox が検査した Host Projection と**同じ規則**で配置し、投影先が
+  衝突する artifact は1byteも書く前に拒否する
 """
 
 from __future__ import annotations
@@ -47,6 +49,10 @@ import json
 
 from forge_ai.core.orchestration.build_time_extension import (
     BuildTimeExtensionError,
+)
+from forge_ai.core.orchestration.build_time_host_projection import (
+    BuildTimeHostProjection,
+    HostProjectionError,
 )
 from forge_ai.core.orchestration.synthesizing_build_time_implementer import (
     VerifiedCapabilityArtifact,
@@ -117,6 +123,12 @@ class FlutterCapabilityInstaller:
     harness_files: frozenset[str]
     host_prefix: str = "flutter/"
 
+    def _projection(self) -> BuildTimeHostProjection:
+        return BuildTimeHostProjection(
+            host_prefix=self.host_prefix,
+            excluded_paths=self.harness_files,
+        )
+
     def install(
         self, verified: VerifiedCapabilityArtifact,
     ) -> AcquiredCapabilityInstallation:
@@ -136,9 +148,18 @@ class FlutterCapabilityInstaller:
         if not root.is_dir():
             raise InstallationError(f"acquired capability root does not exist: {root}")
 
+        projection = self._projection()
+        try:
+            projection.projected_paths(source.path for source in artifact.files)
+        except HostProjectionError as exc:
+            raise InstallationError(str(exc)) from exc
+
         planned: list[tuple[Path, str]] = []
         for source in artifact.files:
-            relative = self._host_path(source.path)
+            try:
+                relative = projection.project(source.path)
+            except HostProjectionError as exc:
+                raise InstallationError(str(exc)) from exc
             if relative is None:
                 continue
             destination = (target_dir / relative).resolve()
@@ -260,12 +281,10 @@ class FlutterCapabilityInstaller:
 
     def _host_path(self, path: str) -> str | None:
         """artifact のパス → アプリ内の相対パス。載せないものは `None`。"""
-        if path in self.harness_files:
-            # 検証の道具は製品ではない。
-            return None
-        if path.startswith(self.host_prefix):
-            return path[len(self.host_prefix):]
-        return path
+        try:
+            return self._projection().project(path)
+        except HostProjectionError as exc:
+            raise InstallationError(str(exc)) from exc
 
 
 def verify_installed_capability(frontend_root: Path, slug: str) -> str:

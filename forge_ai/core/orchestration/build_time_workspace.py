@@ -27,6 +27,9 @@ from forge_ai.core.orchestration.build_time_extension import (
     BuildTimeCapabilityArtifact,
     BuildTimeExtensionError,
 )
+from forge_ai.core.orchestration.build_time_host_projection import (
+    BuildTimeHostProjection,
+)
 from forge_ai.core.orchestration.build_time_sandbox import BuildTimeSandboxPolicy
 
 
@@ -75,6 +78,7 @@ class ManagedBuildEvidence:
     sandbox_policy_digest: str = ""
     sandbox_preflight_pass: bool = False
     sandbox_environment_names: tuple[str, ...] = ()
+    sandbox_host_projection_digest: str = ""
 
     def passed(self, kind: str) -> bool:
         matching = [item for item in self.commands if item.kind == kind]
@@ -109,6 +113,8 @@ class ManagedBuildWorkspaceRunner:
         self,
         artifact: BuildTimeCapabilityArtifact,
         commands: Iterable[BuildCommand],
+        *,
+        host_projection: BuildTimeHostProjection | None = None,
     ) -> ManagedBuildExecution:
         artifact.validate()
         command_plan = tuple(commands)
@@ -147,6 +153,7 @@ class ManagedBuildWorkspaceRunner:
                 artifact,
                 command_plan,
                 workspace=workspace,
+                host_projection=host_projection,
             )
 
             evidence: list[CommandEvidence] = []
@@ -176,6 +183,7 @@ class ManagedBuildWorkspaceRunner:
                 sandbox_policy_digest=sandbox.policy_digest,
                 sandbox_preflight_pass=True,
                 sandbox_environment_names=sandbox.environment_names,
+                sandbox_host_projection_digest=sandbox.host_projection_digest,
             )
             result = BuildTimeBuildResult(
                 build_id=build_id,

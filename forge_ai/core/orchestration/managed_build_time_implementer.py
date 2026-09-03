@@ -7,7 +7,8 @@ activation is issued only for the exact build whose runtime probe and sandbox
 preflight passed.
 
 The class is capability-agnostic.  It does not know map/calendar/game semantics;
-callers provide a reusable artifact plus an explicit command plan.
+callers provide a reusable artifact plus an explicit command plan and host-layout
+projection.
 """
 
 from __future__ import annotations
@@ -19,6 +20,9 @@ from forge_ai.core.orchestration.build_time_extension import (
     BuildTimeCapabilityArtifact,
     BuildTimeExtensionError,
     LoadedBuildActivation,
+)
+from forge_ai.core.orchestration.build_time_host_projection import (
+    BuildTimeHostProjection,
 )
 from forge_ai.core.orchestration.build_time_workspace import (
     BuildCommand,
@@ -39,6 +43,7 @@ class ManagedBuildTimeImplementer:
     capability_id: str
     commands: tuple[BuildCommand, ...]
     runner: ManagedBuildWorkspaceRunner = field(default_factory=ManagedBuildWorkspaceRunner)
+    host_projection: BuildTimeHostProjection = field(default_factory=BuildTimeHostProjection)
     _last_execution: ManagedBuildExecution | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -50,7 +55,11 @@ class ManagedBuildTimeImplementer:
     def build(self, artifact: BuildTimeCapabilityArtifact) -> BuildTimeBuildResult:
         if artifact.capability_id != self.capability_id:
             raise BuildTimeExtensionError("managed builder changed capability identity")
-        execution = self.runner.run(artifact, self.commands)
+        execution = self.runner.run(
+            artifact,
+            self.commands,
+            host_projection=self.host_projection,
+        )
         self._last_execution = execution
         return execution.result
 
