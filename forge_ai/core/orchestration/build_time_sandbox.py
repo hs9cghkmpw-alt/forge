@@ -14,6 +14,10 @@ verified artifact is installed.  A binding may therefore refer to a generated
 file that becomes its sibling after projection, but only when that destination
 is explicitly declared, collision-free, and part of the same artifact.
 
+Reserved JSON metadata is permitted only at explicitly named metadata paths,
+must parse as JSON, and never becomes installed host source.  Unknown generated
+file formats remain fail-closed.
+
 The policy is deliberately capability-based and fail-closed.  A future OS
 backend (AppContainer / namespace / WASI / VM) can sit underneath the same
 contract; this module must not be described as the final EXT-08 proof by itself.
@@ -36,6 +40,7 @@ from forge_ai.core.orchestration.build_time_extension import (
     BuildTimeExtensionError,
 )
 from forge_ai.core.orchestration.build_time_host_projection import (
+    BUILD_TIME_METADATA_PATHS,
     BuildTimeHostProjection,
 )
 
@@ -47,7 +52,7 @@ __all__ = [
 ]
 
 
-BUILD_TIME_SANDBOX_POLICY_VERSION = "2026-09-03.v2"
+BUILD_TIME_SANDBOX_POLICY_VERSION = "2026-09-03.v3"
 
 
 class SandboxPolicyViolation(BuildTimeExtensionError):
@@ -143,6 +148,9 @@ _DART_ALLOWED_SDK_IMPORTS = frozenset(
     }
 )
 
+# This is the generated-extension Host API surface.  Do not add renderer/state/
+# runtime internals here merely to make a generated widget compile.  The acquired
+# capability facade must expose a least-privilege adapter instead.
 _DART_ALLOWED_PACKAGE_IMPORTS = frozenset(
     {
         "package:flutter/material.dart",
@@ -235,6 +243,7 @@ class BuildTimeSandboxPolicy:
             "dart_allowed_sdk": sorted(_DART_ALLOWED_SDK_IMPORTS),
             "dart_allowed_packages": sorted(_DART_ALLOWED_PACKAGE_IMPORTS),
             "dart_dangerous_tokens": sorted(_DART_DANGEROUS_TOKENS),
+            "metadata_paths": sorted(BUILD_TIME_METADATA_PATHS),
             "command_profiles": ["python-safe", "dart-safe"],
             "environment_mode": "allow-list-private-home-workspace-pythonpath",
             "host_projection_mode": "explicit-prefix-exclusions-v1",
@@ -293,7 +302,8 @@ class BuildTimeSandboxPolicy:
         projected_paths = frozenset(projected_by_source.values())
 
         for source in artifact.files:
-            lowered = source.path.lower()
+            normalized_path = PurePosixPath(source.path).as_posix()
+            lowered = normalized_path.lower()
             if lowered.endswith(".py"):
                 self._validate_python(source.path, source.content, local_python_roots)
             elif lowered.endswith(".dart"):
@@ -303,6 +313,12 @@ class BuildTimeSandboxPolicy:
                     artifact_paths,
                     projected_by_source,
                     projected_paths,
+                )
+            elif normalized_path in BUILD_TIME_METADATA_PATHS:
+                self._validate_metadata_json(
+                    path=normalized_path,
+                    content=source.content,
+                    capability_id=artifact.capability_id,
                 )
             else:
                 raise SandboxPolicyViolation(
@@ -323,6 +339,54 @@ class BuildTimeSandboxPolicy:
             # phases will fail closed and promotion remains impossible.
             return
         _PythonSafetyVisitor(path=path, local_roots=local_roots).visit(tree)
+
+    def _validate_metadata_json(
+        self,
+        *,
+        path: str,
+        content: str,
+        capability_id: str,
+    ) -> None:
+        try:
+            value = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise SandboxPolicyViolation(
+                f"sandbox source policy rejected {path!r}: metadata is not valid JSON"
+            ) from exc
+        if not isinstance(value, dict):
+            raise SandboxPolicyViolation(
+                f"sandbox source policy rejected {path!r}: metadata root must be an object"
+            )
+
+        # capability_contribution.json is a declaration tied to the artifact identity.
+        # Do not let generated metadata silently claim a different capability.
+        if path == "capability_contribution.json":
+            declared = value.get("capability_id")
+            if declared != capability_id:
+                raise SandboxPolicyViolation(
+                    f"sandbox source policy rejected {path!r}: capability identity mismatch"
+                )
+            for key in ("widget_type", "widget_id", "document_version"):
+                field = value.get(key)
+                if not isinstance(field, str) or not field.strip():
+                    raise SandboxPolicyViolation(
+                        f"sandbox source policy rejected {path!r}: metadata field {key!r} is required"
+                    )
+            properties = value.get("properties", [])
+            if not isinstance(properties, list):
+                raise SandboxPolicyViolation(
+                    f"sandbox source policy rejected {path!r}: properties must be a list"
+                )
+            for item in properties:
+                if (
+                    not isinstance(item, list)
+                    or len(item) != 2
+                    or not isinstance(item[0], str)
+                    or not item[0].strip()
+                ):
+                    raise SandboxPolicyViolation(
+                        f"sandbox source policy rejected {path!r}: properties must be [name, value] pairs"
+                    )
 
     def _validate_dart(
         self,

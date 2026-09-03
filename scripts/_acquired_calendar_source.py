@@ -97,27 +97,27 @@ void main() {
 }
 '''
 
+# 生成 binding は Forge の内部 Runtime/Document を直接 import しない。
+# `ForgeAcquiredRuntimeReader` が read-only Host API であり、表示 Capability に
+# write/dispatch/export 権限を先渡ししない。
 _BINDING = '''import 'package:flutter/material.dart';
 
 import 'package:forge_app/json_ui/acquired/acquired_capability.dart';
-import 'package:forge_app/json_ui/renderer/forge_runtime_state.dart';
 import 'package:forge_app/json_ui/schema/acquired_widget_types.dart';
-import 'package:forge_app/json_ui/schema/forge_document.dart';
 
 import 'capability_impl.dart';
 
 /// 記録を月ごとにまとめて見せる。
 Widget buildCalendarView(
   BuildContext context,
-  ForgeWidgetNode node,
-  ForgeRuntimeState state,
-  Widget Function(ForgeWidgetNode child) recurse,
+  ForgeAcquiredNode node,
+  ForgeAcquiredRuntimeReader state,
+  ForgeAcquiredChildBuilder recurse,
 ) {
-  final acquired = node as ForgeAcquiredWidgetNode;
-  final stateRef = acquired.properties['state_ref'] as String? ?? 'records';
-  final dateField = acquired.properties['date_field'] as String? ?? 'date';
-  final title = acquired.properties['title'] as String? ?? 'カレンダー';
-  final emptyText = acquired.properties['empty_text'] as String? ?? '記録がありません';
+  final stateRef = node.properties['state_ref'] as String? ?? 'records';
+  final dateField = node.properties['date_field'] as String? ?? 'date';
+  final title = node.properties['title'] as String? ?? 'カレンダー';
+  final emptyText = node.properties['empty_text'] as String? ?? '記録がありません';
 
   final records = state.getRecordList(stateRef);
   final dates = <String>[];
@@ -194,8 +194,6 @@ def _payload() -> dict:
         ],
         "reusable_contract": "日付の記録を月ごとにまとめて見せる再利用可能な実装",
     }
-
-
 
 
 CALENDAR_PAYLOAD = _payload()

@@ -1,24 +1,22 @@
-// 獲得能力の**登録**そのものの不変条件（TD94）。
+// 獲得能力の**登録**そのものの不変条件（TD94 / EXT-08 Layer 1）。
 //
 // 実際に Forge のアプリへ載って描かれるところは
 // `test_acquired/acquired_capability_e2e_test.dart` が見る。
-// ここが見るのは登録の門である。
+// ここが見るのは登録の門と、生成 Builder へ渡す Host API の型である。
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:forge_app/json_ui/acquired/acquired_capability.dart';
 import 'package:forge_app/json_ui/acquired/acquired_capabilities.dart';
-import 'package:forge_app/json_ui/renderer/forge_runtime_state.dart';
 import 'package:forge_app/json_ui/schema/acquired_widget_types.dart';
-import 'package:forge_app/json_ui/schema/forge_document.dart';
 import 'package:forge_app/json_ui/widget_registry/widget_registry.dart';
 
 Widget _build(
   BuildContext context,
-  ForgeWidgetNode node,
-  ForgeRuntimeState state,
-  Widget Function(ForgeWidgetNode child) recurse,
+  ForgeAcquiredNode node,
+  ForgeAcquiredRuntimeReader state,
+  ForgeAcquiredChildBuilder recurse,
 ) =>
     const Text('描いた');
 

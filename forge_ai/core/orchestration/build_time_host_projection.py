@@ -6,10 +6,14 @@ must use the *same* projection contract; otherwise a relative import can be
 validated against one layout and executed from another.
 
 This module is intentionally generic.  It knows no Flutter widget or capability
-identity.  A language build plan supplies only two structural facts:
+identity.  A language build plan supplies only structural facts:
 
 * ``host_prefix``: a generated prefix removed when files enter the host app;
 * ``excluded_paths``: harness files used for verification but never installed.
+
+Forge also reserves a very small set of generated metadata paths.  They are part
+of the verified artifact and are scanned by the sandbox, but they are not host
+source and therefore never enter the installed Flutter source tree.
 
 Projection is fail-closed: unsafe paths and two sources collapsing onto the same
 installed path are rejected before execution or installation.
@@ -26,6 +30,7 @@ from typing import Iterable
 from forge_ai.core.orchestration.build_time_extension import BuildTimeExtensionError
 
 __all__ = [
+    "BUILD_TIME_METADATA_PATHS",
     "BuildTimeHostProjection",
     "HostProjectionError",
 ]
@@ -33,6 +38,12 @@ __all__ = [
 
 class HostProjectionError(BuildTimeExtensionError):
     """The declared generated-to-host layout is unsafe or ambiguous."""
+
+
+#: Declarative evidence/metadata that is verified with the artifact but is not
+#: executable host source.  Keep this list intentionally tiny; adding an entry
+#: changes what generated files can exist without being installed into the host.
+BUILD_TIME_METADATA_PATHS = frozenset({"capability_contribution.json"})
 
 
 def _normalize_relative(path: str, *, label: str) -> str:
@@ -65,12 +76,13 @@ class BuildTimeHostProjection:
         else:
             normalized_prefix = ""
 
-        normalized_excluded = frozenset(
+        normalized_excluded = {
             _normalize_relative(path, label="host projection excluded path")
             for path in self.excluded_paths
-        )
+        }
+        normalized_excluded.update(BUILD_TIME_METADATA_PATHS)
         object.__setattr__(self, "host_prefix", normalized_prefix)
-        object.__setattr__(self, "excluded_paths", normalized_excluded)
+        object.__setattr__(self, "excluded_paths", frozenset(normalized_excluded))
 
     @property
     def digest(self) -> str:
@@ -85,7 +97,7 @@ class BuildTimeHostProjection:
         return sha256(encoded).hexdigest()
 
     def project(self, path: str) -> str | None:
-        """Return installed path, or ``None`` for verification-only harness files."""
+        """Return installed path, or ``None`` for verification-only files."""
         source = _normalize_relative(path, label="generated source path")
         if source in self.excluded_paths:
             return None
