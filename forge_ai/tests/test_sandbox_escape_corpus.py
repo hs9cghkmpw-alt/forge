@@ -36,6 +36,7 @@ import pathlib
 import sys
 import tempfile
 import textwrap
+import resource
 import unittest
 from unittest.mock import patch
 
@@ -398,6 +399,42 @@ class TestPolicyOnlyIsAllowedButNamed(unittest.TestCase):
                     workspace=self.workspace,
                     policy=SandboxPolicy(allow_network=True),
                 )
+
+
+class TestTheToolchainPolicyIsStillBounded(unittest.TestCase):
+    """**緩めるが、外さない。**
+
+    実 toolchain（Dart / Flutter）を走らせるには既定より広い上限が要る。
+    しかし「広い」を「無制限」にすると、resource exhaustion を防ぐという
+    目的そのものが消える。ここはその境目を固定する。
+    """
+
+    def test_every_limit_is_finite(self) -> None:
+        policy = SandboxPolicy.for_toolchain(timeout_seconds=120)
+        for name in (
+            "timeout_seconds", "cpu_seconds", "memory_bytes",
+            "max_processes", "max_file_bytes", "max_output_bytes",
+        ):
+            value = getattr(policy, name)
+            with self.subTest(limit=name):
+                self.assertGreater(value, 0, f"{name} が 0 以下")
+                self.assertNotEqual(
+                    value, resource.RLIM_INFINITY,
+                    f"{name} が無制限になっている（上限を外している）",
+                )
+
+    def test_it_is_wider_than_the_default_but_not_absurd(self) -> None:
+        default = SandboxPolicy()
+        toolchain = SandboxPolicy.for_toolchain(timeout_seconds=120)
+        self.assertGreater(toolchain.memory_bytes, default.memory_bytes)
+        self.assertLessEqual(
+            toolchain.memory_bytes, 32 * 1024 * 1024 * 1024,
+            "toolchain 用でも 32GB を超える上限は「上限」と呼べない",
+        )
+
+    def test_network_is_still_denied_for_toolchains(self) -> None:
+        """**広げるのは資源だけ。** network は開けない。"""
+        self.assertFalse(SandboxPolicy.for_toolchain(timeout_seconds=120).allow_network)
 
 
 if __name__ == "__main__":

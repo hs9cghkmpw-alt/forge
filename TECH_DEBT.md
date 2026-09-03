@@ -4302,7 +4302,18 @@ runner は `unshare` が在っても namespace を作れず、fail closed の Sa
 `FORGE_SANDBOX_ALLOW_POLICY_ONLY=1` を立てた場合だけ Policy 層のみで走り、
 Evidence へ `sandbox_backend="policy-only"` と残る（OS 層と混ぜない）。
 
-**2 度落とした。** 1 度目（run 33812200098）は backend job、2 度目
+**3 度落とした。** 3 度目（run 33813249633）は**別の原因**で、
+`SandboxPolicy.memory_bytes = 512MB` が `RLIMIT_AS`（仮想アドレス空間）へ入り、
+**Dart VM の起動時予約に足りなかった**。Sandbox が拒否したのではなく、中で
+Dart が立ち上がれなかった。手元では Python の小さな subprocess でしか
+試していなかったため気付けなかった。
+
+2GB の仮想領域を予約するだけのプログラムで実測して確認した
+（512MB → `Cannot allocate memory` / 8GB → 成功）。`SandboxPolicy.for_toolchain()`
+を足し、**緩めるが外さない**（どの上限も有限、32GB 以下、network は開かない、
+を `test_the_toolchain_policy_is_still_bounded` が固定）。
+
+1 度目（run 33812200098）は backend job、2 度目
 （run 33812952355）は frontend job の「生成 Dart の実ビルド経路」step。
 opt-in を step ごとに書いていたため別 job の step に付け忘れた。
 **「step を足すたびに思い出す」設計は忘れられる**ので、workflow 全体の

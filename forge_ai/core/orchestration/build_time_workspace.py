@@ -288,11 +288,12 @@ class ManagedBuildWorkspaceRunner:
             result = run_in_sandbox(
                 argv,
                 workspace=workspace,
-                policy=SandboxPolicy(
+                # **実 toolchain 用の上限を使う。** 既定値（512MB）は
+                # `RLIMIT_AS`（仮想アドレス空間）へ入るため、起動時に巨大な
+                # 仮想領域を予約する Dart VM が立ち上がれない（2026-09-04、
+                # CI で判明）。緩めるが外さない——`for_toolchain` 参照。
+                policy=SandboxPolicy.for_toolchain(
                     timeout_seconds=float(command.timeout_seconds),
-                    # CPU 秒も別に取る。壁時計だけでは「速く回り続けるもの」を
-                    # 止められない。
-                    cpu_seconds=max(1, int(command.timeout_seconds)),
                 ),
                 env_override=env,
             )

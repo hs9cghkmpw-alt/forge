@@ -462,6 +462,33 @@ CI はこの変数を立てて走る（理由を `ci.yml` に書いた）。
 **「step を足すたびに思い出す」設計は忘れられる。** 2 回連続で忘れた。
 したがって opt-in を **workflow 全体の `env:`** へ 1 箇所だけ置き直した。
 
+### 3 度目——今度は別の原因だった
+
+opt-in を workflow 全体へ置いた `211ae70` でも、frontend job の同じ step が
+落ちた。**ここで「また opt-in の付け忘れだろう」と決めつけなかったのが
+分かれ目**で、log を取り直したところ実行時間が **0.17s → 5.76s** に伸びて
+いた。Sandbox は拒否しておらず、**中で Dart が起動できていなかった**。
+
+原因は**私の既定値**である。`SandboxPolicy.memory_bytes = 512MB` は
+`RLIMIT_AS`（**仮想**アドレス空間）へ入る。Python の小さな script なら
+足りるが、**Dart VM は起動時に巨大な仮想領域を予約する**ため立ち上がれない。
+
+手元では Python の subprocess でしか試していなかったので気付けなかった。
+
+**推測で直さず、実測で確かめた**（CLAUDE.md「直す前に再現する」）。
+
+```text
+2GB の仮想領域を予約するだけのプログラムを Sandbox で実行
+
+  default (512MB RLIMIT_AS)  → ok=False  OSError: Cannot allocate memory
+  for_toolchain (8GB)        → ok=True   RESERVED 2GB OK
+```
+
+直し方は `SandboxPolicy.for_toolchain()` を足し、`build_time_workspace` が
+それを使う。**緩めるが外さない**——`test_the_toolchain_policy_is_still_bounded`
+が「どの上限も有限であること」「32GB を超えないこと」「network は開かない
+こと」を固定する。上限を外して通す道は塞いだ。
+
 ### 再発防止
 
 `unshare` を失敗する stub で置き換えて **CI 環境を手元で再現**し、

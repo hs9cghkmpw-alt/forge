@@ -118,6 +118,40 @@ class SandboxPolicy:
     path_value: str = "/usr/bin:/bin"
     """子プロセスへ渡す PATH。**ホストから継承しない。**"""
 
+    @classmethod
+    def for_toolchain(cls, *, timeout_seconds: float) -> "SandboxPolicy":
+        """Dart / Flutter のような**実 toolchain** を走らせるための上限。
+
+        ---
+
+        ## なぜ既定値では駄目なのか（2026-09-04、CI で判明）
+
+        既定の `memory_bytes = 512MB` は `RLIMIT_AS`（**仮想**アドレス空間）へ
+        入る。Python の小さな script なら足りるが、**Dart VM は起動時に巨大な
+        仮想領域を予約する**ため、512MB では立ち上がらない。
+
+        CI の `生成 Dart の実ビルド経路` step がこれで落ちた。Sandbox が拒否
+        したのではなく、**Sandbox の中で Dart が起動できなかった**。
+        手元では Python の subprocess でしか試していなかったので気付けなかった。
+
+        ## それでも無制限にはしない
+
+        上限を外すのは簡単だが、そうすると「resource exhaustion を防ぐ」が
+        消える。**緩めるが、外さない。** `test_the_toolchain_policy_is_still_bounded`
+        がこれを固定する。
+        """
+        return cls(
+            timeout_seconds=timeout_seconds,
+            cpu_seconds=max(1, int(timeout_seconds)),
+            # 仮想アドレス空間。Dart VM の予約に耐えつつ、機械を食い尽くさない。
+            memory_bytes=8 * 1024 * 1024 * 1024,
+            # build は子 process を多く作る（compiler / analyzer / isolate）。
+            max_processes=512,
+            # build 生成物は 32MB を普通に超える。
+            max_file_bytes=1024 * 1024 * 1024,
+            max_output_bytes=4 * 1024 * 1024,
+        )
+
 
 @dataclass(frozen=True)
 class SandboxResult:
