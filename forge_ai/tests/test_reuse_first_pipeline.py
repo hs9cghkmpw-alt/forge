@@ -105,6 +105,10 @@ def _promoted_manifest() -> ExtensionManifest:
             language_binding=True, validator_binding=True,
             runtime_binding=True, compiler_binding=True,
             tests_pass=True, build_pass=True, runtime_evidence=True,
+            # This fixture represents an already acquired BUILD_TIME capability.
+            # The production gate now requires sandbox evidence before that state
+            # can exist, so the synthetic state must include the same invariant.
+            sandbox_preflight=True,
             safety_review=True,
         ),
     )
