@@ -413,6 +413,50 @@ proof by itself」と書いており、今回の OS 層はその下に入る形�
 
 ---
 
+## 9.2 CI を落とした（正直に書く）
+
+merge 後の CI run `33812200098` が **failure** だった。10 件 FAIL。
+
+### 原因
+
+**GitHub Actions の runner は `unshare` が在っても namespace を作れない**
+（2026-09-04 実測）。したがって `available_backend()` が `None` を返し、
+fail closed の Sandbox が生成物の実行を拒否し、**build が走ることを前提と
+した既存試験 10 件が落ちた**。
+
+自分のホスト（root、namespace 可）でしか確かめていなかった。
+**「自分の環境で通った」を「通る」と読んだ**のが原因である。
+
+### 直し方——保証を弱めずに直す
+
+「CI だから素通しにする」はしない。代わりに **Policy 層だけの実行**という
+段を明示的に作った。
+
+| backend | 意味 |
+|---|---|
+| `linux-namespace+pid` | OS 層あり（network / PID namespace + rlimit） |
+| `policy-only` | **OS 層なし。** Policy 層（AST 検査・実行ファイル固定・env scrub）のみ |
+| `""` | 実行していない、または隔離を通っていない |
+
+守った条件は 3 つ。
+
+1. **既定は拒否のまま。** `FORGE_SANDBOX_ALLOW_POLICY_ONLY=1` の明示が要る
+   （`external_call_policy` と同じ形。`.env` に置いたら勝手に開く、を作らない）
+2. **名前に残す。** `policy-only` を `linux-namespace+pid` と混ぜない
+3. **空文字にしない。** 空は「隔離せず走った」の意味であり別物
+
+CI はこの変数を立てて走る（理由を `ci.yml` に書いた）。
+**利用者の端末では変数が無いので拒否される。** Windows で Self-Extension が
+動かないのは TD110 のとおりであり、それを隠す道ではない。
+
+### 再発防止
+
+`unshare` を失敗する stub で置き換えて **CI 環境を手元で再現**し、
+opt-in あり（`794 passed / 24 skipped`）と opt-in なし（`9 failed` = 拒否が
+効いている）の両方を確認した。以後、Sandbox に触るときはこの再現を通す。
+
+---
+
 ## 10. 新規 TECH_DEBT
 
 | ID | 内容 |
@@ -422,3 +466,4 @@ proof by itself」と書いており、今回の OS 層はその下に入る形�
 | TD112 | Permission Manifest を Promotion 判定へ配線していない。Manifest は作れるが、無いまま Promotion できる |
 | TD113 | 依存 allowlist の中身が空。License / Digest / 脆弱性情報を持っていない |
 | TD114 | 自分の誤配置（SEC-06/07・QA-05・UI-11）。Capability 名を読まずに検索語を置いた。**Mapping Index を結論として使わない**運用で再発を防ぐ |
+| TD115 | Sandbox を自分のホスト（root・namespace 可）でしか確かめず CI を落とした。`policy-only` 段を足して直したが、**環境差を先に確かめる**手順が要る |

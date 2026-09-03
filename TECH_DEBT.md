@@ -4287,3 +4287,21 @@ SEC-07（Secret管理）/ QA-05（配線破壊試験）/ UI-11（特殊UI）へ�
 再発防止: Mapping Index は**候補抽出まで**であり結論ではない、と
 `docs/evidence/capability_matrix/README.md` §5 へ明記した。
 Status を決める前に必ず Capability の実名と closing evidence を読む。
+
+
+## TD115. Sandbox を自分のホストでしか確かめず CI を落とした（2026-09-04）→ **解消**
+
+merge 後の CI run 33812200098 が failure（10 件 FAIL）。GitHub Actions の
+runner は `unshare` が在っても namespace を作れず、fail closed の Sandbox が
+生成物の実行を拒否したため、build が走る前提の既存試験が落ちた。
+
+**自分のホスト（root・namespace 可）でしか確かめず、「自分の環境で通った」を
+「通る」と読んだ**のが原因である。
+
+解消: `policy-only` 段を明示的に追加した。既定は拒否のままで、
+`FORGE_SANDBOX_ALLOW_POLICY_ONLY=1` を立てた場合だけ Policy 層のみで走り、
+Evidence へ `sandbox_backend="policy-only"` と残る（OS 層と混ぜない）。
+
+再発防止: `unshare` を失敗する stub で置き換えて CI 環境を手元で再現する
+手順を確立した。opt-in あり 794 passed / 24 skipped、opt-in なし 9 failed
+（拒否が効いている）の両方を確認済み。Sandbox に触るときは必ずこれを通す。

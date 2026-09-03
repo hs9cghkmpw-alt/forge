@@ -153,6 +153,28 @@ contract」「must not be described as the final EXT-08 proof by itself」と
 
 この結果 SEC-05（Generated Code検査）が NOT_STARTED → PARTIAL になりました。
 
+### CI を一度落としました（正直に書きます）
+
+merge 後の CI run `33812200098` が failure（10 件 FAIL）でした。
+
+**原因**: GitHub Actions の runner は `unshare` が在っても namespace を
+作れません。fail closed の Sandbox が生成物の実行を拒否し、build が走る
+前提の既存試験が落ちました。**自分のホストでしか確かめていなかった**のが
+原因です。
+
+**直し方**: 「CI だから素通し」にはしませんでした。代わりに
+`policy-only`（Policy 層だけ）という段を明示的に作り、
+
+1. 既定は拒否のまま（`FORGE_SANDBOX_ALLOW_POLICY_ONLY=1` の明示が要る）
+2. Evidence に `sandbox_backend="policy-only"` と**名前を残す**（OS 層と混ぜない）
+3. 空文字にしない（空は「隔離せず走った」の意味で別物）
+
+CI はこの変数を立てて走ります。**利用者の端末では変数が無いので拒否されます。**
+
+`unshare` を失敗する stub に置き換えて CI 環境を手元で再現し、
+opt-in あり（794 passed / 24 skipped）と opt-in なし（9 failed = 拒否が
+効いている）の両方を確認しました。
+
 ### まだ言えないこと
 
 **Windows に Sandbox はありません。** だから「Sandbox 完成」とは書きません。

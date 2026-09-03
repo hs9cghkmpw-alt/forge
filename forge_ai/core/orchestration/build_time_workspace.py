@@ -72,7 +72,24 @@ class CommandEvidence:
     EXT-08 / SEC-04（2026-09-04）。生成物を「どこで動かしたか」は
     Evidence の一部である。隔離せずに動かした結果を、隔離した結果と
     同じ扱いにしない。
+
+    取りうる値:
+
+    | 値 | 意味 |
+    |---|---|
+    | `linux-namespace+pid` | OS 層あり（network / PID namespace + rlimit） |
+    | `linux-namespace` | OS 層あり（PID namespace は取れなかった） |
+    | `policy-only` | **OS 層なし。** Policy 層（AST 検査・実行ファイル固定・env scrub）のみ |
+    | `""` | 実行していない、または隔離を通っていない |
+
+    `policy-only` を OS 層と同じ扱いにしない。弱いが 0 ではない、という
+    ちょうどの位置に置くための名前である。
     """
+
+    @property
+    def os_isolated(self) -> bool:
+        """OS 層（namespace）の中で走ったか。`policy-only` は False。"""
+        return self.sandbox_backend.startswith("linux-namespace")
 
     @property
     def passed(self) -> bool:

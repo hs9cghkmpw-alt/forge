@@ -12,13 +12,16 @@ from forge_ai.core.sandbox.policy import (
     tier_for_permissions,
 )
 from forge_ai.core.sandbox.runner import (
+    ALLOW_POLICY_ONLY_ENV,
     SandboxPolicy,
     SandboxResult,
     SandboxUnavailable,
     SandboxViolation,
     available_backend,
     describe_environment,
+    os_isolation_available,
     pid_isolation_available,
+    policy_only_allowed,
     run_in_sandbox,
 )
 
@@ -27,6 +30,7 @@ __all__ = [
     "PermissionManifest", "TierViolation", "assert_dependencies_allowed",
     "assert_execution_allowed", "assert_promotion_allowed", "tier_for_permissions",
     "SandboxPolicy", "SandboxResult", "SandboxUnavailable", "SandboxViolation",
-    "available_backend", "describe_environment", "pid_isolation_available",
+    "ALLOW_POLICY_ONLY_ENV", "available_backend", "describe_environment",
+    "os_isolation_available", "pid_isolation_available", "policy_only_allowed",
     "run_in_sandbox",
 ]

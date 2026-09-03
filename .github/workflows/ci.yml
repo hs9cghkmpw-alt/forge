@@ -73,7 +73,19 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
 
+      # GitHub Actions の runner は `unshare` が在っても namespace を作れない
+      # （2026-09-04 実測）。Sandbox は既定で fail closed なので、そのままだと
+      # 生成物を動かす試験が全部止まる。
+      #
+      # ここで開けるのは **Policy 層だけの実行**（AST/import 検査・実行ファイル
+      # 固定・env scrub）であり、Evidence には `sandbox_backend="policy-only"`
+      # と残る。OS 層（namespace + rlimit）を通ったことにはならない。
+      #
+      # **利用者の端末ではこの変数が無いので拒否される。** Windows で
+      # Self-Extension が動かないのは TD110 のとおりで、それを隠す道ではない。
       - name: forge_ai tests
+        env:
+          FORGE_SANDBOX_ALLOW_POLICY_ONLY: "1"
         working-directory: forge_ai
         run: python -m pytest tests -q
 

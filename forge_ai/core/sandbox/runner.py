@@ -35,7 +35,28 @@ Forge の主配布対象には Windows が含まれる。**Linux だけ実装し
 
 - backend が無い → 実行しない
 - backend の起動に失敗した → 実行しない
-- 隔離の一部だけ効いた → 実行しない（部分的な隔離は隔離ではない）
+- 隔離の一部だけ効いた → **その事実を名前に残す**（下記）
+
+## Policy 層だけの実行（`policy-only`）
+
+OS 層（namespace）が使えない環境がある。GitHub Actions の runner が
+まさにそれで、`unshare` は在るが namespace を作れない（2026-09-04 実測）。
+
+そこで **Policy 層だけ**で走る道を用意する。Policy 層
+（`build_time_sandbox`）は、生成 Source の AST/import 検査、実行ファイルの
+固定、環境変数の scrub を行う。**弱いが 0 ではない。**
+
+ただし次を守る。
+
+1. **既定は拒否。** `FORGE_SANDBOX_ALLOW_POLICY_ONLY=1` の明示が要る
+   （`external_call_policy` と同じ形。`.env` に何か置いたら勝手に開く、を
+   もう一度作らない）
+2. **名前に残す。** `backend` は `"policy-only"` になる。
+   `"linux-namespace+pid"` と混ぜない。Evidence を読む側が区別できる
+3. **空文字にはしない。** 空は「隔離せずに走った」の意味であり、別物
+
+利用者の端末では変数が無いので**拒否**される。Windows で Self-Extension が
+動かないのは TD110 のとおりであり、それを隠すための道ではない。
 """
 
 from __future__ import annotations
@@ -50,9 +71,15 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+#: OS 層が無い環境で Policy 層だけの実行を許す環境変数。**既定は拒否。**
+ALLOW_POLICY_ONLY_ENV = "FORGE_SANDBOX_ALLOW_POLICY_ONLY"
+
 __all__ = [
+    "ALLOW_POLICY_ONLY_ENV",
     "SandboxPolicy",
+    "os_isolation_available",
     "pid_isolation_available",
+    "policy_only_allowed",
     "SandboxResult",
     "SandboxUnavailable",
     "SandboxViolation",
@@ -162,6 +189,20 @@ def available_backend() -> str | None:
     return "linux-namespace+pid" if "--pid" in command else "linux-namespace"
 
 
+def os_isolation_available() -> bool:
+    """OS 層（namespace）が使えるか。`policy-only` と区別するために公開する。"""
+    return available_backend() is not None
+
+
+def policy_only_allowed() -> bool:
+    """OS 層が無いときに Policy 層だけで走ってよいか。**既定は False。**
+
+    `1` / `true` / `yes` / `on` 以外はすべて拒否（fail closed）。
+    """
+    value = os.environ.get(ALLOW_POLICY_ONLY_ENV, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
 def pid_isolation_available() -> bool:
     """PID namespace まで取れるか。
 
@@ -179,6 +220,8 @@ def describe_environment() -> dict:
         "backend": available_backend(),
         "unshare_available": bool(shutil.which("unshare")),
         "rlimits_available": hasattr(resource, "setrlimit"),
+        "os_isolation": os_isolation_available(),
+        "policy_only_allowed": policy_only_allowed(),
         "pid_isolation": pid_isolation_available(),
         # root では `RLIMIT_NPROC` が強制されない（実測 2026-09-04）。
         # 数の上限に頼れるかどうかを、Evidence 側から見えるようにする。
@@ -243,24 +286,28 @@ def run_in_sandbox(
     if not argv:
         raise SandboxViolation("実行する argv が空である")
 
-    backend = available_backend()
-    if backend is None:
-        raise SandboxUnavailable(
-            f"この環境（{platform.system()}）には実際の隔離手段が無いため、"
-            "生成物を実行しない。Windows / macOS の backend は未実装である。"
-            "**隔離できないなら動かさない**（fail closed）"
-        )
+    # **要求そのものの不正を先に見る。** 環境の有無より前に落とすことで、
+    # 「環境が無いから通った / 通らなかった」の紛れを無くす。
     if policy.allow_network:
         raise SandboxViolation(
             "network を開ける経路は未実装である。"
             "Tier C の承認済み経路として別途設計する（現在は常に deny）"
         )
 
-    (workspace / ".tmp").mkdir(exist_ok=True)
-    prefix = _unshare_command()
-    if prefix is None:  # available_backend と競合した場合も fail closed
-        raise SandboxUnavailable("unshare が使えなくなった。実行しない")
+    backend = available_backend()
+    prefix: list[str] | None = _unshare_command() if backend else None
+    if backend is None or prefix is None:
+        if not policy_only_allowed():
+            raise SandboxUnavailable(
+                f"この環境（{platform.system()}）には OS 層の隔離手段が無いため、"
+                "生成物を実行しない。**隔離できないなら動かさない**（fail closed）。"
+                f"Policy 層だけで走らせる場合は {ALLOW_POLICY_ONLY_ENV}=1 を明示すること"
+            )
+        # Policy 層だけ。**名前に残す**ので、Evidence を読む側が区別できる。
+        backend = "policy-only"
+        prefix = []
 
+    (workspace / ".tmp").mkdir(exist_ok=True)
     started = time.monotonic()
     timed_out = False
     try:

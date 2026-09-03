@@ -44,12 +44,15 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from forge_ai.core.sandbox import (  # noqa: E402
+    ALLOW_POLICY_ONLY_ENV,
     SandboxPolicy,
     SandboxUnavailable,
     SandboxViolation,
     available_backend,
     describe_environment,
+    os_isolation_available,
     pid_isolation_available,
+    policy_only_allowed,
     run_in_sandbox,
 )
 
@@ -286,7 +289,16 @@ class TestItFailsClosed(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
 
     def test_it_refuses_to_run_without_a_backend(self) -> None:
-        """Windows / macOS で起きること。**素通しで実行しない。**"""
+        """Windows / macOS で起きること。**素通しで実行しない。**
+
+        `FORGE_SANDBOX_ALLOW_POLICY_ONLY` を明示的に外して確かめる——
+        CI はこれを立てて走るので、外さないと「既定の拒否」を見ていない
+        ことになる（環境の設定でテストの意味が変わる、を避ける）。
+        """
+        saved = os.environ.pop(ALLOW_POLICY_ONLY_ENV, None)
+        if saved is not None:
+            self.addCleanup(os.environ.__setitem__, ALLOW_POLICY_ONLY_ENV, saved)
+
         with patch("forge_ai.core.sandbox.runner.available_backend", return_value=None):
             with self.assertRaises(SandboxUnavailable):
                 run_in_sandbox([sys.executable, "-c", "print(1)"], workspace=self.workspace)
@@ -317,6 +329,75 @@ class TestItFailsClosed(unittest.TestCase):
     def test_an_empty_argv_is_refused(self) -> None:
         with self.assertRaises(SandboxViolation):
             run_in_sandbox([], workspace=self.workspace)
+
+
+class TestPolicyOnlyIsAllowedButNamed(unittest.TestCase):
+    """OS 層が無い環境でも Policy 層だけで走れる。**ただし名前に残す。**
+
+    GitHub Actions の runner は `unshare` が在っても namespace を作れない
+    （2026-09-04 実測）。そこで Policy 層（AST/import 検査・実行ファイル固定・
+    env scrub）だけで走る道を用意した。**弱いが 0 ではない。**
+
+    危ないのは「弱い隔離を強い隔離と同じ名前で記録すること」なので、
+    そこを試験で固定する。
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.workspace = pathlib.Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self._saved = os.environ.get(ALLOW_POLICY_ONLY_ENV)
+        self.addCleanup(self._restore)
+
+    def _restore(self) -> None:
+        if self._saved is None:
+            os.environ.pop(ALLOW_POLICY_ONLY_ENV, None)
+        else:
+            os.environ[ALLOW_POLICY_ONLY_ENV] = self._saved
+
+    def test_without_the_opt_in_it_still_refuses(self) -> None:
+        """**既定は拒否のまま。** 環境が弱いだけで勝手に開かない。"""
+        os.environ.pop(ALLOW_POLICY_ONLY_ENV, None)
+        with patch("forge_ai.core.sandbox.runner.available_backend", return_value=None):
+            with self.assertRaises(SandboxUnavailable):
+                run_in_sandbox([sys.executable, "-c", "print(1)"], workspace=self.workspace)
+
+    def test_a_typo_does_not_open_it(self) -> None:
+        for value in ("ture", "yes-please", "0", "", "  "):
+            with self.subTest(value=value):
+                os.environ[ALLOW_POLICY_ONLY_ENV] = value
+                self.assertFalse(policy_only_allowed(), f"{value!r} を真と読んでいる")
+
+    def test_the_opt_in_runs_but_names_the_weaker_backend(self) -> None:
+        os.environ[ALLOW_POLICY_ONLY_ENV] = "1"
+        with patch("forge_ai.core.sandbox.runner.available_backend", return_value=None):
+            result = run_in_sandbox(
+                [sys.executable, "-c", "print('ran')"], workspace=self.workspace,
+            )
+        self.assertTrue(result.ok, result.stderr)
+        self.assertEqual(
+            result.backend, "policy-only",
+            "弱い隔離を強い隔離と同じ名前で記録している",
+        )
+        self.assertNotEqual(result.backend, "", "空は「隔離せず走った」の意味であり別物")
+
+    def test_policy_only_is_not_os_isolation(self) -> None:
+        """**名前を混ぜない。** Evidence を読む側が区別できること。"""
+        os.environ[ALLOW_POLICY_ONLY_ENV] = "1"
+        with patch("forge_ai.core.sandbox.runner.available_backend", return_value=None):
+            self.assertFalse(os_isolation_available())
+            self.assertTrue(policy_only_allowed())
+
+    def test_a_bad_request_is_refused_before_the_environment_is_consulted(self) -> None:
+        """要求そのものの不正は、環境の有無より先に落とす。"""
+        os.environ[ALLOW_POLICY_ONLY_ENV] = "1"
+        with patch("forge_ai.core.sandbox.runner.available_backend", return_value=None):
+            with self.assertRaises(SandboxViolation):
+                run_in_sandbox(
+                    [sys.executable, "-c", "print(1)"],
+                    workspace=self.workspace,
+                    policy=SandboxPolicy(allow_network=True),
+                )
 
 
 if __name__ == "__main__":

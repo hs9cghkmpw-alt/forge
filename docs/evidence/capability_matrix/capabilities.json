@@ -1308,7 +1308,7 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "**Linux の OS 層のみ。** Windows / macOS backend は未実装で、その環境では実行を拒否する（fail closed）。root 実行では RLIMIT_NPROC が効かない（PID namespace で隔離はする）",
+      "remaining_gap": "**OS 層は Linux のみ。** Windows / macOS backend は未実装で、その環境では実行を拒否する（fail closed）。namespace を作れない環境（GitHub Actions runner が該当。2026-09-04 実測）では `FORGE_SANDBOX_ALLOW_POLICY_ONLY=1` を明示した場合に限り Policy 層だけで走り、Evidence へ `sandbox_backend=\"policy-only\"` と残る——**OS 層を通ったことにはならない**。root 実行では RLIMIT_NPROC が効かない（PID namespace で隔離はする）",
       "blocking_tech_debt": [],
       "next_proof": "Windows backend の実装と、Windows 上での escape corpus 全遮断",
       "evidence_reuse": {
@@ -3711,7 +3711,7 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "Target は「OS 別 escape corpus 全遮断」。**Linux しか埋まっていない**",
+      "remaining_gap": "**OS 層は Linux のみ。** Windows / macOS backend は未実装で、その環境では実行を拒否する（fail closed）。namespace を作れない環境（GitHub Actions runner が該当。2026-09-04 実測）では `FORGE_SANDBOX_ALLOW_POLICY_ONLY=1` を明示した場合に限り Policy 層だけで走り、Evidence へ `sandbox_backend=\"policy-only\"` と残る——**OS 層を通ったことにはならない**。root 実行では RLIMIT_NPROC が効かない（PID namespace で隔離はする）",
       "blocking_tech_debt": [],
       "next_proof": "Windows / macOS の escape corpus",
       "evidence_reuse": {
