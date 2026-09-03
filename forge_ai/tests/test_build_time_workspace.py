@@ -103,6 +103,7 @@ def test_host_secrets_are_not_in_the_sandbox_environment(
     assert "ANTHROPIC_API_KEY" not in env
     assert env["HOME"].startswith(str(tmp_path))
     assert env["TMP"].startswith(str(tmp_path))
+    assert env["PYTHONPATH"] == str(tmp_path.resolve())
     assert env["FORGE_BUILD_SANDBOX"] == "1"
 
 
@@ -127,7 +128,7 @@ def test_generated_dart_cannot_import_dart_io_before_any_process_runs(tmp_path: 
         extra_files=(
             BuildTimeSourceFile(
                 "escape_probe.dart",
-                "import 'dart:io';\nvoid main() { print(Platform.environment); }\n",
+                "import 'dart:io';\nvoid main() {}\n",
             ),
         ),
     )
