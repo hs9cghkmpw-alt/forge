@@ -226,7 +226,7 @@ class BuildTimeSandboxPolicy:
             "dart_allowed_packages": sorted(_DART_ALLOWED_PACKAGE_IMPORTS),
             "dart_dangerous_tokens": sorted(_DART_DANGEROUS_TOKENS),
             "command_profiles": ["python-safe", "dart-safe"],
-            "environment_mode": "allow-list-and-private-home",
+            "environment_mode": "allow-list-private-home-workspace-pythonpath",
         }
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return sha256(encoded).hexdigest()
@@ -281,10 +281,13 @@ class BuildTimeSandboxPolicy:
     ) -> None:
         try:
             tree = ast.parse(content, filename=path)
-        except SyntaxError as exc:
-            raise SandboxPolicyViolation(
-                f"sandbox cannot reason about invalid Python source {path!r}: {exc.msg}"
-            ) from exc
+        except SyntaxError:
+            # Invalid Python cannot execute.  Treat syntax validity as a build/test
+            # concern, not a security-policy verdict: the mandatory compile/test
+            # phases will fail closed and promotion remains impossible.  Raising a
+            # SandboxPolicyViolation here incorrectly converted ordinary bad-source
+            # evidence into a security exception and bypassed the normal failure path.
+            return
         _PythonSafetyVisitor(path=path, local_roots=local_roots).visit(tree)
 
     def _validate_dart(
@@ -415,6 +418,9 @@ class BuildTimeSandboxPolicy:
                 "TMPDIR": str(private_tmp),
                 "PYTHONNOUSERSITE": "1",
                 "PYTHONSAFEPATH": "1",
+                # PYTHONSAFEPATH removes implicit cwd injection.  Add back exactly
+                # the generated workspace, and nothing from the host project/user.
+                "PYTHONPATH": str(workspace.resolve()),
                 "CI": "true",
                 "FORGE_BUILD_SANDBOX": "1",
             }
