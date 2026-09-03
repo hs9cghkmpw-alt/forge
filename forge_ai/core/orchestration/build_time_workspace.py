@@ -68,10 +68,13 @@ class ManagedBuildEvidence:
     source_digest: str
     runtime_fingerprint: str
     commands: tuple[CommandEvidence, ...]
-    sandbox_policy_version: str
-    sandbox_policy_digest: str
-    sandbox_preflight_pass: bool
-    sandbox_environment_names: tuple[str, ...]
+    # Empty/False means "no sandbox evidence".  Defaults preserve compatibility
+    # with deliberately forged/fake evidence tests without ever treating absence
+    # as a pass.
+    sandbox_policy_version: str = ""
+    sandbox_policy_digest: str = ""
+    sandbox_preflight_pass: bool = False
+    sandbox_environment_names: tuple[str, ...] = ()
 
     def passed(self, kind: str) -> bool:
         matching = [item for item in self.commands if item.kind == kind]
