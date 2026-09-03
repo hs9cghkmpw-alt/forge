@@ -86,6 +86,16 @@ HANDOFFとReportにはbranch、start/final HEAD、実装内容、Production wiri
 tests、mutation、CI、未検証、Technical Debt、次Taskを残す。秘密値やraw
 利用者データは文書・fixture・logへ残さない。
 
+## Context / Token Safety — mandatory
+
+全Agentは作業中、残りcontext/token余力と残作業量を継続的に確認または保守的に推定する。正確な残量を取得できない場合でも、この規則は免除されない。
+
+context切れ・出力打切り・作業途中の情報喪失が起きそうな状態まで作業を続けることは禁止する。危険域に入る前に安全なcheckpointを作り、現在の変更を可能な範囲で保存し、`docs/HANDOFF.md`、Task report、Issue/PRなどSource of Truthへ `AI-HANDOFF` を残して作業を止める。
+
+`AI-HANDOFF` には最低限、(1)目的、(2)完了済み、(3)未完了、(4)branch/commit/PR/Issue、(5)変更ファイル、(6)実行済みtests/CI/visual結果、(7)blocker、(8)次の具体的1〜3手、(9)触ってはいけない安全境界、(10)推測・未検証事項を含める。
+
+申し送り後に新しい大規模変更を開始してはならない。次Agentは最初に最新HANDOFFを読み、重複作業をせず続きから再開する。トークンを使い切ることより、早めで完全な申し送りを優先する。
+
 ## Agent Execution Policy
 
 Implementation Agent が、いちいち確認を取らずに実行してよいことと、
