@@ -129,6 +129,30 @@ Capability 名を読まずに検索語を置いたため、SEC-06 / SEC-07 / QA-
 - 実測で判明: **`RLIMIT_NPROC` は root では効かない**。PID namespace が本体
 - Real Provider calls **0** / Real Local Model runs **0** / Human Evidence **0 人**
 
+### 別 Agent の Sandbox 実装と重ねた（重要）
+
+作業中に、別の Agent が同じ branch へ Sandbox 系の実装を push していました
+（`d5ae993`、22 commit）。**どちらも消さずに重ねました。** 競合ではなく補完です。
+
+| 層 | 誰 | 何を閉じるか |
+|---|---|---|
+| **Policy 層**（`build_time_sandbox.py`） | 別 Agent | 生成 Source の AST/import preflight、実行ファイル allowlist、実行ファイルをホスト上で一度だけ解決して固定（PATH 差し替え防止）、環境変数 scrub、Host Projection binding、sandbox attestation を Promotion blocker に |
+| **OS 層**（`core/sandbox/`） | 今回 | network namespace、PID namespace、RLIMIT_CPU/AS/FSIZE、壁時計 timeout、明示 workspace、shell 不使用 |
+
+Policy 層だけでは「読み落とした 1 つ」で破れます。OS 層だけではどの実行
+ファイルが選ばれたか分かりません。**両方要ります。**
+
+向こうの docstring 自身が「A future OS backend can sit underneath the same
+contract」「must not be described as the final EXT-08 proof by itself」と
+書いており、今回の OS 層はちょうどその下に入りました。
+
+衝突は `_execute` と対応テストの 2 箇所。向こうの `resolve_executable` /
+`build_environment` で argv と env を固定し、**それを** `run_in_sandbox` へ
+渡す形へ直しました（`env_override` を追加。渡されても `os.environ` は
+継承しません）。テストは両者を残しました。
+
+この結果 SEC-05（Generated Code検査）が NOT_STARTED → PARTIAL になりました。
+
 ### まだ言えないこと
 
 **Windows に Sandbox はありません。** だから「Sandbox 完成」とは書きません。

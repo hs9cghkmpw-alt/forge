@@ -387,6 +387,32 @@ Mapping Index（`docs/evidence/capability_matrix/mapping_index.json`）を
 
 ---
 
+## 9.1 別 Agent の Sandbox 実装と重ねた
+
+作業中に別 Agent が同じ branch へ Sandbox 系 22 commit を push していた
+（`d5ae993`）。**どちらも消さずに重ねた。**
+
+| 層 | 出所 | 内容 |
+|---|---|---|
+| Policy 層（`build_time_sandbox.py`） | 別 Agent | AST/import preflight、実行ファイル allowlist、実行ファイルの一度限りの解決と固定、env scrub、Host Projection binding、sandbox attestation を Promotion blocker に |
+| OS 層（`core/sandbox/`） | 今回 | network / PID namespace、rlimit、timeout、workspace、shell 不使用 |
+
+**Policy 層だけでは読み落とした 1 つで破れ、OS 層だけではどの実行ファイルが
+選ばれたか分からない。** 向こうの docstring 自身が「A future OS backend can
+sit underneath the same contract」「must not be described as the final EXT-08
+proof by itself」と書いており、今回の OS 層はその下に入る形になった。
+
+衝突は `_execute` と対応テストの 2 箇所。向こうの `resolve_executable` /
+`build_environment` で argv と env を固定し、**それを** `run_in_sandbox` へ
+渡す形へ解決した（`run_in_sandbox` に `env_override` を追加。渡されても
+`os.environ` は継承しない）。テストは両者を残した。
+
+- merge 後: forge_ai **803 passed** / backend **2072 passed**
+- 配線破壊: `_execute` を素の `subprocess.run` へ戻すと 2 件 FAIL（再確認）
+- SEC-05 が NOT_STARTED → **PARTIAL**（向こうの AST/import preflight による）
+
+---
+
 ## 10. 新規 TECH_DEBT
 
 | ID | 内容 |
