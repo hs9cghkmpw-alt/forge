@@ -7,7 +7,8 @@ because code or a manifest was generated.
 Promotion requires evidence across the full binding chain:
 
 semantic decomposition -> Forge Language/validator -> runtime/compiler -> tests
--> build/runtime evidence -> safety review where applicable.
+-> build/runtime evidence -> sandbox preflight for BUILD_TIME -> safety review
+where applicable.
 
 The manifest is deliberately capability-oriented, not app-oriented.  A Golden
 request may motivate an extension, but the produced capability must be reusable
@@ -43,6 +44,7 @@ class ExtensionEvidence:
     tests_pass: bool = False
     build_pass: bool = False
     runtime_evidence: bool = False
+    sandbox_preflight: bool = False
     safety_review: bool = False
 
 
@@ -69,6 +71,13 @@ class ExtensionManifest:
             "build_pass": self.evidence.build_pass,
             "runtime_evidence": self.evidence.runtime_evidence,
         }
+        # Generated BUILD_TIME source must never become a reusable capability just
+        # because a custom builder returned tests/build/runtime=True.  The sandbox
+        # gate is a lifecycle invariant, not merely an implementation detail of one
+        # runner.  Other routes do not claim generated host-code execution and are
+        # therefore not forced through this specific proof.
+        if self.route is ExtensionRoute.BUILD_TIME:
+            required["sandbox_preflight"] = self.evidence.sandbox_preflight
         if self.requires_confirmation:
             required["safety_review"] = self.evidence.safety_review
         return tuple(name for name, ok in required.items() if not ok)
