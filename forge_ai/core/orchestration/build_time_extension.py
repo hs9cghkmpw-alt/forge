@@ -3,7 +3,8 @@
 BUILD_TIME is the route for a genuinely missing primitive whose implementation
 requires generated/modified source and a new runtime build.  Promotion alone is
 not enough: the built runtime must be loaded and fingerprint-matched before the
-capability can be exposed to the planner.
+capability can be exposed to the planner.  Generated host-code execution also
+requires explicit sandbox preflight evidence before promotion.
 """
 
 from __future__ import annotations
@@ -93,6 +94,9 @@ class BuildTimeBuildResult:
     build_pass: bool
     runtime_evidence: bool
     safety_review: bool = False
+    sandbox_preflight: bool = False
+    sandbox_policy_version: str = ""
+    sandbox_policy_digest: str = ""
 
 
 class BuildTimeBuilder(Protocol):
@@ -139,6 +143,12 @@ def implement_build_time_extension(
         raise BuildTimeExtensionError("builder source digest does not match generated artifact")
     if not build.build_id or not build.runtime_fingerprint:
         raise BuildTimeExtensionError("builder must return build_id and runtime_fingerprint")
+    if build.sandbox_preflight and (
+        not build.sandbox_policy_version or not build.sandbox_policy_digest
+    ):
+        raise BuildTimeExtensionError(
+            "sandbox preflight cannot be true without policy version and digest"
+        )
 
     evidence = ExtensionEvidence(
         semantic_decomposition=True,
@@ -150,6 +160,11 @@ def implement_build_time_extension(
         tests_pass=build.tests_pass,
         build_pass=build.build_pass,
         runtime_evidence=build.runtime_evidence,
+        sandbox_preflight=(
+            build.sandbox_preflight
+            and bool(build.sandbox_policy_version)
+            and bool(build.sandbox_policy_digest)
+        ),
         safety_review=build.safety_review if manifest.requires_confirmation else True,
     )
     implementing = replace(manifest, status=ExtensionStatus.IMPLEMENTING, evidence=evidence)

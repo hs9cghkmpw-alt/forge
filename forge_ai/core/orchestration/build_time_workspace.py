@@ -1,16 +1,14 @@
 """Concrete managed workspace runner for BUILD_TIME capability acquisition.
 
-This module is intentionally generic: it does not know about map/calendar/game or
-any other product domain.  It materializes an already-decomposed reusable
-BuildTimeCapabilityArtifact into an isolated staging directory, executes an
-explicit allow-listed command plan without shell interpolation, records concrete
-evidence, and returns the exact source/runtime fingerprint used by the promotion
-gate.
+This module materializes an already-decomposed reusable BuildTimeCapabilityArtifact
+into a staging directory, applies the default-deny BuildTimeSandboxPolicy before
+any generated code can execute, runs an explicit allow-listed command plan, and
+records the exact evidence used by the promotion gate.
 
-It is *not* an arbitrary command endpoint.  Callers must provide argv tuples;
-``shell=True`` is never used, cwd is pinned to the generated workspace, execution
-is bounded by timeout, paths are checked before materialization, and output is
-truncated before it can become unbounded evidence.
+The workspace alone is not called a sandbox.  The enforceable sandbox layer lives
+in ``build_time_sandbox.py`` and currently provides source/effect policy, command
+profiles, executable pinning, environment scrubbing, cwd pinning and timeout.
+OS-level network namespaces / AppContainer / VM isolation remain separate proof.
 """
 
 from __future__ import annotations
@@ -36,6 +34,10 @@ from forge_ai.core.orchestration.build_time_extension import (
     BuildTimeCapabilityArtifact,
     BuildTimeExtensionError,
 )
+from forge_ai.core.orchestration.build_time_host_projection import (
+    BuildTimeHostProjection,
+)
+from forge_ai.core.orchestration.build_time_sandbox import BuildTimeSandboxPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +86,14 @@ class ManagedBuildEvidence:
     source_digest: str
     runtime_fingerprint: str
     commands: tuple[CommandEvidence, ...]
+    # Empty/False means "no sandbox evidence".  Defaults preserve compatibility
+    # with deliberately forged/fake evidence tests without ever treating absence
+    # as a pass.
+    sandbox_policy_version: str = ""
+    sandbox_policy_digest: str = ""
+    sandbox_preflight_pass: bool = False
+    sandbox_environment_names: tuple[str, ...] = ()
+    sandbox_host_projection_digest: str = ""
 
     def passed(self, kind: str) -> bool:
         matching = [item for item in self.commands if item.kind == kind]
@@ -97,7 +107,7 @@ class ManagedBuildExecution:
 
 
 class ManagedBuildWorkspaceRunner:
-    """Materialize and execute one BUILD_TIME artifact in a controlled workspace."""
+    """Materialize and execute one BUILD_TIME artifact behind sandbox preflight."""
 
     def __init__(
         self,
@@ -105,17 +115,21 @@ class ManagedBuildWorkspaceRunner:
         root: Path | None = None,
         max_output_chars: int = 20_000,
         keep_workspace: bool = False,
+        sandbox_policy: BuildTimeSandboxPolicy | None = None,
     ) -> None:
         if max_output_chars <= 0:
             raise ValueError("max_output_chars must be positive")
         self._root = root
         self._max_output_chars = max_output_chars
         self._keep_workspace = keep_workspace
+        self._sandbox_policy = sandbox_policy or BuildTimeSandboxPolicy()
 
     def run(
         self,
         artifact: BuildTimeCapabilityArtifact,
         commands: Iterable[BuildCommand],
+        *,
+        host_projection: BuildTimeHostProjection | None = None,
     ) -> ManagedBuildExecution:
         artifact.validate()
         command_plan = tuple(commands)
@@ -148,6 +162,15 @@ class ManagedBuildWorkspaceRunner:
                     "materialized workspace digest differs from generated artifact"
                 )
 
+            # Crucial ordering: preflight runs before the first subprocess.  A rejected
+            # artifact therefore cannot obtain a single instruction of host execution.
+            sandbox = self._sandbox_policy.preflight(
+                artifact,
+                command_plan,
+                workspace=workspace,
+                host_projection=host_projection,
+            )
+
             evidence: list[CommandEvidence] = []
             for command in command_plan:
                 item = self._execute(workspace, command)
@@ -159,7 +182,11 @@ class ManagedBuildWorkspaceRunner:
 
             build_id = f"build-{uuid4().hex}"
             fingerprint = self._runtime_fingerprint(
-                artifact.capability_id, build_id, workspace_digest, tuple(evidence)
+                artifact.capability_id,
+                build_id,
+                workspace_digest,
+                sandbox.policy_digest,
+                tuple(evidence),
             )
             bundle = ManagedBuildEvidence(
                 build_id=build_id,
@@ -167,6 +194,11 @@ class ManagedBuildWorkspaceRunner:
                 source_digest=artifact.source_digest,
                 runtime_fingerprint=fingerprint,
                 commands=tuple(evidence),
+                sandbox_policy_version=sandbox.policy_version,
+                sandbox_policy_digest=sandbox.policy_digest,
+                sandbox_preflight_pass=True,
+                sandbox_environment_names=sandbox.environment_names,
+                sandbox_host_projection_digest=sandbox.host_projection_digest,
             )
             result = BuildTimeBuildResult(
                 build_id=build_id,
@@ -176,6 +208,9 @@ class ManagedBuildWorkspaceRunner:
                 build_pass=bundle.passed("build"),
                 runtime_evidence=bundle.passed("runtime_probe"),
                 safety_review=(bundle.passed("safety") if "safety" in present else False),
+                sandbox_preflight=bundle.sandbox_preflight_pass,
+                sandbox_policy_version=bundle.sandbox_policy_version,
+                sandbox_policy_digest=bundle.sandbox_policy_digest,
             )
             return ManagedBuildExecution(result=result, evidence=bundle)
         finally:
@@ -207,26 +242,42 @@ class ManagedBuildWorkspaceRunner:
         """生成物を**隔離して**走らせる（EXT-08 / SEC-04、2026-09-04）。
 
         ここが「AI が書いたコードを実際に動かす」唯一の場所である。
-        以前はここが素の `subprocess.run` で、**ホストの権限と環境変数を
-        そのまま**渡していた。生成物から見れば、network も secret も
-        ファイルシステムも開いていた。
+        以前は素の `subprocess.run` で、**ホストの権限と環境変数をそのまま**
+        渡していた。生成物から見れば network も secret も開いていた。
 
-        隔離できない環境（Windows / macOS backend は未実装）では
-        **実行せずに失敗として返す**。`passed` が False になるので
-        Promotion まで進まない——fail closed である。
-        「Sandbox が無いから素通しで動かす」は最悪の設計であり、
-        それをしないことがこの分岐の目的である。
+        ## 2 層を重ねる
+
+        1. **Policy 層**（`build_time_sandbox`）——実行ファイルをホスト上で
+           一度だけ解決して固定し（あとから PATH を変えても差し替わらない）、
+           環境変数を scrub する。静的 preflight（import / 実行ファイル
+           allowlist）もここに属する。
+        2. **OS 層**（`forge_ai.core.sandbox`）——network namespace、
+           PID namespace、CPU / memory / file size の rlimit、壁時計 timeout。
+
+        Policy 層だけでは「読み落とした 1 つ」で破れる。OS 層だけでは
+        どの実行ファイルが選ばれたか分からない。**両方要る。**
+
+        隔離できない環境（Windows / macOS の OS backend は未実装）では
+        **実行せずに失敗として返す**。`passed` が False になるので Promotion
+        まで進まない——fail closed である。「Sandbox が無いから素通しで動かす」
+        は最悪の設計であり、それをしないことがこの分岐の目的である。
         """
+        # Policy 層: 実行ファイルを一度だけ解決して固定し、環境を scrub する。
+        resolved_executable = self._sandbox_policy.resolve_executable(command.argv[0])
+        argv = [resolved_executable, *command.argv[1:]]
+        env = self._sandbox_policy.build_environment(workspace)
         try:
+            # OS 層: 上で固定した argv と環境を、namespace と rlimit の中で走らせる。
             result = run_in_sandbox(
-                list(command.argv),
+                argv,
                 workspace=workspace,
                 policy=SandboxPolicy(
                     timeout_seconds=float(command.timeout_seconds),
-                    # CPU 秒は壁時計より短く取る。壁時計だけだと、
-                    # 「速く回り続けるもの」を CPU 側で止められない。
+                    # CPU 秒も別に取る。壁時計だけでは「速く回り続けるもの」を
+                    # 止められない。
                     cpu_seconds=max(1, int(command.timeout_seconds)),
                 ),
+                env_override=env,
             )
         except (SandboxUnavailable, SandboxViolation) as exc:
             return CommandEvidence(
@@ -278,6 +329,7 @@ class ManagedBuildWorkspaceRunner:
         capability_id: str,
         build_id: str,
         source_digest: str,
+        sandbox_policy_digest: str,
         evidence: tuple[CommandEvidence, ...],
     ) -> str:
         h = sha256()
@@ -286,6 +338,11 @@ class ManagedBuildWorkspaceRunner:
         h.update(build_id.encode("utf-8"))
         h.update(b"\0")
         h.update(source_digest.encode("ascii"))
+        h.update(b"\0")
+        # Runtime evidence is meaningful only together with the exact policy that
+        # permitted execution.  Tightening/loosening policy therefore changes the
+        # fingerprint and prevents stale evidence from silently carrying forward.
+        h.update(sandbox_policy_digest.encode("ascii"))
         for item in evidence:
             h.update(item.kind.encode("utf-8"))
             h.update(b"\0")

@@ -221,12 +221,18 @@ def run_in_sandbox(
     *,
     workspace: Path,
     policy: SandboxPolicy | None = None,
+    env_override: dict[str, str] | None = None,
 ) -> SandboxResult:
     """`argv` を隔離して実行する。
 
     **shell を通さない。** 文字列ではなく argv を受け取るのは、
     生成物由来の文字列が shell metacharacter として解釈される経路を
     作らないためである。
+
+    `env_override` は、呼び出し側が既に scrub 済みの環境を持っている場合に
+    渡す（`build_time_sandbox` の Policy 層がそれを作る）。**渡されても
+    `os.environ` を継承しない**——空から作られたものだけを受け取る前提で
+    あり、ここで継承へ戻すことはない。
     """
     import time
 
@@ -261,7 +267,7 @@ def run_in_sandbox(
         completed = subprocess.run(
             [*prefix, *argv],
             cwd=str(workspace),
-            env=_child_env(policy, workspace),
+            env=env_override if env_override is not None else _child_env(policy, workspace),
             capture_output=True,
             timeout=policy.timeout_seconds,
             preexec_fn=_limits(policy),  # noqa: PLW1509 — 隔離のために必要

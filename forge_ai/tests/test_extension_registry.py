@@ -29,6 +29,7 @@ def _promoted_manifest(route: ExtensionRoute = ExtensionRoute.DECLARATIVE):
         semantic_decomposition=True, reusable_primitive=True, language_binding=True,
         validator_binding=True, runtime_binding=True, compiler_binding=True,
         tests_pass=True, build_pass=True, runtime_evidence=True,
+        sandbox_preflight=route is ExtensionRoute.BUILD_TIME,
     )
     return replace(manifest, evidence=evidence).verified().promoted()
 

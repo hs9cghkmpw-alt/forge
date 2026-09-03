@@ -30,7 +30,12 @@ def _candidate() -> ExtensionCandidate:
     )
 
 
-def _artifact() -> BuildTimeCapabilityArtifact:
+def _artifact(*, probe_exit: int = 0) -> BuildTimeCapabilityArtifact:
+    probe_tail = (
+        "print('runtime-probe-pass')\n"
+        if probe_exit == 0
+        else f"raise SystemExit({probe_exit})\n"
+    )
     return BuildTimeCapabilityArtifact(
         capability_id="view.synthetic_probe",
         files=(
@@ -42,11 +47,19 @@ def _artifact() -> BuildTimeCapabilityArtifact:
                 ),
             ),
             BuildTimeSourceFile(
+                path="capability_test.py",
+                content=(
+                    "from capability import render\n"
+                    "assert render(2) == 'probe:2'\n"
+                    "print('test-pass')\n"
+                ),
+            ),
+            BuildTimeSourceFile(
                 path="verify.py",
                 content=(
                     "from capability import render\n"
                     "assert render(7) == 'probe:7'\n"
-                    "print('runtime-probe-pass')\n"
+                    + probe_tail
                 ),
             ),
         ),
@@ -57,8 +70,8 @@ def _artifact() -> BuildTimeCapabilityArtifact:
 
 def _commands() -> tuple[BuildCommand, ...]:
     return (
-        BuildCommand("test", (sys.executable, "-c", "from capability import render; assert render(2) == 'probe:2'")),
-        BuildCommand("build", (sys.executable, "-m", "py_compile", "capability.py", "verify.py")),
+        BuildCommand("test", (sys.executable, "capability_test.py")),
+        BuildCommand("build", (sys.executable, "-m", "compileall", "-q", ".")),
         BuildCommand("runtime_probe", (sys.executable, "verify.py")),
     )
 
@@ -87,6 +100,7 @@ def test_real_managed_commands_can_promote_and_activate_exact_build(tmp_path) ->
     assert evidence.evidence.passed("test")
     assert evidence.evidence.passed("build")
     assert evidence.evidence.passed("runtime_probe")
+    assert evidence.evidence.sandbox_preflight_pass
     assert "runtime-probe-pass" in evidence.evidence.commands[-1].stdout
 
 
@@ -104,24 +118,25 @@ def test_loader_rejects_build_metadata_not_produced_by_exact_execution(tmp_path)
 
 
 def test_failed_runtime_probe_never_becomes_loaded_activation(tmp_path) -> None:
-    commands = (
-        BuildCommand("test", (sys.executable, "-c", "from capability import render; assert render(1) == 'probe:1'")),
-        BuildCommand("build", (sys.executable, "-m", "py_compile", "capability.py")),
-        BuildCommand("runtime_probe", (sys.executable, "-c", "raise SystemExit(9)")),
-    )
     bridge = ManagedBuildTimeImplementer(
         capability_id="view.synthetic_probe",
-        commands=commands,
+        commands=_commands(),
         runner=ManagedBuildWorkspaceRunner(root=tmp_path),
     )
     manifest = create_extension_manifest(_candidate(), ExtensionRoute.BUILD_TIME)
 
     implementation = implement_build_time_extension(
         manifest,
-        _artifact(),
+        _artifact(probe_exit=9),
         builder=bridge.build,
         load_runtime=bridge.load_runtime,
     )
 
     assert implementation.manifest.status.value == "implementing"
     assert implementation.activation is None
+    execution = bridge.last_execution
+    assert execution is not None
+    assert execution.evidence.passed("test")
+    assert execution.evidence.passed("build")
+    assert not execution.evidence.passed("runtime_probe")
+    assert execution.evidence.commands[-1].exit_code == 9

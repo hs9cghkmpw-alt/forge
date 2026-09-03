@@ -1292,12 +1292,13 @@
         "closing_evidence": "Network/File/Process/Secret escape 0件",
         "hard_gate": true
       },
-      "zero_budget_approach": "OS 標準の namespace（network / PID）+ rlimit + env 作り直し。追加費用 0",
+      "zero_budget_approach": "2層。Policy層（静的preflight・実行ファイル固定・env scrub、build_time_sandbox）+ OS層（network/PID namespace・rlimit・timeout、core/sandbox）。追加費用 0",
       "implementation_status": "PARTIAL",
       "evidence_status": "HARD_GATE_PARTIAL",
       "implementation_evidence": [
         "forge_ai/core/sandbox/runner.py",
         "forge_ai/core/sandbox/policy.py",
+        "forge_ai/core/orchestration/build_time_sandbox.py",
         "forge_ai/tests/test_sandbox_escape_corpus.py",
         "forge_ai/core/orchestration/build_time_workspace.py"
       ],
@@ -1307,7 +1308,7 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "**Linux backend のみ。** Windows / macOS backend は未実装で、その環境では実行を拒否する（fail closed）。root 実行では RLIMIT_NPROC が効かない（PID namespace で隔離はする）。AST / Import / Secret / Effect の静的検査は別途未実装（SEC-05）",
+      "remaining_gap": "**Linux の OS 層のみ。** Windows / macOS backend は未実装で、その環境では実行を拒否する（fail closed）。root 実行では RLIMIT_NPROC が効かない（PID namespace で隔離はする）",
       "blocking_tech_debt": [],
       "next_proof": "Windows backend の実装と、Windows 上での escape corpus 全遮断",
       "evidence_reuse": {
@@ -3700,6 +3701,7 @@
       "implementation_evidence": [
         "forge_ai/core/sandbox/runner.py",
         "forge_ai/core/sandbox/policy.py",
+        "forge_ai/core/orchestration/build_time_sandbox.py",
         "forge_ai/tests/test_sandbox_escape_corpus.py",
         "forge_ai/core/orchestration/build_time_workspace.py"
       ],
@@ -3738,19 +3740,21 @@
         "closing_evidence": "AST/Import/Secret/Effect違反見逃し0件",
         "hard_gate": true
       },
-      "zero_budget_approach": null,
-      "implementation_status": "NOT_STARTED",
-      "evidence_status": "NONE",
-      "implementation_evidence": [],
+      "zero_budget_approach": "生成 Source の AST 検査（host I/O / process / network の import 禁止）と実行ファイル allowlist",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "forge_ai/core/orchestration/build_time_sandbox.py"
+      ],
       "measured": {
         "episodes": 0,
         "successes": 0,
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "生成コードの AST / Import / Secret / Effect 検査が無い。`dart analyze` は構文・型・lint であって違反検出ではない",
+      "remaining_gap": "別 Agent が 2026-09-03 に実装した AST/import preflight がある。Secret / Effect の違反検出と、違反 Corpus に対する見逃し 0 件は未実施",
       "blocking_tech_debt": [],
-      "next_proof": "違反 Corpus に対する見逃し0件",
+      "next_proof": "AST/Import/Secret/Effect の違反 Corpus に対する見逃し 0 件",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []

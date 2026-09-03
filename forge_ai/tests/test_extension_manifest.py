@@ -15,7 +15,11 @@ from forge_ai.core.orchestration.extension_plan import (
 )
 
 
-def _complete_evidence(*, safety_review: bool = False) -> ExtensionEvidence:
+def _complete_evidence(
+    *,
+    safety_review: bool = False,
+    sandbox_preflight: bool = False,
+) -> ExtensionEvidence:
     return ExtensionEvidence(
         semantic_decomposition=True,
         reusable_primitive=True,
@@ -26,6 +30,7 @@ def _complete_evidence(*, safety_review: bool = False) -> ExtensionEvidence:
         tests_pass=True,
         build_pass=True,
         runtime_evidence=True,
+        sandbox_preflight=sandbox_preflight,
         safety_review=safety_review,
     )
 
@@ -38,15 +43,29 @@ def test_missing_view_cannot_be_promoted_from_generated_manifest_alone() -> None
     assert not manifest.can_promote
     assert "runtime_binding" in manifest.promotion_blockers()
     assert "runtime_evidence" in manifest.promotion_blockers()
+    assert "sandbox_preflight" in manifest.promotion_blockers()
 
     with pytest.raises(ValueError, match="complete evidence"):
+        manifest.verified()
+
+
+def test_build_time_capability_needs_sandbox_even_if_all_old_gates_are_green() -> None:
+    candidate = plan_extension_candidate("view.map")
+    manifest = create_extension_manifest(candidate, ExtensionRoute.BUILD_TIME)
+    manifest = replace(manifest, evidence=_complete_evidence(sandbox_preflight=False))
+
+    assert manifest.promotion_blockers() == ("sandbox_preflight",)
+    with pytest.raises(ValueError, match="sandbox_preflight"):
         manifest.verified()
 
 
 def test_safe_capability_can_promote_only_after_full_reusable_evidence() -> None:
     candidate = plan_extension_candidate("view.map")
     manifest = create_extension_manifest(candidate, ExtensionRoute.BUILD_TIME)
-    manifest = replace(manifest, evidence=_complete_evidence())
+    manifest = replace(
+        manifest,
+        evidence=_complete_evidence(sandbox_preflight=True),
+    )
 
     verified = manifest.verified()
     promoted = verified.promoted()

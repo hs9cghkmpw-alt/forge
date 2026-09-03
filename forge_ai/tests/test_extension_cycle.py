@@ -56,6 +56,10 @@ def _promoted_manifest(manifest):
         tests_pass=True,
         build_pass=True,
         runtime_evidence=True,
+        # This helper intentionally synthesizes an already-evidenced manifest.
+        # BUILD_TIME now requires sandbox evidence as a lifecycle invariant; the
+        # DECLARATIVE route does not claim generated host-code execution.
+        sandbox_preflight=manifest.route is ExtensionRoute.BUILD_TIME,
     )
     return replace(manifest, evidence=evidence).verified().promoted()
 

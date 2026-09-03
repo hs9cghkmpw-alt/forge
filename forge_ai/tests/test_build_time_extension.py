@@ -49,6 +49,9 @@ def _builder(artifact: BuildTimeCapabilityArtifact) -> BuildTimeBuildResult:
         tests_pass=True,
         build_pass=True,
         runtime_evidence=True,
+        sandbox_preflight=True,
+        sandbox_policy_version="test-policy-v1",
+        sandbox_policy_digest="a" * 64,
     )
 
 
@@ -74,6 +77,44 @@ def test_build_time_extension_promotes_only_after_exact_build_is_loaded() -> Non
     assert result.activation is not None
     assert result.activation.build_id == "build-123"
     assert result.activation.runtime_fingerprint == "runtime-abc"
+
+
+def test_build_time_extension_without_sandbox_attestation_never_promotes() -> None:
+    manifest = create_extension_manifest(_candidate(), ExtensionRoute.BUILD_TIME)
+
+    def unsandboxed_builder(artifact: BuildTimeCapabilityArtifact) -> BuildTimeBuildResult:
+        return replace(
+            _builder(artifact),
+            sandbox_preflight=False,
+            sandbox_policy_version="",
+            sandbox_policy_digest="",
+        )
+
+    result = implement_build_time_extension(
+        manifest,
+        _artifact(),
+        builder=unsandboxed_builder,
+        load_runtime=lambda build: pytest.fail("loader must not run without sandbox evidence"),
+    )
+
+    assert result.manifest.status.value == "implementing"
+    assert result.activation is None
+    assert result.manifest.promotion_blockers() == ("sandbox_preflight",)
+
+
+def test_sandbox_pass_without_policy_identity_is_rejected_as_inconsistent() -> None:
+    manifest = create_extension_manifest(_candidate(), ExtensionRoute.BUILD_TIME)
+
+    def inconsistent_builder(artifact: BuildTimeCapabilityArtifact) -> BuildTimeBuildResult:
+        return replace(_builder(artifact), sandbox_policy_digest="")
+
+    with pytest.raises(BuildTimeExtensionError, match="policy version and digest"):
+        implement_build_time_extension(
+            manifest,
+            _artifact(),
+            builder=inconsistent_builder,
+            load_runtime=_loader,
+        )
 
 
 def test_build_failure_never_produces_activation_or_promotion() -> None:

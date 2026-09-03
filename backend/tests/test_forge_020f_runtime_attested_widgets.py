@@ -19,7 +19,8 @@ Validator（生成物を検査する仕組み）の許可 widget は版ごとの
 2. **loaded な BUILD_TIME activation を持つ**（新しい runtime を実際に
    ビルドして載せた）
 
-`requested` では広がらない。`DECLARATIVE` でも広がらない。
+BUILD_TIME の PROMOTED state 自体には、現在さらに sandbox preflight evidence
+が必須である。`requested` では広がらない。`DECLARATIVE` でも広がらない。
 """
 
 from __future__ import annotations
@@ -91,6 +92,7 @@ def _promoted_manifest(route: ExtensionRoute) -> ExtensionManifest:
             language_binding=True, validator_binding=True,
             runtime_binding=True, compiler_binding=True,
             tests_pass=True, build_pass=True, runtime_evidence=True,
+            sandbox_preflight=route is ExtensionRoute.BUILD_TIME,
             safety_review=True,
         ),
     )
