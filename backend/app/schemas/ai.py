@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # ---------------------------------------------------------------------------
 # Request(ADAPTER_CONTRACT_V1.md 5.2節)
@@ -411,6 +411,42 @@ class NeedModelDTO(BaseModel):
     assumptions: list[SafeAssumptionDTO] = Field(default_factory=list)
 
 
+class ProviderAttributionDTO(BaseModel):
+    """**設定されたProviderと、実際に答えたProviderは別の事実である**(TD104)。
+
+    `backend/app/ai/gateway/model_call_ledger.py`の`ProviderAttribution`を
+    そのままHTTPへ出したもの。Evidenceがここと食い違ってはならない。
+
+    `model_config`で`protected_namespaces`を空にしているのは、Pydanticが
+    `model_`で始まるフィールド名を予約語として警告するためである。
+    ここでの`model_calls`は「Model呼び出し回数」であり、Pydanticの
+    `model_*` APIとは無関係。**名前を`llm_calls`等へ曲げない**——
+    Evidence側の語彙(`model_calls`)と一致させることの方が重要である。
+    """
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    configured_provider: str | None = None
+    """要求やRouterに**指定された**名前。指定が無ければ`None`(auto)。
+    **これを「使われた」と読んではならない。**"""
+
+    actually_used_provider: str | None = None
+    """**実際に応答を返した**Provider。1回も成功していなければ`None`。"""
+
+    actually_used_model: str = ""
+    reported_provider: str = "none"
+    model_calls: int = 0
+    """試行の総数。**失敗した試行も1回**(呼んだのだから)。"""
+
+    successful_model_calls: int = 0
+    deterministic_path: bool = True
+    """Modelを1回も呼ばずに答えたか(Fast path / Reuse)。"""
+
+    fallback_used: bool = False
+    attempted_providers: list[str] = Field(default_factory=list)
+    failed_providers: list[str] = Field(default_factory=list)
+
+
 class SimulatedOutputMixin(BaseModel):
     """FORGE-HANDOFF-LOCAL-AI-UX-004 §9(2026-08-13)新設。
 
@@ -424,10 +460,28 @@ class SimulatedOutputMixin(BaseModel):
     """
 
     provider: str = "mock"
-    """実際に使われたProvider名。"""
+    """**実際に応答を返した**Provider名。
+
+    TD104(2026-09-03)で意味を締めた。以前ここには
+    `last_provider_used or request.provider or "unknown"` が入っており、
+    **1回もModelを呼んでいないとき、指定されただけのProvider名**が
+    そのまま「使われた」として記録されていた。Fast pathはLLMを0回しか
+    呼ばないので、`provider=gemini`を指定した要求は「Geminiが答えた」と
+    いうEvidenceを残していた。呼んでいない。
+
+    いまは`ProviderAttribution.reported_provider`が入る。
+    Modelを1回も呼んでいなければ`"none"`であり、**Provider名を作らない**。
+    """
 
     simulated: bool = False
     """`True`なら、この結果は実際の推論ではなくMockが組み立てた模擬出力。"""
+
+    attribution: ProviderAttributionDTO | None = None
+    """設定されたProviderと、実際に答えたProviderを**分けて**持つ。
+
+    `provider`だけでは「0回呼んだ」と「呼んで答えた」を区別できない。
+    99%を主張するとき、Repair回数やFallback率と同じくらい、
+    **そもそも何回Modelを呼んだか**が要る（§11）。"""
 
 
 class StageTimingsDTO(BaseModel):

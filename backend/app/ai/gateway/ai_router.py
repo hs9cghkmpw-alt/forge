@@ -53,6 +53,7 @@ from typing import Any
 
 from app.ai.foundation.deadline import apply_deadline, supports_deadline
 from app.ai.foundation.model_choice import apply_model, supports_model_choice
+from app.ai.gateway.model_call_ledger import record_routed_result
 from app.ai.gateway.ai_errors import ErrorKind, classify_exception
 from app.ai.gateway.benchmark_evidence import BenchmarkEvidenceStore, default_evidence_store
 from app.ai.gateway.learning_foundation import (
@@ -892,6 +893,11 @@ class _BoundAdapter:
         result = self.router.generate(
             self.task, prompt, response_schema, provider=self.provider
         )
+        # TD104(2026-09-03): **ここが Model 呼び出しの唯一の口である。**
+        # 数え忘れた経路が「0回」に見えると、間違いが楽観側へ倒れる
+        # （呼んだのに呼んでいないことになる）ので、呼び出し側では
+        # なくここで数える。記録先が無ければ素通りする。
+        record_routed_result(result)
         self.last_provider_used = result.provider_used
         self.last_model_used = next(
             (

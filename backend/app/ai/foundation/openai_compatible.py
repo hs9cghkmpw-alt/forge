@@ -62,6 +62,7 @@ from typing import Any
 import httpx
 
 from app.ai.gateway.ai_errors import ErrorKind, ProviderError
+from app.ai.gateway.external_call_policy import assert_external_call_allowed
 from app.ai.gateway.provider_registry import StructuredOutputMode
 from app.ai.gateway.structured_output_capability import (
     FourHundredReading,
@@ -330,6 +331,12 @@ class OpenAICompatibleAdapter:
     結果の見出しに使われる識別子。
     """
 
+    #: この Adapter の実行場所。**既定は `"cloud"`**（fail closed）。
+    #: このマシンで動く Runtime だけが `"local"` を名乗ってよい
+    #: （`LocalModelProvider`）。`external_call_policy` はこの値で
+    #: 「外へ出るのか」を判断する。
+    deployment: str = "cloud"
+
     def __init__(
         self,
         *,
@@ -562,6 +569,13 @@ class OpenAICompatibleAdapter:
         response_schema: dict[str, Any],
         mode: StructuredOutputMode = StructuredOutputMode.JSON_SCHEMA,
     ) -> str:
+        # FORGE-EXTERNAL-CALL-DEFAULT-DENY(2026-09-03): **実通信の直前**で
+        # Policy を確認する。ここが唯一の egress なので、ここを通さずに
+        # 外へ出る経路は無い（`test_external_call_policy.py` が、
+        # `app/ai/foundation` に無防備な `httpx.Client(` が増えたら落ちる）。
+        assert_external_call_allowed(
+            provider_id=self.provider_name, deployment=self.deployment,
+        )
         try:
             with httpx.Client(timeout=self._timeout) as client:
                 response = client.post(

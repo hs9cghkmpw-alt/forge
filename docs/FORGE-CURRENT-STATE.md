@@ -5,7 +5,7 @@
 **Detailed product authority:** `docs/PRODUCT-DIRECTION.md`  
 **Operational handoff:** `docs/HANDOFF.md`
 
-Last reviewed against GitHub code HEAD: **2026-09-02**
+Last reviewed against GitHub code HEAD: **2026-09-03**
 
 ---
 
@@ -344,6 +344,40 @@ real Local Model run.
 
 ---
 
+## 10.2 Capability ledger and evidence integrity — 2026-09-03
+
+The 121 detailed capabilities now exist as a machine-readable ledger rather than
+prose: `docs/evidence/capability_matrix/capabilities.json`, checked in CI by
+`scripts/check_capability_matrix.py`. The checker refuses claims the repository
+cannot support — a single passing run recorded as `99_PROVEN`, an `IMPLEMENTED`
+with no existing evidence path, a hand-written Wilson bound, a shrunken
+denominator. Seven such inflations were injected and all seven were caught.
+
+State on 2026-09-03: **`99_PROVEN` 0, `HARD_GATE_PROVEN` 0**, `IMPLEMENTED` 12,
+`PARTIAL` 5, `NOT_STARTED` 2, `NOT_ASSESSED` 102. `NOT_ASSESSED` means *not yet
+examined*, which is deliberately distinct from `NOT_STARTED` (*examined, absent*).
+
+Two architectural holes were closed:
+
+- **Real-provider egress is default-deny** (`external_call_policy.py`). The
+  presence of an API key is no longer treated as consent — that was the exact
+  shape of the 2026-09-02 incident. Cloud calls need an explicit flag; tests
+  need a second one; anything that is not `1/true/yes/on` fails closed.
+- **Provider attribution separates configured from actually used**
+  (`model_call_ledger.py`, TD104). A request that calls no model reports
+  `"none"` rather than inventing a provider name, and carries `model_calls`,
+  `deterministic_path` and `fallback_used`.
+
+ADR-015 records that generated Dart is intentional architecture evolution, not
+drift — Constitution §8 names `controlled synthesis` and §10 names
+`promotion gates`, and GEN-09/10/11 plus EXT-04/06 are unreachable through the
+typed IR vocabulary alone. But the gate chain is incomplete: **no sandbox, no
+permission manifest, no tier enforcement, no dependency allowlist**. Generated
+test/build steps run with host privileges. EXT-08 was therefore lowered to
+`NOT_STARTED` and EXT-03/AI-06 to `PARTIAL`.
+
+---
+
 ## 11. Current unverified / incomplete boundaries
 
 Do not claim these as complete without new evidence:
@@ -361,7 +395,13 @@ Do not claim these as complete without new evidence:
 - Any benchmark axis that is unmeasured should remain `unsupported` or `unknown`, not fake zero/PASS
 - Real-device Mobile/Tablet rendering: only Chromium viewport emulation has been run (2026-09-02)
 - The `AIモード` `unavailable` / `preparing` states under a live backend: unrendered, because this host must not start the backend (a real `GEMINI_API_KEY` sits in its `backend/.env`)
-- Provider attribution in Evidence (TD104): a fast-path request with zero LLM calls still reported `provider: "gemini"`
+- ~~Provider attribution in Evidence (TD104)~~ — closed 2026-09-03
+- **Frozen Final Holdout does not exist.** The repository is fully readable by the development agent, so a benchmark committed in plaintext is not held out. No capability can reach `99_PROVEN` until this is resolved (TD109; CEO decision required)
+- **Human Evidence: 0 participants.** No zero-budget route to 400 independent first-time participants is secured; even the 3-5 person H0 stage is unstarted
+- **No sandbox in the self-extension path** (TD107). Generated test/build run with host privileges, so EXT-08's `0 escapes` hard gate is unverified, not satisfied
+- **Capability Tier is not enforced in code** (TD108); Tier C can traverse the Tier A path
+- Security corpora are undefined, so no security item can claim `HARD_GATE_PROVEN`
+- Outcome metrics beyond success rate (repair count, p95 latency, peak RSS, crash, data loss) are not recorded in episodes
 
 ---
 

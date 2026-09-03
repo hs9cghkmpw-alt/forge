@@ -4,7 +4,21 @@
 
 ## CEOへの依頼（最優先・上から順に）
 
-0. **Gemini 無料枠が 2 回分消費された可能性が高い（2026-09-02、事故報告）。**
+0. **Frozen Final Holdout の置き方を決めてください（2026-09-03、これが止まっている本体）。**
+   この Repository は開発 Agent が全部読めるので、最終 99% 証明用の
+   Benchmark を平文で置いた時点で Holdout になりません。したがって
+   **現在どの能力も `99_PROVEN` へ到達できません**。0 円で採れる案は 3 つ
+   （別 Repository / CEO 手元 / Seed 保持）。詳細は
+   `docs/evidence/capability_matrix/README.md` §3.2。どれを採るか決めて
+   ください。
+
+0.5 **Human Panel の募集経路を決めてください。** 0 円で独立初見 400 人を
+   確保する経路が現在ありません。まず 3〜5 人の H0 から始めます。Claude 側
+   では募集自体が出来ないため CEO の行動が要ります。詳細は
+   `docs/reports/FORGE-HUMAN-PANEL-ACQUISITION-PLAN-20260903.md`。
+   **現在の Human Evidence 人数は 0 人です。**
+
+0.9 **Gemini 無料枠が 2 回分消費された可能性が高い（2026-09-02、事故報告）。**
    ブラウザ実描画の証拠を撮るために Claude 側の作業ホストで backend を
    起動したところ、そのコンテナの `backend/.env` に **実 API キーが入って
    いた**。`/api/v1/ai/converse` を 2 回送信した後に気付き、直ちに停止した。
@@ -14,6 +28,8 @@
    `backend/.env` は gitignore 対象で git 追跡外である。
    以後このホストで backend を起動しない。詳細は
    `docs/reports/FORGE-PROVIDER-INDEPENDENT-UI-20260902-report.md` §0.1。
+   **2026-09-03 に Architecture で塞ぎました**（`external_call_policy.py`、
+   Default Deny）。API キーがあるだけでは、もう外部 Provider を呼びません。
 
 1. **OpenAI API キーの失効手続き。** 以前のセッションでチャットへ貼られた
    `sk-proj-...` は Repository に保存していないが、**貼られた時点で漏れている**。
@@ -34,6 +50,84 @@
 3. ~~Universal QualityのConstitution追記承認~~ — **完了。** CEOが提案の
    正確な文面を確認し、2026-09-02に「いいよ、すべて承認」と明示承認した。
    Constitution §13へ追記済み。
+
+---
+
+## 121能力 Gap Matrix と Evidence 整合性（2026-09-03）
+
+Base HEAD `61a199d` から実装した。
+
+### やったこと（3つ）
+
+1. **121 能力を機械が読める台帳にした。**
+   `docs/evidence/capability_matrix/capabilities.json`（121 件、Target
+   Contract は戦略 §2.5 をそのまま取り込み）。
+   `scripts/check_capability_matrix.py` が CI で走り、**書けるより高い状態を
+   主張していないか**を検査する。
+
+2. **実 Provider 誤爆を Architecture で禁止した。**
+   `backend/app/ai/gateway/external_call_policy.py`。Default Deny。
+   **API キーの存在を同意として扱わない**——これが 2026-09-02 の事故の形。
+
+3. **TD104 を解消した。** 呼んでいない Provider の名前を Evidence へ書かない。
+   `backend/app/ai/gateway/model_call_ledger.py` が、configured（指定）と
+   actually used（実際に答えた）を分けて持つ。0 回なら `"none"`。
+
+### 121 能力の状態（2026-09-03）
+
+| Status | 件数 |
+|---|---:|
+| `NOT_ASSESSED`（今回見ていない） | 102 |
+| `NOT_STARTED`（見た。実装が無い） | 2 |
+| `PARTIAL` | 5 |
+| `IMPLEMENTED` | 12 |
+| **`99_PROVEN`** | **0** |
+| **`HARD_GATE_PROVEN`** | **0** |
+
+**102 件を `NOT_ASSESSED` のまま残した**のは、121 を 1 セッションで正しく
+評価できないからです。「見ていない」を「無い」と書くのも嘘なので分けました。
+
+### ADR-015: 生成 Source は Drift ではなく Gate 付き Evolution
+
+`docs/adr/ADR-015-generated-source-is-evolution-not-drift.md`
+
+Constitution §8 の `controlled synthesis`、§10 の `promotion gates` が
+生成 Source を予定しており、GEN-09/10/11・EXT-04/06 は Typed IR だけでは
+満たせない。したがって **JSON-only へ戻すのは能力を削ることになり、選べない**。
+
+すでに閉じている Gate: 隔離生成 / Digest 固定 / 静的解析 / 生成テスト /
+実 Build / Runtime probe / Validator 語彙拡張の制限 / 出荷物の空検査。
+**AI が書いた Source がそのまま Production へ入る経路は現時点で無い。**
+
+**閉じていない Gate: Sandbox・Permission Manifest・Tier 強制・依存 allowlist。**
+生成物の test/build を**ホスト権限**で実行しています。
+そのため EXT-08 を `NOT_STARTED` へ、EXT-03 と AI-06 を `PARTIAL` へ
+**下げました**（実態に合わせて下げた、という意味です）。
+
+### 次にやるべき Gap（波及順、上位 3）
+
+1. **Sandbox（EXT-08）** — 無いまま Self-Extension が動いている。SEC 全体が依存
+2. **Frozen Final Holdout の運用** — 無いとどの能力も `99_PROVEN` に到達しない（CEO 決定待ち）
+3. **Outcome 指標の Episode 収録**（Repair / p95 / RAM 等）— 99% の裏で性能が
+   落ちていないことを示す唯一の手段
+
+### 検証
+
+- `pytest backend/tests`: **2066 passed / 16 skipped**（前回 2035）
+- `pytest forge_ai/tests`: **747 passed / 10 skipped**
+- `flutter analyze --fatal-infos --fatal-warnings`: No issues found
+- `flutter test`: **589 passed**
+- `check_universal_quality_policy.py`: PASS / `check_capability_matrix.py`: PASS
+- 配線破壊試験 5 種 + Matrix 水増し 7 種、**すべて検出**
+- **Real Provider calls: 0 件**（Default Deny により構造的に 0）
+- **Real Local Model runs: 0 回 / Human Evidence: 0 人**
+
+### まだ言えないこと
+
+**「能力差 0 達成」「2億円版と同等完成」「全体 99% 達成」とは書けません。**
+今回縮んだのは能力差ではなく、**差を測れない状態**です。
+
+詳細: `docs/reports/FORGE-121-CAPABILITY-GAP-AND-EVIDENCE-INTEGRITY-20260903.md`
 
 ---
 

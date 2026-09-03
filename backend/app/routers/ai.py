@@ -57,6 +57,9 @@ from app.ai.runtime.stage_timing import (
     StageTimings,
     count as _timing_count,
 )
+from app.ai.gateway.model_call_ledger import ModelCallLedger as _ModelCallLedger
+from app.ai.gateway.model_call_ledger import current_ledger as _current_ledger
+from app.ai.gateway.model_call_ledger import recording as _model_call_recording
 from app.ai.runtime.stage_timing import measuring as _timing_measuring
 from app.ai.runtime.stage_timing import stage as _timing_stage
 from app.ai.runtime.conversation_metrics import record_conversation_event
@@ -80,6 +83,7 @@ from app.ai.runtime.pipeline_errors import (
 from app.ai.runtime.prompt_pipeline import PipelineNeedsConfirmationResult, PromptPipeline
 from app.ai.runtime.provider_router import ProviderRouter
 from app.schemas.ai import (
+    ProviderAttributionDTO,
     AgentRunDTO,
     ArtifactRefDTO,
     ConfirmationAnswerRequest,
@@ -476,9 +480,27 @@ def converse(request: ConverseRequest):
     「速い道を入れたから速い」と丸めないために、ここで計測を始める。
     どの段が何ミリ秒かは `timings` として応答に載る。
     """
-    with _timing_measuring() as timings:
+    # TD104(2026-09-03): Model 呼び出しを**数えながら**1ターン進める。
+    # 数えないと「0回」と「記録漏れ」を後から区別できない。
+    with _model_call_recording(), _timing_measuring() as timings:
         response = _converse_step(request)
     return _with_timings(response, timings)
+
+
+
+def _provider_attribution(*, configured_provider: str | None):  # noqa: ANN202
+    """いまの要求で**実際に**何回 Model を呼んだかから帰属を作る。
+
+    Ledger が無い（計測していない）場合も、`configured_provider` を
+    「使った」ことにはしない——空の Ledger から作れば `model_calls=0`、
+    `reported_provider="none"` になる。**分からないものを楽観側へ倒さない。**
+    """
+    ledger = _current_ledger() or _ModelCallLedger()
+    return ledger.attribution(configured_provider=configured_provider)
+
+
+def _attribution_dto(attribution) -> ProviderAttributionDTO:  # noqa: ANN001
+    return ProviderAttributionDTO(**attribution.to_dict())
 
 
 def _with_timings(response, timings: StageTimings):  # noqa: ANN001, ANN202
@@ -582,7 +604,17 @@ def _converse_step(request: ConverseRequest):
         raise ProviderError(message, sub_reason=sub_reason, stage="conversation") from exc
 
     # **実行後**に確定する。Routerがfallbackした場合も正しい名前になる。
-    provider_name = provider.last_provider_used or request.provider or "unknown"
+    #
+    # TD104(2026-09-03): ここは以前
+    # `provider.last_provider_used or request.provider or "unknown"`
+    # だった。`or request.provider` が問題で、**1回もModelを呼んでいない
+    # とき（Fast path）に、指定されただけのProvider名**へ落ちていた。
+    # 指定は設定であって、使った事実ではない。
+    #
+    # いまはLedger（実際の呼び出し記録）から作る。0回なら`"none"`で
+    # あり、**Provider名を作らない**。
+    attribution = _provider_attribution(configured_provider=request.provider)
+    provider_name = attribution.reported_provider
     simulated = router.is_simulated(provider_name)
 
     need_model_dto = NeedModelDTO(**step_result.need_model.to_dict())
@@ -625,6 +657,7 @@ def _converse_step(request: ConverseRequest):
             session_id=session.session_id, question=step_result.question or "", need_model=need_model_dto,
             readiness=step_result.readiness.value,
             provider=provider_name, simulated=simulated,
+            attribution=_attribution_dto(attribution),
         )
 
     if step_result.action == ConversationAction.CONFIRM:
@@ -645,6 +678,7 @@ def _converse_step(request: ConverseRequest):
             reason=step_result.confirm_reason or "確認が必要な操作を含むため",
             need_model=need_model_dto, readiness=step_result.readiness.value,
             provider=provider_name, simulated=simulated,
+            attribution=_attribution_dto(attribution),
         )
 
     if step_result.action == ConversationAction.UPDATE:
@@ -672,6 +706,7 @@ def _converse_step(request: ConverseRequest):
             session_id=session.session_id, need_model=need_model_dto,
             change_request=change_request,
             provider=provider_name, simulated=simulated,
+            attribution=_attribution_dto(attribution),
             result=_update_result_dto(outcome),
         )
 
@@ -718,6 +753,7 @@ def _converse_step(request: ConverseRequest):
             session_id=session.session_id, question=question, need_model=need_model_dto,
             readiness=ConversationReadiness.INSUFFICIENT_INFORMATION.value,
             provider=provider_name, simulated=simulated,
+            attribution=_attribution_dto(attribution),
         )
 
     if isinstance(result, PipelineNeedsConfirmationResult):
@@ -737,7 +773,16 @@ def _converse_step(request: ConverseRequest):
 
     # 生成本体を実行したProviderを報告する(会話ステップとは別のProviderに
     # なりうる——Routerは各Taskで独立にfallbackする)。
-    build_provider_name = result.diagnostics.provider_used or provider_name
+    # TD104: Pipelineが自分で記録した名前(`diagnostics.provider_used`)と、
+    # Ledgerが観測した事実を**突き合わせる**。Ledgerが「呼んでいない」と
+    # 言っているのにPipelineがProvider名を名乗る場合、信じるのは観測の
+    # 方である（呼んでいないものを呼んだことにしない）。
+    build_attribution = _provider_attribution(configured_provider=request.provider)
+    build_provider_name = (
+        build_attribution.reported_provider
+        if build_attribution.model_calls == 0
+        else (result.diagnostics.provider_used or build_attribution.reported_provider)
+    )
     agent_summary = (
         run_local_agent_verification(result)
         if request.agent_mode == "verify"
@@ -749,6 +794,7 @@ def _converse_step(request: ConverseRequest):
             result, session_id=session.session_id, agent_summary=agent_summary
         ), readiness=step_result.readiness.value,
         provider=build_provider_name, simulated=router.is_simulated(build_provider_name),
+        attribution=_attribution_dto(build_attribution),
     )
 
 

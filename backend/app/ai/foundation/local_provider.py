@@ -88,6 +88,12 @@ def extract_json_object(text: str) -> dict[str, Any]:
 class LocalModelProvider(OpenAICompatibleAdapter):
     """`LLMAdapter` Protocolを満たす、ローカル推論Runtimeへの接続。"""
 
+    #: このマシンで動く。Quota を消費せず、入力が外部へ出ない。
+    #: `external_call_policy` はこれを見て、通常運用では通す
+    #: （Local-first は製品の中核であり、環境変数を必須にしない）。
+    #: **テスト実行中だけは拒否する**——決定的でない実行を防ぐため。
+    deployment: str = "local"
+
     def __init__(
         self,
         *,

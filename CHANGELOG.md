@@ -1,3 +1,46 @@
+# 2026-09-03 — 121能力 Gap Matrix と Evidence 整合性
+
+- **121能力を機械可読な台帳にした**（`docs/evidence/capability_matrix/capabilities.json`）。
+  Target Contract は戦略 §2.5 の表をそのまま取り込み、改変していない。
+  `scripts/check_capability_matrix.py` を CI へ追加し、
+  「1回成功を99_PROVEN」「根拠パス無しでIMPLEMENTED」「Wilson下限の手盛り」
+  「分母を121から減らす」等を機械が落とす。7種の水増しで検出を確認。
+- 状態: `99_PROVEN` 0件 / `HARD_GATE_PROVEN` 0件 / `IMPLEMENTED` 12件 /
+  `PARTIAL` 5件 / `NOT_STARTED` 2件 / `NOT_ASSESSED` 102件。
+  **「見ていない(NOT_ASSESSED)」と「無い(NOT_STARTED)」を分けた。**
+- **実Provider誤爆をArchitectureで禁止**（`external_call_policy.py`、Default Deny）。
+  **API キーの存在を同意として扱わない**——2026-09-02 の事故の形そのもの。
+  Cloud は `FORGE_ALLOW_REAL_PROVIDER_CALLS=1`、テスト中はさらに
+  `FORGE_REAL_PROVIDER_TEST=1` を要求する。`1/true/yes/on` 以外は fail closed。
+  強制点は実通信の直前。`app/ai/foundation` に無防備な `httpx.Client(` が
+  増えると `TestNoUnguardedEgressPointAppears` が名指しで落ちる。
+- **TD104 解消**（`model_call_ledger.py`）。`or request.provider` により、
+  **1回もModelを呼んでいないとき指定名が「使われた」に化けていた**。
+  configured / actually used / model_calls / deterministic_path / fallback を
+  分けて記録し、0回なら `"none"`（Provider名を作らない）。記録は
+  `AIRouter._BoundAdapter`（Model呼び出しの唯一の口）で行う。
+- **ADR-015**: 生成 Source は Architecture Drift ではなく Gate 付き Evolution。
+  Constitution §8 `controlled synthesis` / §10 `promotion gates` が予定して
+  おり、GEN-09/10/11・EXT-04/06 は Typed IR だけでは満たせない。
+  ただし **Sandbox・Permission Manifest・Tier強制・依存allowlist が無い**ため、
+  EXT-08 を `NOT_STARTED` へ、EXT-03 と AI-06 を `PARTIAL` へ**下げた**。
+- Evidence Reuse Graph / Dataset分離 / Outcome指標の規約を
+  `docs/evidence/capability_matrix/README.md` に固定。
+  **同一Requirement Familyの言い換えを独立試験として数えない**を明文化。
+- **Frozen Final Holdout は存在しない**と記録した。Repositoryが開発Agentから
+  全部読めるため、平文で置いた時点でHoldoutにならない。CEO決定待ち。
+- `docs/architecture/FORGE-THREAT-MODEL.md` を新設。「Security 100%」を
+  「定義された Threat Model / Corpus / Hard Gate の内側で Critical Violation 0件」
+  と定義し、**未検査領域を安全と主張しない**ことを固定した。Corpusは未定義。
+- `docs/reports/FORGE-HUMAN-PANEL-ACQUISITION-PLAN-20260903.md` を新設。
+  **Human Evidence 0人**。0円での独立初見400人の経路は未確保（Operational Gap）。
+- 新規 TD105〜TD109。解消 TD104。
+- 検証: backend 2066 / forge_ai 747 / flutter 589 passed、analyze clean、
+  Universal Quality PASS、Matrix PASS。配線破壊5種すべて検出。
+  **Real Provider calls 0件 / Real Local Model runs 0回 / Human Evidence 0人。**
+- **「能力差0達成」「全体99%達成」とは書いていない。** 今回縮んだのは
+  能力差ではなく、差を測れない状態である。
+
 # 2026-09-02 — Provider 非依存 UI と Core UX の正直さ
 
 - ホーム画面の `_ProviderToggle`（`Gemini` ⇔ `Mock` のタップ切り替え）を削除。

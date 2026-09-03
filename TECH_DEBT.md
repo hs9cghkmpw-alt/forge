@@ -4147,7 +4147,7 @@ CIを落とした配置を再現すると落ちることを確認済み。
 完走した回数**が0。以後この定義で数える。
 
 
-## TD104. 呼んでいないProviderの名前をEvidenceが名乗る（2026-09-02、新規）
+## TD104. 呼んでいないProviderの名前をEvidenceが名乗る（2026-09-02）→ **解消**（2026-09-03）
 
 `POST /api/v1/ai/converse` を fast path（LLM 0回）で通したとき、応答の
 `provider` が `"gemini"` になる場面を実機で観測した。`provider` は
@@ -4162,3 +4162,70 @@ Provider帰属の修正はPipeline側（`result.diagnostics.provider_used` と
 **追試は未実施**。作業ホストの `backend/.env` に実APIキーが入っており、
 backendを起動すると実Gemini APIを呼んでしまうため（同日の事故報告参照）、
 このホストでは再現確認を行わない。CEO環境またはキー未設定の環境で追試する。
+
+
+**解消（2026-09-03）**: `backend/app/ai/gateway/model_call_ledger.py`。
+
+原因は観測ではなくコードだった。
+
+```python
+provider_name = provider.last_provider_used or request.provider or "unknown"
+```
+
+`or request.provider` により、**1回もModelを呼んでいないとき、指定された
+だけのProvider名**が「使われた」として記録される。`"unknown"`も、
+「0回呼んだ」と「呼んだが記録漏れ」を同じ語へ潰していた。
+
+configured（指定）と actually used（実際に答えた）を分け、`model_calls` /
+`deterministic_path` / `fallback_used` / `attempted_providers` /
+`failed_providers` を持つ。0回なら報告名は`"none"`で、**Provider名を作らない**。
+
+記録は`AIRouter._BoundAdapter.complete_structured`（Model呼び出しの唯一の口）
+で行う。呼び出し側が数える設計にしない——数え忘れた経路が「0回」に見えると、
+間違いが楽観側へ倒れる。
+
+- テスト: `backend/tests/test_provider_attribution.py`（13件）
+- 配線破壊: 旧`or request.provider`へ戻すと2件FAIL、Router側の記録を外すと1件FAIL
+
+**前回観測の訂正**: `provider: "gemini"`を観測したとき「fast pathで0回なのに
+Geminiを名乗った」と書いたが、あの応答はBUILD/CONFIRMであり、会話段が0回でも
+そのあとPipelineが実際に呼んでいた。あの値自体は誤りでなかった可能性が高い。
+
+## TD105. 決定的経路でもProviderが使えないと会話が進まない（2026-09-03、新規）
+
+`/converse`は`bind()`でProviderを確保してから`ConversationEngine.step()`を
+呼ぶ。fast pathはLLMを0回しか呼ばないのに、**Providerが1つも使えないと
+`NoProviderAvailableError`で503**になる。Modelを呼ばない応答が、Model可用性に
+依存している。Reuse-firstが効いたときも同じ形になる。
+
+実際に`provider="gemini"`（鍵なし環境）でfast path到達前に503を確認した
+（`backend/tests/test_provider_attribution.py`のdocstring参照）。
+
+## TD106. 会話段の内部例外がProviderの失敗として報告される（2026-09-03、新規）
+
+`routers/ai.py`の`ConversationEngine.step()`呼び出しは`except Exception`で
+すべて`ProviderError(sub_reason="unavailable")`へ変換する。したがって
+**Forge側の不具合（TypeError等）が「AIが使えない」としてEvidenceに残る**。
+利用者向け文言としては妥当だが、Evidenceとしては誤りである。
+実際、テスト作成中に差し替えたstepのsignature不一致が503として現れた。
+
+## TD107. Self-ExtensionにSandboxが無い（2026-09-03、新規、EXT-08）
+
+生成されたDartのtest/buildを**ホスト権限**で実行している
+（`forge_ai/core/orchestration/`にsandbox実装が存在しない）。
+EXT-08の`Network/File/Process/Secret escape 0件`は**未実装**であり未検証。
+ADR-015 §4.2 W1。SEC全体とEXT-03/09/10がここに依存する。
+
+## TD108. Capability Tierがコードで強制されていない（2026-09-03、新規）
+
+戦略§2.4のTier A/B/Cは策定済みだが、コードがTierを見ていない。
+Tier C（Network / 外部Credential / OS / 決済 / 高Risk）がTier Aと同じ経路を
+通れる。Hard Gate「Tier Cの無承認自動実行0件」が成立していない。
+
+## TD109. Frozen Final Holdoutの運用手段が無い（2026-09-03、新規）
+
+この Repository は開発Agentが全部読める。したがって最終99%証明用の
+Benchmarkを平文で置いた時点でHoldoutにならない。
+**現在どの能力も`99_PROVEN`へ到達できない。**
+実装の問題ではなく運用設計の問題であり、CEO決定が要る
+（`docs/evidence/capability_matrix/README.md` §3.2 の H1/H2/H3）。

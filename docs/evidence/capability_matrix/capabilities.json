@@ -1,0 +1,3470 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-09-03",
+  "source_of_truth": "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md §2.5",
+  "total_capabilities": 121,
+  "status_vocabulary": [
+    "NOT_ASSESSED",
+    "NOT_STARTED",
+    "DESIGNED",
+    "PARTIAL",
+    "IMPLEMENTED",
+    "VERIFIED",
+    "99_PROVEN",
+    "HARD_GATE_PROVEN"
+  ],
+  "honesty_rules": [
+    "DESIGNED を IMPLEMENTED として数えない",
+    "IMPLEMENTED を VERIFIED として数えない",
+    "テスト1回成功を 99_PROVEN として数えない",
+    "評価していないものは NOT_ASSESSED であって NOT_STARTED ではない",
+    "99_PROVEN は Wilson 95% 信頼下限が 0.99 以上のときだけ"
+  ],
+  "capabilities": [
+    {
+      "capability_id": "AI-01",
+      "category": "A",
+      "category_name": "AI・理解能力",
+      "name": "自然言語理解",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "未見Requirement Family、Semantic Contract、Task完了",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "AI-02",
+      "category": "A",
+      "category_name": "AI・理解能力",
+      "name": "BUILD/ASK判断",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "曖昧/明確/High-risk別Confusion Matrix",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "決定論的 fast path（既存 plan_capabilities / detect_risk_signals の再利用、LLM 0 回）",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/runtime/conversation_fast_path.py",
+        "backend/tests/test_conversation_fast_path.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "未見 Requirement Family 400 件での Confusion Matrix が無い。曖昧文は依然 LLM へ委ねる",
+      "blocking_tech_debt": [
+        "TD96"
+      ],
+      "next_proof": "Development Set 上での ASK/BUILD Confusion Matrix を n>=200 で測る",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "AI-03",
+      "category": "A",
+      "category_name": "AI・理解能力",
+      "name": "必要な質問だけする",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "不要質問率1%以下、必要質問欠落率1%以下",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "AI-04",
+      "category": "A",
+      "category_name": "AI・理解能力",
+      "name": "ユーザー訂正理解",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Stateful Correctionの独立400 Family",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "AI-05",
+      "category": "A",
+      "category_name": "AI・理解能力",
+      "name": "複雑な要求分解",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Goal/Constraint/Capability Planの必須意味一致",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "AI-06",
+      "category": "A",
+      "category_name": "AI・理解能力",
+      "name": "未知要求への対応",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Tier A/B/C別のGap→完了または正しいPolicy処理",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "Capability Plan と Gap 検出（Tier 分類は戦略 §2.4 で策定済み）",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "forge_ai/core/orchestration/capability_gate.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "**Capability Tier がコードで強制されていない。** Tier C が Tier A と同じ経路を通れる",
+      "blocking_tech_debt": [],
+      "next_proof": "Tier をコードで強制し、Tier C の無承認自動実行 0 件を示す",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "AI-07",
+      "category": "A",
+      "category_name": "AI・理解能力",
+      "name": "長期的な文脈理解",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "100 turnと再起動後のGoal/Constraint保持",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "AI-08",
+      "category": "A",
+      "category_name": "AI・理解能力",
+      "name": "意図の誤認識防止",
+      "target_contract": {
+        "target": "100%必須意味",
+        "closing_evidence": "Wrong-meaning success 0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "AI-09",
+      "category": "A",
+      "category_name": "AI・理解能力",
+      "name": "AI Router",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "L0/L1/L2、Model/Profile、Risk Routeの正解率",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "Provider Router（Local-first / quota / fallback / circuit breaker）",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/gateway/ai_router.py",
+        "backend/tests/test_ai_router.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "L0/L1/L2 と Risk Route の正解率が未測定",
+      "blocking_tech_debt": [],
+      "next_proof": "Routing 判断の Oracle を定義し Development Set で測る",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "AI-10",
+      "category": "A",
+      "category_name": "AI・理解能力",
+      "name": "AI Provider比較",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "同一Task/OracleによるBlind A/B再現率",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-01",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "会話→アプリ",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Conversationから利用者TaskまでのFull E2E",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-02",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "Forge Language生成",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "未見Contractから正しいIR/Schema生成",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-03",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "Schema正当性",
+      "target_contract": {
+        "target": "100%",
+        "closing_evidence": "Invalid SchemaのRuntime到達0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": "Typed Forge IR + Schema Validator（決定論）",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "HARD_GATE_DESIGNED",
+      "implementation_evidence": [
+        "backend/app/ai/validators/schema_validator.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "Invalid Schema の Runtime 到達 0 件を、独立 Corpus で示していない",
+      "blocking_tech_debt": [],
+      "next_proof": "Invalid Schema Corpus を作り、Runtime 到達 0 件を測る",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-04",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "Validator",
+      "target_contract": {
+        "target": "100%",
+        "closing_evidence": "Critical mutation survivor 0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": "Validator + mutation（Critical survivor 0 が Hard Gate）",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "HARD_GATE_DESIGNED",
+      "implementation_evidence": [
+        "backend/app/ai/validators/",
+        "backend/tests/test_forge_020f_runtime_attested_widgets.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "Critical mutation survivor 0 件を系統的な mutation 実行で示していない",
+      "blocking_tech_debt": [],
+      "next_proof": "Validator への系統的 mutation を回し survivor 0 を示す",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-05",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "Repair",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "独立Failure 400件、最大3回後の最終成功",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-06",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "Flutter描画",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "対応Platformの実Render/Task Evidence",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "Flutter JSON UI Renderer + Widget Registry",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "REAL_RENDER_PARTIAL",
+      "implementation_evidence": [
+        "frontend/lib/json_ui/",
+        "docs/evidence/visual/provider-independent-ui-20260902/"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "実端末（Mobile/Tablet）未確認。Chromium viewport 再現のみ",
+      "blocking_tech_debt": [
+        "TD99"
+      ],
+      "next_proof": "実端末での Render と Task 完遂 Evidence",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-07",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "CRUDアプリ",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Create/Read/Update/Delete/Persistence E2E",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-08",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "複雑業務アプリ",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "承認・在庫・予約・CRM等の未見Workflow",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-09",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "特殊UI",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "TemplateなしのEncoding/View/Interaction Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-10",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "ゲーム",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Loop/Rule/Input/Collision/State/Persistence Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-11",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "インタラクティブUI",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Drag/Animation/Realtime/Keyboard/Touch E2E",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-12",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "複数画面アプリ",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Route graph、Deep link、Back stack、State保持",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-13",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "外部サービス連携",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Permission付きMock/実Sandbox API Contract Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "GEN-14",
+      "category": "B",
+      "category_name": "アプリ生成能力",
+      "name": "Web利用",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Untrusted Web→検証→Task、Injection違反0件",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-01",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "不足Capability検出",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Required semanticsとCatalog差分の独立400件",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-02",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "Capability分解",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Data/View/Effect/Encoding/Simulation分解Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-03",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "新Capability定義",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "完全なTyped ContractとPermission Manifest",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "Typed Contract は既存の extension_manifest。Permission Manifest は未実装",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "forge_ai/core/orchestration/extension_manifest.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "Typed Contract はあるが **Permission Manifest が無い**（ADR-015 §4.2 W2）",
+      "blocking_tech_debt": [],
+      "next_proof": "Permission Manifest を Contract の必須要素にし、欠落で Promotion が落ちることを示す",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-04",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "コード生成",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Allowlist内ArtifactのBuild/Task成功",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "Capability Gap から Dart Source を生成し、静的検査 → Build → 取り込み",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "E2E_SINGLE_CASE",
+      "implementation_evidence": [
+        "forge_ai/core/orchestration/flutter_capability_installer.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "Allowlist 内 Artifact の Build/Task 成功率が 1 件の E2E しか無い",
+      "blocking_tech_debt": [],
+      "next_proof": "独立 Requirement Family で n>=30 の生成→Build→Task 成功率",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-05",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "Validator登録",
+      "target_contract": {
+        "target": "100%",
+        "closing_evidence": "登録漏れ・迂回経路0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": "Runtime-attested widget（PROMOTED かつ loaded BUILD_TIME activation のみ Validator 語彙を広げる）",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "HARD_GATE_DESIGNED",
+      "implementation_evidence": [
+        "backend/app/ai/validators/runtime_attested_widgets.py",
+        "backend/tests/test_forge_020f_runtime_attested_widgets.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "登録漏れ・迂回経路 0 件は設計と 14 件のテストで守っているが、独立 Corpus 測定は無い",
+      "blocking_tech_debt": [],
+      "next_proof": "迂回経路 Corpus を作り 0 件を測る",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-06",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "Flutter Runtime登録",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Digest一致したCapabilityの実Render",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "生成 Dart を Forge 本体へ install し、Parser → Registry → 実 Widget まで通す",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "E2E_SINGLE_CASE",
+      "implementation_evidence": [
+        "forge_ai/core/orchestration/flutter_capability_installer.py",
+        "frontend/lib/json_ui/acquired/"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "Digest 一致 Capability の実 Render は 1 件のみ",
+      "blocking_tech_debt": [],
+      "next_proof": "複数 Capability での実 Render",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-07",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "Dart実試験",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Generated test + independent property test",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-08",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "Sandbox実行",
+      "target_contract": {
+        "target": "100%境界",
+        "closing_evidence": "Network/File/Process/Secret escape 0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": "OS 標準の隔離機構（namespace / seccomp 等）で生成物の test/build を落とした権限で実行する",
+      "implementation_status": "NOT_STARTED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "**Sandbox が存在しない。** 生成物の test/build をホスト権限で実行している（ADR-015 §4.2）",
+      "blocking_tech_debt": [],
+      "next_proof": "escape を試みる Corpus に対して Network/File/Process/Secret escape 0 件",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-09",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "自動安全性判断",
+      "target_contract": {
+        "target": "100%重大検出",
+        "closing_evidence": "P0/P1 false negative 0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": "静的解析 + Sandbox 観測 + Permission 判定の合議",
+      "implementation_status": "NOT_STARTED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "Sandbox が無いため、P0/P1 の自動安全性判断そのものが成立していない",
+      "blocking_tech_debt": [
+        "EXT-08 依存"
+      ],
+      "next_proof": "P0/P1 Corpus に対する false negative 0 件",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-10",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "自動Promotion",
+      "target_contract": {
+        "target": "100%適格Artifact",
+        "closing_evidence": "未検証Promotion 0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": "VerifiedCapabilityArtifact（検査した成果物と取り込む成果物の同一性を digest で強制）",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "HARD_GATE_DESIGNED",
+      "implementation_evidence": [
+        "forge_ai/core/orchestration/"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "Digest / Build / Runtime loaded / PROMOTED の 4 条件は実装済み。ただし Sandbox と Permission が Gate 列に無いまま Promotion できる（ADR-015 §4.2）",
+      "blocking_tech_debt": [],
+      "next_proof": "Promotion 迂回 Corpus で 0 件を測る",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-11",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "新能力の再利用",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "再起動・別Project・別表現で再生成なし",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "Reuse-first pipeline（既存 Capability を先に探す）",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "forge_ai/core/orchestration/reuse_first_pipeline.py",
+        "forge_ai/tests/"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "再利用が process ローカル（PROMOTED_CAPABILITIES overlay）。再起動で消える",
+      "blocking_tech_debt": [
+        "TD97"
+      ],
+      "next_proof": "再起動・別 Project・別表現での再利用を Evidence 付きで通す",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-12",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "能力の改善",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "旧版非劣化 + 新Failure解消Benchmark",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-13",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "不要能力の廃止",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Dependency/Migration/Removal/Rollback E2E",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "EXT-14",
+      "category": "C",
+      "category_name": "Self-Extension（自己拡張）",
+      "name": "完全自律ループ",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Gap→生成→検証→取込→再利用→Episode完走",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "Gap→生成→検証→取込→再利用の閉ループ",
+      "implementation_status": "PARTIAL",
+      "evidence_status": "E2E_SINGLE_CASE",
+      "implementation_evidence": [
+        "forge_ai/core/orchestration/reuse_first_pipeline.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "**実 Local Model による完走が 0 回**。Test Double での完走のみ",
+      "blocking_tech_debt": [
+        "TD97",
+        "TD98"
+      ],
+      "next_proof": "実 Local Model で 1 回完走させ、Episode を残す",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LOC-01",
+      "category": "D",
+      "category_name": "Local AI",
+      "name": "Local Model接続",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Cold/Warm start、再接続、Runtime切替",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "Ollama / OpenAI 互換 Runtime への接続（Local-first）",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "REAL_DEVICE_PARTIAL",
+      "implementation_evidence": [
+        "backend/app/ai/foundation/local_provider.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "実機会話は PASS 済みだが、生成段の実時間が未計測",
+      "blocking_tech_debt": [
+        "TD98"
+      ],
+      "next_proof": "実機で BUILD 段の実時間を測る",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LOC-02",
+      "category": "D",
+      "category_name": "Local AI",
+      "name": "実モデル応答",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Test Doubleを除くModel Digest付き応答",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LOC-03",
+      "category": "D",
+      "category_name": "Local AI",
+      "name": "Forge要求理解",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "TC-01のLocal-only Slice",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LOC-04",
+      "category": "D",
+      "category_name": "Local AI",
+      "name": "Forge Language生成",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Local-only Schema/Compiler/Runtime E2E",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LOC-05",
+      "category": "D",
+      "category_name": "Local AI",
+      "name": "応答速度",
+      "target_contract": {
+        "target": "≥99% Budget内",
+        "closing_evidence": "Profile別TC-07、p99併記",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LOC-06",
+      "category": "D",
+      "category_name": "Local AI",
+      "name": "Cloud代替能力",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Network deny状態の全Core Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LOC-07",
+      "category": "D",
+      "category_name": "Local AI",
+      "name": "Routing",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Model/Tool/Deterministic Route正解率",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LOC-08",
+      "category": "D",
+      "category_name": "Local AI",
+      "name": "Local優先判断",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "品質Gateを満たす時だけLocal Promotion",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LOC-09",
+      "category": "D",
+      "category_name": "Local AI",
+      "name": "オフライン利用",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "7日Network denyの生成・保存・修正",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LOC-10",
+      "category": "D",
+      "category_name": "Local AI",
+      "name": "低資源PC対応",
+      "target_contract": {
+        "target": "≥99%同一品質",
+        "closing_evidence": "Minimum Hardware ProfileでOOM/Crashなし、かつ標準Profileと同じ全Task/Visual/Safety Gate",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LOC-11",
+      "category": "D",
+      "category_name": "Local AI",
+      "name": "自動実行経路選択",
+      "target_contract": {
+        "target": "≥99%同一品質",
+        "closing_evidence": "RAM/VRAM/Backend/品質/速度から、同一品質を証明済みの経路だけを選ぶTask",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-01",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "Generation記録",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Episode必須Field完全性",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-02",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "Evidence記録",
+      "target_contract": {
+        "target": "100%",
+        "closing_evidence": "PASSにGit SHA/Digest/環境欠落0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-03",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "ユーザー訂正収集",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Consent付きCorrection→Episode接続",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-04",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "Experience蓄積",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Production Pathの永続Store到達",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-05",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "永続保存",
+      "target_contract": {
+        "target": "100%保全",
+        "closing_evidence": "Crash/再起動/Migrationで喪失0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-06",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "Dataset生成",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Episode→Curated Candidateの正しい変換",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-07",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "Dataset品質判定",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "PII/License/誤Label/重複/Leak Gate",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-08",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "Teacher比較",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "TeacherをTruthにしない同一Oracle比較",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-09",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "LoRA学習",
+      "target_contract": {
+        "target": "≥99%完走",
+        "closing_evidence": "Dataset/Config/Digest/Artifact再現Run",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-10",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "Adapter評価",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Blind Holdoutと全TC非劣化",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-11",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "自動Promotion",
+      "target_contract": {
+        "target": "100%適格",
+        "closing_evidence": "Hard Gate未達Candidate昇格0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-12",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "改悪検出",
+      "target_contract": {
+        "target": "100%重大回帰",
+        "closing_evidence": "Critical regression見逃し0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "LRN-13",
+      "category": "E",
+      "category_name": "学習・成長能力",
+      "name": "継続改善",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "3世代以上で改善または安全な不採用",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-01",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "基本Layout",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "全ViewportのOverflow/Crop/Task検査",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-02",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "Design Language",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Semantic Role→Token→実Render一致",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-03",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "Semantic Role",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "意味に適したRole選択Human/Oracle一致",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-04",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "KPI表現",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "値・単位・比較軸・強調の正確性",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-05",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "Responsive",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Mobile/Tablet/Desktop/Orientation Matrix",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-06",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "長文耐性",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "200% expansionと多言語Text",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-07",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "Empty State",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "状態理解と次ActionのHuman Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-08",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "視覚階層",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "主要Action/情報順のHuman一致",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-09",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "Design多様性",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "用途別差とGolden Template参照0件",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-10",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "Animation",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Timing/Cancel/Reduced motion/Frame Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-11",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "特殊UI",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Canvas/Timeline/Grid/Scene等の未見Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": "Provider 非依存 UI（AIモード）と、表示＝実状態の一致",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "REAL_RENDER_PARTIAL",
+      "implementation_evidence": [
+        "frontend/lib/shared_widgets/ai_mode.dart",
+        "frontend/test/shared_widgets/ai_mode_test.dart"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "実端末未確認。Accessibility の系統的検査は未実施",
+      "blocking_tech_debt": [],
+      "next_proof": "実端末 + Accessibility Gate",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-12",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "Accessibility",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "WCAG 2.2 AA適用項目 + Assistive Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-13",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "Visual自動評価",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Human判定とのParticipant単位一致下限",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "UI-14",
+      "category": "F",
+      "category_name": "UI・Design品質",
+      "name": "プロが作った製品品質",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "初見400人の公開可能/利用可能判定",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-01",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "Unit Test",
+      "target_contract": {
+        "target": "≥99%要求追跡",
+        "closing_evidence": "Invariant/Requirement coverage",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-02",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "Validator Test",
+      "target_contract": {
+        "target": "100%重大検出",
+        "closing_evidence": "Critical mutation survivor 0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-03",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "Flutter Test",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Widget/Integration/Goldenの対応Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-04",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "CI",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Clean Runner再現、FlakeをRetryで隠さない",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-05",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "配線破壊試験",
+      "target_contract": {
+        "target": "100%",
+        "closing_evidence": "Critical Guard-break全検出",
+        "hard_gate": true
+      },
+      "zero_budget_approach": "Evidence integrity（呼んでいない Provider を記録しない）",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "UNIT_AND_INTEGRATION",
+      "implementation_evidence": [
+        "backend/app/ai/gateway/model_call_ledger.py",
+        "backend/tests/test_provider_attribution.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "Repair 回数・p95 latency・Peak RAM 等の Outcome 指標が Evidence に未収録",
+      "blocking_tech_debt": [],
+      "next_proof": "§11 の Outcome 指標一式を Episode へ載せる",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-06",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "Dart実行試験",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "実Dart compile/run、Stub除外",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-07",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "E2E",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Natural language→Task完了Full Path",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-08",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "実機試験",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Digest固定のPhysical Device Matrix",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-09",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "Visual Regression",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Noise補正後の重大Visual defect検出",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-10",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "大規模Benchmark",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "10,000件と全Slice個別下限",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-11",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "長時間耐久",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "72時間Soak、Resource trend、Checkpoint",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "QA-12",
+      "category": "G",
+      "category_name": "Reliability / QA",
+      "name": "Failure Recovery",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Crash/Network/Disk/Power/Migration復旧",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "SEC-01",
+      "category": "H",
+      "category_name": "Security / Safety",
+      "name": "Schema Validation",
+      "target_contract": {
+        "target": "100%",
+        "closing_evidence": "Invalid/ambiguous Artifact通過0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "SEC-02",
+      "category": "H",
+      "category_name": "Security / Safety",
+      "name": "Capability Trust",
+      "target_contract": {
+        "target": "100%",
+        "closing_evidence": "Digest/Trust/Artifact不一致0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "SEC-03",
+      "category": "H",
+      "category_name": "Security / Safety",
+      "name": "Permission",
+      "target_contract": {
+        "target": "100%無権限拒否",
+        "closing_evidence": "Default Deny escape 0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "SEC-04",
+      "category": "H",
+      "category_name": "Security / Safety",
+      "name": "Sandbox",
+      "target_contract": {
+        "target": "100%境界",
+        "closing_evidence": "OS別escape corpus全遮断",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "SEC-05",
+      "category": "H",
+      "category_name": "Security / Safety",
+      "name": "Generated Code検査",
+      "target_contract": {
+        "target": "100%重大検出",
+        "closing_evidence": "AST/Import/Secret/Effect違反見逃し0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "SEC-06",
+      "category": "H",
+      "category_name": "Security / Safety",
+      "name": "Dependency検査",
+      "target_contract": {
+        "target": "100%重大検出",
+        "closing_evidence": "Unknown/禁止/重大脆弱Dependency 0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": "External call default deny（API キーの存在を同意として扱わない）",
+      "implementation_status": "IMPLEMENTED",
+      "evidence_status": "HARD_GATE_DESIGNED",
+      "implementation_evidence": [
+        "backend/app/ai/gateway/external_call_policy.py",
+        "backend/tests/test_external_call_policy.py"
+      ],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "Threat Model 全体（Sandbox escape / RAG poisoning / Supply chain 等）は未検査",
+      "blocking_tech_debt": [],
+      "next_proof": "Threat Model 別 Corpus で Critical Violation 0 を示す",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "SEC-07",
+      "category": "H",
+      "category_name": "Security / Safety",
+      "name": "Secret管理",
+      "target_contract": {
+        "target": "100%",
+        "closing_evidence": "Prompt/Log/Dataset/Screenshot漏洩0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "SEC-08",
+      "category": "H",
+      "category_name": "Security / Safety",
+      "name": "攻撃入力耐性",
+      "target_contract": {
+        "target": "≥99% + P0/P1 100%",
+        "closing_evidence": "Adversarial corpusとFuzz",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "SEC-09",
+      "category": "H",
+      "category_name": "Security / Safety",
+      "name": "Web Prompt Injection対策",
+      "target_contract": {
+        "target": "100%権限保護",
+        "closing_evidence": "Web/Tool outputによる権限上昇0件",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "SEC-10",
+      "category": "H",
+      "category_name": "Security / Safety",
+      "name": "独立Security Review",
+      "target_contract": {
+        "target": "≥99%Control coverage",
+        "closing_evidence": "別Agent/Community Review + Attack再現",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-01",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "開発者が起動",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Clean clone→Doctor→起動",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-02",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "一般人Install",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "初見400人、代行なしFirst result",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-03",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "初期設定",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Runtime/Model/Profile自動構成",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-04",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "Account/Identity",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Local Device Key、Recovery、権限制御",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-05",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "Project保存",
+      "target_contract": {
+        "target": "100%保全",
+        "closing_evidence": "Crash/Restart/MigrationでData loss 0",
+        "hard_gate": true
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-06",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "Backup",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "自動Backup生成とIntegrity検査",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-07",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "Sync",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "LAN/File/P2P、Offline競合収束",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-08",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "Update",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Atomic update、Health check、Rollback",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-09",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "Crash Recovery",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "強制終了100地点から復旧",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-10",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "Android",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "実機/PWA ClientのCore Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-11",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "iPhone",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Safari PWAのInstall/Use/Revision Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-12",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "Windows",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Clean Machine Bundle/PWA/Host Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-13",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "macOS",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Clean MacのBuild/Launch/Core Task Matrix",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-14",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "App配布",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Release→検証→導入→更新→削除Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PRD-15",
+      "category": "I",
+      "category_name": "製品としての完成度",
+      "name": "Linux",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Clean LinuxのBuild/Launch/Core Task Matrix",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PER-01",
+      "category": "J",
+      "category_name": "Performance（速度・規模）",
+      "name": "Conversation速度",
+      "target_contract": {
+        "target": "≥99% Budget内",
+        "closing_evidence": "Feedback/ASK/BUILDのProfile別分布",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PER-02",
+      "category": "J",
+      "category_name": "Performance（速度・規模）",
+      "name": "Cloud候補生成速度",
+      "target_contract": {
+        "target": "≥99% Budget内",
+        "closing_evidence": "Optional Teacher利用時のStage timing",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PER-03",
+      "category": "J",
+      "category_name": "Performance（速度・規模）",
+      "name": "Local生成速度",
+      "target_contract": {
+        "target": "≥99% Budget内",
+        "closing_evidence": "Cold/Warm、Small/Medium、CPU/GPU Profile",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PER-04",
+      "category": "J",
+      "category_name": "Performance（速度・規模）",
+      "name": "UI描画",
+      "target_contract": {
+        "target": "≥99% Budget内",
+        "closing_evidence": "Frame time、入力応答、Jank Matrix",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PER-05",
+      "category": "J",
+      "category_name": "Performance（速度・規模）",
+      "name": "大規模Project",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "多画面・1M record・長期履歴Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PER-06",
+      "category": "J",
+      "category_name": "Performance（速度・規模）",
+      "name": "並列生成",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Queue/Cancel/Backpressure/Isolation Task",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PER-07",
+      "category": "J",
+      "category_name": "Performance（速度・規模）",
+      "name": "大量利用者/Host",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Bounded concurrency、Overload recovery",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    },
+    {
+      "capability_id": "PER-08",
+      "category": "J",
+      "category_name": "Performance（速度・規模）",
+      "name": "Cache",
+      "target_contract": {
+        "target": "≥99%",
+        "closing_evidence": "Hit正当性、Version invalidation、stale 0件",
+        "hard_gate": false
+      },
+      "zero_budget_approach": null,
+      "implementation_status": "NOT_ASSESSED",
+      "evidence_status": "NONE",
+      "implementation_evidence": [],
+      "measured": {
+        "episodes": 0,
+        "successes": 0,
+        "success_rate": null,
+        "wilson_lower_bound_95": null
+      },
+      "remaining_gap": "この Task では評価していない（NOT_ASSESSED）",
+      "blocking_tech_debt": [],
+      "next_proof": "コードと Evidence から現状を評価する",
+      "evidence_reuse": {
+        "episode_families": [],
+        "shared_with": []
+      }
+    }
+  ]
+}

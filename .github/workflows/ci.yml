@@ -58,6 +58,12 @@ jobs:
       - name: 全端末・全利用者の同一品質方針を検査
         run: python3 scripts/check_universal_quality_policy.py
 
+      # 121能力Matrixが、書けるより高い状態を主張していないか。
+      # 「1回成功を99_PROVEN」「根拠パス無しでIMPLEMENTED」等が入ると落ちる
+      # （scripts/check_capability_matrix.py の docstring 参照）。
+      - name: 121能力Matrixの主張整合性を検査
+        run: python3 scripts/check_capability_matrix.py --summary
+
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}

@@ -43,6 +43,8 @@ from typing import Any
 
 import httpx
 
+from app.ai.gateway.external_call_policy import assert_external_call_allowed
+
 from .interfaces import LLMAdapter
 
 
@@ -193,6 +195,11 @@ class GeminiProvider:
         client = self._client
         owns_client = client is None
         if client is None:
+            # FORGE-EXTERNAL-CALL-DEFAULT-DENY(2026-09-03): **実クライアント
+            # を作る直前**で Policy を確認する。Test が `httpx.MockTransport`
+            # を注入した場合はここを通らない——それは外へ出ていないので
+            # 拒否する理由が無い。
+            assert_external_call_allowed(provider_id=self.provider_name, deployment="cloud")
             client = httpx.Client(timeout=self._timeout)
         try:
             response = client.post(url, params={"key": self._api_key}, json=body)

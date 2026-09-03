@@ -39,6 +39,26 @@ from app.ai.foundation.openai_compatible import (  # noqa: E402
 )
 from app.ai.gateway.ai_errors import ErrorKind, ProviderError, classify_exception  # noqa: E402
 
+import pytest
+
+from app.ai.gateway.external_call_policy import allow_mocked_transport
+
+
+# FORGE-EXTERNAL-CALL-DEFAULT-DENY(2026-09-03)。
+#
+# このファイルは `httpx.Client.post` を差し替えており、**ネットワークへは
+# 一切出ない**。`external_call_policy` は既定で実 Provider への通信を拒否
+# するので、「ここは出ていない」ことを明示的に宣言する。
+#
+# 環境変数ではなく呼び出し側の明示にしてあるのは、`.env` の中身で挙動が
+# 変わる経路をもう一度作らないためである（それが 2026-09-02 の事故の形）。
+@pytest.fixture(autouse=True)
+def _network_is_mocked_in_this_module():
+    with allow_mocked_transport():
+        yield
+
+
+
 
 def _response(
     status: int = 200,
