@@ -4302,6 +4302,12 @@ runner は `unshare` が在っても namespace を作れず、fail closed の Sa
 `FORGE_SANDBOX_ALLOW_POLICY_ONLY=1` を立てた場合だけ Policy 層のみで走り、
 Evidence へ `sandbox_backend="policy-only"` と残る（OS 層と混ぜない）。
 
+**2 度落とした。** 1 度目（run 33812200098）は backend job、2 度目
+（run 33812952355）は frontend job の「生成 Dart の実ビルド経路」step。
+opt-in を step ごとに書いていたため別 job の step に付け忘れた。
+**「step を足すたびに思い出す」設計は忘れられる**ので、workflow 全体の
+`env:` へ 1 箇所だけ置き直した。
+
 再発防止: `unshare` を失敗する stub で置き換えて CI 環境を手元で再現する
 手順を確立した。opt-in あり 794 passed / 24 skipped、opt-in なし 9 failed
 （拒否が効いている）の両方を確認済み。Sandbox に触るときは必ずこれを通す。

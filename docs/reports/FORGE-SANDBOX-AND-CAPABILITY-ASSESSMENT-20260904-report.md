@@ -449,6 +449,19 @@ CI はこの変数を立てて走る（理由を `ci.yml` に書いた）。
 **利用者の端末では変数が無いので拒否される。** Windows で Self-Extension が
 動かないのは TD110 のとおりであり、それを隠す道ではない。
 
+### 2 度目も落とした（同じ形）
+
+`9cdb442` の CI run `33812952355` は backend / forge_ai が両方 success に
+なったが、**frontend job の「生成 Dart の実ビルド経路」step が同じ理由で
+落ちた**。opt-in を **step ごとに**書いていたため、別 job の step に
+付け忘れた。
+
+`did not produce a verified artifact` ——Sandbox が実行を拒否 → build 失敗
+→ verified artifact 無し、という同じ連鎖である。
+
+**「step を足すたびに思い出す」設計は忘れられる。** 2 回連続で忘れた。
+したがって opt-in を **workflow 全体の `env:`** へ 1 箇所だけ置き直した。
+
 ### 再発防止
 
 `unshare` を失敗する stub で置き換えて **CI 環境を手元で再現**し、

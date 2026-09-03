@@ -27,6 +27,24 @@
 
 name: CI
 
+# ## Sandbox は CI では Policy 層だけで走る
+#
+# GitHub Actions の runner は `unshare` が在っても namespace を作れない
+# （2026-09-04 実測）。Sandbox は既定 fail closed なので、そのままだと
+# 生成物を動かす step が全部止まる——実際に run 33812200098 / 33812952355 で
+# 止めた。
+#
+# ここで開けるのは **Policy 層だけの実行**（生成 Source の AST/import 検査、
+# 実行ファイルの固定、環境変数 scrub）であり、Evidence には
+# `sandbox_backend="policy-only"` と残る。**OS 層（network / PID namespace +
+# rlimit）を通ったことにはならない。**
+#
+# job ごとではなく workflow 全体へ置くのは、**step を足すたびに思い出す設計は
+# 忘れられる**からである（2 回連続で忘れた）。
+#
+# **利用者の端末ではこの変数が無いので拒否される。** Windows で
+# Self-Extension が動かないのは TD110 のとおりであり、それを隠す道ではない。
+
 on:
   push:
     branches: ["**"]
@@ -39,6 +57,9 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  FORGE_SANDBOX_ALLOW_POLICY_ONLY: "1"
 
 jobs:
   backend:
@@ -73,19 +94,7 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
 
-      # GitHub Actions の runner は `unshare` が在っても namespace を作れない
-      # （2026-09-04 実測）。Sandbox は既定で fail closed なので、そのままだと
-      # 生成物を動かす試験が全部止まる。
-      #
-      # ここで開けるのは **Policy 層だけの実行**（AST/import 検査・実行ファイル
-      # 固定・env scrub）であり、Evidence には `sandbox_backend="policy-only"`
-      # と残る。OS 層（namespace + rlimit）を通ったことにはならない。
-      #
-      # **利用者の端末ではこの変数が無いので拒否される。** Windows で
-      # Self-Extension が動かないのは TD110 のとおりで、それを隠す道ではない。
       - name: forge_ai tests
-        env:
-          FORGE_SANDBOX_ALLOW_POLICY_ONLY: "1"
         working-directory: forge_ai
         run: python -m pytest tests -q
 
