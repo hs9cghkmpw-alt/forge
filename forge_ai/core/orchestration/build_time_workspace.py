@@ -185,6 +185,9 @@ class ManagedBuildWorkspaceRunner:
                 build_pass=bundle.passed("build"),
                 runtime_evidence=bundle.passed("runtime_probe"),
                 safety_review=(bundle.passed("safety") if "safety" in present else False),
+                sandbox_preflight=bundle.sandbox_preflight_pass,
+                sandbox_policy_version=bundle.sandbox_policy_version,
+                sandbox_policy_digest=bundle.sandbox_policy_digest,
             )
             return ManagedBuildExecution(result=result, evidence=bundle)
         finally:
