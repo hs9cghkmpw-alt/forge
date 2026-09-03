@@ -3,7 +3,8 @@
 `implement_build_time_extension()` deliberately depends on small Builder/Loader
 protocols.  This module provides the production-grade bridge for those protocols:
 commands actually execute through `ManagedBuildWorkspaceRunner`, and runtime
-activation is issued only for the exact build whose runtime probe passed.
+activation is issued only for the exact build whose runtime probe and sandbox
+preflight passed.
 
 The class is capability-agnostic.  It does not know map/calendar/game semantics;
 callers provide a reusable artifact plus an explicit command plan.
@@ -62,6 +63,11 @@ class ManagedBuildTimeImplementer:
             raise BuildTimeExtensionError("runtime load does not reference the exact managed build")
         if not (build.tests_pass and build.build_pass and build.runtime_evidence):
             raise BuildTimeExtensionError("unverified managed build cannot become a loaded runtime")
+        if not build.sandbox_preflight:
+            raise BuildTimeExtensionError("build without sandbox preflight cannot become a loaded runtime")
+        if not build.sandbox_policy_version or not build.sandbox_policy_digest:
+            raise BuildTimeExtensionError("sandbox attestation is incomplete")
+
         evidence = execution.evidence
         if evidence.build_id != build.build_id:
             raise BuildTimeExtensionError("managed evidence build id mismatch")
@@ -69,6 +75,13 @@ class ManagedBuildTimeImplementer:
             raise BuildTimeExtensionError("managed evidence source digest mismatch")
         if evidence.runtime_fingerprint != build.runtime_fingerprint:
             raise BuildTimeExtensionError("managed evidence runtime fingerprint mismatch")
+        if not evidence.sandbox_preflight_pass:
+            raise BuildTimeExtensionError("managed evidence has no sandbox preflight pass")
+        if evidence.sandbox_policy_version != build.sandbox_policy_version:
+            raise BuildTimeExtensionError("sandbox policy version differs from verified build")
+        if evidence.sandbox_policy_digest != build.sandbox_policy_digest:
+            raise BuildTimeExtensionError("sandbox policy digest differs from verified build")
+
         return LoadedBuildActivation(
             capability_id=self.capability_id,
             build_id=build.build_id,
