@@ -121,6 +121,10 @@ Constitution §8 の `controlled synthesis`、§10 の `promotion gates` が
 - 配線破壊試験 5 種 + Matrix 水増し 7 種、**すべて検出**
 - **Real Provider calls: 0 件**（Default Deny により構造的に 0）
 - **Real Local Model runs: 0 回 / Human Evidence: 0 人**
+- **CI run `33701168608` @ `6bee221` — success、4/4 job、53 step すべて
+  success（skip 0）。** 新設した「121能力Matrixの主張整合性を検査」step は
+  Python 3.11 / 3.12 の両 job で実行され success（skip ではない）。
+  https://github.com/hs9cghkmpw-alt/forge/actions/runs/33701168608
 
 ### まだ言えないこと
 

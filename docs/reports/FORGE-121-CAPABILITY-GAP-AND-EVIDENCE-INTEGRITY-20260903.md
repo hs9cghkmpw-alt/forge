@@ -254,6 +254,8 @@ Fail closed:
 | Real Provider calls | **0 件**（Default Deny により構造的に 0） |
 | Real Local Model runs | **0 回** |
 | Human Evidence | **0 人** |
+| CI run [33701168608](https://github.com/hs9cghkmpw-alt/forge/actions/runs/33701168608) @ `6bee221` | **success 4/4 job、53 step すべて success（skip 0）** |
+| うち新設 step「121能力Matrixの主張整合性を検査」 | Python 3.11 / 3.12 の両 job で **success**（skip されていない） |
 
 ### 9.1 配線破壊試験
 
