@@ -438,6 +438,7 @@ def inspect_generated_sources(
         for path, _ in files
         if PurePosixPath(path).suffix.lower() == ".py"
     }
+    artifact_paths = {PurePosixPath(path).as_posix() for path, _ in files}
 
     for path, content in files:
         suffix = PurePosixPath(path).suffix.lower()
@@ -458,6 +459,25 @@ def inspect_generated_sources(
         )
 
     internal = {name for name in imports if name in internal_module_names}
+    # Dart の相対 import（`import 'capability_impl.dart';`）は依存ではなく
+    # **artifact の中の隣のファイル**である。Python 側は直したのに Dart 側を
+    # 直しておらず、CI の実 Dart build で落ちた（2026-09-04）。
+    #
+    # **名前が似ているだけのものを内部扱いしない。** 実際に artifact の中の
+    # path へ解決できたものだけを外す。
+    for uri in imports - internal:
+        if uri.startswith(("dart:", "package:")):
+            continue
+        relative = PurePosixPath(uri.replace("\\", "/"))
+        if relative.is_absolute() or ".." in relative.parts:
+            # artifact の外を指す相対 import は内部扱いしない（そのまま
+            # 未知依存として扱われ、build_time_sandbox も別途拒否する）。
+            continue
+        for source_path, _ in files:
+            target = (PurePosixPath(source_path).parent / relative).as_posix()
+            if target in artifact_paths:
+                internal.add(uri)
+                break
     return SourceInspectionResult(
         effects=frozenset(f.effect for f in findings),
         findings=tuple(findings),

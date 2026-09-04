@@ -350,3 +350,80 @@ class TestBenignSourceIsNotFlagged(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheRealGeneratedArtifactShapeIsAccepted(unittest.TestCase):
+    """**本番の生成物そのものの形**で検査が通ることを、Dart 無しで確かめる。
+
+    2026-09-04: Dart の相対 import（`import 'capability_impl.dart';`）を
+    外部依存と誤検出し、**CI の実 Dart build でだけ落ちた**。ローカルは
+    Dart が無くて skip されるので気付けなかった。
+
+    そこで「Dart を必要としない部分」だけをここで固定する。同じ取りこぼしが
+    起きたら、**CI を待たずにローカルで落ちる。**
+    """
+
+    #: `test_dart_build_plan.py` が実際に生成する形と同じ import 構成。
+    ARTIFACT = (
+        ("lib/capability_impl.dart", "class AcquiredGrid {}\n"),
+        (
+            "test/capability_test.dart",
+            "import 'capability_impl.dart';\nvoid main() {}\n",
+        ),
+        (
+            "lib/forge_binding.dart",
+            "import 'package:flutter/material.dart';\n"
+            "import 'package:forge_app/json_ui/acquired/acquired_capability.dart';\n"
+            "import 'package:forge_app/json_ui/schema/acquired_widget_types.dart';\n"
+            "import 'capability_impl.dart';\n",
+        ),
+    )
+
+    def test_artifact_relative_dart_imports_are_internal(self) -> None:
+        result = inspect_generated_sources(self.ARTIFACT)
+        self.assertIn("capability_impl.dart", result.internal_imports)
+        self.assertNotIn("capability_impl.dart", result.imports)
+
+    def test_a_relative_import_escaping_the_artifact_is_not_internal(self) -> None:
+        """**名前が似ているだけのものを内部扱いしない。**"""
+        result = inspect_generated_sources(
+            (("lib/a.dart", "import '../../secrets/keys.dart';\n"),)
+        )
+        self.assertEqual(frozenset(), result.internal_imports)
+        self.assertIn("../../secrets/keys.dart", result.imports)
+
+    def test_the_real_artifact_shape_passes_the_dependency_gate(self) -> None:
+        """この形が Promotion を通ること。**通らない Gate は壁である。**"""
+        from forge_ai.core.promotion.gate import (
+            PromotionRequest,
+            evaluate_promotion,
+        )
+        from forge_ai.core.sandbox.policy import (
+            CapabilityTier,
+            Permission,
+            PermissionManifest,
+        )
+
+        decision = evaluate_promotion(
+            PromotionRequest(
+                capability_id="view.acquired_grid",
+                requires_generated_source=True,
+                permission_manifest=PermissionManifest(
+                    capability_id="view.acquired_grid",
+                    permissions=frozenset({Permission.LOCAL_COMPUTE}),
+                    declared_tier=CapabilityTier.A,
+                ),
+                inspection=inspect_generated_sources(self.ARTIFACT),
+                sandbox_backend="linux-namespace+pid",
+                sandbox_policy_version="v1",
+                sandbox_policy_digest="a" * 64,
+                tests_pass=True,
+                build_pass=True,
+                runtime_probe_pass=True,
+                verified_source_digest="s" * 64,
+                promoted_source_digest="s" * 64,
+                verified_artifact_digest="f" * 64,
+                promoted_artifact_digest="f" * 64,
+            )
+        )
+        self.assertTrue(decision.allowed, decision.to_dict())
