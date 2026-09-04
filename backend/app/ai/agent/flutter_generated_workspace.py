@@ -99,10 +99,18 @@ def _with_document_asset(pubspec: bytes) -> bytes:
     asset_line = "    - assets/forge_document.json"
     if asset_line in text:
         return pubspec
-    marker = "  assets:\n"
-    if marker not in text:
-        raise GeneratedWorkspaceError("Flutter runtime pubspec has no assets section")
-    return text.replace(marker, marker + asset_line + "\n", 1).encode("utf-8")
+    # Preserve the template's newline convention. Windows text files commonly
+    # use CRLF, while Linux CI uses LF; treating only LF as valid makes the same
+    # checked-in runtime fail on a fresh Windows machine.
+    for newline in ("\r\n", "\n", "\r"):
+        marker = f"  assets:{newline}"
+        if marker in text:
+            return text.replace(
+                marker,
+                marker + asset_line + newline,
+                1,
+            ).encode("utf-8")
+    raise GeneratedWorkspaceError("Flutter runtime pubspec has no assets section")
 
 
 def materialize_flutter_generated_workspace(

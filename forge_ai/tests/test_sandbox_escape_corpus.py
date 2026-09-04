@@ -32,11 +32,11 @@
 from __future__ import annotations
 
 import os
+import math
 import pathlib
 import sys
 import tempfile
 import textwrap
-import resource
 import unittest
 from unittest.mock import patch
 
@@ -389,6 +389,21 @@ class TestPolicyOnlyIsAllowedButNamed(unittest.TestCase):
             self.assertFalse(os_isolation_available())
             self.assertTrue(policy_only_allowed())
 
+    def test_policy_only_does_not_require_the_posix_resource_module(self) -> None:
+        """Windows には `resource` が無い。明示 opt-in の弱い経路は import で死なない。"""
+        os.environ[ALLOW_POLICY_ONLY_ENV] = "1"
+        with (
+            patch("forge_ai.core.sandbox.runner.available_backend", return_value=None),
+            patch("forge_ai.core.sandbox.runner.resource", None),
+        ):
+            result = run_in_sandbox(
+                [sys.executable, "-c", "print('windows-policy-only-probe')"],
+                workspace=self.workspace,
+            )
+        self.assertTrue(result.ok, result.stderr)
+        self.assertEqual(result.backend, "policy-only")
+        self.assertIn("windows-policy-only-probe", result.stdout)
+
     def test_a_bad_request_is_refused_before_the_environment_is_consulted(self) -> None:
         """要求そのものの不正は、環境の有無より先に落とす。"""
         os.environ[ALLOW_POLICY_ONLY_ENV] = "1"
@@ -418,8 +433,8 @@ class TestTheToolchainPolicyIsStillBounded(unittest.TestCase):
             value = getattr(policy, name)
             with self.subTest(limit=name):
                 self.assertGreater(value, 0, f"{name} が 0 以下")
-                self.assertNotEqual(
-                    value, resource.RLIM_INFINITY,
+                self.assertTrue(
+                    math.isfinite(value),
                     f"{name} が無制限になっている（上限を外している）",
                 )
 

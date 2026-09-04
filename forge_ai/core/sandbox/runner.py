@@ -63,7 +63,10 @@ from __future__ import annotations
 
 import os
 import platform
-import resource
+try:
+    import resource
+except ModuleNotFoundError:  # Windows: resource is POSIX-only
+    resource = None  # type: ignore[assignment]
 import shutil
 import subprocess
 import sys
@@ -253,7 +256,7 @@ def describe_environment() -> dict:
         "platform": platform.system(),
         "backend": available_backend(),
         "unshare_available": bool(shutil.which("unshare")),
-        "rlimits_available": hasattr(resource, "setrlimit"),
+        "rlimits_available": resource is not None and hasattr(resource, "setrlimit"),
         "os_isolation": os_isolation_available(),
         "policy_only_allowed": policy_only_allowed(),
         "pid_isolation": pid_isolation_available(),
@@ -264,6 +267,11 @@ def describe_environment() -> dict:
 
 
 def _limits(policy: SandboxPolicy):  # noqa: ANN202 — preexec_fn 用
+    if resource is None:
+        raise SandboxUnavailable(
+            "この環境には POSIX resource limits がないため、OS 資源上限を適用できない"
+        )
+
     def apply() -> None:
         resource.setrlimit(resource.RLIMIT_CPU, (policy.cpu_seconds, policy.cpu_seconds))
         resource.setrlimit(resource.RLIMIT_AS, (policy.memory_bytes, policy.memory_bytes))
@@ -344,6 +352,16 @@ def run_in_sandbox(
     (workspace / ".tmp").mkdir(exist_ok=True)
     started = time.monotonic()
     timed_out = False
+
+    # `resource` / `preexec_fn` are POSIX-only. Windows has no OS sandbox
+    # backend yet, so the default path already fails closed above. An explicit
+    # policy-only opt-in may still run static-policy-checked commands for CI or
+    # diagnostics; in that weaker mode we must not crash merely by importing or
+    # passing POSIX-only subprocess hooks. Evidence continues to name that mode
+    # `policy-only`, never OS isolation.
+    posix_limits = resource is not None and os.name == "posix"
+    preexec = _limits(policy) if posix_limits else None
+
     try:
         completed = subprocess.run(
             [*prefix, *argv],
@@ -351,8 +369,8 @@ def run_in_sandbox(
             env=env_override if env_override is not None else _child_env(policy, workspace),
             capture_output=True,
             timeout=policy.timeout_seconds,
-            preexec_fn=_limits(policy),  # noqa: PLW1509 — 隔離のために必要
-            start_new_session=False,     # preexec_fn 側で setsid する
+            preexec_fn=preexec,  # noqa: PLW1509 — POSIX の隔離上限に必要
+            start_new_session=False,  # POSIX では preexec_fn 側で setsid する
             check=False,
         )
         exit_code = completed.returncode

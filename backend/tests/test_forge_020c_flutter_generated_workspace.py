@@ -77,6 +77,23 @@ class TestFlutterGeneratedWorkspace(unittest.TestCase):
         self.assertFalse((root / "build").exists())
         self.assertFalse((root / ".env.local").exists())
 
+    def test_crlf_pubspec_is_supported_and_preserved(self) -> None:
+        """Windows CRLF must not make a valid Flutter assets section disappear."""
+        (self.template / "pubspec.yaml").write_bytes(
+            b"name: forge_app\r\nflutter:\r\n  assets:\r\n    - assets/logo.png\r\n"
+        )
+        root = self.temp / "generated"
+        materialize_flutter_generated_workspace(
+            root=root,
+            runtime_template_root=self.template,
+            forge_document=self.document,
+        )
+        pubspec = (root / "pubspec.yaml").read_bytes()
+        self.assertIn(
+            b"  assets:\r\n    - assets/forge_document.json\r\n",
+            pubspec,
+        )
+
     def test_incomplete_template_fails_closed(self) -> None:
         bad = self.temp / "bad"
         bad.mkdir()
