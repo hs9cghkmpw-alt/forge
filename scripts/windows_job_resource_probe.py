@@ -291,20 +291,30 @@ def main() -> int:
         )
         cpu_job = ctx._new_job(
             flags=base.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_JOB_TIME,
-            job_time_100ns=15_000_000,  # 1.5 seconds of user-mode CPU time
+            # 1.5 s was too tight on the physical Windows 10 target: PowerShell
+            # could consume the entire user-mode budget during startup before the
+            # first workspace marker was written.  That made a working Job limit
+            # look like a test failure.  Four seconds still fails decisively if
+            # JOB_TIME is removed (the infinite loop reaches the 12 s host wait),
+            # while giving the command itself time to begin.
+            job_time_100ns=40_000_000,  # 4.0 seconds of user-mode CPU time
         )
         result["stage"] = "cpu:start-process"
         cpu_pi = ctx._start(cpu_script, cpu_job)
         result["stage"] = "cpu:wait"
         cpu_t0 = time.monotonic()
-        cpu_wait, _ = _wait_exit(cpu_pi, 10_000)
+        cpu_wait, cpu_code = _wait_exit(cpu_pi, 12_000)
         cpu_elapsed = time.monotonic() - cpu_t0
+        cpu_marker = cpu_started.is_file()
         assertions["cpu_job_time_enforced"] = (
-            cpu_started.is_file()
+            cpu_marker
             and cpu_wait == base.WAIT_OBJECT_0
-            and cpu_elapsed < 8.0
+            and cpu_elapsed < 10.0
         )
         result["cpu_elapsed_seconds"] = round(cpu_elapsed, 3)
+        result["cpu_marker_created"] = cpu_marker
+        result["cpu_wait_code"] = int(cpu_wait)
+        result["cpu_exit_code"] = cpu_code
         result["stage"] = "cpu:cleanup"
         _close_pi(cpu_pi)
         base.kernel32.CloseHandle(cpu_job)
