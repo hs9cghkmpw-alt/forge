@@ -382,3 +382,45 @@ Stage 4 is complete. TD110 itself remains open until the production
 `forge_ai.core.sandbox` backend passes the physical full escape corpus and the
 previously failing Self-Extension generate -> verify -> promote -> install -> reuse
 tests on this machine.
+
+
+## TD110 production integration attempt: foundation defects found
+
+Physical Windows 10 Home production-validation run at commit
+`4f7aa31626a981989d5923ca60131b1dfb106588` produced:
+
+```text
+PASS  01 TD110 physical probes
+FAIL  02 production escape corpus
+FAIL  03 full forge_ai Self-Extension suite
+PASS  04 backend regression
+working tree clean = true
+policy-only fallback = disabled
+```
+
+This was valuable: the probe implementation was healthy, while the first
+production backend wiring exposed defects that the isolated probes could not see.
+
+Root causes identified from the physical run:
+
+1. the production execution timeout began **before** first-use recursive toolchain
+   ACL projection. On the fresh PC that projection consumed tens of seconds, so
+   some commands entered the AppContainer with almost no execution budget left.
+   This explained false wall-clock failures, empty network/write output, and
+   Self-Extension commands stopping before runtime-probe evidence.
+2. production Job Object CPU policy used only per-job user time. The backend now
+   additionally applies `JOB_OBJECT_LIMIT_PROCESS_TIME` with the same bounded
+   budget to make the Python workload limit explicit.
+3. the production backend recreated a new AppContainer SID and recursively
+   rewrote Python/Dart toolchain ACLs for every command. This made the complete
+   suite take roughly 95 minutes. The backend now reuses one random ephemeral
+   AppContainer identity per host Python process, caches exact toolchain RX
+   projection for that SID, and still grants/removes each generated workspace
+   independently.
+4. the Windows escape corpus contained Linux-specific resource expectations and
+   platform guards that were not yet production-grade. Windows now has explicit
+   Job Object process-limit coverage and Windows memory-limit semantics.
+
+The next production run is gated: the expensive full suite executes only after
+the physical probes, production escape corpus, and the previously failing
+Self-Extension regression files pass.
