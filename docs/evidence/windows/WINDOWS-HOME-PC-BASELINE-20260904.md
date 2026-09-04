@@ -236,3 +236,37 @@ Windows backend on Windows 10 Home.
 TD110 remains open until the real Forge runner uses this backend, real Python
 and Dart/Flutter toolchains execute inside it, guard-break tests fail when
 controls are removed, and the Self-Extension promotion/reuse path passes.
+
+
+## TD110 Stage 4 partial: real Python passes; dartdev CLI hits AppContainer path-canonicalization limit
+
+Physical Windows 10 Home batch at commit `0447c0d17529f22a5edaab877e5d495a0a2d2562` observed:
+
+- isolation boundary: PASS
+- Job Object resource/lifetime controls: PASS
+- Python 3.12.10 direct AppContainer smoke: PASS
+- Python generated test / compileall / runtime probe: PASS
+- Dart 3.13.2 direct AppContainer smoke (`--version`): PASS
+- Dart `run` / `analyze`: FAIL with exit 255 before generated source runs
+- ACL cleanup: PASS
+
+The Dart failure stack is:
+
+```text
+type 'Null' is not a subtype of type 'String'
+_Platform.resolvedExecutable
+Sdk._createSingleton
+VmInteropHandler.initialize
+```
+
+This distinguishes executable viability from dartdev viability: `dart.exe` itself
+starts successfully as an AppContainer process, while dartdev initialization fails
+when it asks Dart for a canonical resolved executable path.
+
+Current investigation therefore keeps the AppContainer boundary intact and probes a
+Dart VM route using `--disable-dart-dev` plus kernel snapshot generation. We will
+not weaken the sandbox or grant broad Windows object-manager permissions merely to
+make dartdev pass.
+
+TD110 remains open until the chosen Dart route passes physical Windows mutation
+tests and is integrated into the production sandbox runner / Self-Extension path.
