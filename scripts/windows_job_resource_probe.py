@@ -111,7 +111,14 @@ class Context:
         ):
             raise base._winerror("InitializeProcThreadAttributeList")
 
-        caps = base.SECURITY_CAPABILITIES(
+        # IMPORTANT: UpdateProcThreadAttribute keeps the pointer to the
+        # SECURITY_CAPABILITIES value for later CreateProcessW use; it does not
+        # make this Python ctypes object magically immortal.  Stage-2 kept the
+        # structure alive as a local in main(), but this Context constructor used
+        # to let it go out of scope before _start().  On physical Windows 10 that
+        # became an access violation while CreateProcessW dereferenced the stale
+        # pointer.  Keep the backing object alive for the lifetime of attr_list.
+        self.security_capabilities = base.SECURITY_CAPABILITIES(
             AppContainerSid=self.sid,
             Capabilities=None,
             CapabilityCount=0,
@@ -121,8 +128,8 @@ class Context:
             self.attr_list,
             0,
             base.SIZE_T(base.PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES),
-            ctypes.byref(caps),
-            ctypes.sizeof(caps),
+            ctypes.byref(self.security_capabilities),
+            ctypes.sizeof(self.security_capabilities),
             None,
             None,
         ):
