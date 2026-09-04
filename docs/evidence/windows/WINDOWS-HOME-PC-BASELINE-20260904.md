@@ -293,3 +293,36 @@ The next probe therefore bypasses `dart.exe` entirely and launches the SDK's
 `bin\\dartvm.exe` directly, supplying explicit executable and resolved-executable
 identity. This keeps the AppContainer boundary unchanged and tests the primitive
 that a production Windows runner could actually use.
+
+
+### Dart direct-VM file path still blocked by AppContainer DOS canonicalization
+
+Physical Windows 10 Home run after `c2c7091` confirmed that bypassing
+`dart.exe` and invoking `dartvm.exe` directly is necessary but not sufficient.
+
+Observed:
+
+```text
+dartvm direct --version: PASS
+generated Python test/build/runtime: PASS
+dartvm generated source by ordinary C:\\... path: exit 255
+Failed to canonicalize path '...capability_test.dart'. OS error: '(null)' (5).
+```
+
+This is not a workspace file-ACL failure. Dart's Windows runtime canonicalizes a
+script path through `GetFinalPathNameByHandleW(..., VOLUME_NAME_DOS)`.
+AppContainer denies the DOS-volume translation path even when the file itself is
+readable. Microsoft has separately reproduced the same Win32 behavior and notes
+that `VOLUME_NAME_NT` succeeds where `VOLUME_NAME_DOS` returns
+`ERROR_ACCESS_DENIED`.
+
+The probe now tests two non-weakened alternatives in the same physical batch:
+
+1. `package:` URI with a sandbox-local package_config, retaining ordinary
+   multi-file generated Dart and relative imports.
+2. self-contained `data:` URI as a control that removes main-script filesystem
+   canonicalization entirely.
+
+The package route is the quality gate because it scales beyond command-line-sized
+single-file source. The data route is diagnostic evidence only if package routing
+still fails.
