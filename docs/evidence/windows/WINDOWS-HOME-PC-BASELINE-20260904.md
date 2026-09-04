@@ -424,3 +424,46 @@ Root causes identified from the physical run:
 The next production run is gated: the expensive full suite executes only after
 the physical probes, production escape corpus, and the previously failing
 Self-Extension regression files pass.
+
+
+### Production escape corpus follow-up: 27/28 effective checks, memory verdict fixed
+
+Physical Windows 10 Home run from branch HEAD `d805b3c` showed that the
+production escape corpus was down to one reported failure:
+
+```text
+network deny                     PASS
+DNS deny                         PASS
+wall-clock timeout               PASS
+CPU limit                        PASS
+workspace write                  PASS
+workspace max-file monitor       PASS
+secret/env scrub                 PASS
+Windows child-process limit      PASS
+memory bomb                      reported FAIL
+Linux-only PID/fork checks        SKIP (expected)
+```
+
+The memory result itself was not an escape. The child returned:
+
+```text
+exit_code       = 0
+timed_out       = false
+stdout_bytes    = 22
+```
+
+On Windows Job Object memory enforcement, Python can receive an allocation
+failure, raise `MemoryError`, let the test program catch it, print
+`blocked: MemoryError`, and then exit 0. The previous Windows assertion
+incorrectly required a non-zero process exit for every valid memory-limit
+outcome. The corpus now accepts either:
+
+1. handled `MemoryError` with the explicit blocked marker, or
+2. hard Job/process termination with a non-zero exit,
+
+while still rejecting wall-clock timeout as proof of memory enforcement.
+
+The next rerun also contains production integration fixes not present in this
+physical result: one AppContainer SID per host test process, cached toolchain RX
+projection, command timeout starting after isolation setup, and explicit
+per-process CPU time enforcement.
