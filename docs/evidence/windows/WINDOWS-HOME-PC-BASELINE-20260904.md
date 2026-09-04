@@ -270,3 +270,26 @@ make dartdev pass.
 
 TD110 remains open until the chosen Dart route passes physical Windows mutation
 tests and is integrated into the production sandbox runner / Self-Extension path.
+
+
+### Dart Windows launcher follow-up
+
+A subsequent physical Windows run showed that the first proposed
+`dart --disable-dart-dev` workaround is not sufficient. On Windows, the
+distributed `dart.exe` launcher still transitions to `dartvm.exe`. In this
+AppContainer, Dart's Windows launcher cannot resolve its DOS canonical executable
+path and constructs an empty `--resolved_executable_name=` argument. The child
+then exits before generated Dart executes.
+
+Observed evidence:
+
+```text
+dart-vm-test/build/runtime exit = 0xC0000008
+Empty value for option resolved_executable_name
+Setting VM flags failed: Unrecognized flags: resolved_executable_name
+```
+
+The next probe therefore bypasses `dart.exe` entirely and launches the SDK's
+`bin\\dartvm.exe` directly, supplying explicit executable and resolved-executable
+identity. This keeps the AppContainer boundary unchanged and tests the primitive
+that a production Windows runner could actually use.
