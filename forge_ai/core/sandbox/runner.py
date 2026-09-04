@@ -22,14 +22,19 @@
 | 無限実行 | timeout → process group ごと kill |
 | 依存の獲得 | `policy.assert_dependencies_allowed`（実行前） |
 
-## Windows を「あとで」にしない
+## Windows backend
 
-Forge の主配布対象には Windows が含まれる。**Linux だけ実装して完成扱いに
-しない。** Windows / macOS の backend は未実装であり、その環境では
-`SandboxUnavailable` を送出して**実行を拒否する**（fail closed）。
+Windows は AppContainer（no-capability）+ Job Object を使う。生成 workspace
+だけへ Modify、解決済み toolchain root へ一時 RX を与え、process は suspended
+で作成して Job へ割り当ててから再開する。CPU / memory / process count /
+wall-clock / output・workspace growth を制限し、network capability は与えない。
 
-「Sandbox が無い環境では素通しで実行する」は、いちばんやってはいけない
-設計である。無いなら動かさない。
+Dart は Windows AppContainer で DOS canonicalization が拒否されるため、
+`dart.exe` / dartdev をそのまま使わず、`dartvm.exe` + sandbox-local
+package_config + `package:` URI を使う。Sandbox を弱める回避はしない。
+
+macOS はまだ backend 未実装であり、そこで OS 層が必要なら
+`SandboxUnavailable` で fail closed する。
 
 ## fail closed の意味
 
@@ -236,7 +241,7 @@ def available_backend() -> str | None:
 
 
 def os_isolation_available() -> bool:
-    """OS 層（namespace）が使えるか。`policy-only` と区別するために公開する。"""
+    """OS 層の強制隔離が使えるか。`policy-only` と区別するために公開する。"""
     return available_backend() is not None
 
 
