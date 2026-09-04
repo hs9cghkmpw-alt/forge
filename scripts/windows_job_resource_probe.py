@@ -266,6 +266,16 @@ def _close_pi(pi: base.PROCESS_INFORMATION) -> None:
         base.kernel32.CloseHandle(pi.hProcess)
 
 
+def _wait_for_path(path: Path, *, timeout_seconds: float) -> bool:
+    """Wait for a child-created marker without conflating startup with timeout."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if path.is_file():
+            return True
+        time.sleep(0.05)
+    return path.is_file()
+
+
 def main() -> int:
     ctx = None
     result: dict[str, object] = {
@@ -455,8 +465,20 @@ foreach ($p in $alive) {{ try {{ Stop-Process -Id $p.Id -Force }} catch {{}} }}
         wall_job = ctx._new_job(flags=base.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
         result["stage"] = "wall-clock:start-process"
         wall_pi = ctx._start(wall_script, wall_job)
+
+        # PowerShell startup time varies substantially on the fresh Windows PC.
+        # Start the 2 s wall-clock budget only after the child proves it entered
+        # the workload. Otherwise a slow module/runtime startup can make a valid
+        # timeout control look broken.
+        result["stage"] = "wall-clock:wait-for-marker"
+        wall_marker = _wait_for_path(wall_started, timeout_seconds=12.0)
+
         result["stage"] = "wall-clock:wait"
-        wall_wait, _ = _wait_exit(wall_pi, 2_000)
+        if wall_marker:
+            wall_wait, _ = _wait_exit(wall_pi, 2_000)
+        else:
+            wall_wait, _ = _wait_exit(wall_pi, 0)
+
         terminated = False
         if wall_wait == base.WAIT_TIMEOUT:
             terminated = bool(base.kernel32.TerminateJobObject(wall_job, 124))
@@ -464,11 +486,16 @@ foreach ($p in $alive) {{ try {{ Stop-Process -Id $p.Id -Force }} catch {{}} }}
         else:
             wall_wait2, wall_code2 = wall_wait, None
         assertions["wall_clock_job_termination"] = (
-            wall_started.is_file()
+            wall_marker
             and wall_wait == base.WAIT_TIMEOUT
             and terminated
             and wall_wait2 == base.WAIT_OBJECT_0
+            and wall_code2 == 124
         )
+        result["wall_clock_marker_created"] = wall_marker
+        result["wall_clock_initial_wait_code"] = int(wall_wait)
+        result["wall_clock_terminate_job_succeeded"] = terminated
+        result["wall_clock_final_wait_code"] = int(wall_wait2)
         result["wall_clock_exit_code"] = wall_code2
         result["stage"] = "wall-clock:cleanup"
         _close_pi(wall_pi)
