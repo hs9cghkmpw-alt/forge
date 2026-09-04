@@ -23,10 +23,11 @@
 
 ## Windows
 
-この Corpus は Linux backend を検査する。**Windows backend は未実装**で
-あり、そこでは `SandboxUnavailable` で実行が拒否される
-（`test_it_refuses_to_run_without_a_backend`）。Linux だけ通ったことを
-「Sandbox 完成」と読まないこと。
+Windows は `windows-appcontainer+job` backend を同じ Corpus で検査する。
+Linux 固有の PID namespace / `os.fork` 観測だけは skip し、代わりに
+AppContainer + Job Object の child-process limit を Windows 専用ケースで
+直接確認する。platform ごとに防御機構は違っても、逃げられないという
+契約は同じにする。
 """
 
 from __future__ import annotations
@@ -88,7 +89,10 @@ class TestTheSandboxActuallyRunsThings(_SandboxCase):
 
     def test_a_harmless_program_succeeds(self) -> None:
         result = self.run_python("print('hello from inside')")
-        self.assertTrue(result.ok, result.stderr)
+        self.assertTrue(
+            result.ok,
+            f"harmless program failed: {result.to_dict()} stderr={result.stderr!r}",
+        )
         self.assertIn("hello from inside", result.stdout)
 
     def test_it_can_write_inside_its_own_workspace(self) -> None:
@@ -96,7 +100,10 @@ class TestTheSandboxActuallyRunsThings(_SandboxCase):
             open('output.txt', 'w').write('ok')
             print('wrote')
         """)
-        self.assertTrue(result.ok, result.stderr)
+        self.assertTrue(
+            result.ok,
+            f"workspace write failed: {result.to_dict()} stderr={result.stderr!r}",
+        )
         self.assertEqual((self.workspace / "output.txt").read_text(), "ok")
 
 
@@ -197,13 +204,25 @@ class TestEscapeCorpus(_SandboxCase):
                 print('blocked: MemoryError')
         """, policy=SandboxPolicy(timeout_seconds=20, cpu_seconds=10,
                                   memory_bytes=256 * 1024 * 1024))
-        # **`MemoryError` が出ることを要求する。**
-        # 「終わらなかった」で満足すると、上限を外しても timeout が
-        # 代わりに拾ってしまい試験が置物になる（2026-09-04 に実際そうだった）。
-        self.assertIn(
-            "blocked: MemoryError", result.stdout,
-            f"RLIMIT_AS で止まっていない（timeout で拾っただけの可能性）: {result.to_dict()}",
-        )
+        if platform.system() == "Windows":
+            # Job Object memory limits may fail an allocation or terminate the
+            # offending process outright. Either is valid only if the wall-clock
+            # timeout did NOT do the stopping.
+            self.assertFalse(result.ok, f"memory bomb escaped: {result.to_dict()}")
+            self.assertFalse(
+                result.timed_out,
+                f"memory bomb reached wall timeout; Job memory limit is not proven: {result.to_dict()}",
+            )
+            self.assertNotEqual(
+                result.exit_code, 0,
+                f"memory bomb exited successfully despite the limit: {result.to_dict()}",
+            )
+        else:
+            # POSIX RLIMIT_AS is expected to surface as MemoryError.
+            self.assertIn(
+                "blocked: MemoryError", result.stdout,
+                f"RLIMIT_AS で止まっていない（timeout で拾っただけの可能性）: {result.to_dict()}",
+            )
 
     def test_processes_cannot_see_or_signal_the_host(self) -> None:
         """Linux PID namespace の host-process boundary を確認する。
@@ -256,6 +275,56 @@ class TestEscapeCorpus(_SandboxCase):
 
         # timeout で leader ごと落ちる。namespace の外に残骸を残さない。
         self.assertLess(result.duration_seconds, 30, "fork bomb の後始末が終わっていない")
+
+
+    def test_windows_child_process_limit_is_enforced(self) -> None:
+        """Windows Job Object の ActiveProcessLimit を production backend で確認する。"""
+        if platform.system() != "Windows":
+            self.skipTest("Windows Job Object 専用の観測")
+
+        result = self.run_python(
+            """
+            import subprocess, sys, time
+            children = []
+            created = 0
+            try:
+                for _ in range(6):
+                    child = subprocess.Popen([
+                        sys.executable, "-c", "import time; time.sleep(10)"
+                    ])
+                    children.append(child)
+                    created += 1
+            except Exception as error:
+                print("blocked after", created, type(error).__name__)
+            finally:
+                for child in children:
+                    try:
+                        child.terminate()
+                    except Exception:
+                        pass
+                for child in children:
+                    try:
+                        child.wait(timeout=2)
+                    except Exception:
+                        pass
+            print("CREATED", created)
+            """,
+            policy=SandboxPolicy(
+                timeout_seconds=20,
+                cpu_seconds=10,
+                max_processes=2,
+            ),
+        )
+        self.assertNotIn(
+            "CREATED 6",
+            result.stdout,
+            f"Windows Job Object process limit was bypassed: {result.to_dict()}",
+        )
+        self.assertIn(
+            "CREATED",
+            result.stdout,
+            f"process-limit probe did not execute: {result.to_dict()} stderr={result.stderr!r}",
+        )
 
     def test_the_nproc_limit_is_reported_honestly(self) -> None:
         """**効かない制限を「効く」と書かない。**"""
