@@ -364,7 +364,7 @@ for ($i = 0; $i -lt 5; $i++) {{
     if (-not $p.HasExited) {{ $alive += $p }}
   }} catch {{}}
 }}
-Set-Content -LiteralPath '{proc_result}' -Value $alive.Count
+Set-Content -LiteralPath '{proc_result}' -Value $alive.Count -Encoding ASCII
 foreach ($p in $alive) {{ try {{ Stop-Process -Id $p.Id -Force }} catch {{}} }}
 """
         proc_job = ctx._new_job(
@@ -378,7 +378,7 @@ foreach ($p in $alive) {{ try {{ Stop-Process -Id $p.Id -Force }} catch {{}} }}
         proc_pi = ctx._start(proc_script, proc_job)
         result["stage"] = "process-limit:wait"
         proc_wait, proc_code = _wait_exit(proc_pi, 15_000)
-        count = int(proc_result.read_text(encoding="utf-16").strip()) if proc_result.is_file() else 999
+        count = int(proc_result.read_text(encoding="ascii").strip()) if proc_result.is_file() else 999
         assertions["active_process_limit_enforced"] = (
             proc_wait == base.WAIT_OBJECT_0
             and proc_code == 0
@@ -424,7 +424,7 @@ foreach ($p in $alive) {{ try {{ Stop-Process -Id $p.Id -Force }} catch {{}} }}
         pid_file = ctx.workspace / "surviving-child.pid"
         child_script = f"""
 $p = Start-Process -FilePath "$env:SystemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -ArgumentList '-NoProfile','-Command','Start-Sleep -Seconds 30' -PassThru -WindowStyle Hidden
-Set-Content -LiteralPath '{pid_file}' -Value $p.Id
+Set-Content -LiteralPath '{pid_file}' -Value $p.Id -Encoding ASCII
 exit 0
 """
         child_job = ctx._new_job(flags=base.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
@@ -432,7 +432,7 @@ exit 0
         parent_pi = ctx._start(child_script, child_job)
         result["stage"] = "kill-on-close:wait-parent"
         parent_wait, parent_code = _wait_exit(parent_pi, 10_000)
-        child_pid = int(pid_file.read_text(encoding="utf-16").strip()) if pid_file.is_file() else 0
+        child_pid = int(pid_file.read_text(encoding="ascii").strip()) if pid_file.is_file() else 0
         result["stage"] = "kill-on-close:open-child"
         child_handle = (
             base.kernel32.OpenProcess(SYNCHRONIZE, False, child_pid)
