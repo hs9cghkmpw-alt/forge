@@ -4236,20 +4236,40 @@ Network namespace / PID namespace / env 作り直し / RLIMIT_CPU / RLIMIT_AS /
 RLIMIT_FSIZE / 壁時計 timeout / 明示 workspace / shell 不使用。
 本番経路（`build_time_workspace._execute`）へ配線済み。
 escape corpus 8/8 遮断、配線破壊 7 種で検出。
-**Windows / macOS は未実装であり TD110 として残る。**
+**Windows 分も 2026-09-04 の実 Windows 10 Home production validation で解消。**
+macOS は未実装のまま TD117 へ分離する。
 
-## TD110. Windows / macOS の Sandbox backend が無い（2026-09-04、新規）
+## TD110. Windows Sandbox backend が無い（2026-09-04）→ **解消（Windows）**
 
-`forge_ai/core/sandbox/runner.py` の隔離は Linux の namespace + rlimit に依存する。
-Windows と macOS では `available_backend()` が `None` を返し、
-`SandboxUnavailable` で**実行を拒否する**（fail closed）。安全側ではあるが、
-**その環境では Self-Extension が動かない**。
+初期状態では Windows で `available_backend()` が `None` を返し、
+Self-Extension は fail closed で停止していた。
 
-Windows は主配布対象である（PRD-12）。Linux だけ通ったことを
-「Sandbox 完成」と読まないこと。EXT-08 / SEC-04 が `PARTIAL` に留まる理由。
+**2026-09-04、実 Windows 10 Home で解消を確認。**
 
-必要なもの: Windows Job Object（memory / process 上限）、restricted token、
-WFP かループバック遮断による network deny、環境変数の作り直し。
+本番 backend は `windows-appcontainer+job`。AppContainer（capability なし）+
+Job Object を `runner.py` の本番経路へ配線し、Workspace だけ Modify、
+Toolchain は一時 RX、秘密/env は作り直し、Network は OS 境界で deny、
+CPU / memory / process / wall-clock / file growth / output を bounded にした。
+Dart は Windows AppContainer の DOS canonicalization 制約を避けるため、
+`dartvm.exe + package:` route を使う。
+
+物理 Windows の最終一括検証（commit
+`7f8e000ce53165512c66132018a888c560c61ca4`）:
+
+- production escape corpus: PASS
+- TD110 physical probes: PASS
+- targeted Self-Extension regressions: PASS
+- full forge_ai Self-Extension suite: PASS
+- backend regression: PASS
+- `FORGE_SANDBOX_ALLOW_POLICY_ONLY`: **無効**
+- working tree: **clean**
+- final verdict: `TD110 production validation: ALL PASS`
+
+Evidence:
+`docs/evidence/windows/WINDOWS-HOME-PC-BASELINE-20260904.md`
+
+**注意:** これは Windows 部分の解消である。macOS backend は未実装なので
+TD117 へ分離する。EXT-08 / SEC-04 の全 OS hard gate はまだ PARTIAL。
 
 ## TD111. RLIMIT_NPROC が root 実行で効かない（2026-09-04、新規、実測）
 
@@ -4371,3 +4391,23 @@ Sandbox の振る舞いそのものは依然として CI で検証されてい�
 | corpus を Windows 実機の検証へ寄せる | TD110 の実機経路と合流できる | 手動であり毎 push では回らない |
 
 **どれも未実施。** それまでは「CI 緑 = Sandbox 検証済み」と読まないこと。
+
+
+## TD117. macOS Sandbox backend が無い（2026-09-04、TD110 から分離）
+
+Windows は `windows-appcontainer+job` で実機 production validation まで完了したが、
+macOS の OS sandbox backend はまだ実装していない。
+
+したがって macOS では OS 層の Sandbox が必要な Self-Extension 実行は
+`SandboxUnavailable` で fail closed する。Windows の成功を理由に macOS も
+安全だとみなさない。
+
+EXT-08 / SEC-04 の Target Contract が「OS別 escape corpus 全遮断」であるため、
+Capability Matrix はまだ `PARTIAL` / `HARD_GATE_PARTIAL` のまま維持する。
+
+次に必要:
+- macOS の OS 強制隔離 backend
+- Network / File / Process / Secret escape corpus
+- CPU / memory / wall-clock / child cleanup
+- real Python / Dart toolchain
+- Self-Extension generate -> verify -> promote -> install/reuse の実機証拠
