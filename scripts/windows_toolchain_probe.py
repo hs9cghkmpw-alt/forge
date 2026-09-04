@@ -572,6 +572,36 @@ def main() -> int:
         result["acl_ancestor_grants"] = [str(p) for p in granted_ancestors]
         result["acl_toolchain_grants"] = [str(p) for p in granted_recursive]
 
+        # Production Forge will launch the validated toolchain executable
+        # directly, not through PowerShell. Probe that exact primitive as well
+        # as the richer child-orchestration run below.
+        python_direct = _direct_appcontainer_run(
+            ctx,
+            executable=python,
+            args=("--version",),
+            python=python,
+            dart=dart,
+        )
+        dart_direct = _direct_appcontainer_run(
+            ctx,
+            executable=dart,
+            args=("--version",),
+            python=python,
+            dart=dart,
+        )
+        result["direct_smoke"] = {
+            "python": python_direct,
+            "dart": dart_direct,
+        }
+        direct_smoke_ok = all(
+            item.get("created") is True
+            and item.get("appcontainer_token") is True
+            and item.get("timed_out") is False
+            and item.get("exit_code") == 0
+            for item in (python_direct, dart_direct)
+        )
+        result["direct_smoke_ok"] = direct_smoke_ok
+
         job = ctx._new_job(
             flags=(
                 isolation.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
@@ -653,11 +683,15 @@ def main() -> int:
             "dart_runtime",
         )
         failed = [name for name in required if assertions.get(name) is not True]
-        if exit_code != 0 or failed:
-            raise RuntimeError(
-                "toolchain assertions failed: "
-                + (", ".join(failed) if failed else f"exit={exit_code}")
-            )
+        if exit_code != 0 or failed or not direct_smoke_ok:
+            pieces: list[str] = []
+            if failed:
+                pieces.append(", ".join(failed))
+            if exit_code != 0:
+                pieces.append(f"orchestrator_exit={exit_code}")
+            if not direct_smoke_ok:
+                pieces.append("direct_smoke")
+            raise RuntimeError("toolchain assertions failed: " + "; ".join(pieces))
 
         result["ok"] = True
 
