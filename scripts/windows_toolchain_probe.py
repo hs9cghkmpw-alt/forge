@@ -42,6 +42,22 @@ if platform.system() != "Windows":
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _emit_json(value: object) -> None:
+    """Print JSON without depending on the Windows console code page.
+
+    Physical Windows PowerShell can leave BOM/progress characters in captured
+    child output.  Encoding them through cp932 can raise UnicodeEncodeError
+    even after the probe itself has completed.  ASCII-escaped JSON preserves
+    every code point and keeps evidence emission fail-safe.
+    """
+    print(json.dumps(value, ensure_ascii=True, indent=2))
+
+
+def _clean_log_text(value: str) -> str:
+    """Remove transport-only BOMs while preserving the actual tool output."""
+    return value.replace("\ufeff", "")
+
+
 def _run_icacls(args: list[str]) -> subprocess.CompletedProcess[str]:
     icacls = shutil.which("icacls.exe") or os.path.join(
         os.environ["SystemRoot"], "System32", "icacls.exe"
@@ -658,7 +674,9 @@ def main() -> int:
             ):
                 path = ctx.workspace / name
                 if path.is_file():
-                    logs[name] = path.read_text(encoding="utf-8", errors="replace")[-4000:]
+                    logs[name] = _clean_log_text(
+                        path.read_text(encoding="utf-8", errors="replace")
+                    )[-4000:]
             result["logs"] = logs
             raise RuntimeError("toolchain child did not produce result JSON")
 
@@ -678,7 +696,9 @@ def main() -> int:
         ):
             path = ctx.workspace / name
             if path.is_file():
-                logs[name] = path.read_text(encoding="utf-8", errors="replace")[-2000:]
+                logs[name] = _clean_log_text(
+                    path.read_text(encoding="utf-8", errors="replace")
+                )[-2000:]
         result["logs"] = logs
 
         required = (
@@ -739,7 +759,7 @@ def main() -> int:
             result["cleanup_errors"] = cleanup_errors
             result["ok"] = False
 
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    _emit_json(result)
     return 0 if result.get("ok") is True else 1
 
 
