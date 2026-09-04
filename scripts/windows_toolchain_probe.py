@@ -20,6 +20,7 @@ Fail closed: any command failure or ACL-cleanup failure exits non-zero.
 
 from __future__ import annotations
 
+import base64
 import ctypes
 import json
 import os
@@ -229,6 +230,39 @@ def _write_fixtures(workspace: Path) -> None:
         encoding="utf-8",
     )
 
+    package_dir = workspace / ".dart_tool"
+    package_dir.mkdir(parents=True, exist_ok=True)
+    (package_dir / "package_config.json").write_text(
+        json.dumps(
+            {
+                "configVersion": 2,
+                "packages": [
+                    {
+                        "name": "forge_probe",
+                        "rootUri": "../",
+                        "packageUri": "",
+                        "languageVersion": "3.0",
+                    }
+                ],
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+
+
+def _dart_data_uri(source: str) -> str:
+    payload = base64.b64encode(source.encode("utf-8")).decode("ascii")
+    return "data:application/dart;charset=utf-8;base64," + payload
+
+
+def _self_contained_dart(workspace: Path, entry_name: str) -> str:
+    impl = (workspace / "capability_impl.dart").read_text(encoding="utf-8")
+    entry = (workspace / entry_name).read_text(encoding="utf-8")
+    entry = entry.replace("import 'capability_impl.dart';\n", "", 1)
+    return impl + "\n" + entry
+
 
 def _toolchain_environment(
     ctx: resource_probe.Context,
@@ -414,6 +448,8 @@ def _toolchain_script(
     dartvm: Path,
     result_file: Path,
     appcontainer_local: Path,
+    dart_test_data_uri: str,
+    dart_probe_data_uri: str,
 ) -> str:
     w = _ps_quote(str(workspace))
     py = _ps_quote(str(python))
@@ -421,6 +457,8 @@ def _toolchain_script(
     dartvm_exe = _ps_quote(str(dartvm))
     result = _ps_quote(str(result_file))
     appcontainer_local_text = _ps_quote(str(appcontainer_local))
+    dart_test_data = _ps_quote(dart_test_data_uri)
+    dart_probe_data = _ps_quote(dart_probe_data_uri)
 
     return rf"""
 $ErrorActionPreference = 'Continue'
@@ -486,6 +524,16 @@ $probe = [ordered]@{{
   dart_vm_test = $false
   dart_vm_build = $false
   dart_vm_runtime = $false
+
+  # Two AppContainer-compatible candidates are probed in the same batch:
+  # package: URI preserves normal multi-file imports and scales to large
+  # generated source; data: URI is a no-filesystem-canonicalization control.
+  dart_package_test = $false
+  dart_package_build = $false
+  dart_package_runtime = $false
+  dart_data_test = $false
+  dart_data_build = $false
+  dart_data_runtime = $false
   exit_codes = [ordered]@{{}}
   errors = @()
 }}
@@ -507,7 +555,16 @@ $dartRuntimeLog = Join-Path $workspace 'dart-runtime.log'
 $dartVmTestLog = Join-Path $workspace 'dart-vm-test.log'
 $dartVmBuildLog = Join-Path $workspace 'dart-vm-build.log'
 $dartVmRuntimeLog = Join-Path $workspace 'dart-vm-runtime.log'
+$dartPackageTestLog = Join-Path $workspace 'dart-package-test.log'
+$dartPackageBuildLog = Join-Path $workspace 'dart-package-build.log'
+$dartPackageRuntimeLog = Join-Path $workspace 'dart-package-runtime.log'
+$dartDataTestLog = Join-Path $workspace 'dart-data-test.log'
+$dartDataBuildLog = Join-Path $workspace 'dart-data-build.log'
+$dartDataRuntimeLog = Join-Path $workspace 'dart-data-runtime.log'
 $dartKernel = Join-Path $workspace 'capability-test.dill'
+$dartPackageKernel = Join-Path $workspace 'capability-package-test.dill'
+$dartDataKernel = Join-Path $workspace 'capability-data-test.dill'
+$packageConfig = Join-Path $workspace '.dart_tool\package_config.json'
 
 function Invoke-ProbeCommand(
   [string]$Name,
@@ -554,11 +611,24 @@ $probe.dart_vm_test = Invoke-ProbeCommand 'dart-vm-test' '{dartvm_exe}' ($dartVm
 $probe.dart_vm_build = Invoke-ProbeCommand 'dart-vm-build' '{dartvm_exe}' ($dartVmIdentity + @('--snapshot-kind=kernel',"--snapshot=$dartKernel",$dartTest)) $dartVmBuildLog
 $probe.dart_vm_runtime = Invoke-ProbeCommand 'dart-vm-runtime' '{dartvm_exe}' ($dartVmIdentity + @($dartProbe)) $dartVmRuntimeLog
 
+# package: URI: the VM's initial asset-resolution path skips DOS canonicalization,
+# while the compiler still reads the real workspace files through package config.
+$dartPackageArgs = $dartVmIdentity + @("--packages=$packageConfig")
+$probe.dart_package_test = Invoke-ProbeCommand 'dart-package-test' '{dartvm_exe}' ($dartPackageArgs + @('package:forge_probe/capability_test.dart')) $dartPackageTestLog
+$probe.dart_package_build = Invoke-ProbeCommand 'dart-package-build' '{dartvm_exe}' ($dartPackageArgs + @('--snapshot-kind=kernel',"--snapshot=$dartPackageKernel",'package:forge_probe/capability_test.dart')) $dartPackageBuildLog
+$probe.dart_package_runtime = Invoke-ProbeCommand 'dart-package-runtime' '{dartvm_exe}' ($dartPackageArgs + @('package:forge_probe/probe.dart')) $dartPackageRuntimeLog
+
+# data: URI: fully self-contained control route. It proves whether removing
+# filesystem canonicalization entirely is sufficient inside this AppContainer.
+$probe.dart_data_test = Invoke-ProbeCommand 'dart-data-test' '{dartvm_exe}' ($dartVmIdentity + @('{dart_test_data}')) $dartDataTestLog
+$probe.dart_data_build = Invoke-ProbeCommand 'dart-data-build' '{dartvm_exe}' ($dartVmIdentity + @('--snapshot-kind=kernel',"--snapshot=$dartDataKernel",'{dart_test_data}')) $dartDataBuildLog
+$probe.dart_data_runtime = Invoke-ProbeCommand 'dart-data-runtime' '{dartvm_exe}' ($dartVmIdentity + @('{dart_probe_data}')) $dartDataRuntimeLog
+
 $probe | ConvertTo-Json -Compress | Set-Content -LiteralPath '{result}' -Encoding UTF8
 if ($probe.python_visible -and $probe.dart_visible -and $probe.dartvm_visible -and
     $probe.python_smoke -and $probe.dart_smoke -and
     $probe.python_test -and $probe.python_build -and $probe.python_runtime -and
-    $probe.dart_vm_test -and $probe.dart_vm_build -and $probe.dart_vm_runtime -and
+    $probe.dart_package_test -and $probe.dart_package_build -and $probe.dart_package_runtime -and
     $probe.host_secret_absent) {{
   exit 0
 }}
@@ -600,6 +670,12 @@ def main() -> int:
         result["appcontainer_sid"] = ctx.sid_text
 
         _write_fixtures(ctx.workspace)
+        dart_test_data_uri = _dart_data_uri(
+            _self_contained_dart(ctx.workspace, "capability_test.dart")
+        )
+        dart_probe_data_uri = _dart_data_uri(
+            _self_contained_dart(ctx.workspace, "probe.dart")
+        )
         result_file = ctx.workspace / "toolchain-result.json"
 
         # Grant read/execute to toolchain trees and non-inheriting traversal
@@ -687,6 +763,8 @@ def main() -> int:
             dartvm,
             result_file,
             ctx.appcontainer_local,
+            dart_test_data_uri,
+            dart_probe_data_uri,
         )
         started = time.monotonic()
         pi = ctx._start(script, job)
@@ -719,6 +797,12 @@ def main() -> int:
                 "dart-vm-test.log",
                 "dart-vm-build.log",
                 "dart-vm-runtime.log",
+                "dart-package-test.log",
+                "dart-package-build.log",
+                "dart-package-runtime.log",
+                "dart-data-test.log",
+                "dart-data-build.log",
+                "dart-data-runtime.log",
             ):
                 path = ctx.workspace / name
                 if path.is_file():
@@ -744,6 +828,12 @@ def main() -> int:
             "dart-vm-test.log",
             "dart-vm-build.log",
             "dart-vm-runtime.log",
+            "dart-package-test.log",
+            "dart-package-build.log",
+            "dart-package-runtime.log",
+            "dart-data-test.log",
+            "dart-data-build.log",
+            "dart-data-runtime.log",
         ):
             path = ctx.workspace / name
             if path.is_file():
@@ -762,9 +852,9 @@ def main() -> int:
             "python_test",
             "python_build",
             "python_runtime",
-            "dart_vm_test",
-            "dart_vm_build",
-            "dart_vm_runtime",
+            "dart_package_test",
+            "dart_package_build",
+            "dart_package_runtime",
         )
         result["dartdev_cli_compatible"] = all(
             assertions.get(name) is True
@@ -772,7 +862,15 @@ def main() -> int:
         )
         result["appcontainer_safe_dart_route"] = all(
             assertions.get(name) is True
-            for name in ("dart_vm_test", "dart_vm_build", "dart_vm_runtime")
+            for name in (
+                "dart_package_test",
+                "dart_package_build",
+                "dart_package_runtime",
+            )
+        )
+        result["dart_data_uri_control"] = all(
+            assertions.get(name) is True
+            for name in ("dart_data_test", "dart_data_build", "dart_data_runtime")
         )
 
         failed = [name for name in required if assertions.get(name) is not True]
