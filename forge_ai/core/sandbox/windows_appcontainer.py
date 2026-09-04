@@ -383,11 +383,17 @@ def _python_roots(executable: Path) -> tuple[Path, ...]:
 
 def _dart_paths(executable: Path) -> tuple[Path, Path]:
     executable = executable.resolve()
-    sdk = executable.parent.parent
-    dartvm = executable.parent / "dartvm.exe"
+    if executable.suffix.lower() in {".bat", ".cmd"}:
+        # Flutter exposes dart through <flutter>\bin\dart.bat; the actual SDK
+        # is cached under <flutter>\bin\cache\dart-sdk.
+        flutter_root = executable.parent.parent
+        sdk = flutter_root / "bin" / "cache" / "dart-sdk"
+    else:
+        sdk = executable.parent.parent
+    dartvm = sdk / "bin" / "dartvm.exe"
     if not dartvm.is_file():
-        raise WindowsSandboxError(f"Dart VM not found beside resolved Dart executable: {dartvm}")
-    return sdk, dartvm
+        raise WindowsSandboxError(f"Dart VM not found in resolved SDK: {dartvm}")
+    return sdk.resolve(), dartvm.resolve()
 
 
 def _environment_block(
@@ -966,7 +972,7 @@ def run(
         executable_dirs: list[Path] = []
         invocations: list[tuple[Path, list[str]]]
 
-        if name in {"dart.exe", "dart"}:
+        if name in {"dart.exe", "dart", "dart.bat", "dart.cmd"}:
             sdk, dartvm = _dart_paths(original_executable)
             ctx.grant_toolchain((sdk,))
             executable_dirs.extend((dartvm.parent,))
