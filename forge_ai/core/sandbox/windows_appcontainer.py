@@ -1043,7 +1043,6 @@ def run(
         raise WindowsSandboxError(f"resolved executable does not exist: {original_executable}")
 
     ctx = _Context(workspace)
-    started = time.monotonic()
     cleanup_error: Exception | None = None
 
     try:
@@ -1074,6 +1073,13 @@ def run(
             executable_dirs=tuple(dict.fromkeys(executable_dirs)),
         )
 
+        # The command timeout is an execution limit, not a host-side ACL/setup
+        # limit. Recursive first-use toolchain ACL projection can take tens of
+        # seconds on a fresh Windows PC; counting that time against the child
+        # gave the first sandboxed command only ~50 ms and produced false
+        # timeout/resource failures. Start the budget only after the security
+        # boundary and toolchain projection are fully established.
+        started = time.monotonic()
         stdout_parts: list[str] = []
         stderr_parts: list[str] = []
         exit_code: int | None = 0
