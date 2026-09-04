@@ -303,19 +303,65 @@ def main() -> int:
         cpu_pi = ctx._start(cpu_script, cpu_job)
         result["stage"] = "cpu:wait"
         cpu_t0 = time.monotonic()
-        cpu_wait, cpu_code = _wait_exit(cpu_pi, 12_000)
+        cpu_wait, cpu_code = _wait_exit(cpu_pi, 20_000)
         cpu_elapsed = time.monotonic() - cpu_t0
         cpu_marker = cpu_started.is_file()
+
+        # Wall-clock duration is intentionally NOT the verdict.  A 4 s user-CPU
+        # budget can take much longer than 4 s of wall time on a busy/slow host.
+        # The physical Windows 10 batch reproduced 11+ s wall time while the Job
+        # still terminated the process with the same CPU-limit exit status.
+        #
+        # Prove causality with a guard-break control: run the same infinite CPU
+        # workload in an otherwise identical Job with JOB_TIME removed.  It must
+        # still be alive after a bounded observation window.  If removing the
+        # control does not change the result, this probe must fail.
         assertions["cpu_job_time_enforced"] = (
             cpu_marker
             and cpu_wait == base.WAIT_OBJECT_0
-            and cpu_elapsed < 10.0
+            and cpu_code is not None
+            and cpu_code != 0
         )
         result["cpu_elapsed_seconds"] = round(cpu_elapsed, 3)
         result["cpu_marker_created"] = cpu_marker
         result["cpu_wait_code"] = int(cpu_wait)
         result["cpu_exit_code"] = cpu_code
+
+        result["stage"] = "cpu:guard-break-control"
+        control_started = ctx.workspace / "cpu-control-started.txt"
+        control_script = (
+            f"Set-Content -LiteralPath '{control_started}' -Value started; "
+            "while ($true) { [Math]::Sqrt(1234567) | Out-Null }"
+        )
+        control_job = ctx._new_job(
+            flags=base.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        )
+        control_pi = ctx._start(control_script, control_job)
+        control_t0 = time.monotonic()
+        control_wait, control_code = _wait_exit(control_pi, 6_000)
+        control_elapsed = time.monotonic() - control_t0
+        control_marker = control_started.is_file()
+        control_terminated = False
+        if control_wait == base.WAIT_TIMEOUT:
+            control_terminated = bool(base.kernel32.TerminateJobObject(control_job, 125))
+            control_wait2, control_code2 = _wait_exit(control_pi, 5_000)
+        else:
+            control_wait2, control_code2 = control_wait, control_code
+
+        assertions["cpu_limit_removed_keeps_workload_running"] = (
+            control_marker
+            and control_wait == base.WAIT_TIMEOUT
+            and control_terminated
+            and control_wait2 == base.WAIT_OBJECT_0
+        )
+        result["cpu_control_elapsed_seconds"] = round(control_elapsed, 3)
+        result["cpu_control_marker_created"] = control_marker
+        result["cpu_control_initial_wait_code"] = int(control_wait)
+        result["cpu_control_exit_code"] = control_code2
+
         result["stage"] = "cpu:cleanup"
+        _close_pi(control_pi)
+        base.kernel32.CloseHandle(control_job)
         _close_pi(cpu_pi)
         base.kernel32.CloseHandle(cpu_job)
 
