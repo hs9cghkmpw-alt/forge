@@ -25,6 +25,7 @@ AppContainer setup/launch failure.
 
 from __future__ import annotations
 
+import atexit
 import ctypes
 from ctypes import wintypes
 from functools import lru_cache
@@ -35,6 +36,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 
@@ -56,6 +58,7 @@ PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES = 0x00020009
 TOKEN_QUERY = 0x0008
 TOKEN_IS_APP_CONTAINER = 29
 
+JOB_OBJECT_LIMIT_PROCESS_TIME = 0x00000002
 JOB_OBJECT_LIMIT_JOB_TIME = 0x00000004
 JOB_OBJECT_LIMIT_ACTIVE_PROCESS = 0x00000008
 JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x00000100
@@ -537,25 +540,36 @@ def _dart_invocations(
     raise WindowsSandboxError(f"unsupported Dart command for Windows backend: {args!r}")
 
 
-class _Context:
-    def __init__(self, workspace: Path) -> None:
+class _Session:
+    """One ephemeral AppContainer identity reused for this host Python process.
+
+    The expensive recursive RX projection over Python/Dart SDK trees is tied to
+    the AppContainer SID, not to one generated workspace. Reusing one random SID
+    for the lifetime of the test/build process makes the production path fast
+    enough for the full Self-Extension suite while preserving isolation between
+    workspaces: every workspace still receives and later loses its own Modify ACE.
+
+    If the host process crashes, the random SID is effectively dead because the
+    moniker contains an unguessable UUID. Normal interpreter shutdown removes all
+    projected toolchain ACEs and deletes the profile.
+    """
+
+    def __init__(self) -> None:
         self.api = _apis()
-        self.workspace = workspace.resolve()
-        self.moniker = f"Forge.Sandbox.{uuid.uuid4().hex}"
+        self.moniker = f"Forge.Sandbox.Session.{uuid.uuid4().hex}"
         self.sid = PSID()
         self.sid_text = ""
         self.profile_created = False
-        self.attr_buffer = None
-        self.attr_list = None
-        self.security_capabilities = None
         self.granted_recursive: list[Path] = []
         self.granted_ancestors: list[Path] = []
+        self._lock = threading.RLock()
+        self._closed = False
 
         hr = int(
             self.api.userenv.CreateAppContainerProfile(
                 self.moniker,
-                "Forge Sandbox",
-                "Ephemeral Forge generated-code sandbox",
+                "Forge Sandbox Session",
+                "Ephemeral Forge generated-code sandbox session",
                 None,
                 0,
                 ctypes.byref(self.sid),
@@ -585,11 +599,99 @@ class _Context:
             self.api.ole32.CoTaskMemFree(ctypes.cast(folder_ptr, LPVOID))
 
         (self.appcontainer_local / "Temp").mkdir(parents=True, exist_ok=True)
-        self.work_dir = self.appcontainer_local / "Forge"
+        (self.appcontainer_local / "Forge").mkdir(parents=True, exist_ok=True)
+
+    def grant_toolchain(self, roots: tuple[Path, ...]) -> None:
+        with self._lock:
+            unique_roots = tuple(dict.fromkeys(path.resolve() for path in roots))
+            ancestor_set = {
+                ancestor
+                for root in unique_roots
+                for ancestor in _ancestors(root)
+            }
+            for ancestor in sorted(ancestor_set, key=lambda item: len(item.parts)):
+                if ancestor in self.granted_ancestors:
+                    continue
+                _grant(ancestor, self.sid_text, "RX", recursive=False)
+                self.granted_ancestors.append(ancestor)
+            for root in unique_roots:
+                if root in self.granted_recursive:
+                    continue
+                _grant(root, self.sid_text, "RX", recursive=True)
+                self.granted_recursive.append(root)
+
+    def close(self) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            self._closed = True
+            errors: list[str] = []
+            for path in reversed(self.granted_recursive):
+                try:
+                    _remove_acl(path, self.sid_text, recursive=True)
+                except Exception as exc:
+                    errors.append(str(exc))
+            for path in reversed(self.granted_ancestors):
+                try:
+                    _remove_acl(path, self.sid_text, recursive=False)
+                except Exception as exc:
+                    errors.append(str(exc))
+            if self.sid:
+                self.api.advapi32.FreeSid(self.sid)
+                self.sid = PSID()
+            if self.profile_created:
+                self.api.userenv.DeleteAppContainerProfile(self.moniker)
+                self.profile_created = False
+            if errors:
+                raise WindowsSandboxError("; ".join(errors))
+
+
+_SESSION_LOCK = threading.RLock()
+_SESSION: _Session | None = None
+
+
+def _session() -> _Session:
+    global _SESSION
+    with _SESSION_LOCK:
+        if _SESSION is None:
+            _SESSION = _Session()
+            atexit.register(_close_session_at_exit)
+        return _SESSION
+
+
+def _close_session_at_exit() -> None:
+    global _SESSION
+    with _SESSION_LOCK:
+        session = _SESSION
+        _SESSION = None
+    if session is not None:
+        try:
+            session.close()
+        except Exception:
+            # atexit cannot safely surface sandbox evidence. Per-run workspace
+            # cleanup remains strict; this is best-effort recovery for host exit.
+            pass
+
+
+class _Context:
+    def __init__(self, workspace: Path) -> None:
+        self.session = _session()
+        self.api = self.session.api
+        self.workspace = workspace.resolve()
+        self.sid = self.session.sid
+        self.sid_text = self.session.sid_text
+        self.appcontainer_local = self.session.appcontainer_local
+        self.attr_buffer = None
+        self.attr_list = None
+        self.security_capabilities = None
+        self.workspace_granted = False
+        self.work_dir = (
+            self.appcontainer_local / "Forge" / f"run-{uuid.uuid4().hex}"
+        )
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
         _grant(self.workspace, self.sid_text, "M", recursive=True)
-        self.granted_recursive.append(self.workspace)
+        self.workspace_granted = True
 
         attr_size = SIZE_T(0)
         ctypes.set_last_error(0)
@@ -606,8 +708,6 @@ class _Context:
         ):
             raise _winerror("InitializeProcThreadAttributeList")
 
-        # UpdateProcThreadAttribute retains a pointer to this structure until
-        # CreateProcessW. Keep it alive for the full context lifetime.
         self.security_capabilities = SECURITY_CAPABILITIES(
             AppContainerSid=self.sid,
             Capabilities=None,
@@ -626,23 +726,7 @@ class _Context:
             raise _winerror("UpdateProcThreadAttribute(SECURITY_CAPABILITIES)")
 
     def grant_toolchain(self, roots: tuple[Path, ...]) -> None:
-        unique_roots = tuple(dict.fromkeys(path.resolve() for path in roots))
-        ancestor_set = {
-            ancestor
-            for root in unique_roots
-            for ancestor in _ancestors(root)
-            if ancestor != self.workspace
-        }
-        for ancestor in sorted(ancestor_set, key=lambda item: len(item.parts)):
-            if ancestor in self.granted_ancestors:
-                continue
-            _grant(ancestor, self.sid_text, "RX", recursive=False)
-            self.granted_ancestors.append(ancestor)
-        for root in unique_roots:
-            if root in self.granted_recursive:
-                continue
-            _grant(root, self.sid_text, "RX", recursive=True)
-            self.granted_recursive.append(root)
+        self.session.grant_toolchain(roots)
 
     def new_job(
         self,
@@ -659,12 +743,15 @@ class _Context:
         limits.BasicLimitInformation.LimitFlags = (
             JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
             | JOB_OBJECT_LIMIT_JOB_TIME
+            | JOB_OBJECT_LIMIT_PROCESS_TIME
             | JOB_OBJECT_LIMIT_ACTIVE_PROCESS
             | JOB_OBJECT_LIMIT_PROCESS_MEMORY
             | JOB_OBJECT_LIMIT_JOB_MEMORY
         )
+        budget_100ns = max(1, int(cpu_seconds)) * 10_000_000
+        limits.BasicLimitInformation.PerProcessUserTimeLimit = budget_100ns
+        limits.BasicLimitInformation.PerJobUserTimeLimit = budget_100ns
         limits.BasicLimitInformation.ActiveProcessLimit = max(1, int(max_processes))
-        limits.BasicLimitInformation.PerJobUserTimeLimit = max(1, int(cpu_seconds)) * 10_000_000
         limits.ProcessMemoryLimit = max(1, int(memory_bytes))
         limits.JobMemoryLimit = max(1, int(memory_bytes))
 
@@ -680,27 +767,19 @@ class _Context:
 
     def close(self) -> None:
         errors: list[str] = []
-        for path in reversed(self.granted_recursive):
-            try:
-                _remove_acl(path, self.sid_text, recursive=True)
-            except Exception as exc:  # pragma: no cover - physical cleanup path
-                errors.append(str(exc))
-        for path in reversed(self.granted_ancestors):
-            try:
-                _remove_acl(path, self.sid_text, recursive=False)
-            except Exception as exc:  # pragma: no cover - physical cleanup path
-                errors.append(str(exc))
-
         if self.attr_list:
             self.api.kernel32.DeleteProcThreadAttributeList(self.attr_list)
             self.attr_list = None
-        if self.sid:
-            self.api.advapi32.FreeSid(self.sid)
-            self.sid = PSID()
-        if self.profile_created:
-            self.api.userenv.DeleteAppContainerProfile(self.moniker)
-            self.profile_created = False
-
+        if self.workspace_granted:
+            try:
+                _remove_acl(self.workspace, self.sid_text, recursive=True)
+            except Exception as exc:
+                errors.append(str(exc))
+            self.workspace_granted = False
+        try:
+            shutil.rmtree(self.work_dir, ignore_errors=True)
+        except Exception as exc:
+            errors.append(str(exc))
         if errors:
             raise WindowsSandboxError("; ".join(errors))
 
