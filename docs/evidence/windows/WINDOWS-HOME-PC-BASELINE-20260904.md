@@ -4,7 +4,7 @@
 
 Freshly initialized Windows home PC used as a real portability / distribution check for Forge.
 
-This record is evidence only. It does **not** claim that Windows Sandbox support or TD110 is resolved.
+This record began as evidence-only while the Windows backend was incomplete. The final section records the physical production-validation run that closes the **Windows portion** of TD110. macOS remains a separate unimplemented backend.
 
 ## Environment
 
@@ -467,3 +467,75 @@ The next rerun also contains production integration fixes not present in this
 physical result: one AppContainer SID per host test process, cached toolchain RX
 projection, command timeout starting after isolation setup, and explicit
 per-process CPU time enforcement.
+
+
+## FINAL — Windows 10 Home production validation: ALL PASS
+
+Physical Windows 10 Home execution on 2026-09-04 at repository commit
+`7f8e000ce53165512c66132018a888c560c61ca4` completed the one-shot production
+validation with `FORGE_SANDBOX_ALLOW_POLICY_ONLY` explicitly disabled.
+
+Observed host resources at launch:
+
+```text
+RAM installed : 7.92 GB
+RAM free      : 2.76 GB
+Page file     : 1.88 GB
+```
+
+Observed result:
+
+```text
+PASS  01 production escape corpus             exit=0   169.8s
+PASS  02 TD110 physical probes                exit=0   239.3s
+PASS  03 targeted Self-Extension regressions  exit=0   218.5s
+PASS  04 full forge_ai Self-Extension suite   exit=0   257.1s
+PASS  05 backend regression                   exit=0    74.2s
+
+Working tree clean: True
+Policy-only fallback: DISABLED
+
+TD110 production validation: ALL PASS
+```
+
+This run is the first complete physical-Windows proof of the production backend,
+not merely the isolated probe implementation.
+
+The evidence now establishes, on the actual Windows 10 Home distribution target:
+
+- AppContainer no-capability OS boundary is active.
+- outbound network and DNS escape tests are blocked.
+- host secrets and host environment are not inherited.
+- workspace write is allowed while host/outside access remains denied.
+- Job Object wall-clock, CPU, memory and active-process controls are exercised by
+  the production runner.
+- oversized workspace file growth is stopped.
+- real Python test/build/runtime execution succeeds in the sandbox.
+- real Dart execution succeeds through the AppContainer-safe
+  `dartvm.exe + package:` route, including kernel build/type-check gate.
+- the production escape corpus passes; Linux-only PID namespace / `os.fork`
+  observations are intentionally skipped on Windows and replaced by Windows Job
+  Object process-limit coverage.
+- the previously failing Self-Extension regression families pass.
+- the complete `forge_ai` Self-Extension suite passes.
+- backend regression passes.
+- generated execution does not rely on the weaker `policy-only` fallback.
+- the repository remains clean after validation.
+
+### Closure decision
+
+**Windows portion of TD110: RESOLVED on Windows 10 Home.**
+
+The tested production backend is:
+
+```text
+windows-appcontainer+job
+```
+
+and the Windows Self-Extension path now reaches the intended
+generate -> verify -> promote -> install/reuse behavior under OS isolation.
+
+This does **not** prove macOS sandbox support, Android/iOS device behavior,
+all 121 capabilities at 99%, or the global Security/Sandbox hard gate across
+every target OS. macOS remains unimplemented and must stay explicit in the
+capability matrix / tech-debt ledger rather than being hidden by the Windows pass.
