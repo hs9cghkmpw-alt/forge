@@ -44,7 +44,7 @@ def _strip_powershell_progress_clixml(value: str) -> str:
             continue
         if (
             stripped.startswith("<Objs Version=")
-            and "powershell.com/powershell/2004/04" in stripped
+            and "schemas.microsoft.com/powershell/2004/04" in stripped
         ):
             continue
         kept.append(line)
