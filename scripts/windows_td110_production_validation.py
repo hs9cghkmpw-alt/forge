@@ -83,7 +83,7 @@ def main() -> int:
     env.pop("FORGE_SANDBOX_ALLOW_POLICY_ONLY", None)
     env["PYTHONUTF8"] = "1"
 
-    steps = (
+    foundation_steps = (
         Step(
             "01 TD110 physical probes",
             (str(python), str(REPO / "scripts" / "windows_td110_batch.py")),
@@ -104,8 +104,28 @@ def main() -> int:
             ),
             REPO,
         ),
+    )
+
+    targeted_steps = (
         Step(
-            "03 full forge_ai Self-Extension suite",
+            "03 targeted Self-Extension regressions",
+            (
+                str(python),
+                "-m",
+                "unittest",
+                "forge_ai.tests.test_build_time_workspace",
+                "forge_ai.tests.test_dart_build_plan",
+                "forge_ai.tests.test_managed_build_time_implementer",
+                "forge_ai.tests.test_self_extension_e2e_real_build",
+                "forge_ai.tests.test_synthesizing_build_time_implementer",
+            ),
+            REPO,
+        ),
+    )
+
+    completion_steps = (
+        Step(
+            "04 full forge_ai Self-Extension suite",
             (
                 str(python),
                 "-m",
@@ -119,7 +139,7 @@ def main() -> int:
             REPO,
         ),
         Step(
-            "04 backend regression",
+            "05 backend regression",
             (
                 str(python),
                 "-m",
@@ -137,7 +157,30 @@ def main() -> int:
     print(f"Logs   : {run_dir}")
     print("Policy-only fallback: DISABLED")
 
-    results = [_run(step, run_dir, env) for step in steps]
+    results: list[Result] = []
+
+    # Do not spend an hour on the full suite when the OS boundary itself is
+    # already broken. Keep the user-facing workflow one-command, but gate the
+    # expensive layers behind the foundations they depend on.
+    for step in foundation_steps:
+        item = _run(step, run_dir, env)
+        results.append(item)
+        if item.exit_code != 0:
+            break
+
+    if all(item.exit_code == 0 for item in results):
+        for step in targeted_steps:
+            item = _run(step, run_dir, env)
+            results.append(item)
+            if item.exit_code != 0:
+                break
+
+    if len(results) == len(foundation_steps) + len(targeted_steps) and all(
+        item.exit_code == 0 for item in results
+    ):
+        for step in completion_steps:
+            results.append(_run(step, run_dir, env))
+
     failed = [item for item in results if item.exit_code != 0]
 
     print("\n=== Summary ===")
