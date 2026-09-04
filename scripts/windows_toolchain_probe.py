@@ -210,6 +210,179 @@ def _write_fixtures(workspace: Path) -> None:
     )
 
 
+def _toolchain_environment(
+    ctx: resource_probe.Context,
+    *,
+    python: Path,
+    dart: Path,
+) -> ctypes.Array:
+    """Build a secret-free Windows environment block for direct toolchain launch."""
+    workspace = ctx.workspace
+    private_home = workspace / ".sandbox-home"
+    private_roaming = private_home / "AppData" / "Roaming"
+    private_home.mkdir(parents=True, exist_ok=True)
+    private_roaming.mkdir(parents=True, exist_ok=True)
+
+    system_root = os.environ["SystemRoot"]
+    container_local = ctx.appcontainer_local
+    container_temp = container_local / "Temp"
+    container_temp.mkdir(parents=True, exist_ok=True)
+
+    drive = workspace.drive.upper()
+    path_value = ";".join(
+        dict.fromkeys(
+            (
+                str(python.parent),
+                str(dart.parent),
+                os.path.join(system_root, "System32"),
+                os.path.join(system_root, "System32", "WindowsPowerShell", "v1.0"),
+            )
+        )
+    )
+    entries = [
+        (f"={drive}", str(workspace)),
+        ("APPDATA", str(private_roaming)),
+        ("CI", "true"),
+        ("ComSpec", os.path.join(system_root, "System32", "cmd.exe")),
+        ("FORGE_BUILD_SANDBOX", "1"),
+        ("HOME", str(private_home)),
+        ("LOCALAPPDATA", str(container_local)),
+        ("PATH", path_value),
+        ("PYTHONNOUSERSITE", "1"),
+        ("PYTHONPATH", str(workspace)),
+        ("PYTHONSAFEPATH", "1"),
+        ("SystemRoot", system_root),
+        ("TEMP", str(container_temp)),
+        ("TMP", str(container_temp)),
+        ("TMPDIR", str(container_temp)),
+        ("USERPROFILE", str(private_home)),
+        ("WINDIR", system_root),
+    ]
+    entries.sort(key=lambda item: item[0].casefold())
+    block = "\0".join(f"{name}={value}" for name, value in entries) + "\0\0"
+    return ctypes.create_unicode_buffer(block)
+
+
+def _direct_appcontainer_run(
+    ctx: resource_probe.Context,
+    *,
+    executable: Path,
+    args: tuple[str, ...],
+    python: Path,
+    dart: Path,
+    timeout_ms: int = 20_000,
+) -> dict[str, object]:
+    """Launch one native toolchain process directly under AppContainer + Job."""
+    job = ctx._new_job(
+        flags=(
+            isolation.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            | isolation.JOB_OBJECT_LIMIT_ACTIVE_PROCESS
+            | isolation.JOB_OBJECT_LIMIT_PROCESS_MEMORY
+            | isolation.JOB_OBJECT_LIMIT_JOB_MEMORY
+        ),
+        active_process_limit=64,
+        process_memory=4 * 1024 * 1024 * 1024,
+        job_memory=8 * 1024 * 1024 * 1024,
+    )
+    pi = isolation.PROCESS_INFORMATION()
+    token = isolation.HANDLE()
+    result: dict[str, object] = {
+        "created": False,
+        "appcontainer_token": False,
+        "timed_out": False,
+        "exit_code": None,
+    }
+
+    try:
+        si = isolation.STARTUPINFOEXW()
+        si.StartupInfo.cb = ctypes.sizeof(si)
+        si.lpAttributeList = ctx.attr_list
+        env_block = _toolchain_environment(ctx, python=python, dart=dart)
+        command_line = ctypes.create_unicode_buffer(
+            subprocess.list2cmdline([str(executable), *args])
+        )
+
+        if not isolation.kernel32.CreateProcessW(
+            str(executable),
+            command_line,
+            None,
+            None,
+            False,
+            isolation.CREATE_SUSPENDED
+            | isolation.CREATE_UNICODE_ENVIRONMENT
+            | isolation.EXTENDED_STARTUPINFO_PRESENT,
+            ctypes.cast(env_block, isolation.LPVOID),
+            str(ctx.workspace),
+            ctypes.byref(si.StartupInfo),
+            ctypes.byref(pi),
+        ):
+            code = ctypes.get_last_error()
+            result["create_winerror"] = code
+            result["create_error"] = ctypes.FormatError(code).strip()
+            return result
+
+        result["created"] = True
+
+        if not isolation.advapi32.OpenProcessToken(
+            pi.hProcess, isolation.TOKEN_QUERY, ctypes.byref(token)
+        ):
+            code = ctypes.get_last_error()
+            result["token_winerror"] = code
+            result["token_error"] = ctypes.FormatError(code).strip()
+            return result
+
+        is_appcontainer = isolation.DWORD(0)
+        returned = isolation.DWORD(0)
+        if not isolation.advapi32.GetTokenInformation(
+            token,
+            isolation.TOKEN_IS_APP_CONTAINER,
+            ctypes.byref(is_appcontainer),
+            ctypes.sizeof(is_appcontainer),
+            ctypes.byref(returned),
+        ):
+            code = ctypes.get_last_error()
+            result["token_info_winerror"] = code
+            result["token_info_error"] = ctypes.FormatError(code).strip()
+            return result
+        result["appcontainer_token"] = bool(is_appcontainer.value)
+
+        if not isolation.kernel32.AssignProcessToJobObject(job, pi.hProcess):
+            code = ctypes.get_last_error()
+            result["job_winerror"] = code
+            result["job_error"] = ctypes.FormatError(code).strip()
+            return result
+
+        if isolation.kernel32.ResumeThread(pi.hThread) == 0xFFFFFFFF:
+            code = ctypes.get_last_error()
+            result["resume_winerror"] = code
+            result["resume_error"] = ctypes.FormatError(code).strip()
+            return result
+
+        wait = isolation.kernel32.WaitForSingleObject(pi.hProcess, timeout_ms)
+        if wait == isolation.WAIT_TIMEOUT:
+            result["timed_out"] = True
+            isolation.kernel32.TerminateJobObject(job, 124)
+            isolation.kernel32.WaitForSingleObject(pi.hProcess, 5_000)
+        elif wait != isolation.WAIT_OBJECT_0:
+            result["wait_code"] = int(wait)
+            return result
+
+        exit_code = isolation.DWORD(0)
+        if isolation.kernel32.GetExitCodeProcess(pi.hProcess, ctypes.byref(exit_code)):
+            result["exit_code"] = int(exit_code.value)
+            result["exit_code_hex"] = f"0x{int(exit_code.value):08X}"
+
+        return result
+    finally:
+        if token:
+            isolation.kernel32.CloseHandle(token)
+        if pi.hThread:
+            isolation.kernel32.CloseHandle(pi.hThread)
+        if pi.hProcess:
+            isolation.kernel32.CloseHandle(pi.hProcess)
+        isolation.kernel32.CloseHandle(job)
+
+
 def _ps_quote(value: str) -> str:
     return value.replace("'", "''")
 
