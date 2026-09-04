@@ -62,6 +62,59 @@
 
 ---
 
+## CI 緑が Sandbox の証明になっていなかった（2026-09-04、追記）
+
+**壊れているものを 1 つ直し、CI がそれを捕まえられなかった理由を塞ぎました。**
+
+### 何が起きていたか
+
+別 Agent の Windows 対応 commit に `import platform` の書き忘れがあり、
+**CI 緑のまま HEAD へ入っていました**（run `33843247140` は success）。
+しかし Linux 実機では forge_ai の試験が **4 件 FAIL** します。
+
+理由は、その行が **CI では skip される class の中にあった**ことです。
+GitHub Actions の runner は namespace を作れないので、Sandbox の
+escape corpus は class ごと skip されます（実測 **13 skipped**）。
+
+> **Sandbox が効くことを証明する試験が、CI では一度も走っていません。**
+> つまり CI 緑は「Sandbox が効いている」ことを何も意味していませんでした。
+
+### 直したこと
+
+1. `import platform` を追加（forge_ai **812 passed / 10 skipped**、FAIL 0）
+2. **CI へ静的検査を追加。** `ruff` は **既に `backend/requirements.txt` に
+   あったのに、どこからも呼ばれていませんでした**——このリポジトリが
+   繰り返している「作ったが呼ばれない」の一例です
+
+### 配線破壊で確かめました
+
+```text
+import platform を外す
+  → 新 lint gate      : 4 errors（捕まえる）
+  → CI 環境の pytest  : 14 passed / 13 skipped（捕まえない）
+```
+
+**lint が無ければ、同じバグはまた素通りします。**
+
+### まだ塞げていないこと（TD116）
+
+静的検査は「名前が無い」は見つけますが、**「隔離が破れた」は見つけません。**
+Sandbox の振る舞いは依然 CI で検証されていません。
+**「CI 緑 = Sandbox 検証済み」と読まないでください。**
+
+### 別 Agent の Windows 実装について
+
+`forge_ai/core/sandbox/windows_appcontainer.py`（1,040 行）と、CEO の実 Windows
+PC で採った Evidence（`docs/evidence/windows/WINDOWS-HOME-PC-BASELINE-20260904.md`）
+が入りました。**私はこれを検証していません**（この実行ホストに Windows が
+無いため）。先方の文書自身も「TD110 解決とは主張しない」と書いています。
+
+ただし **TECH_DEBT / CHANGELOG / Capability Matrix が実装より遅れています**。
+TD110 は依然「未実装」と書かれたままです。Windows の Status を上げるかどうかは、
+実機 Evidence を読んだうえで判断が要るため、**私の側では上げていません。**
+
+---
+
 ## Sandbox 実装と 121 能力の実態確定（2026-09-04）
 
 Base HEAD `ba0233f` から実装した。**今回は測り方ではなく、実際に穴を塞いだ。**

@@ -94,6 +94,26 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install --upgrade pip && pip install -r backend/requirements.txt
 
+      # ## なぜ lint を足したか（2026-09-04）
+      #
+      # `import platform` を書き忘れた test が **CI 緑のまま HEAD へ入った**。
+      # 理由は、その NameError を含む escape corpus が **CI では class ごと
+      # skip される**から（runner が namespace を作れないため）。
+      #
+      #   Sandbox が効くことを証明する試験が、CI では一度も走らない。
+      #
+      # したがって「試験が走らない環境でも壊れを捕まえる」層が要る。
+      # ruff は **既に backend/requirements.txt にあったのに、どこからも
+      # 呼ばれていなかった**（このリポジトリが繰り返す「作ったが呼ばれない」）。
+      #
+      # 選んだ規則は現在ゼロ件のものだけで、**雑音で無視される gate にしない**。
+      # F821 が今回の NameError を、E999 が構文破壊を捕まえる。
+      #
+      # **これは skip の代わりにならない。** 静的検査は「名前が無い」は
+      # 見つけるが「隔離が破れた」は見つけない。TD116 として残す。
+      - name: 静的検査（走らない試験の壊れを捕まえる）
+        run: python -m ruff check --select F821,F811,F632,F702,E999 backend forge_ai scripts
+
       - name: forge_ai tests
         working-directory: forge_ai
         run: python -m pytest tests -q

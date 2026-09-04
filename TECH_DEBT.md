@@ -4322,3 +4322,52 @@ opt-in を step ごとに書いていたため別 job の step に付け忘れ�
 再発防止: `unshare` を失敗する stub で置き換えて CI 環境を手元で再現する
 手順を確立した。opt-in あり 794 passed / 24 skipped、opt-in なし 9 failed
 （拒否が効いている）の両方を確認済み。Sandbox に触るときは必ずこれを通す。
+
+---
+
+## TD116. Sandbox の escape corpus が CI で一度も走らない（2026-09-04、新規、実測）
+
+**Sandbox が効くことを証明する試験が、CI では class ごと skip される。**
+
+GitHub Actions の runner は namespace を作れないため `available_backend()` が
+`None` を返し、`@_NEEDS_BACKEND` が `TestTheSandboxActuallyRunsThings` と
+`TestEscapeCorpus` を丸ごと skip する（実測: **13 skipped**）。
+
+これは fail closed の正しい帰結であり、素通しで PASS にするよりは正しい。
+しかし結果として、**CI 緑は「Sandbox が効いている」ことを何も意味しない。**
+
+### 実際に事故った（この負債を見つけた経緯）
+
+`import platform` を書き忘れた test が **CI 緑のまま HEAD へ入った**
+（run `33843247140` は success、しかし Linux 実機では 4 件 FAIL）。
+NameError を含む行が skip される class の中にあったためである。
+
+配線破壊で確かめた（2026-09-04）。
+
+```text
+import platform を外す
+  → 新 lint gate      : 4 errors（捕まえる）
+  → CI 環境の pytest  : 14 passed / 13 skipped（捕まえない）
+```
+
+### 部分的に塞いだもの
+
+`ruff check --select F821,F811,F632,F702,E999` を CI へ足した
+（ruff は **既に `backend/requirements.txt` にあったのに、どこからも
+呼ばれていなかった**）。選んだ規則は現在ゼロ件のものだけで、雑音で
+無視される gate にしていない。
+
+### 塞げていないもの（これが本体）
+
+**静的検査は「名前が無い」は見つけるが「隔離が破れた」は見つけない。**
+Sandbox の振る舞いそのものは依然として CI で検証されていない。
+
+採りうる案:
+
+| 案 | 見込み | 懸念 |
+|---|---|---|
+| CI で `docker run --privileged` の中へ corpus を入れる | namespace を作れる可能性が高い | 未実測。runner の設定に依存する |
+| self-hosted runner | 確実 | 0 円方針と運用負荷 |
+| corpus を Windows 実機の検証へ寄せる | TD110 の実機経路と合流できる | 手動であり毎 push では回らない |
+
+**どれも未実施。** それまでは「CI 緑 = Sandbox 検証済み」と読まないこと。

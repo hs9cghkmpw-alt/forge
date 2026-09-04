@@ -1,3 +1,22 @@
+# 2026-09-04 — CI 緑が Sandbox の証明になっていなかった
+
+`import platform` の書き忘れが **CI 緑のまま HEAD へ入っていた**
+（run `33843247140` success、しかし Linux 実機で 4 件 FAIL）。
+
+原因は CI の構造だった。runner が namespace を作れないため、Sandbox の
+escape corpus は **class ごと skip される**（実測 13 skipped）。
+**Sandbox が効くことを証明する試験が CI で一度も走っていなかった。**
+
+- `import platform` を追加（forge_ai 812 passed / 10 skipped、FAIL 0）
+- CI へ静的検査を追加（`ruff check --select F821,F811,F632,F702,E999`）。
+  **ruff は既に `backend/requirements.txt` にあったのに、どこからも
+  呼ばれていなかった**——「作ったが呼ばれない」の一例
+- 選んだ規則は現在ゼロ件のものだけ。雑音で無視される gate にしない
+- 配線破壊: import を外すと lint は 4 errors で落ち、CI 環境の pytest は
+  14 passed / 13 skipped で**捕まえない**
+- TD116 を追加。**静的検査は「隔離が破れた」は見つけない。**
+  「CI 緑 = Sandbox 検証済み」と読まない
+
 # 2026-09-04 — Sandbox 実装と 121 能力の実態確定
 
 **今回は測り方ではなく、実際に穴を塞いだ。**
