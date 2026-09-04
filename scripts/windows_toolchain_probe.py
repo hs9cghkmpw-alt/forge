@@ -449,6 +449,7 @@ $probe = [ordered]@{{
   dart_test = $false
   dart_analyze = $false
   dart_runtime = $false
+  exit_codes = [ordered]@{{}}
   errors = @()
 }}
 
@@ -467,11 +468,23 @@ $dartTestLog = Join-Path $workspace 'dart-test.log'
 $dartAnalyzeLog = Join-Path $workspace 'dart-analyze.log'
 $dartRuntimeLog = Join-Path $workspace 'dart-runtime.log'
 
-function Invoke-ProbeCommand([string]$Name, [scriptblock]$Command, [string]$LogPath) {{
+function Invoke-ProbeCommand(
+  [string]$Name,
+  [string]$FilePath,
+  [string[]]$ArgumentList,
+  [string]$LogPath
+) {{
+  $ErrorLog = "$LogPath.err"
   try {{
-    & $Command *> $LogPath
-    return ($LASTEXITCODE -eq 0)
+    $p = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -WorkingDirectory $workspace -RedirectStandardOutput $LogPath -RedirectStandardError $ErrorLog -PassThru -Wait -WindowStyle Hidden -ErrorAction Stop
+
+    $probe.exit_codes[$Name] = [int]$p.ExitCode
+    if (Test-Path -LiteralPath $ErrorLog) {{
+      Get-Content -LiteralPath $ErrorLog -ErrorAction SilentlyContinue | Add-Content -LiteralPath $LogPath -Encoding UTF8
+    }}
+    return ($p.ExitCode -eq 0)
   }} catch {{
+    $probe.exit_codes[$Name] = $null
     $message = "$($Name): $($_.Exception.GetType().FullName): $($_.Exception.Message)"
     $probe.errors += $message
     $message | Out-File -LiteralPath $LogPath -Encoding UTF8 -Append
@@ -479,14 +492,14 @@ function Invoke-ProbeCommand([string]$Name, [scriptblock]$Command, [string]$LogP
   }}
 }}
 
-$probe.python_smoke = Invoke-ProbeCommand 'python-smoke' {{ & '{py}' --version }} $pySmokeLog
-$probe.dart_smoke = Invoke-ProbeCommand 'dart-smoke' {{ & '{dart_exe}' --version }} $dartSmokeLog
-$probe.python_test = Invoke-ProbeCommand 'python-test' {{ & '{py}' $pyTest }} $pyTestLog
-$probe.python_build = Invoke-ProbeCommand 'python-build' {{ & '{py}' -m compileall -q $workspace }} $pyBuildLog
-$probe.python_runtime = Invoke-ProbeCommand 'python-runtime' {{ & '{py}' $pyProbe }} $pyRuntimeLog
-$probe.dart_test = Invoke-ProbeCommand 'dart-test' {{ & '{dart_exe}' run $dartTest }} $dartTestLog
-$probe.dart_analyze = Invoke-ProbeCommand 'dart-analyze' {{ & '{dart_exe}' analyze $dartImpl $dartTest $dartProbe }} $dartAnalyzeLog
-$probe.dart_runtime = Invoke-ProbeCommand 'dart-runtime' {{ & '{dart_exe}' run $dartProbe }} $dartRuntimeLog
+$probe.python_smoke = Invoke-ProbeCommand 'python-smoke' '{py}' @('--version') $pySmokeLog
+$probe.dart_smoke = Invoke-ProbeCommand 'dart-smoke' '{dart_exe}' @('--version') $dartSmokeLog
+$probe.python_test = Invoke-ProbeCommand 'python-test' '{py}' @($pyTest) $pyTestLog
+$probe.python_build = Invoke-ProbeCommand 'python-build' '{py}' @('-m','compileall','-q',$workspace) $pyBuildLog
+$probe.python_runtime = Invoke-ProbeCommand 'python-runtime' '{py}' @($pyProbe) $pyRuntimeLog
+$probe.dart_test = Invoke-ProbeCommand 'dart-test' '{dart_exe}' @('run',$dartTest) $dartTestLog
+$probe.dart_analyze = Invoke-ProbeCommand 'dart-analyze' '{dart_exe}' @('analyze',$dartImpl,$dartTest,$dartProbe) $dartAnalyzeLog
+$probe.dart_runtime = Invoke-ProbeCommand 'dart-runtime' '{dart_exe}' @('run',$dartProbe) $dartRuntimeLog
 
 $probe | ConvertTo-Json -Compress | Set-Content -LiteralPath '{result}' -Encoding UTF8
 if ($probe.python_visible -and $probe.dart_visible -and
