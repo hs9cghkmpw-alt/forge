@@ -139,7 +139,7 @@ def _venv_python() -> tuple[Path, Path]:
     return python, home
 
 
-def _dart_executable() -> tuple[Path, Path]:
+def _dart_executable() -> tuple[Path, Path, Path]:
     found = shutil.which("dart")
     if not found:
         raise RuntimeError("dart is not on PATH")
@@ -159,7 +159,11 @@ def _dart_executable() -> tuple[Path, Path]:
         raise RuntimeError(f"resolved Dart executable does not exist: {dart}")
     if not dart_sdk.is_dir():
         raise RuntimeError(f"resolved Dart SDK root does not exist: {dart_sdk}")
-    return dart, dart_sdk
+
+    dartvm = dart_sdk / "bin" / "dartvm.exe"
+    if not dartvm.is_file():
+        raise RuntimeError(f"resolved Dart VM executable does not exist: {dartvm}")
+    return dart, dart_sdk, dartvm
 
 
 def _write_fixtures(workspace: Path) -> None:
@@ -407,12 +411,14 @@ def _toolchain_script(
     workspace: Path,
     python: Path,
     dart: Path,
+    dartvm: Path,
     result_file: Path,
     appcontainer_local: Path,
 ) -> str:
     w = _ps_quote(str(workspace))
     py = _ps_quote(str(python))
     dart_exe = _ps_quote(str(dart))
+    dartvm_exe = _ps_quote(str(dartvm))
     result = _ps_quote(str(result_file))
     appcontainer_local_text = _ps_quote(str(appcontainer_local))
 
@@ -463,6 +469,7 @@ $probe = [ordered]@{{
                        [string]::IsNullOrEmpty($env:ANTHROPIC_API_KEY)
   python_visible = Test-Path -LiteralPath '{py}'
   dart_visible = Test-Path -LiteralPath '{dart_exe}'
+  dartvm_visible = Test-Path -LiteralPath '{dartvm_exe}'
   python_smoke = $false
   dart_smoke = $false
   python_test = $false
@@ -538,12 +545,17 @@ $probe.dart_runtime = Invoke-ProbeCommand 'dart-runtime' '{dart_exe}' @('run',$d
 # Bypass dartdev but keep the same Dart VM / frontend compiler. This is the
 # candidate production route for AppContainer: execute generated Dart directly
 # and force a kernel compilation as the build/type-checking gate.
-$probe.dart_vm_test = Invoke-ProbeCommand 'dart-vm-test' '{dart_exe}' @('--disable-dart-dev',$dartTest) $dartVmTestLog
-$probe.dart_vm_build = Invoke-ProbeCommand 'dart-vm-build' '{dart_exe}' @('--disable-dart-dev','--snapshot-kind=kernel',"--snapshot=$dartKernel",$dartTest) $dartVmBuildLog
-$probe.dart_vm_runtime = Invoke-ProbeCommand 'dart-vm-runtime' '{dart_exe}' @('--disable-dart-dev',$dartProbe) $dartVmRuntimeLog
+$dartVmIdentity = @(
+  "--executable_name={dartvm_exe}",
+  "--resolved_executable_name={dartvm_exe}"
+)
+
+$probe.dart_vm_test = Invoke-ProbeCommand 'dart-vm-test' '{dartvm_exe}' ($dartVmIdentity + @($dartTest)) $dartVmTestLog
+$probe.dart_vm_build = Invoke-ProbeCommand 'dart-vm-build' '{dartvm_exe}' ($dartVmIdentity + @('--snapshot-kind=kernel',"--snapshot=$dartKernel",$dartTest)) $dartVmBuildLog
+$probe.dart_vm_runtime = Invoke-ProbeCommand 'dart-vm-runtime' '{dartvm_exe}' ($dartVmIdentity + @($dartProbe)) $dartVmRuntimeLog
 
 $probe | ConvertTo-Json -Compress | Set-Content -LiteralPath '{result}' -Encoding UTF8
-if ($probe.python_visible -and $probe.dart_visible -and
+if ($probe.python_visible -and $probe.dart_visible -and $probe.dartvm_visible -and
     $probe.python_smoke -and $probe.dart_smoke -and
     $probe.python_test -and $probe.python_build -and $probe.python_runtime -and
     $probe.dart_vm_test -and $probe.dart_vm_build -and $probe.dart_vm_runtime -and
@@ -575,12 +587,13 @@ def main() -> int:
 
     try:
         python, python_home = _venv_python()
-        dart, dart_sdk = _dart_executable()
+        dart, dart_sdk, dartvm = _dart_executable()
 
         result["python_executable"] = str(python)
         result["python_home"] = str(python_home)
         result["dart_executable"] = str(dart)
         result["dart_sdk"] = str(dart_sdk)
+        result["dartvm_executable"] = str(dartvm)
 
         ctx = resource_probe.Context()
         result["moniker"] = ctx.moniker
@@ -630,16 +643,28 @@ def main() -> int:
             python=python,
             dart=dart,
         )
+        dartvm_direct = _direct_appcontainer_run(
+            ctx,
+            executable=dartvm,
+            args=(
+                f"--executable_name={dartvm}",
+                f"--resolved_executable_name={dartvm}",
+                "--version",
+            ),
+            python=python,
+            dart=dart,
+        )
         result["direct_smoke"] = {
             "python": python_direct,
             "dart": dart_direct,
+            "dartvm": dartvm_direct,
         }
         direct_smoke_ok = all(
             item.get("created") is True
             and item.get("appcontainer_token") is True
             and item.get("timed_out") is False
             and item.get("exit_code") == 0
-            for item in (python_direct, dart_direct)
+            for item in (python_direct, dart_direct, dartvm_direct)
         )
         result["direct_smoke_ok"] = direct_smoke_ok
 
@@ -659,6 +684,7 @@ def main() -> int:
             ctx.workspace,
             python,
             dart,
+            dartvm,
             result_file,
             ctx.appcontainer_local,
         )
@@ -730,6 +756,7 @@ def main() -> int:
             "host_secret_absent",
             "python_visible",
             "dart_visible",
+            "dartvm_visible",
             "python_smoke",
             "dart_smoke",
             "python_test",
