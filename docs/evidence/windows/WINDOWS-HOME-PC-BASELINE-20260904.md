@@ -326,3 +326,59 @@ The probe now tests two non-weakened alternatives in the same physical batch:
 The package route is the quality gate because it scales beyond command-line-sized
 single-file source. The data route is diagnostic evidence only if package routing
 still fails.
+
+
+## TD110 Stage 4 complete: real Python + Dart package route inside AppContainer
+
+Physical Windows 10 Home batch at commit
+`1a3acee2b0315bda0f1055a3f2ba38e0042c8224` returned:
+
+```text
+01-isolation-boundary      PASS
+02-job-resource-limits     PASS
+03-real-toolchains         PASS
+TD110 probe batch: ALL PASS
+```
+
+The real-toolchain evidence included:
+
+```text
+python_smoke         = true
+python_test          = true
+python_build         = true
+python_runtime       = true
+
+dartvm_visible       = true
+dart_package_test    = true
+dart_package_build   = true
+dart_package_runtime = true
+
+host_secret_absent   = true
+acl_cleanup          = true
+direct_smoke_ok      = true
+```
+
+The ordinary Windows `dart run` / `dart analyze` and direct file-path
+`dartvm.exe` routes remain incompatible with AppContainer because Dart asks
+Windows for a DOS-canonical path. That incompatibility is preserved as diagnostic
+evidence rather than hidden.
+
+The successful production candidate is:
+
+```text
+AppContainer + Job Object
+  -> dartvm.exe directly
+  -> explicit executable identity
+  -> sandbox-local package_config
+  -> package:forge_extension/<entry.dart>
+  -> kernel snapshot generation for build/type-check gate
+```
+
+This route keeps multi-file generated Dart and relative imports, does not grant
+network capabilities, and does not broaden host filesystem ACLs beyond temporary
+RX grants on the exact toolchain roots plus non-inheriting ancestor traversal.
+
+Stage 4 is complete. TD110 itself remains open until the production
+`forge_ai.core.sandbox` backend passes the physical full escape corpus and the
+previously failing Self-Extension generate -> verify -> promote -> install -> reuse
+tests on this machine.
