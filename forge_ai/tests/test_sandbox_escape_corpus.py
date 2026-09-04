@@ -205,14 +205,13 @@ class TestEscapeCorpus(_SandboxCase):
         )
 
     def test_processes_cannot_see_or_signal_the_host(self) -> None:
-        """**PID namespace が本体の防御である。**
+        """Linux PID namespace の host-process boundary を確認する。
 
-        中から見える process は自分たちだけで、host の process へは
-        届かない。`RLIMIT_NPROC` は数の上限にすぎず、しかも root では
-        強制されない（下の試験参照）。**数の上限だけに頼らない。**
+        Windows は PID namespace ではなく AppContainer access checks + Job
+        Object containment なので、同じ観測方法を無理に当てはめない。
         """
-        if not pid_isolation_available():
-            self.skipTest("PID namespace が取れない環境（弱い隔離である事実を skip として残す）")
+        if platform.system() != "Linux" or not pid_isolation_available():
+            self.skipTest("Linux PID namespace 専用の観測")
 
         result = self.run_python("""
             import os, signal
@@ -237,8 +236,8 @@ class TestEscapeCorpus(_SandboxCase):
         数の上限が効くのは非 root 実行のときだけであり、それは
         `describe_environment()['nproc_limit_effective']` に出る。
         """
-        if not pid_isolation_available():
-            self.skipTest("PID namespace が取れない環境")
+        if platform.system() != "Linux" or not pid_isolation_available():
+            self.skipTest("os.fork + Linux PID namespace 専用の観測")
 
         result = self.run_python("""
             import os, time
@@ -261,7 +260,12 @@ class TestEscapeCorpus(_SandboxCase):
         """**効かない制限を「効く」と書かない。**"""
         described = describe_environment()
         self.assertIn("nproc_limit_effective", described)
-        if os.geteuid() == 0:
+        if platform.system() == "Windows":
+            self.assertTrue(
+                described["nproc_limit_effective"],
+                "Windows Job Object ActiveProcessLimit が有効なのに無効と報告している",
+            )
+        elif hasattr(os, "geteuid") and os.geteuid() == 0:
             self.assertFalse(
                 described["nproc_limit_effective"],
                 "root なのに RLIMIT_NPROC が効くと報告している",
@@ -279,6 +283,9 @@ class TestEscapeCorpus(_SandboxCase):
         """, policy=SandboxPolicy(timeout_seconds=20, cpu_seconds=10,
                                   max_file_bytes=2 * 1024 * 1024))
         self.assertNotIn("ESCAPED", result.stdout, "ファイルサイズ上限が効いていない")
+        if platform.system() == "Windows":
+            self.assertFalse(result.ok, "Windows の workspace growth monitor が Job を止めていない")
+            self.assertIn("file limit exceeded", result.stderr.lower())
 
 
 class TestItFailsClosed(unittest.TestCase):
@@ -304,11 +311,11 @@ class TestItFailsClosed(unittest.TestCase):
             with self.assertRaises(SandboxUnavailable):
                 run_in_sandbox([sys.executable, "-c", "print(1)"], workspace=self.workspace)
 
-    def test_a_non_linux_platform_has_no_backend(self) -> None:
-        with patch("forge_ai.core.sandbox.runner.platform.system", return_value="Windows"):
+    def test_an_unimplemented_platform_has_no_backend(self) -> None:
+        with patch("forge_ai.core.sandbox.runner.platform.system", return_value="Darwin"):
             self.assertIsNone(
                 available_backend(),
-                "Windows backend は未実装である。**実装したことにしない**",
+                "未実装 platform を OS 隔離ありとして扱っている",
             )
 
     def test_network_cannot_be_opened_yet(self) -> None:
