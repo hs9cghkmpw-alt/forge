@@ -79,6 +79,7 @@ class CommandEvidence:
     |---|---|
     | `linux-namespace+pid` | OS 層あり（network / PID namespace + rlimit） |
     | `linux-namespace` | OS 層あり（PID namespace は取れなかった） |
+    | `windows-appcontainer+job` | OS 層あり（AppContainer + Job Object） |
     | `policy-only` | **OS 層なし。** Policy 層（AST 検査・実行ファイル固定・env scrub）のみ |
     | `""` | 実行していない、または隔離を通っていない |
 
@@ -88,8 +89,11 @@ class CommandEvidence:
 
     @property
     def os_isolated(self) -> bool:
-        """OS 層（namespace）の中で走ったか。`policy-only` は False。"""
-        return self.sandbox_backend.startswith("linux-namespace")
+        """OS 層の強制隔離で走ったか。`policy-only` は False。"""
+        return (
+            self.sandbox_backend.startswith("linux-namespace")
+            or self.sandbox_backend == "windows-appcontainer+job"
+        )
 
     @property
     def passed(self) -> bool:
@@ -268,14 +272,16 @@ class ManagedBuildWorkspaceRunner:
            一度だけ解決して固定し（あとから PATH を変えても差し替わらない）、
            環境変数を scrub する。静的 preflight（import / 実行ファイル
            allowlist）もここに属する。
-        2. **OS 層**（`forge_ai.core.sandbox`）——network namespace、
-           PID namespace、CPU / memory / file size の rlimit、壁時計 timeout。
+        2. **OS 層**（`forge_ai.core.sandbox`）——Linux は namespace +
+           rlimit、Windows は AppContainer + Job Object + workspace/output
+           growth monitor。どちらも network deny / resource bound / timeout
+           を OS boundary の中で強制する。
 
         Policy 層だけでは「読み落とした 1 つ」で破れる。OS 層だけでは
         どの実行ファイルが選ばれたか分からない。**両方要る。**
 
-        隔離できない環境（Windows / macOS の OS backend は未実装）では
-        **実行せずに失敗として返す**。`passed` が False になるので Promotion
+        隔離できない環境（macOS、または Windows backend を初期化できない
+        環境）では **実行せずに失敗として返す**。`passed` が False になるので Promotion
         まで進まない——fail closed である。「Sandbox が無いから素通しで動かす」
         は最悪の設計であり、それをしないことがこの分岐の目的である。
         """
