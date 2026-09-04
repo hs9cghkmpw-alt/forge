@@ -22,6 +22,10 @@ from forge_ai.core.orchestration.extension_manifest import (
 )
 from forge_ai.core.orchestration.extension_plan import ExtensionRoute
 from forge_ai.core.promotion.effects import EffectKind, inspect_generated_sources
+from forge_ai.core.promotion.attestation import (
+    canonical_permission_manifest_digest,
+)
+from forge_ai.core.promotion.dependencies import UnknownSecurityPolicy
 from forge_ai.core.promotion.gate import PromotionRequest, evaluate_promotion
 from forge_ai.core.sandbox.policy import (
     CapabilityTier,
@@ -210,6 +214,12 @@ def implement_build_time_extension(
     if not implementing.can_promote:
         return ExtensionImplementation(manifest=implementing, activation=None)
 
+    # build 時点の Permission Manifest を先に固定する。あとで比べるため
+    # であり、**同じ値を 2 回計算して自分と比べる茶番にしない**。
+    verified_permission_digest = canonical_permission_manifest_digest(
+        build.permission_manifest
+    )
+
     # **Promotion Gate。** ここを通らずに PROMOTED にはできない
     # （`promoted()` が決定を必須引数で要求する）。
     inspection = (
@@ -236,7 +246,22 @@ def implement_build_time_extension(
             promoted_source_digest=artifact.source_digest,
             verified_artifact_digest=build.runtime_fingerprint,
             promoted_artifact_digest=build.runtime_fingerprint,
+            # **Manifest digest を production で必須にする**（001A / Major 2）。
+            #
+            # verified = builder が返した Permission Manifest（build 時点）
+            # promoted = いま昇格しようとしている Permission Manifest
+            #
+            # 両者が違えば、build と昇格の間に権限・承認・出所が
+            # 書き換えられたということである。
+            verified_manifest_digest=verified_permission_digest,
+            promoted_manifest_digest=canonical_permission_manifest_digest(
+                build.permission_manifest
+            ),
             command_sources=build.command_sources,
+            # 生成 Capability の依存は「Forge が既に同梱していて、生成物の
+            # ために新規取得が発生しないもの」に限る。**それでも
+            # 「脆弱性が無いと確認した」ではない**（SEC-06 は PARTIAL のまま）。
+            unknown_security_policy=UnknownSecurityPolicy.ALLOW_IF_BUNDLED,
             extra_evidence={"route": manifest.route.value, "build_id": build.build_id},
         )
     )

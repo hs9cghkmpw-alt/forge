@@ -43,6 +43,10 @@ from forge_ai.core.promotion.dependencies import (
     DependencyVerdict,
     UnknownSecurityPolicy,
 )
+from forge_ai.core.promotion.attestation import (
+    PromotionAttestation,
+    canonical_permission_manifest_digest,
+)
 from forge_ai.core.promotion.effects import (
     EffectKind,
     SourceInspectionResult,
@@ -121,6 +125,12 @@ class PromotionDecision:
     allowed: bool
     rejections: tuple[RejectionDetail, ...]
     evidence: Mapping[str, object]
+    attestation: "PromotionAttestation | None" = None
+    """Gate が判定に使った**入力一式**。
+
+    受け取った側（Registry / Store）はこれで**再評価**する。
+    「通ったよ」という印を信じない（001A / Major 1）。
+    """
 
     @property
     def reasons(self) -> tuple[PromotionRejection, ...]:
@@ -198,9 +208,16 @@ class PromotionRequest:
     """build/test で実際に走らせた command 文字列。取得行為の走査対象。"""
 
     allowlist: DependencyAllowlist | None = None
-    unknown_security_policy: UnknownSecurityPolicy = (
-        UnknownSecurityPolicy.ALLOW_IF_BUNDLED
-    )
+    unknown_security_policy: UnknownSecurityPolicy = UnknownSecurityPolicy.REJECT
+    """**既定は拒否側**（001A / Medium 指摘）。
+
+    以前は既定が `ALLOW_IF_BUNDLED` で、docstring の「既定は拒否側」と
+    食い違っていた。重大 Gate の既定が黙って緩い側にあるのは危険なので、
+    **既定を REJECT へ揃えた。**
+
+    `ALLOW_IF_BUNDLED` を使う経路は、**呼び出し側が明示的に選ぶ**こと。
+    選んだ事実は Evidence の `unknown_security_policy` に残る。
+    """
     extra_evidence: Mapping[str, object] = field(default_factory=dict)
 
 
@@ -422,7 +439,16 @@ def _check_identity(request: PromotionRequest, out: list[RejectionDetail]) -> No
             )
     verified_manifest = request.verified_manifest_digest
     promoted_manifest = request.promoted_manifest_digest
-    if verified_manifest or promoted_manifest:
+    # **両方空なら拒否**（001A / Major 2）。以前は「どちらも空なら見ない」
+    # ため、production が渡し忘れても素通りしていた。
+    if not verified_manifest or not promoted_manifest:
+        out.append(
+            RejectionDetail(
+                PromotionRejection.ARTIFACT_DIGEST_MISSING,
+                "manifest digest が固定されていない（検証後の書き換えを検出できない）",
+            )
+        )
+    else:
         if verified_manifest != promoted_manifest:
             out.append(
                 RejectionDetail(
@@ -521,6 +547,7 @@ def evaluate_promotion(request: PromotionRequest) -> PromotionDecision:
         "declared_effects": sorted(e.value for e in request.declared_effects),
         "dependencies": verdict.to_dict() if verdict else None,
     }
+    evidence["unknown_security_policy"] = request.unknown_security_policy.value
     evidence.update(dict(request.extra_evidence))
 
     return PromotionDecision(
@@ -528,4 +555,155 @@ def evaluate_promotion(request: PromotionRequest) -> PromotionDecision:
         allowed=not rejections,
         rejections=tuple(rejections),
         evidence=MappingProxyType(evidence),
+        attestation=_attestation_for(request, manifest, inspection),
+    )
+
+
+def _attestation_for(
+    request: PromotionRequest,
+    manifest: PermissionManifest | None,
+    inspection: SourceInspectionResult | None,
+) -> PromotionAttestation:
+    """判定に使った入力一式を写し取る。**結論は入れない。**
+
+    結論を入れると「allowed=True と書けば通る」に戻ってしまう。
+    入れるのは入力だけで、受け取る側が再評価する。
+    """
+    return PromotionAttestation(
+        capability_id=request.capability_id,
+        requires_generated_source=request.requires_generated_source,
+        permissions=tuple(
+            sorted(getattr(p, "value", str(p)) for p in manifest.permissions)
+        )
+        if manifest is not None
+        else (),
+        declared_tier=(
+            manifest.declared_tier.value
+            if manifest is not None and manifest.declared_tier is not None
+            else None
+        ),
+        human_approval=bool(manifest.human_approval) if manifest else False,
+        approval_reference=manifest.approval_reference if manifest else "",
+        declared_effects=tuple(sorted(e.value for e in request.declared_effects)),
+        observed_effects=tuple(sorted(e.value for e in inspection.effects))
+        if inspection
+        else (),
+        observed_imports=tuple(sorted(inspection.imports)) if inspection else (),
+        internal_imports=tuple(sorted(inspection.internal_imports))
+        if inspection
+        else (),
+        files_inspected=inspection.files_inspected if inspection else 0,
+        sandbox_backend=request.sandbox_backend,
+        sandbox_policy_version=request.sandbox_policy_version,
+        sandbox_policy_digest=request.sandbox_policy_digest,
+        tests_pass=request.tests_pass,
+        build_pass=request.build_pass,
+        runtime_probe_pass=request.runtime_probe_pass,
+        source_digest=request.promoted_source_digest,
+        artifact_digest=request.promoted_artifact_digest,
+        permission_manifest_digest=canonical_permission_manifest_digest(manifest),
+        unknown_security_policy=request.unknown_security_policy.value,
+        command_sources=request.command_sources,
+    )
+
+
+def reevaluate_attestation(
+    attestation: PromotionAttestation,
+) -> PromotionDecision:
+    """Attestation の入力で **Gate をもう一度走らせる**（001A / Major 1）。
+
+    Registry と Store はこれを呼び、`allowed` になることを確かめてから
+    受け入れる。「通ったよ」という印を信じない。
+
+    偽造するには「本当に Gate を満たす入力一式」を作るしかなく、それは
+    偽造ではなく実際に条件を満たすことである。
+    """
+    from forge_ai.core.promotion.effects import EffectKind as _Effect
+
+    def _effects(values: tuple[str, ...]) -> frozenset[EffectKind]:
+        out: set[EffectKind] = set()
+        for value in values:
+            try:
+                out.add(_Effect(value))
+            except ValueError:
+                # 知らない Effect 名は UNKNOWN へ倒す。**安全側へ倒さない。**
+                out.add(_Effect.UNKNOWN)
+        return frozenset(out)
+
+    permissions: set[Permission] = set()
+    for value in attestation.permissions:
+        try:
+            permissions.add(Permission(value))
+        except ValueError:
+            # 未知 Permission は enum にできないので生値のまま渡す。
+            # Gate 側の `isinstance` 検査が UNKNOWN_PERMISSION で落とす。
+            permissions.add(value)  # type: ignore[arg-type]
+
+    manifest = (
+        PermissionManifest(
+            capability_id=attestation.capability_id,
+            permissions=frozenset(permissions),
+            declared_tier=(
+                CapabilityTier(attestation.declared_tier)
+                if attestation.declared_tier
+                else None
+            ),
+            human_approval=attestation.human_approval,
+            approval_reference=attestation.approval_reference,
+        )
+        if attestation.permission_manifest_digest
+        else None
+    )
+
+    # **Permission Manifest の digest も突き合わせる。** 再構成したものが
+    # 元と一致しなければ、Attestation の中身が書き換えられている。
+    if manifest is not None:
+        if canonical_permission_manifest_digest(manifest) != (
+            attestation.permission_manifest_digest
+        ):
+            return PromotionDecision(
+                capability_id=attestation.capability_id,
+                allowed=False,
+                rejections=(
+                    RejectionDetail(
+                        PromotionRejection.PERMISSION_MANIFEST_INVALID,
+                        "Attestation の Permission Manifest が書き換えられている",
+                    ),
+                ),
+                evidence=MappingProxyType({"reevaluated": True}),
+            )
+
+    inspection = SourceInspectionResult(
+        effects=_effects(attestation.observed_effects),
+        findings=(),
+        files_inspected=attestation.files_inspected,
+        imports=frozenset(attestation.observed_imports),
+        internal_imports=frozenset(attestation.internal_imports),
+    )
+
+    return evaluate_promotion(
+        PromotionRequest(
+            capability_id=attestation.capability_id,
+            requires_generated_source=attestation.requires_generated_source,
+            permission_manifest=manifest,
+            inspection=inspection,
+            declared_effects=_effects(attestation.declared_effects),
+            sandbox_backend=attestation.sandbox_backend,
+            sandbox_policy_version=attestation.sandbox_policy_version,
+            sandbox_policy_digest=attestation.sandbox_policy_digest,
+            tests_pass=attestation.tests_pass,
+            build_pass=attestation.build_pass,
+            runtime_probe_pass=attestation.runtime_probe_pass,
+            verified_source_digest=attestation.source_digest,
+            promoted_source_digest=attestation.source_digest,
+            verified_artifact_digest=attestation.artifact_digest,
+            promoted_artifact_digest=attestation.artifact_digest,
+            verified_manifest_digest=attestation.extension_manifest_digest,
+            promoted_manifest_digest=attestation.extension_manifest_digest,
+            command_sources=attestation.command_sources,
+            unknown_security_policy=UnknownSecurityPolicy(
+                attestation.unknown_security_policy
+            ),
+            extra_evidence={"reevaluated": True},
+        )
     )

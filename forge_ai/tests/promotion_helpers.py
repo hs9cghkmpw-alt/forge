@@ -7,6 +7,9 @@ Gate が壊れてもテストが緑のままになる——それは置物であ
 
 from __future__ import annotations
 
+from forge_ai.core.promotion.attestation import (
+    canonical_permission_manifest_digest,
+)
 from forge_ai.core.promotion.effects import SourceInspectionResult
 from forge_ai.core.promotion.gate import (
     PromotionDecision,
@@ -33,6 +36,12 @@ def allowed_decision(capability_id: str) -> PromotionDecision:
             permission_manifest=tier_a_manifest(capability_id),
             inspection=SourceInspectionResult(
                 effects=frozenset(), findings=(), files_inspected=0
+            ),
+            verified_manifest_digest=canonical_permission_manifest_digest(
+                tier_a_manifest(capability_id)
+            ),
+            promoted_manifest_digest=canonical_permission_manifest_digest(
+                tier_a_manifest(capability_id)
             ),
         )
     )

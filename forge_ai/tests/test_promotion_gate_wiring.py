@@ -135,7 +135,7 @@ class TestTheRegistryRefusesUngatedManifests(unittest.TestCase):
 
         with self.assertRaises(ValueError) as caught:
             registry.install(forged, _Activation())
-        self.assertIn("promotion decision digest", str(caught.exception))
+        self.assertIn("promotion attestation", str(caught.exception))
 
 
 class TestTheProductionDeclarativePathGoesThroughTheGate(unittest.TestCase):

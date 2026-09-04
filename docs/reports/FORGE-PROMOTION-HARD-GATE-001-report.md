@@ -269,3 +269,160 @@ CI からも走る。
 
 **Evidence が足りないものは上げていない。** EXT-10 と EXT-03 は実装が
 進んだが Status を据え置いた。
+
+
+---
+
+# 001A — 独立レビュー修正（2026-09-04）
+
+独立レビューで Major 2 件・Medium 1 件が残った。**指摘はすべて正しかった。**
+
+## Major 1: fake digest で Registry を通せた
+
+### 何が悪かったか
+
+```python
+if not manifest.promotion_decision_digest:
+    raise ValueError(...)
+```
+
+**非空かしか見ていなかった。** したがって
+
+```python
+replace(manifest, status=PROMOTED, promotion_decision_digest="fake")
+```
+
+で Registry を通せた。**実際に再現した**（修正前に走らせて確認）。
+
+> 「`promoted()` だけが digest を埋める」というコメントは、Python の
+> dataclass / `replace` に対する Security Boundary にならない。
+
+レビューのこの一文が核心である。私はコメントを保証と取り違えていた。
+
+### どう直したか——digest を信用するのをやめた
+
+Attestation は「通った」という**結論**ではなく、Gate が判定に使った
+**入力一式**を持つ。Registry と Store は、その入力で
+`evaluate_promotion` を**もう一度走らせて**から受け入れる。
+
+```text
+以前: 「通ったよ」という印を信じる
+いま: 「通ったと言うなら、その入力でもう一度やってみせろ」
+```
+
+install / load 時に見るもの:
+
+| # | 検査 | 何を止めるか |
+|---|---|---|
+| 1 | Attestation の存在 | Gate 未通過 |
+| 2 | capability_id 一致 | 他 Capability の決定の流用 |
+| 3 | digest == Attestation から再計算 | Attestation のすり替え |
+| 4 | Manifest digest 一致 | 検証後の Manifest 書き換え（TOCTOU） |
+| 5 | **再評価して allowed** | 「通ったよ」の自己申告 |
+| 6 | Activation の identity | 載せる物 ≠ 検証した物 |
+
+**Registry と Store は同じ 1 関数を呼ぶ**（`promotion_verification.py`）。
+2 箇所に書くとずれる——`os_isolated` で実際にずれた。
+
+### 正直な限界
+
+**同一プロセス内の任意コードに対する暗号的境界ではない。**
+`evaluate_promotion` 自体を差し替えられれば何でも通る。Python の
+プロセス内でこれ以上の保証は作れない。
+
+止まるのは「Gate を通さずに PROMOTED を名乗る」であり、偽造しようとすると
+**本当に Gate を満たす入力**を作る羽目になる。それは偽造ではない。
+
+## Major 2: Manifest digest が production 未配線
+
+`verified_manifest_digest` / `promoted_manifest_digest` は
+**両方空なら拒否されなかった**。しかも production はそれを渡していなかった。
+つまり既存の `test_a_swapped_manifest_is_refused` は人工的な unit test であり、
+production binding の証明になっていなかった——レビューの指摘どおりである。
+
+直したこと:
+
+- **両方空 → 拒否**（`artifact_digest_missing`）
+- BUILD_TIME は build 時点の Permission Manifest digest を先に固定し、
+  昇格時に計算し直して突き合わせる（**同じ値を 2 回計算して自分と比べる茶番にしない**）
+- 宣言経路も渡す
+- Attestation が `extension_manifest_digest`（status と promotion 系を除いた
+  ExtensionManifest の正準 digest）へ束縛される。**昇格後に route / evidence /
+  確認要否 / label を書き換えると install が落ちる**
+
+## Medium: UNKNOWN 依存 Policy の矛盾
+
+docstring は「既定は拒否側」、実装の既定は `ALLOW_IF_BUNDLED` だった。
+**docstring 側を正とし、既定を `REJECT` へ変更した。**
+
+`ALLOW_IF_BUNDLED` を使う経路は**呼び出し側が明示的に選ぶ**。
+選んだ事実は Evidence の `unknown_security_policy` に残る。
+
+本番 BUILD_TIME は `ALLOW_IF_BUNDLED` を明示的に選んでいる。理由は
+「Forge が既に同梱していて、生成物のための新規取得が発生しないもの」に
+限るからである。**それでも「脆弱性が無いと確認した」ではない。**
+SEC-06 は `PARTIAL` のままにする。
+
+## 追加破壊試験（22 件）
+
+| 攻撃 | 結果 |
+|---|---|
+| `promotion_decision_digest="fake"` | 拒否 |
+| ランダム 64hex digest | 拒否 |
+| Attestation は本物・digest だけ差し替え | 拒否 |
+| 他 Capability の決定を流用 | 拒否 |
+| 拒否される入力の Attestation を持ち込む | 拒否（再評価） |
+| 昇格後に確認要否を変更 | 拒否 |
+| 昇格後に route を変更 | 拒否 |
+| 昇格後に evidence を弱める | 拒否 |
+| Attestation の権限を追加（権限昇格） | 拒否 |
+| 人の承認を偽造 | 拒否 |
+| 承認の**出所**だけ書き換え | 拒否 |
+| 未 allowlist 依存へすり替え | 拒否 |
+| 危険 Effect を追加 | 拒否 |
+| Manifest 未束縛の Attestation | 拒否 |
+| `bound_to_manifest("")` | 拒否 |
+| **Store: 偽 digest + envelope SHA を再計算** | 拒否（load 時に再評価） |
+| Store: Attestation を剥がす | 拒否 |
+| Store: 保存後に権限を昇格 | 拒否 |
+| Store: 保存後に Manifest を編集 | 拒否 |
+
+**Store の SHA256 は改ざん検知の identity であって、Gate 通過の証明ではない。**
+正しく計算し直した改ざんは SHA では捕まらない。捕まえるのは再評価である。
+
+## Mutation: 26 → 36 件
+
+新設 10 件。**うち 4 件は最初 FAIL した**——私が書いたばかりの試験が
+置物だった。
+
+```text
+manifest_digest_presence_at_install  → 置物（試験を書き足して解消）
+manifest_digest_presence_in_gate     → 置物（同上）
+store_reverifies_on_load             → 置物（round-trip 改ざん試験へ差し替え）
+registry_requires_decision_digest    → 陳腐化（実装の変更に追随させた）
+```
+
+**書いた直後の試験でも置物になる。** 破壊試験をしなければ「PASS している」と
+報告していた。最終的に **36/36 検出**。
+
+Gate 拒否理由（enum）だけでなく、**Registry / Store の検証不変条件 10 件**も
+一覧化した。これが壊れると拒否理由を 1 つも変えずに偽造が通るためである。
+
+## 検証
+
+forge_ai **895 passed / 11 skipped**、backend **2073 passed / 16 skipped**、
+mutation **36/36 検出**、Capability Matrix PASS、Universal Quality PASS、lint PASS。
+
+## Windows 実機
+
+**Windows Sandbox backend 自体は変更していない。** ただし Promotion の
+**本番配線**を変えたので、Promotion 経路だけの再試験を用意した。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows_promotion_gate_revalidation.ps1
+```
+
+1 本で完結し、最後に `RESULT: ALL PASS` / `RESULT: FAIL (...)` が 1 行出る。
+`FORGE_SANDBOX_ALLOW_POLICY_ONLY` を**明示的に削除**してから走るので、
+policy-only で誤魔化した結果にはならない。
+**TD110 physical probes の全再実行は不要。**

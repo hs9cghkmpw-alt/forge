@@ -14,6 +14,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from forge_ai.core.orchestration.extension_activation import CapabilityActivation
+from forge_ai.core.orchestration.promotion_verification import (
+    verify_promotion_attestation,
+)
 from forge_ai.core.orchestration.extension_manifest import ExtensionManifest, ExtensionStatus
 from forge_ai.core.orchestration.extension_plan import ExtensionRoute
 
@@ -44,20 +47,32 @@ class PromotedCapabilityRegistry:
             raise ValueError("Only PROMOTED extensions may be installed for reuse.")
         if manifest.promotion_blockers():
             raise ValueError("PROMOTED manifest still has evidence blockers; refusing install.")
-        # `promoted()` だけが decision digest を埋める。空のまま PROMOTED を
-        # 名乗っている manifest は、Gate を通さず `replace()` で横から作られた
-        # ものである。**status を自己申告として信じない。**
-        if not manifest.promotion_decision_digest:
-            raise ValueError(
-                "PROMOTED manifest carries no promotion decision digest; "
-                "it did not pass the promotion gate. Refusing install."
-            )
+        # **「通った」という印を信じない**（001A / Major 1）。
+        #
+        # 以前はここで `promotion_decision_digest` が非空かだけを見ていた。
+        # したがって `replace(manifest, status=PROMOTED,
+        # promotion_decision_digest="fake")` で通せた。実際に再現した。
+        #
+        # いまは Attestation（Gate が使った入力一式）で**もう一度 Gate を
+        # 走らせて**から受け入れる。偽造するには「本当に Gate を満たす
+        # 入力」を作るしかなく、それは偽造ではない。
         if activation is None:
             raise ValueError(
                 "PROMOTED manifest has no executable activation; refusing metadata-only reuse."
             )
         if activation.capability_id != manifest.capability_id:
             raise ValueError("Activation changed capability identity; refusing install.")
+
+        # **「通った」という印を信じない**（001A / Major 1）。
+        #
+        # 以前はここで `promotion_decision_digest` が非空かだけを見ていた。
+        # したがって `replace(manifest, status=PROMOTED,
+        # promotion_decision_digest="fake")` で通せた。実際に再現した。
+        #
+        # いまは Attestation（Gate が使った入力一式）で**もう一度 Gate を
+        # 走らせて**から受け入れる。偽造するには「本当に Gate を満たす
+        # 入力」を作るしかなく、それは偽造ではない。
+        verify_promotion_attestation(manifest, activation=activation)
 
         if manifest.route in _IMMEDIATE_ROUTES:
             pass

@@ -23,6 +23,10 @@ from enum import Enum
 from hashlib import sha256
 
 from forge_ai.core.orchestration.extension_plan import ExtensionCandidate, ExtensionRoute
+from forge_ai.core.promotion.attestation import (
+    PromotionAttestation,
+    canonical_extension_manifest_digest,
+)
 from forge_ai.core.promotion.gate import PromotionDecision
 
 
@@ -60,14 +64,26 @@ class ExtensionManifest:
     status: ExtensionStatus = ExtensionStatus.DRAFT
     evidence: ExtensionEvidence = ExtensionEvidence()
     source_reason: str = ""
+    promotion_attestation: PromotionAttestation | None = None
+    """**Gate が判定に使った入力一式**（001A / Major 1）。
+
+    以前はここが digest 文字列だけで、Registry は「非空か」しか見ていな
+    かった。したがって `replace(manifest, status=PROMOTED,
+    promotion_decision_digest="fake")` で通せた——**実際に再現した。**
+
+    「`promoted()` だけが埋める」というコメントは、`dataclasses.replace`
+    に対する Security Boundary にならない。
+
+    いまは結論ではなく**入力**を持つ。Registry と Store はこれで
+    `reevaluate_attestation()` を走らせ、**もう一度 Gate を通す。**
+    """
+
     promotion_decision_digest: str = ""
-    """**Promotion Gate が実際に許可した証**（FORGE-PROMOTION-HARD-GATE-001）。
+    """`promotion_attestation` の指紋。**単独では信用されない。**
 
-    `promoted()` だけがこれを埋める。`replace(manifest, status=PROMOTED)` で
-    横から PROMOTED を名乗った manifest はここが空のままなので、
-    Registry がそれを見て install を拒否できる。
-
-    **空 = Gate を通っていない。**
+    Registry は「非空か」ではなく「Attestation から計算し直した値と
+    一致するか」を見る。すり替えを検出するための値であって、
+    通過の証明ではない。
     """
 
     def promotion_blockers(self) -> tuple[str, ...]:
@@ -122,10 +138,23 @@ class ExtensionManifest:
                 f"{decision.capability_id!r} != {self.capability_id!r}"
             )
         decision.require_allowed()
+        if decision.attestation is None:
+            raise ValueError(
+                "Promotion decision carries no attestation; refusing to promote. "
+                "A decision without its inputs cannot be re-verified at install."
+            )
+        # **昇格する Manifest そのものへ束縛する**（001A / Major 2）。
+        # status と promotion 系 field を除いた正準 digest なので、
+        # verified→promoted で値は変わらない。install 時に計算し直して
+        # 突き合わせるため、**検証後に Manifest を書き換えると落ちる。**
+        attestation = decision.attestation.bound_to_manifest(
+            canonical_extension_manifest_digest(self)
+        )
         return replace(
             self,
             status=ExtensionStatus.PROMOTED,
-            promotion_decision_digest=promotion_decision_digest(decision),
+            promotion_attestation=attestation,
+            promotion_decision_digest=attestation.digest(),
         )
 
 

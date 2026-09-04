@@ -62,6 +62,8 @@ EFFECTS = "forge_ai/core/promotion/effects.py"
 MANIFEST = "forge_ai/core/orchestration/extension_manifest.py"
 REGISTRY = "forge_ai/core/orchestration/extension_registry.py"
 DEPS = "forge_ai/core/promotion/dependencies.py"
+VERIFY = "forge_ai/core/orchestration/promotion_verification.py"
+STORE = "forge_ai/core/orchestration/extension_store.py"
 
 GATE_TESTS = ("forge_ai/tests/test_promotion_gate.py",)
 CORPUS_TESTS = ("forge_ai/tests/test_generated_source_effect_corpus.py",)
@@ -69,8 +71,31 @@ WIRING_TESTS = (
     "forge_ai/tests/test_promotion_gate_wiring.py",
     "forge_ai/tests/test_extension_registry.py",
 )
+FORGERY_TESTS = ("forge_ai/tests/test_promotion_forgery.py",)
+STORE_TESTS = (
+    "forge_ai/tests/test_promotion_forgery.py",
+    "forge_ai/tests/test_extension_store.py",
+)
 
 #: mutation を持たない理由が説明できる rejection。**「面倒だから」は理由でない。**
+#: Gate の拒否理由ではないが、**壊れたら偽造が通る**不変条件。
+#:
+#: Registry / Store 側の再検証は「拒否理由 enum」を持たない。しかし
+#: これが壊れると `PromotionRejection` を 1 つも変えずに偽造が通るので、
+#: 破壊試験の対象としては同格である。
+VERIFICATION_INVARIANTS = {
+    "attestation_missing",
+    "attestation_digest_mismatch",
+    "attestation_capability_mismatch",
+    "attestation_manifest_unbound",
+    "attestation_manifest_mismatch",
+    "attestation_not_reevaluated",
+    "attestation_permission_tampered",
+    "store_not_reverified",
+    "registry_not_reverified",
+    "unknown_security_default_relaxed",
+}
+
 UNMUTATED_REJECTIONS = {
     # capability_id 不一致は Manifest 検査と同じ if 連鎖の中にあり、
     # `permission_manifest_check` を壊すと同時に落ちる。
@@ -306,12 +331,103 @@ MUTATIONS: tuple[Mutation, ...] = (
         tests=WIRING_TESTS,
     ),
     Mutation(
-        name="registry_requires_decision_digest",
-        description="Gate を通っていない manifest を Registry へ入れられるようにする",
-        path=REGISTRY,
-        old="        if not manifest.promotion_decision_digest:",
+        name="attestation_required_at_install",
+        description="Attestation が無い PROMOTED を受け入れる（fake digest bypass）",
+        path=VERIFY,
+        old="    if attestation is None:",
+        new="    if False:",
+        tests=FORGERY_TESTS,
+        covers=("attestation_missing",),
+    ),
+    Mutation(
+        name="attestation_digest_binding",
+        description="digest と Attestation の不一致を見逃す（Attestation すり替え）",
+        path=VERIFY,
+        old="    if recomputed != manifest.promotion_decision_digest:",
+        new="    if False:",
+        tests=FORGERY_TESTS,
+        covers=("attestation_digest_mismatch",),
+    ),
+    Mutation(
+        name="attestation_capability_binding",
+        description="他 Capability の決定の流用を許す",
+        path=VERIFY,
+        old="    if attestation.capability_id != manifest.capability_id:",
+        new="    if False:",
+        tests=FORGERY_TESTS,
+        covers=("attestation_capability_mismatch",),
+    ),
+    Mutation(
+        name="manifest_digest_presence_at_install",
+        description="Manifest へ束縛されていない Attestation を許す",
+        path=VERIFY,
+        old="    if not attestation.extension_manifest_digest:",
+        new="    if False:",
+        tests=FORGERY_TESTS,
+        covers=("attestation_manifest_unbound",),
+    ),
+    Mutation(
+        name="manifest_digest_binding_at_install",
+        description="検証後の Manifest 書き換えを見逃す（TOCTOU）",
+        path=VERIFY,
+        old="    if attestation.extension_manifest_digest != expected_manifest_digest:",
+        new="    if False:",
+        tests=FORGERY_TESTS,
+        covers=("attestation_manifest_mismatch",),
+    ),
+    Mutation(
+        name="attestation_reevaluation",
+        description="Attestation を再評価せずに信じる（「通ったよ」を信用する）",
+        path=VERIFY,
+        old="    if not decision.allowed:",
+        new="    if False:",
+        tests=FORGERY_TESTS,
+        covers=("attestation_not_reevaluated",),
+    ),
+    Mutation(
+        name="permission_manifest_reconstruction_check",
+        description="Attestation 内の Permission 改変を見逃す（権限昇格）",
+        path=GATE,
+        old="        if canonical_permission_manifest_digest(manifest) != (\n            attestation.permission_manifest_digest\n        ):",
         new="        if False:",
-        tests=WIRING_TESTS,
+        tests=FORGERY_TESTS,
+        covers=("attestation_permission_tampered",),
+    ),
+    Mutation(
+        name="manifest_digest_presence_in_gate",
+        description="manifest digest 欠落のまま Promotion を通す",
+        path=GATE,
+        old="    if not verified_manifest or not promoted_manifest:",
+        new="    if False:",
+        tests=GATE_TESTS,
+        covers=("artifact_digest_missing",),
+    ),
+    Mutation(
+        name="store_reverifies_on_load",
+        description="Store が load 時に再検証しない（SHA を通過証明として信じる）",
+        path=STORE,
+        old="        verify_promotion_attestation(manifest)",
+        new="        pass",
+        tests=STORE_TESTS,
+        covers=("store_not_reverified",),
+    ),
+    Mutation(
+        name="unknown_security_default_is_reject",
+        description="UNKNOWN 依存の既定を緩い側へ戻す",
+        path=GATE,
+        old="    unknown_security_policy: UnknownSecurityPolicy = UnknownSecurityPolicy.REJECT",
+        new="    unknown_security_policy: UnknownSecurityPolicy = UnknownSecurityPolicy.ALLOW_IF_BUNDLED",
+        tests=GATE_TESTS,
+        covers=("unknown_security_default_relaxed",),
+    ),
+    Mutation(
+        name="registry_calls_the_verifier",
+        description="Registry が再検証を呼ばない（Gate 未通過を素通し）",
+        path=REGISTRY,
+        old="        verify_promotion_attestation(manifest, activation=activation)",
+        new="        pass",
+        tests=WIRING_TESTS + FORGERY_TESTS,
+        covers=("registry_not_reverified",),
     ),
 )
 

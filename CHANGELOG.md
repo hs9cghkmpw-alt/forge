@@ -1,3 +1,33 @@
+# 2026-09-04 — 001A 独立レビュー修正（Promotion Gate）
+
+**Major 2 件・Medium 1 件。指摘はすべて正しかった。**
+
+- **Major 1**: Registry が `promotion_decision_digest` の非空しか見ておらず、
+  `replace(manifest, status=PROMOTED, promotion_decision_digest="fake")` で
+  Gate を迂回できた。**修正前に実際に再現した。**
+  → digest を信用するのをやめ、**Gate の入力一式（Attestation）**を持たせて
+  Registry と Store が **再評価**してから受け入れる形にした。
+  検査は共通の 1 関数（`promotion_verification.py`）。2 箇所に書かない。
+- **Major 2**: manifest digest は両方空なら検査されず、production も渡して
+  いなかった。→ 空なら拒否し、BUILD_TIME / 宣言経路の両方へ配線。
+  Attestation が ExtensionManifest の正準 digest へ束縛される。
+- **Medium**: UNKNOWN 依存の既定が docstring（拒否）と実装（許可）で
+  食い違っていた。→ **既定を REJECT へ揃えた。** 許可は明示選択で、
+  選んだ事実が Evidence に残る。SEC-06 は PARTIAL 維持。
+
+偽造拒否の破壊試験 22 件（fake digest / ランダム digest / 他 Capability の
+決定流用 / 拒否入力 / 昇格後の Manifest 改変 / 権限昇格 / 承認偽造 /
+承認出所の書き換え / 依存すり替え / **Store の envelope SHA を再計算した
+改ざん**）。
+
+mutation 26 → **36 件**。新設 10 件のうち **4 件は最初 FAIL した**——
+書いたばかりの試験が置物だった。すべて直して 36/36 検出。
+
+Windows Sandbox backend は未変更。本番配線を変えたため、Promotion 経路
+だけの実機再試験を 1 本の script で用意（`scripts/windows_promotion_gate_revalidation.ps1`）。
+
+forge_ai 895 passed、backend 2073 passed、Matrix PASS、UQ PASS、lint PASS。
+
 # 2026-09-04 — Promotion 安全 Gate（FORGE-PROMOTION-HARD-GATE-001）
 
 生成物の正式採用を許す判定点を **1 つ**へ集約した。

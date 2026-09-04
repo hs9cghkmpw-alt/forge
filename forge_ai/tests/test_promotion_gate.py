@@ -63,6 +63,8 @@ def _good_request(**overrides) -> PromotionRequest:
         promoted_source_digest="s" * 64,
         verified_artifact_digest="f" * 64,
         promoted_artifact_digest="f" * 64,
+        verified_manifest_digest="m" * 64,
+        promoted_manifest_digest="m" * 64,
     )
     base.update(overrides)
     return PromotionRequest(**base)
@@ -339,6 +341,25 @@ class TestVerifiedArtifactEqualsPromotedArtifact(unittest.TestCase):
         self.assertFalse(decision.allowed)
         self.assertIn(PromotionRejection.ARTIFACT_DIGEST_MISSING, decision.reasons)
 
+    def test_a_missing_manifest_digest_is_refused(self) -> None:
+        """**両方空なら拒否**（001A / Major 2）。
+
+        以前は「どちらも空なら見ない」だったので、production が渡し忘れても
+        素通りしていた。渡し忘れを検出できない Gate は Gate ではない。
+        """
+        decision = evaluate_promotion(
+            _good_request(
+                verified_manifest_digest="", promoted_manifest_digest=""
+            )
+        )
+        self.assertFalse(decision.allowed)
+        self.assertIn(PromotionRejection.ARTIFACT_DIGEST_MISSING, decision.reasons)
+
+    def test_a_half_missing_manifest_digest_is_refused(self) -> None:
+        decision = evaluate_promotion(_good_request(promoted_manifest_digest=""))
+        self.assertFalse(decision.allowed)
+        self.assertIn(PromotionRejection.ARTIFACT_DIGEST_MISSING, decision.reasons)
+
     def test_a_swapped_manifest_is_refused(self) -> None:
         decision = evaluate_promotion(
             _good_request(
@@ -371,8 +392,27 @@ class TestDependencyPolicy(unittest.TestCase):
             files_inspected=1,
             imports=frozenset({"dart:math", "package:flutter/material.dart"}),
         )
-        decision = evaluate_promotion(_good_request(inspection=inspection))
+        decision = evaluate_promotion(
+            _good_request(
+                inspection=inspection,
+                unknown_security_policy=UnknownSecurityPolicy.ALLOW_IF_BUNDLED,
+            )
+        )
         self.assertTrue(decision.allowed, decision.to_dict())
+
+    def test_the_default_policy_refuses_unknown_security_status(self) -> None:
+        """**既定は拒否側**（001A / Medium）。明示的に選ばない限り通さない。"""
+        inspection = SourceInspectionResult(
+            effects=frozenset(),
+            findings=(),
+            files_inspected=1,
+            imports=frozenset({"dart:math"}),
+        )
+        decision = evaluate_promotion(_good_request(inspection=inspection))
+        self.assertFalse(decision.allowed)
+        self.assertIn(
+            PromotionRejection.DEPENDENCY_SECURITY_UNKNOWN, decision.reasons
+        )
 
     def test_unknown_security_status_can_be_refused_by_policy(self) -> None:
         """**UNKNOWN を安全扱いしない Policy が選べること。**"""
@@ -501,8 +541,26 @@ class TestEveryCriticalGateIsMutationCovered(unittest.TestCase):
 
     def test_no_mutation_points_at_a_removed_reason(self) -> None:
         module = _load_mutation_runner()
-        all_reasons = {reason.value for reason in PromotionRejection}
-        stale = sorted({v for m in module.MUTATIONS for v in m.covers} - all_reasons)
+        known = {reason.value for reason in PromotionRejection}
+        known |= set(module.VERIFICATION_INVARIANTS)
+        stale = sorted({v for m in module.MUTATIONS for v in m.covers} - known)
         self.assertEqual(
-            [], stale, "存在しない拒否理由を指している mutation: " + ", ".join(stale)
+            [],
+            stale,
+            "拒否理由でも検証不変条件でもないものを指している mutation: "
+            + ", ".join(stale),
+        )
+
+    def test_every_verification_invariant_has_a_mutation(self) -> None:
+        """**Registry / Store 側の不変条件も全数**（001A）。
+
+        ここが漏れると、拒否理由 enum を 1 つも変えずに偽造が通る。
+        """
+        module = _load_mutation_runner()
+        covered = {value for m in module.MUTATIONS for value in m.covers}
+        missing = sorted(set(module.VERIFICATION_INVARIANTS) - covered)
+        self.assertEqual(
+            [],
+            missing,
+            "この検証不変条件に対応する mutation が無い: " + ", ".join(missing),
         )

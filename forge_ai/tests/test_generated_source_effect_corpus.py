@@ -296,6 +296,8 @@ class TestTheDangerousCorpusIsCaught(unittest.TestCase):
                     promoted_source_digest="s" * 64,
                     verified_artifact_digest="f" * 64,
                     promoted_artifact_digest="f" * 64,
+                    verified_manifest_digest="m" * 64,
+                    promoted_manifest_digest="m" * 64,
                 )
             )
             if decision.allowed:
@@ -394,6 +396,7 @@ class TestTheRealGeneratedArtifactShapeIsAccepted(unittest.TestCase):
 
     def test_the_real_artifact_shape_passes_the_dependency_gate(self) -> None:
         """この形が Promotion を通ること。**通らない Gate は壁である。**"""
+        from forge_ai.core.promotion.dependencies import UnknownSecurityPolicy
         from forge_ai.core.promotion.gate import (
             PromotionRequest,
             evaluate_promotion,
@@ -406,6 +409,9 @@ class TestTheRealGeneratedArtifactShapeIsAccepted(unittest.TestCase):
 
         decision = evaluate_promotion(
             PromotionRequest(
+                # 同梱依存（flutter/material 等）を使うので、本番と同じく
+                # ALLOW_IF_BUNDLED を**明示的に**選ぶ。既定は REJECT である。
+                unknown_security_policy=UnknownSecurityPolicy.ALLOW_IF_BUNDLED,
                 capability_id="view.acquired_grid",
                 requires_generated_source=True,
                 permission_manifest=PermissionManifest(
@@ -424,6 +430,8 @@ class TestTheRealGeneratedArtifactShapeIsAccepted(unittest.TestCase):
                 promoted_source_digest="s" * 64,
                 verified_artifact_digest="f" * 64,
                 promoted_artifact_digest="f" * 64,
+                verified_manifest_digest="m" * 64,
+                promoted_manifest_digest="m" * 64,
             )
         )
         self.assertTrue(decision.allowed, decision.to_dict())

@@ -23,6 +23,11 @@ from forge_ai.core.orchestration.declarative_extension import (
     DeclarativeCapabilityArtifact,
     DeclarativePrimitiveRef,
 )
+from forge_ai.core.promotion.attestation import PromotionAttestation
+from forge_ai.core.orchestration.promotion_verification import (
+    PromotionVerificationError,
+    verify_promotion_attestation,
+)
 from forge_ai.core.orchestration.extension_manifest import (
     ExtensionEvidence,
     ExtensionManifest,
@@ -60,7 +65,16 @@ def _payload(manifest: ExtensionManifest, artifact: DeclarativeCapabilityArtifac
             "source_reason": manifest.source_reason,
             # Gate を通った証。**保存しないと再読込で消え、Registry が
             # 「Gate 未通過」として拒否する**（2026-09-04、実際に落ちた）。
+            #
+            # 001A: digest だけでなく **Attestation（Gate の入力一式）**を
+            # 保存する。load 側はこれで Gate を再評価する。
+            # **Store の SHA256 は改ざん検知であって、Gate 通過の証明ではない。**
             "promotion_decision_digest": manifest.promotion_decision_digest,
+            "promotion_attestation": (
+                manifest.promotion_attestation.to_dict()
+                if manifest.promotion_attestation is not None
+                else None
+            ),
         },
         "artifact": {
             "capability_id": artifact.capability_id,
@@ -139,6 +153,11 @@ def load_promoted_declarative_extension(path: str | Path) -> PromotedCapability:
             promotion_decision_digest=str(
                 manifest_raw.get("promotion_decision_digest", "")
             ),
+            promotion_attestation=(
+                PromotionAttestation.from_dict(manifest_raw["promotion_attestation"])
+                if manifest_raw.get("promotion_attestation")
+                else None
+            ),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ExtensionStoreError(f"Invalid stored manifest: {exc}") from exc
@@ -167,10 +186,15 @@ def load_promoted_declarative_extension(path: str | Path) -> PromotedCapability:
 
     if manifest.status is not ExtensionStatus.PROMOTED or manifest.promotion_blockers():
         raise ExtensionStoreError("Stored manifest is not blocker-free PROMOTED evidence.")
-    if not manifest.promotion_decision_digest:
+    # **Store の整合 digest を「Gate を通った証明」として信用しない。**
+    # あれは改ざん検知用の identity であって、中身が Gate を満たすことは
+    # 何も言わない。したがって load 側でも **Gate を再評価する**。
+    try:
+        verify_promotion_attestation(manifest)
+    except PromotionVerificationError as error:
         raise ExtensionStoreError(
-            "Stored manifest carries no promotion decision digest; it did not pass the gate."
-        )
+            f"Stored manifest does not pass promotion re-verification: {error}"
+        ) from error
     if manifest.route is not ExtensionRoute.DECLARATIVE:
         raise ExtensionStoreError("Stored extension is not DECLARATIVE.")
     if manifest.capability_id != artifact.capability_id:

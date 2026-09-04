@@ -26,6 +26,9 @@ from forge_ai.core.orchestration.extension_manifest import (
     ExtensionStatus,
 )
 from forge_ai.core.orchestration.extension_plan import ExtensionRoute
+from forge_ai.core.promotion.attestation import (
+    canonical_permission_manifest_digest,
+)
 from forge_ai.core.promotion.gate import PromotionRequest, evaluate_promotion
 from forge_ai.core.sandbox.policy import (
     CapabilityTier,
@@ -166,6 +169,8 @@ def implement_declarative_extension(
             capability_id=manifest.capability_id,
             requires_generated_source=False,
             permission_manifest=permissions,
+            verified_manifest_digest=canonical_permission_manifest_digest(permissions),
+            promoted_manifest_digest=canonical_permission_manifest_digest(permissions),
             extra_evidence={
                 "route": manifest.route.value,
                 "permission_manifest_source": (
