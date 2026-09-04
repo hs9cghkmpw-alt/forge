@@ -205,17 +205,30 @@ class TestEscapeCorpus(_SandboxCase):
         """, policy=SandboxPolicy(timeout_seconds=20, cpu_seconds=10,
                                   memory_bytes=256 * 1024 * 1024))
         if platform.system() == "Windows":
-            # Job Object memory limits may fail an allocation or terminate the
-            # offending process outright. Either is valid only if the wall-clock
-            # timeout did NOT do the stopping.
-            self.assertFalse(result.ok, f"memory bomb escaped: {result.to_dict()}")
+            # Job Object memory limits have two valid observable outcomes:
+            #
+            # 1) Python receives allocation failure, raises MemoryError, the test
+            #    program catches it and exits 0 after printing the marker; or
+            # 2) Windows terminates the offending process before Python can
+            #    surface MemoryError.
+            #
+            # The physical Windows 10 Home production run observed (1):
+            # stdout_bytes=22 is the CRLF form of "blocked: MemoryError".
+            # Treating every exit-0 as an escape was therefore a false negative.
             self.assertFalse(
                 result.timed_out,
                 f"memory bomb reached wall timeout; Job memory limit is not proven: {result.to_dict()}",
             )
-            self.assertNotEqual(
-                result.exit_code, 0,
-                f"memory bomb exited successfully despite the limit: {result.to_dict()}",
+            handled_allocation_failure = "blocked: MemoryError" in result.stdout
+            hard_termination = (
+                not result.ok
+                and result.exit_code not in (None, 0)
+            )
+            self.assertTrue(
+                handled_allocation_failure or hard_termination,
+                "Windows memory limit neither raised MemoryError nor terminated "
+                f"the process: {result.to_dict()} stdout={result.stdout!r} "
+                f"stderr={result.stderr!r}",
             )
         else:
             # POSIX RLIMIT_AS is expected to surface as MemoryError.
