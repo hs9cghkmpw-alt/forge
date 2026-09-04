@@ -118,6 +118,19 @@ jobs:
         working-directory: forge_ai
         run: python -m pytest tests -q
 
+      # ## Promotion Gate の破壊試験を CI で回す（FORGE-PROMOTION-HARD-GATE-001）
+      #
+      # 「テストを書いた」と「Gate が効いている」は別である。Guard を 1 つずつ
+      # 壊して、対応するテストが落ちることを機械で全数確認する。
+      #
+      # **手で壊していた頃は「今回壊した分だけ」しか分からなかった。**
+      # 壊し忘れた Guard は永久に未検証で、実際に置物を 2 件作った。
+      #
+      # Gate を足して mutation を足し忘れると
+      # `test_every_critical_gate_is_mutation_covered` が落ちる。
+      - name: Promotion Gate の配線破壊試験（全数）
+        run: python scripts/promotion_mutation_runner.py
+
       - name: backend tests
         working-directory: backend
         # 実APIは呼ばない（FORGE_LIVE_TEST を設定しない = test_live_api.py は自分でSKIPする）。

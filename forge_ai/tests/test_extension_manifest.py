@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from forge_ai.tests.promotion_helpers import allowed_decision
+
+
+def _gate_promote(manifest):
+    """本物の Gate を通して PROMOTED にする。"""
+    return manifest.promoted(allowed_decision(manifest.capability_id))
+
 from dataclasses import replace
 
 import pytest
@@ -68,7 +75,7 @@ def test_safe_capability_can_promote_only_after_full_reusable_evidence() -> None
     )
 
     verified = manifest.verified()
-    promoted = verified.promoted()
+    promoted = _gate_promote(verified)
 
     assert verified.status is ExtensionStatus.VERIFIED
     assert promoted.status is ExtensionStatus.PROMOTED
@@ -84,7 +91,7 @@ def test_sensitive_effect_requires_safety_review_in_addition_to_runtime_proof() 
         manifest.verified()
 
     manifest = replace(manifest, evidence=_complete_evidence(safety_review=True))
-    assert manifest.verified().promoted().status is ExtensionStatus.PROMOTED
+    assert _gate_promote(manifest.verified()).status is ExtensionStatus.PROMOTED
 
 
 def test_unresolved_semantic_gap_cannot_skip_decomposition() -> None:

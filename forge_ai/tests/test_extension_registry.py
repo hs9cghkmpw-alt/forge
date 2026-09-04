@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from forge_ai.tests.promotion_helpers import allowed_decision
+
+
+def _gate_promote(manifest):
+    """本物の Gate を通して PROMOTED にする。"""
+    return manifest.promoted(allowed_decision(manifest.capability_id))
+
 from dataclasses import dataclass, replace
 
 import pytest
@@ -31,7 +38,7 @@ def _promoted_manifest(route: ExtensionRoute = ExtensionRoute.DECLARATIVE):
         tests_pass=True, build_pass=True, runtime_evidence=True,
         sandbox_preflight=route is ExtensionRoute.BUILD_TIME,
     )
-    return replace(manifest, evidence=evidence).verified().promoted()
+    return _gate_promote(replace(manifest, evidence=evidence).verified())
 
 
 def test_promoted_declarative_capability_changes_effective_support_for_retry() -> None:

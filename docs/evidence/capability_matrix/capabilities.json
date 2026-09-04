@@ -1089,7 +1089,9 @@
       "implementation_evidence": [
         "forge_ai/core/orchestration/extension_manifest.py",
         "forge_ai/core/sandbox/policy.py",
-        "forge_ai/tests/test_capability_permission_policy.py"
+        "forge_ai/tests/test_capability_permission_policy.py",
+        "forge_ai/core/promotion/gate.py",
+        "forge_ai/tests/test_promotion_gate.py"
       ],
       "measured": {
         "episodes": 0,
@@ -1097,9 +1099,9 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "Permission Manifest は出来たが、**Promotion 判定へまだ配線していない**（ADR-015 §6）",
+      "remaining_gap": "Permission Manifest が Promotion 判定へ**実際に配線された**（TD112 解消）。Manifest 欠落 / 不正 / 未知 Permission / Tier 偽装 / Tier C 無承認 / 承認出所なしをすべて拒否し、破壊試験で検出を確認。**残り**: 宣言 Capability の Permission は導出であり、artifact が effect を表現できるようになったら明示宣言へ切り替えが要る（TD118）",
       "blocking_tech_debt": [],
-      "next_proof": "Manifest 欠落で Promotion が落ちることを配線破壊で示す",
+      "next_proof": "Capability Contract へ Permission を明示的に持たせる",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
@@ -1346,7 +1348,9 @@
       "evidence_status": "UNIT_AND_INTEGRATION",
       "implementation_evidence": [
         "forge_ai/core/sandbox/policy.py",
-        "forge_ai/tests/test_capability_permission_policy.py"
+        "forge_ai/tests/test_capability_permission_policy.py",
+        "forge_ai/core/promotion/effects.py",
+        "forge_ai/core/promotion/gate.py"
       ],
       "measured": {
         "episodes": 0,
@@ -1354,11 +1358,11 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "Tier 判定は動くが、P0/P1 の危険検出そのもの（AST/Effect 解析）が無い",
+      "remaining_gap": "Tier 計算に加えて、危険 Effect の検出そのものが入った（P0 相当 10 種を禁止 Effect として拒否）。宣言 Permission より強い Effect は権限昇格として拒否する。**PARTIAL に留める理由**: 危険度の分類が Forge 側の固定表であり、未知の危険に対する判断能力は測っていない",
       "blocking_tech_debt": [
         "SEC-05 未実装"
       ],
-      "next_proof": "P0/P1 Corpus に対する false negative 0 件",
+      "next_proof": "未知 Effect の分類方針を決め、判断能力を Episode で測る",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
@@ -1389,7 +1393,11 @@
       "implementation_status": "IMPLEMENTED",
       "evidence_status": "HARD_GATE_DESIGNED",
       "implementation_evidence": [
-        "forge_ai/core/orchestration/"
+        "forge_ai/core/orchestration/",
+        "forge_ai/core/promotion/gate.py",
+        "forge_ai/core/orchestration/extension_manifest.py",
+        "forge_ai/tests/test_promotion_gate.py",
+        "forge_ai/tests/test_promotion_gate_wiring.py"
       ],
       "measured": {
         "episodes": 0,
@@ -1397,9 +1405,9 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "Digest / Build / Runtime loaded / PROMOTED の 4 条件は実装済み。ただし Sandbox と Permission が Gate 列に無いまま Promotion できる（ADR-015 §4.2）",
+      "remaining_gap": "Sandbox / Permission / Effect / Dependency / Digest を 1 つの Gate へ集約し、`promoted()` が決定を必須引数で要求する形にした（迂回は TypeError で止まる）。Registry も decision digest 無しの manifest を拒否する。**残り**: Episode が無いので VERIFIED へは上げない",
       "blocking_tech_debt": [],
-      "next_proof": "Promotion 迂回 Corpus で 0 件を測る",
+      "next_proof": "実 Episode で Promotion 拒否/許可の分布を記録する",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
@@ -3261,12 +3269,14 @@
         "hard_gate": true
       },
       "zero_budget_approach": "Gate を1つずつ手で壊し、対応テストが落ちることを毎回確認する（手順として運用）",
-      "implementation_status": "PARTIAL",
+      "implementation_status": "IMPLEMENTED",
       "evidence_status": "UNIT_AND_INTEGRATION",
       "implementation_evidence": [
         "forge_ai/tests/test_sandbox_escape_corpus.py",
         "forge_ai/tests/test_capability_permission_policy.py",
-        "backend/tests/test_external_call_policy.py"
+        "backend/tests/test_external_call_policy.py",
+        "scripts/promotion_mutation_runner.py",
+        "forge_ai/tests/test_promotion_gate.py"
       ],
       "measured": {
         "episodes": 0,
@@ -3274,16 +3284,16 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "**手作業である。** Critical Guard-break の全検出（Target は 100%）を主張するには、壊す対象の一覧と自動実行が要る。現在は「今回壊した分」しか分からない",
+      "remaining_gap": "Critical Gate 26 件の一覧を持ち、mutation runner が全数を機械実行する（26/26 検出）。CI からも走る。Gate を足して mutation を足し忘れると coverage 試験が落ちる。**残り**: 対象は Promotion 系のみ。Sandbox / Validator / Compiler 系の Guard は一覧化されていない（TD119）",
       "blocking_tech_debt": [],
-      "next_proof": "Critical Gate の一覧を作り、mutation runner で全数を自動実行する",
+      "next_proof": "Promotion 以外の Critical Guard も一覧化して runner へ載せる",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
       },
       "gap": {
         "target_level": "99_PROVEN / HARD_GATE_PROVEN",
-        "current_level": "PARTIAL",
+        "current_level": "IMPLEMENTED",
         "gap_steps": 4,
         "blast_radius": 4,
         "implementation_cost": 3,
@@ -3749,10 +3759,12 @@
         "hard_gate": true
       },
       "zero_budget_approach": "生成 Source の AST 検査（host I/O / process / network の import 禁止）と実行ファイル allowlist",
-      "implementation_status": "PARTIAL",
+      "implementation_status": "IMPLEMENTED",
       "evidence_status": "UNIT_AND_INTEGRATION",
       "implementation_evidence": [
-        "forge_ai/core/orchestration/build_time_sandbox.py"
+        "forge_ai/core/orchestration/build_time_sandbox.py",
+        "forge_ai/core/promotion/effects.py",
+        "forge_ai/tests/test_generated_source_effect_corpus.py"
       ],
       "measured": {
         "episodes": 0,
@@ -3760,9 +3772,9 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "別 Agent が 2026-09-03 に実装した AST/import preflight がある。Secret / Effect の違反検出と、違反 Corpus に対する見逃し 0 件は未実施",
+      "remaining_gap": "Effect 抽出（Python は AST / Dart は構文走査）と危険 Corpus 38 検体の見逃し 0 件を実測。ただし **静的検査であり、実行時にしか現れる振る舞いは見えない**。Corpus は私が書いたものであって、未知の書き方に対する見逃し率は未測定。VERIFIED には独立 Episode が要る",
       "blocking_tech_debt": [],
-      "next_proof": "AST/Import/Secret/Effect の違反 Corpus に対する見逃し 0 件",
+      "next_proof": "第三者が書いた回避検体で見逃し率を測る",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
@@ -3770,7 +3782,7 @@
       "human_evidence_required": false,
       "gap": {
         "target_level": "99_PROVEN / HARD_GATE_PROVEN",
-        "current_level": "NOT_STARTED",
+        "current_level": "IMPLEMENTED",
         "gap_steps": 6,
         "blast_radius": 4,
         "implementation_cost": 5,
@@ -3794,7 +3806,9 @@
       "evidence_status": "UNIT_AND_INTEGRATION",
       "implementation_evidence": [
         "forge_ai/core/sandbox/policy.py",
-        "forge_ai/tests/test_capability_permission_policy.py"
+        "forge_ai/tests/test_capability_permission_policy.py",
+        "forge_ai/data/generated_capability_dependencies.json",
+        "forge_ai/core/promotion/dependencies.py"
       ],
       "measured": {
         "episodes": 0,
@@ -3802,9 +3816,9 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "機構は入ったが **allowlist の中身が空**（License / Digest / 脆弱性情報を持っていない）。Target の「重大脆弱 Dependency 0 件」は脆弱性情報が無いと判定できない",
+      "remaining_gap": "allowlist の中身が入った（22 件。ecosystem / version / source / provenance / license / identity / security_status / allowed_reason を機械可読で保持）。宣言ではなく**静的検査が観測した import** を突き合わせる。**PARTIAL に留める理由**: `security_status` は 22 件中 20 件が UNKNOWN である。ネットワークへ出ないので脆弱性情報を持てない。Target の「重大脆弱 Dependency 0 件」は**判定できない**——UNKNOWN を安全扱いしないことで fail closed にしているだけ",
       "blocking_tech_debt": [],
-      "next_proof": "実 allowlist（License / Digest / Provenance 付き）を作り、Unknown/禁止/脆弱の 0 件を示す",
+      "next_proof": "脆弱性情報の取得方針を決める（0 円で採れる経路の調査）",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []

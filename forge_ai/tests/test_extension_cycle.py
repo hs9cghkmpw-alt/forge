@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from forge_ai.tests.promotion_helpers import allowed_decision
+
+
+def _gate_promote(manifest):
+    """本物の Gate を通して PROMOTED にする。"""
+    return manifest.promoted(allowed_decision(manifest.capability_id))
+
 from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
@@ -61,7 +68,7 @@ def _promoted_manifest(manifest):
         # DECLARATIVE route does not claim generated host-code execution.
         sandbox_preflight=manifest.route is ExtensionRoute.BUILD_TIME,
     )
-    return replace(manifest, evidence=evidence).verified().promoted()
+    return _gate_promote(replace(manifest, evidence=evidence).verified())
 
 
 def _promote_with_activation(manifest):

@@ -26,6 +26,12 @@ from forge_ai.core.orchestration.extension_manifest import (
     ExtensionStatus,
 )
 from forge_ai.core.orchestration.extension_plan import ExtensionRoute
+from forge_ai.core.promotion.gate import PromotionRequest, evaluate_promotion
+from forge_ai.core.sandbox.policy import (
+    CapabilityTier,
+    Permission,
+    PermissionManifest,
+)
 
 
 _ALLOWED_PRIMITIVE_KINDS = frozenset({
@@ -85,10 +91,29 @@ class DeclarativeExtensionProbes:
     safety_review: DeclarativeBindingProbe | None = None
 
 
+def declarative_permission_manifest(capability_id: str) -> PermissionManifest:
+    """宣言 Capability の Permission を**導出する**（自己申告ではない）。
+
+    DECLARATIVE 経路が作るのは Forge 自身の Runtime が解釈する **data** であり、
+    生成された host code を実行しない。したがって外界への作用は Forge 本体の
+    解釈器が持つものに限られ、Permission は `LOCAL_COMPUTE` のみ＝Tier A になる。
+
+    **将来 declarative artifact が effect を表現できるようになったら、この導出は
+    嘘になる。** その時点で明示 Manifest を要求へ切り替えること（TD118）。
+    """
+    return PermissionManifest(
+        capability_id=capability_id,
+        permissions=frozenset({Permission.LOCAL_COMPUTE}),
+        declared_tier=CapabilityTier.A,
+    )
+
+
 def implement_declarative_extension(
     manifest: ExtensionManifest,
     artifact: DeclarativeCapabilityArtifact,
     probes: DeclarativeExtensionProbes,
+    *,
+    permission_manifest: PermissionManifest | None = None,
 ) -> ExtensionManifest:
     """Validate/bind one declarative artifact and return evidence-gated manifest.
 
@@ -129,4 +154,24 @@ def implement_declarative_extension(
     )
     if not implementing.can_promote:
         return implementing
-    return implementing.verified().promoted()
+
+    # **Promotion Gate を通す。** 宣言経路は生成 host code を実行しないので
+    # sandbox / build / runtime probe は要求しないが、**Permission Manifest は
+    # 経路に関わらず必須**である（非交渉条件 3）。
+    permissions = permission_manifest or declarative_permission_manifest(
+        manifest.capability_id
+    )
+    decision = evaluate_promotion(
+        PromotionRequest(
+            capability_id=manifest.capability_id,
+            requires_generated_source=False,
+            permission_manifest=permissions,
+            extra_evidence={
+                "route": manifest.route.value,
+                "permission_manifest_source": (
+                    "explicit" if permission_manifest is not None else "derived"
+                ),
+            },
+        )
+    )
+    return implementing.verified().promoted(decision)

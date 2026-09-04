@@ -31,6 +31,7 @@ from uuid import uuid4
 
 from forge_ai.core.orchestration.build_time_extension import (
     BuildTimeBuildResult,
+    acquired_capability_permission_manifest,
     BuildTimeCapabilityArtifact,
     BuildTimeExtensionError,
 )
@@ -90,10 +91,12 @@ class CommandEvidence:
     @property
     def os_isolated(self) -> bool:
         """OS 層の強制隔離で走ったか。`policy-only` は False。"""
-        return (
-            self.sandbox_backend.startswith("linux-namespace")
-            or self.sandbox_backend == "windows-appcontainer+job"
-        )
+        # **Gate と同じ判定表を使う。** ここだけ前方一致にしていたため、
+        # `linux-namespace-fake` のような名前を OS 隔離と数えてしまう差が
+        # あった（2026-09-04、自己攻撃で発見）。判定が 2 箇所にあると必ずずれる。
+        from forge_ai.core.promotion.gate import OS_ISOLATED_BACKENDS
+
+        return self.sandbox_backend in OS_ISOLATED_BACKENDS
 
     @property
     def passed(self) -> bool:
@@ -119,6 +122,24 @@ class ManagedBuildEvidence:
     def passed(self, kind: str) -> bool:
         matching = [item for item in self.commands if item.kind == kind]
         return bool(matching) and all(item.passed for item in matching)
+
+    @property
+    def sandbox_backend(self) -> str:
+        """**全 command が同じ backend を通ったときだけ**その名前を返す。
+
+        1 つでも隔離を通っていない command があれば、その build 全体を
+        「隔離した」とは呼べない。混在は `""`（＝隔離なし）へ倒す。
+        fail closed である。
+        """
+        backends = {item.sandbox_backend for item in self.commands}
+        if not backends or "" in backends or len(backends) != 1:
+            return ""
+        return backends.pop()
+
+    @property
+    def os_isolated(self) -> bool:
+        """OS 層の隔離を全 command が通ったか。`policy-only` は False。"""
+        return bool(self.commands) and all(item.os_isolated for item in self.commands)
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,6 +253,22 @@ class ManagedBuildWorkspaceRunner:
                 sandbox_preflight=bundle.sandbox_preflight_pass,
                 sandbox_policy_version=bundle.sandbox_policy_version,
                 sandbox_policy_digest=bundle.sandbox_policy_digest,
+                # **実際に走った backend を Promotion まで運ぶ。**
+                # ここが無かったので、Gate は policy-only と
+                # windows-appcontainer+job を区別できなかった。
+                sandbox_backend=bundle.sandbox_backend,
+                generated_sources=tuple(
+                    (source.path, source.content) for source in artifact.files
+                ),
+                command_sources=tuple(
+                    " ".join(item.argv) for item in bundle.commands
+                ),
+                # 最小権限を**明示的に**渡す。Gate 側の「Manifest が無ければ
+                # 拒否」は緩めない——本番が黙って None を渡さないだけである。
+                permission_manifest=acquired_capability_permission_manifest(
+                    artifact.capability_id
+                ),
+                declared_effects=frozenset(),
             )
             return ManagedBuildExecution(result=result, evidence=bundle)
         finally:

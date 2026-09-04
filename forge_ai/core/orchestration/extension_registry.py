@@ -44,6 +44,14 @@ class PromotedCapabilityRegistry:
             raise ValueError("Only PROMOTED extensions may be installed for reuse.")
         if manifest.promotion_blockers():
             raise ValueError("PROMOTED manifest still has evidence blockers; refusing install.")
+        # `promoted()` だけが decision digest を埋める。空のまま PROMOTED を
+        # 名乗っている manifest は、Gate を通さず `replace()` で横から作られた
+        # ものである。**status を自己申告として信じない。**
+        if not manifest.promotion_decision_digest:
+            raise ValueError(
+                "PROMOTED manifest carries no promotion decision digest; "
+                "it did not pass the promotion gate. Refusing install."
+            )
         if activation is None:
             raise ValueError(
                 "PROMOTED manifest has no executable activation; refusing metadata-only reuse."

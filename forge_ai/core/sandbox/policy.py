@@ -172,7 +172,12 @@ class PermissionManifest:
     def to_dict(self) -> dict:
         return {
             "capability_id": self.capability_id,
-            "permissions": sorted(p.value for p in self.permissions),
+            # 未知の値が混ざっていても**落ちずに**そのまま出す。
+            # ここで例外を投げると、Gate が typed な拒否理由を返す前に
+            # 死んでしまい、「なぜ拒否したか」が残らない（2026-09-04 実測）。
+            "permissions": sorted(
+                getattr(p, "value", str(p)) for p in self.permissions
+            ),
             "tier": self.tier.value,
             "declared_tier": self.declared_tier.value if self.declared_tier else None,
             "human_approval": self.human_approval,

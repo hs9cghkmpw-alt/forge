@@ -21,6 +21,13 @@ from forge_ai.core.orchestration.extension_manifest import (
     ExtensionStatus,
 )
 from forge_ai.core.orchestration.extension_plan import ExtensionRoute
+from forge_ai.core.promotion.effects import EffectKind, inspect_generated_sources
+from forge_ai.core.promotion.gate import PromotionRequest, evaluate_promotion
+from forge_ai.core.sandbox.policy import (
+    CapabilityTier,
+    Permission,
+    PermissionManifest,
+)
 
 
 class BuildTimeExtensionError(ValueError):
@@ -97,6 +104,21 @@ class BuildTimeBuildResult:
     sandbox_preflight: bool = False
     sandbox_policy_version: str = ""
     sandbox_policy_digest: str = ""
+    sandbox_backend: str = ""
+    """**どの OS 隔離で走ったか。** 空 = 隔離を通っていない。
+
+    ここが無かったので、Promotion 判定は `policy-only` と
+    `windows-appcontainer+job` を区別できなかった（2026-09-04 に発見）。
+    """
+
+    generated_sources: tuple[tuple[str, str], ...] = ()
+    """静的検査へ渡す `(path, content)`。空なら検査できない＝拒否される。"""
+
+    command_sources: tuple[str, ...] = ()
+    """実際に走らせた command。依存の取得行為を走査する対象。"""
+
+    permission_manifest: "PermissionManifest | None" = None
+    declared_effects: frozenset[EffectKind] = frozenset()
 
 
 class BuildTimeBuilder(Protocol):
@@ -116,6 +138,23 @@ class LoadedBuildActivation:
     runtime_fingerprint: str
     source_digest: str
     loaded: bool = True
+
+
+def acquired_capability_permission_manifest(capability_id: str) -> PermissionManifest:
+    """獲得 Capability の**意図**を最小権限で書く（Tier A / 純粋計算）。
+
+    Forge が獲得する Capability は「描画する」ものであって、ネットワークや
+    ファイルや秘密へ触るものではない。したがって宣言は `LOCAL_COMPUTE` だけ。
+
+    **これは検査を甘くするための既定値ではない。** 逆である——宣言が最小
+    なので、生成物が少しでも外界へ触れば `EFFECT_EXCEEDS_PERMISSION` で
+    落ちる。Gate は宣言と実測（静的検査）を突き合わせる。
+    """
+    return PermissionManifest(
+        capability_id=capability_id,
+        permissions=frozenset({Permission.LOCAL_COMPUTE}),
+        declared_tier=CapabilityTier.A,
+    )
 
 
 def implement_build_time_extension(
@@ -171,7 +210,37 @@ def implement_build_time_extension(
     if not implementing.can_promote:
         return ExtensionImplementation(manifest=implementing, activation=None)
 
-    promoted = implementing.verified().promoted()
+    # **Promotion Gate。** ここを通らずに PROMOTED にはできない
+    # （`promoted()` が決定を必須引数で要求する）。
+    inspection = (
+        inspect_generated_sources(build.generated_sources)
+        if build.generated_sources
+        else inspect_generated_sources(
+            tuple((source.path, source.content) for source in artifact.files)
+        )
+    )
+    decision = evaluate_promotion(
+        PromotionRequest(
+            capability_id=manifest.capability_id,
+            requires_generated_source=True,
+            permission_manifest=build.permission_manifest,
+            inspection=inspection,
+            declared_effects=build.declared_effects,
+            sandbox_backend=build.sandbox_backend,
+            sandbox_policy_version=build.sandbox_policy_version,
+            sandbox_policy_digest=build.sandbox_policy_digest,
+            tests_pass=build.tests_pass,
+            build_pass=build.build_pass,
+            runtime_probe_pass=build.runtime_evidence,
+            verified_source_digest=build.source_digest,
+            promoted_source_digest=artifact.source_digest,
+            verified_artifact_digest=build.runtime_fingerprint,
+            promoted_artifact_digest=build.runtime_fingerprint,
+            command_sources=build.command_sources,
+            extra_evidence={"route": manifest.route.value, "build_id": build.build_id},
+        )
+    )
+    promoted = implementing.verified().promoted(decision)
     activation = load_runtime(build)
     if not activation.loaded:
         raise BuildTimeExtensionError("new build was not loaded; refusing capability activation")

@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from forge_ai.tests.promotion_helpers import allowed_decision
+
+
+def _gate_promote(manifest):
+    """本物の Gate を通して PROMOTED にする。"""
+    return manifest.promoted(allowed_decision(manifest.capability_id))
+
 from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
@@ -56,7 +63,7 @@ def _implement(manifest) -> ExtensionImplementation:
         build_pass=True,
         runtime_evidence=True,
     )
-    promoted = replace(manifest, evidence=evidence).verified().promoted()
+    promoted = _gate_promote(replace(manifest, evidence=evidence).verified())
     return ExtensionImplementation(
         manifest=promoted,
         activation=_Activation(promoted.capability_id),

@@ -17,10 +17,13 @@ for unseen requests before it can be promoted.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, replace
 from enum import Enum
+from hashlib import sha256
 
 from forge_ai.core.orchestration.extension_plan import ExtensionCandidate, ExtensionRoute
+from forge_ai.core.promotion.gate import PromotionDecision
 
 
 class ExtensionStatus(str, Enum):
@@ -57,6 +60,15 @@ class ExtensionManifest:
     status: ExtensionStatus = ExtensionStatus.DRAFT
     evidence: ExtensionEvidence = ExtensionEvidence()
     source_reason: str = ""
+    promotion_decision_digest: str = ""
+    """**Promotion Gate が実際に許可した証**（FORGE-PROMOTION-HARD-GATE-001）。
+
+    `promoted()` だけがこれを埋める。`replace(manifest, status=PROMOTED)` で
+    横から PROMOTED を名乗った manifest はここが空のままなので、
+    Registry がそれを見て install を拒否できる。
+
+    **空 = Gate を通っていない。**
+    """
 
     def promotion_blockers(self) -> tuple[str, ...]:
         """Return exact missing proof; empty means promotion is permitted."""
@@ -95,10 +107,26 @@ class ExtensionManifest:
             )
         return replace(self, status=ExtensionStatus.VERIFIED)
 
-    def promoted(self) -> "ExtensionManifest":
+    def promoted(self, decision: PromotionDecision) -> "ExtensionManifest":
+        """**Promotion Gate の決定なしに PROMOTED にはできない。**
+
+        `decision` を必須引数にしてあるのは、「呼ぶ側が忘れずに Gate を
+        通す」設計が忘れられるからである（このリポジトリで 10 回以上起きた）。
+        引数を省いた呼び出しは実行前に TypeError で止まる。
+        """
         if self.status is not ExtensionStatus.VERIFIED:
             raise ValueError("Only a VERIFIED extension may be promoted to a reusable capability.")
-        return replace(self, status=ExtensionStatus.PROMOTED)
+        if decision.capability_id != self.capability_id:
+            raise ValueError(
+                "Promotion decision is for a different capability: "
+                f"{decision.capability_id!r} != {self.capability_id!r}"
+            )
+        decision.require_allowed()
+        return replace(
+            self,
+            status=ExtensionStatus.PROMOTED,
+            promotion_decision_digest=promotion_decision_digest(decision),
+        )
 
 
 def create_extension_manifest(
@@ -123,3 +151,9 @@ def create_extension_manifest(
         requires_confirmation=candidate.requires_confirmation,
         source_reason=candidate.reason,
     )
+
+
+def promotion_decision_digest(decision: PromotionDecision) -> str:
+    """決定そのものの指紋。後から「何を根拠に通したか」を照合できる。"""
+    payload = json.dumps(decision.to_dict(), sort_keys=True, default=str)
+    return sha256(payload.encode("utf-8")).hexdigest()

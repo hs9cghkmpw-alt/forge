@@ -4281,14 +4281,32 @@ TD117 へ分離する。EXT-08 / SEC-04 の全 OS hard gate はまだ PARTIAL。
 見えるようにした。**効かない制限を「効く」と書かない。**
 非 root 実行（本番の想定）では効く見込みだが、**未実測**である。
 
-## TD112. Permission Manifest が Promotion 判定へ配線されていない（2026-09-04、新規）
+## TD112. Permission Manifest が Promotion 判定へ配線されていない（2026-09-04）→ **解消**
+
+**2026-09-04 解消**（FORGE-PROMOTION-HARD-GATE-001）。`forge_ai/core/promotion/gate.py` が
+Permission Manifest を必須入力として検査し、`ExtensionManifest.promoted()` が Gate の
+決定を**必須引数**として要求する。Manifest 欠落・不正・未知 Permission・Tier 偽装・
+Tier C 無承認・承認出所なしを拒否し、破壊試験 6 件で検出を確認した。
+
+以下は解消前の記述。
 
 `PermissionManifest` と Tier 強制（`assert_execution_allowed` /
 `assert_promotion_allowed`）は実装したが、`extension_registry` の Promotion 判定
 から呼んでいない。**Manifest を作れるが、無いまま Promotion できる。**
 「作ったが本番から呼ばれない」の形であり、次の Task で閉じる。
 
-## TD113. 依存 allowlist の中身が空（2026-09-04、新規）
+## TD113. 依存 allowlist の中身が空（2026-09-04）→ **一部解消**
+
+**2026-09-04**: `forge_ai/data/generated_capability_dependencies.json` に 22 件を入れた。
+ecosystem / name / version / source / provenance / license / identity / security_status /
+allowed_reason を機械可読で保持する。突き合わせ対象は宣言ではなく**静的検査が観測した import**。
+
+**残っているもの**: `security_status` は 22 件中 20 件が `UNKNOWN` である。ネットワークへ
+出ないので脆弱性情報を持てない。したがって Target の「重大脆弱 Dependency 0 件」は
+**判定できない**。UNKNOWN を安全扱いしないことで fail closed にしているだけであり、
+「脆弱性が無いと確認した」ではない。SEC-06 を PARTIAL に留めた理由である。
+
+以下は当初の記述。
 
 `assert_dependencies_allowed` の機構は動くが、Forge が保持・検証した依存の
 実リスト（License / Digest / Provenance / 脆弱性情報）が無い。
@@ -4411,3 +4429,53 @@ Capability Matrix はまだ `PARTIAL` / `HARD_GATE_PARTIAL` のまま維持す�
 - CPU / memory / wall-clock / child cleanup
 - real Python / Dart toolchain
 - Self-Extension generate -> verify -> promote -> install/reuse の実機証拠
+
+
+---
+
+## TD118. 宣言 Capability の Permission が「導出」である（2026-09-04、新規）
+
+`declarative_permission_manifest()` は DECLARATIVE 経路の Permission を
+`LOCAL_COMPUTE` のみ（Tier A）と**導出している**。
+
+いまはこれが事実である——宣言 artifact は Forge 自身の Runtime が解釈する
+data であり、生成された host code を実行しないからである。
+
+**しかし将来 declarative artifact が effect を表現できるようになったら、
+この導出は嘘になる。** その時点で「明示 Manifest を必須」へ切り替えること。
+
+切り替えを忘れないための歯止めは**まだ無い**。artifact の表現力が増えた
+ことを機械が検出して落とす仕組みが要る。
+
+---
+
+## TD119. mutation runner の対象が Promotion 系だけ（2026-09-04、新規）
+
+`scripts/promotion_mutation_runner.py` は Critical Gate 26 件を全数検査するが、
+**対象は Promotion 系に限られる**。
+
+一覧化されていない Guard:
+
+| 領域 | 例 |
+|---|---|
+| Sandbox | network deny / env scrub / rlimit / PID namespace / AppContainer |
+| Validator | Schema 検査 / 語彙拡張の制限 |
+| Compiler | 宣言駆動の widget 出力 |
+| Host Projection | prefix 除外 |
+
+Sandbox 側の破壊試験は存在するが**手作業**であり、QA-05 の Target
+「Critical Guard-break 全検出 100%」を全領域について主張できる状態ではない。
+QA-05 を `IMPLEMENTED` に留め、`VERIFIED` へ上げていないのはこのためである。
+
+---
+
+## TD120. Promotion Gate の Episode が 0 件（2026-09-04、新規）
+
+Gate は実装され、破壊試験 26/26 で効くことを確認した。
+**しかし実際の Episode（本番の獲得試行）で何件許可し何件拒否したかの
+記録が無い。**
+
+したがって EXT-10 / EXT-03 / SEC-05 は `IMPLEMENTED` までであり、
+`VERIFIED`（Episode >= 1）へは上げていない。
+
+「Gate が動く」と「Gate が現実の生成物に対して正しく働く」は別である。

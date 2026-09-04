@@ -83,10 +83,19 @@ class _LoadedActivation:
         self.loaded = loaded
 
 
+from forge_ai.tests.promotion_helpers import allowed_decision  # noqa: E402
+
+
 def _promoted_manifest(route: ExtensionRoute) -> ExtensionManifest:
-    return ExtensionManifest(
+    """**PROMOTED を直接名乗らせない。** Gate を通してから昇格する。
+
+    直接組み立てた PROMOTED は promotion decision digest を持たないので、
+    Registry が install を拒否する（FORGE-PROMOTION-HARD-GATE-001）。
+    それが正しい振る舞いなので、fixture 側を本物の経路へ合わせる。
+    """
+    verified = ExtensionManifest(
         capability_id=ACQUIRED, label_ja="獲得した並び", route=route,
-        requires_confirmation=False, status=ExtensionStatus.PROMOTED,
+        requires_confirmation=False, status=ExtensionStatus.VERIFIED,
         evidence=ExtensionEvidence(
             semantic_decomposition=True, reusable_primitive=True,
             language_binding=True, validator_binding=True,
@@ -96,6 +105,7 @@ def _promoted_manifest(route: ExtensionRoute) -> ExtensionManifest:
             safety_review=True,
         ),
     )
+    return verified.promoted(allowed_decision(ACQUIRED))
 
 
 class _Base(unittest.TestCase):

@@ -1,5 +1,4 @@
 """**持っている能力なら作り直さない**（方式B の本線）。
-
 ---
 
 固定文は使わない。**ランダムな自由文**を seed から作って投げる。
@@ -59,6 +58,7 @@ from forge_ai.core.orchestration.synthesizing_build_time_implementer import (  #
 from forge_ai.core.semantics.capability_plan import plan_capabilities  # noqa: E402
 from forge_ai.provider.provider_interface import ProviderResponse  # noqa: E402
 from forge_ai.testing.free_text_requests import (  # noqa: E402
+
     RequestShape,
     assert_no_internal_vocabulary,
     generate_request,
@@ -95,11 +95,22 @@ def _build_document(need, plan, promoted):  # noqa: ANN001, ANN202
     )
 
 
+from forge_ai.tests.promotion_helpers import allowed_decision  # noqa: E402
+
+
+def _gate_promote(manifest):
+    """本物の Gate を通して PROMOTED にする。"""
+    return manifest.promoted(allowed_decision(manifest.capability_id))
+
+
 def _promoted_manifest() -> ExtensionManifest:
-    return ExtensionManifest(
+    verified = ExtensionManifest(
         capability_id=CAPABILITY, label_ja="カレンダーで見る",
         route=ExtensionRoute.BUILD_TIME, requires_confirmation=False,
-        status=ExtensionStatus.PROMOTED,
+        # **PROMOTED を直接名乗らせない。** 下で Gate を通してから昇格する。
+        # 直接組み立てた PROMOTED は decision digest を持たないので、
+        # Registry が install を拒否する（それが正しい振る舞い）。
+        status=ExtensionStatus.VERIFIED,
         evidence=ExtensionEvidence(
             semantic_decomposition=True, reusable_primitive=True,
             language_binding=True, validator_binding=True,
@@ -112,6 +123,7 @@ def _promoted_manifest() -> ExtensionManifest:
             safety_review=True,
         ),
     )
+    return _gate_promote(verified)
 
 
 class _Base(unittest.TestCase):

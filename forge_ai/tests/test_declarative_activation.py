@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from forge_ai.tests.promotion_helpers import allowed_decision
+
+
+def _gate_promote(manifest):
+    """本物の Gate を通して PROMOTED にする。"""
+    return manifest.promoted(allowed_decision(manifest.capability_id))
+
 from dataclasses import replace
 
 import pytest
@@ -53,9 +60,9 @@ def _promoted_manifest():
         validator_binding=True, runtime_binding=True, compiler_binding=True,
         tests_pass=True, build_pass=True, runtime_evidence=True,
     )
-    return replace(
+    return _gate_promote(replace(
         create_extension_manifest(candidate, ExtensionRoute.DECLARATIVE), evidence=evidence
-    ).verified().promoted()
+    ).verified())
 
 
 def test_promoted_activation_changes_generated_document() -> None:

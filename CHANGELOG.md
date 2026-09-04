@@ -1,3 +1,28 @@
+# 2026-09-04 — Promotion 安全 Gate（FORGE-PROMOTION-HARD-GATE-001）
+
+生成物の正式採用を許す判定点を **1 つ**へ集約した。
+
+- `forge_ai/core/promotion/{gate,effects,dependencies}.py` を新設。
+  Permission Manifest / Tier / Effect / Secret / Dependency / Digest /
+  Sandbox backend を 1 度に判定し、**typed な拒否理由 23 種**を残す
+- `ExtensionManifest.promoted()` が Gate の決定を**必須引数**として要求する。
+  迂回は `TypeError` / `PromotionDenied` / Registry の digest 検査 / Store の
+  digest 検査の 4 段で止まる
+- 依存 allowlist に実測 22 件を投入（pubspec.lock と sandbox allowlist を読んで作成）。
+  **突き合わせ対象は宣言ではなく静的検査が観測した import**
+- **Critical Guard 26 件の mutation を全数自動化**（`scripts/promotion_mutation_runner.py`）。
+  26/26 検出、置物 0 件。CI からも走る。Gate を足して mutation を足し忘れると落ちる
+- 危険 Corpus 38 検体、**見逃し 0 件**。誤検出試験も 5 件
+
+配線して見つかった既存バグ 5 件（うち 2 件は自己攻撃で発見）:
+`sandbox_backend` が Promotion へ届いていない / `os_isolated` が呼ばれていない /
+隔離判定が 2 箇所で不一致（偽 backend 名を通す）/ 未知 Permission で例外死 /
+Store が Gate 通過の証を保存しない。
+
+Status: SEC-05 と QA-05 を IMPLEMENTED へ。**EXT-10 / EXT-03 は実装が進んだが
+Episode 0 件のため据え置き。** `99_PROVEN` は 0 件のまま。
+TD112 解消 / TD113 一部解消 / TD118・TD119・TD120 を新規追加。
+
 # 2026-09-04 — Windows 10 Home Sandbox production validation ALL PASS
 
 CEO の実 Windows 10 Home PC で、Windows Self-Extension Sandbox の本番統合を

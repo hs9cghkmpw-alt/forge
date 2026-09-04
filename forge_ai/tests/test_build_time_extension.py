@@ -5,6 +5,7 @@ from dataclasses import replace
 import pytest
 
 from forge_ai.core.orchestration.build_time_extension import (
+    acquired_capability_permission_manifest,
     BuildTimeBuildResult,
     BuildTimeCapabilityArtifact,
     BuildTimeExtensionError,
@@ -52,6 +53,15 @@ def _builder(artifact: BuildTimeCapabilityArtifact) -> BuildTimeBuildResult:
         sandbox_preflight=True,
         sandbox_policy_version="test-policy-v1",
         sandbox_policy_digest="a" * 64,
+        # Promotion Gate は「どの OS 隔離で走ったか」を要求する。
+        # ここを空にすると sandbox_attestation_missing で正しく落ちる。
+        sandbox_backend="linux-namespace+pid",
+        permission_manifest=acquired_capability_permission_manifest(
+            artifact.capability_id
+        ),
+        generated_sources=tuple(
+            (source.path, source.content) for source in artifact.files
+        ),
     )
 
 

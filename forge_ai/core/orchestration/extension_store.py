@@ -58,6 +58,9 @@ def _payload(manifest: ExtensionManifest, artifact: DeclarativeCapabilityArtifac
             "status": manifest.status.value,
             "evidence": asdict(manifest.evidence),
             "source_reason": manifest.source_reason,
+            # Gate を通った証。**保存しないと再読込で消え、Registry が
+            # 「Gate 未通過」として拒否する**（2026-09-04、実際に落ちた）。
+            "promotion_decision_digest": manifest.promotion_decision_digest,
         },
         "artifact": {
             "capability_id": artifact.capability_id,
@@ -133,6 +136,9 @@ def load_promoted_declarative_extension(path: str | Path) -> PromotedCapability:
             status=ExtensionStatus(str(manifest_raw["status"])),
             evidence=evidence,
             source_reason=str(manifest_raw.get("source_reason", "")),
+            promotion_decision_digest=str(
+                manifest_raw.get("promotion_decision_digest", "")
+            ),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ExtensionStoreError(f"Invalid stored manifest: {exc}") from exc
@@ -161,6 +167,10 @@ def load_promoted_declarative_extension(path: str | Path) -> PromotedCapability:
 
     if manifest.status is not ExtensionStatus.PROMOTED or manifest.promotion_blockers():
         raise ExtensionStoreError("Stored manifest is not blocker-free PROMOTED evidence.")
+    if not manifest.promotion_decision_digest:
+        raise ExtensionStoreError(
+            "Stored manifest carries no promotion decision digest; it did not pass the gate."
+        )
     if manifest.route is not ExtensionRoute.DECLARATIVE:
         raise ExtensionStoreError("Stored extension is not DECLARATIVE.")
     if manifest.capability_id != artifact.capability_id:
