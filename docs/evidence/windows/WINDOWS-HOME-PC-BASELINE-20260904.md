@@ -188,3 +188,51 @@ this Windows 10 machine required the profile-specific `LOCALAPPDATA` and
 constructs the child environment from that path.  This is relevant to the
 production backend: **AppContainer environment paths must be resolved from the OS,
 not inferred from the host user's normal environment.**
+
+
+## TD110 Stage 3 real-Windows Job Object resource proof
+
+Physical Windows 10 Home execution of:
+
+```powershell
+py -3.12 scripts\windows_job_resource_probe.py
+```
+
+at commit `0c7ef87028c198c894fb5320227874fa815e0e87` returned `ok: true`.
+
+Observed assertions:
+
+```text
+cpu_job_time_enforced                    = true
+memory_limit_enforced                    = true
+active_process_limit_enforced            = true
+wall_clock_job_termination               = true
+kill_on_job_close_cleans_descendant      = true
+```
+
+Observed measurements:
+
+```text
+cpu_elapsed_seconds        = 4.859
+cpu_marker_created         = true
+cpu_wait_code              = 0
+cpu_exit_code              = 3221225540
+memory_elapsed_seconds     = 2.797
+memory_exit_code           = 0
+max_live_children_observed = 1
+wall_clock_exit_code       = 124
+```
+
+The CPU process was terminated by the Job Object CPU-time limit after it had
+actually entered the workload.  The wall-clock path separately terminated the
+whole Job with exit code 124.  The process-count probe observed at most one live
+child with the configured parent+one-child limit.  A descendant deliberately
+left alive after its parent exited was terminated when the Job handle closed.
+
+This is direct physical-machine evidence that AppContainer + Job Object can
+supply both the security boundary and resource/lifetime controls needed by the
+Windows backend on Windows 10 Home.
+
+TD110 remains open until the real Forge runner uses this backend, real Python
+and Dart/Flutter toolchains execute inside it, guard-break tests fail when
+controls are removed, and the Self-Extension promotion/reuse path passes.
