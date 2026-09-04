@@ -292,20 +292,35 @@ def _grant_workspace(workspace: Path, sid_text: str) -> None:
 
 def _minimal_environment(workspace: Path) -> ctypes.Array:
     system_root = os.environ["SystemRoot"]
-    env = {
-        "SystemRoot": system_root,
-        "WINDIR": system_root,
-        "ComSpec": os.path.join(system_root, "System32", "cmd.exe"),
-        "PATH": (
+    workspace_text = str(workspace)
+
+    # CreateProcessW does not propagate the per-drive current-directory entries
+    # (for example "=C:=C:\\path") when the caller supplies a custom environment
+    # block.  The Windows API documentation explicitly requires callers to add
+    # those entries themselves.  Without the entry for the workspace drive,
+    # Windows 10 returned ERROR_ENVVAR_NOT_FOUND (203) before the AppContainer
+    # process could even be created on the fresh-PC TD110 probe.
+    drive = workspace.drive.upper()
+    env_entries = [
+        (f"={drive}", workspace_text),
+        ("ComSpec", os.path.join(system_root, "System32", "cmd.exe")),
+        ("FORGE_PROBE_VISIBLE", "yes"),
+        (
+            "PATH",
             os.path.join(system_root, "System32")
             + ";"
-            + os.path.join(system_root, "System32", "WindowsPowerShell", "v1.0")
+            + os.path.join(system_root, "System32", "WindowsPowerShell", "v1.0"),
         ),
-        "TEMP": str(workspace),
-        "TMP": str(workspace),
-        "FORGE_PROBE_VISIBLE": "yes",
-    }
-    block = "\0".join(f"{k}={v}" for k, v in sorted(env.items())) + "\0\0"
+        ("SystemRoot", system_root),
+        ("TEMP", workspace_text),
+        ("TMP", workspace_text),
+        ("WINDIR", system_root),
+    ]
+
+    # Windows expects a case-insensitively sorted Unicode environment block,
+    # terminated by an extra NUL after the last NUL-terminated entry.
+    env_entries.sort(key=lambda item: item[0].casefold())
+    block = "\0".join(f"{name}={value}" for name, value in env_entries) + "\0\0"
     return ctypes.create_unicode_buffer(block)
 
 
