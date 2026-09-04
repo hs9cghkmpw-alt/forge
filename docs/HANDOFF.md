@@ -2,6 +2,38 @@
 
 ---
 
+## Windows 10 Home Sandbox / Self-Extension — **実機 production validation 完了（2026-09-04）**
+
+CEO の実 Windows 10 Home PC で、`FORGE_SANDBOX_ALLOW_POLICY_ONLY` を無効にした
+本番一括検証が **ALL PASS** になった。
+
+```text
+PASS  01 production escape corpus
+PASS  02 TD110 physical probes
+PASS  03 targeted Self-Extension regressions
+PASS  04 full forge_ai Self-Extension suite
+PASS  05 backend regression
+Working tree clean: True
+TD110 production validation: ALL PASS
+```
+
+検証対象 commit:
+`7f8e000ce53165512c66132018a888c560c61ca4`
+
+Windows 本番 backend は `windows-appcontainer+job`。
+AppContainer + Job Object、secret/env scrub、network deny、CPU/memory/process/
+wall-clock/file-growth/output 上限、実 Python、Dart `dartvm.exe + package:` route、
+Self-Extension の generate → verify → promote → install/reuse を実機で通した。
+
+**TD110 の Windows 部分は解消。**
+macOS は未実装なので **TD117** へ分離した。したがって EXT-08 / SEC-04 の
+「OS別」Hard Gate 全体はまだ `PARTIAL` のまま。Windows PASS を macOS へ
+外挿しない。
+
+Evidence:
+`docs/evidence/windows/WINDOWS-HOME-PC-BASELINE-20260904.md`
+
+
 ## CEOへの依頼（最優先・上から順に）
 
 0. **【訂正済み】Frozen Final Holdout と Human 400 は、開発の停止理由ではありません。**
@@ -102,16 +134,14 @@ import platform を外す
 Sandbox の振る舞いは依然 CI で検証されていません。
 **「CI 緑 = Sandbox 検証済み」と読まないでください。**
 
-### 別 Agent の Windows 実装について
+### 別 Agent の Windows 実装について — **後続実機検証で解決済み**
 
-`forge_ai/core/sandbox/windows_appcontainer.py`（1,040 行）と、CEO の実 Windows
-PC で採った Evidence（`docs/evidence/windows/WINDOWS-HOME-PC-BASELINE-20260904.md`）
-が入りました。**私はこれを検証していません**（この実行ホストに Windows が
-無いため）。先方の文書自身も「TD110 解決とは主張しない」と書いています。
+この段落の旧状態では Windows 実装は未検証だった。その後 CEO の実 Windows
+10 Home PC で production escape corpus / physical probes / targeted
+Self-Extension / full forge_ai / backend regression がすべて PASS した。
 
-ただし **TECH_DEBT / CHANGELOG / Capability Matrix が実装より遅れています**。
-TD110 は依然「未実装」と書かれたままです。Windows の Status を上げるかどうかは、
-実機 Evidence を読んだうえで判断が要るため、**私の側では上げていません。**
+`TECH_DEBT.md` と Capability Matrix も更新済み。
+TD110 の Windows 部分は解消し、残る macOS backend は TD117 へ分離した。
 
 ---
 
@@ -141,7 +171,7 @@ Base HEAD `ba0233f` から実装した。**今回は測り方ではなく、実�
 | `99_PROVEN` / `HARD_GATE_PROVEN` | **0 件 / 0 件** |
 | Real Local Model runs | **0** |
 | Real Provider 呼び出し | **0**（本 Task 中に実 API は一切呼んでいない） |
-| 実機 Evidence（Windows / Android / iOS） | **0** |
+| 実機 Evidence | **Windows: 1 production validation 完走 / Android・iOS: 0** |
 | Human Evidence | **0 人** |
 | Frozen Final Holdout | 未生成（RC Freeze 後に独立生成） |
 | 0 円違反 | **0 件** |
@@ -160,7 +190,7 @@ Base HEAD `ba0233f` から実装した。**今回は測り方ではなく、実�
    これまでは Forge を動かしているパソコンの権限そのままで動いていて、
    ネットにも出られたし、環境変数（API キーなど）も見えていました。
    いまは、ネットに出られない・秘密が見えない・時間とメモリに上限がある
-   状態でしか動きません。**檻を作れない環境（Windows）では動かしません。**
+   状態でしか動きません。**檻を作れない未実装環境（現在は macOS）では動かしません。**
 2. **危ない操作（ネット接続・ログイン情報・支払い・取り消せない操作）は
    人の承認が要る**ようにしました。利用者には「インターネットへ接続します」
    のような普通の言葉で見せます。
@@ -171,8 +201,8 @@ Base HEAD `ba0233f` から実装した。**今回は測り方ではなく、実�
 
 | ID | Before | After | 残り |
 |---|---|---|---|
-| EXT-08 Sandbox実行 | NOT_STARTED（保護 none） | **PARTIAL**（Linux で escape corpus 8/8 遮断、本番経路へ配線） | Windows backend |
-| SEC-04 Sandbox | NOT_STARTED | **PARTIAL**（Linux corpus のみ） | OS 別 corpus |
+| EXT-08 Sandbox実行 | NOT_STARTED（保護 none） | **PARTIAL**（Linux + Windows 本番OS隔離。Windows実機 ALL PASS） | macOS backend / OS別最終証拠 |
+| SEC-04 Sandbox | NOT_STARTED | **PARTIAL**（Linux + Windows corpus。Windows実機 ALL PASS） | macOS corpus |
 | EXT-03 新Capability定義 | PARTIAL（Contract のみ） | **IMPLEMENTED**（Permission Manifest） | Promotion への配線 |
 | EXT-09 自動安全性判断 | NOT_STARTED | **PARTIAL**（Tier 計算 + Human Gate） | P0/P1 検出（SEC-05 依存） |
 | SEC-06 Dependency検査 | 誤配置 | **PARTIAL**（allowlist 機構） | allowlist の中身 |
