@@ -217,8 +217,17 @@ def _unshare_command() -> list[str] | None:
 
 def available_backend() -> str | None:
     """この環境で使える隔離 backend の名前。無ければ `None`。"""
-    if platform.system() != "Linux":
-        # Windows / macOS の backend は未実装。**「たぶん大丈夫」で通さない。**
+    system = platform.system()
+    if system == "Windows":
+        try:
+            from forge_ai.core.sandbox.windows_appcontainer import (
+                BACKEND_NAME,
+                is_available as windows_backend_available,
+            )
+        except (ImportError, OSError):
+            return None
+        return BACKEND_NAME if windows_backend_available() else None
+    if system != "Linux":
         return None
     command = _unshare_command()
     if command is None:
@@ -241,11 +250,13 @@ def policy_only_allowed() -> bool:
 
 
 def pid_isolation_available() -> bool:
-    """PID namespace まで取れるか。
+    """Linux PID namespace が取れるか。
 
-    取れないときは process の隔離が弱い（`RLIMIT_NPROC` だけになり、
-    root では実質効かない）。**その事実を隠さないために公開する。**
+    Windows の process containment は Job Object であり、PID namespace
+    ではないためここでは False のまま区別する。
     """
+    if platform.system() != "Linux":
+        return False
     command = _unshare_command()
     return bool(command and "--pid" in command)
 
@@ -260,9 +271,17 @@ def describe_environment() -> dict:
         "os_isolation": os_isolation_available(),
         "policy_only_allowed": policy_only_allowed(),
         "pid_isolation": pid_isolation_available(),
-        # root では `RLIMIT_NPROC` が強制されない（実測 2026-09-04）。
-        # 数の上限に頼れるかどうかを、Evidence 側から見えるようにする。
-        "nproc_limit_effective": os.geteuid() != 0 if hasattr(os, "geteuid") else False,
+        # Linux は RLIMIT_NPROC、Windows は Job Object の ActiveProcessLimit。
+        "nproc_limit_effective": (
+            True
+            if platform.system() == "Windows" and available_backend() is not None
+            else (os.geteuid() != 0 if hasattr(os, "geteuid") else False)
+        ),
+        "process_containment": (
+            "windows-job-object"
+            if platform.system() == "Windows" and available_backend() is not None
+            else ("linux-pid-namespace" if pid_isolation_available() else "")
+        ),
     }
 
 
@@ -337,6 +356,39 @@ def run_in_sandbox(
         )
 
     backend = available_backend()
+
+    # Windows: AppContainer + Job Object is a real OS backend.  Do not pass
+    # through subprocess.run first; process creation itself must carry the
+    # SECURITY_CAPABILITIES attribute and be assigned to the Job while suspended.
+    if backend == "windows-appcontainer+job":
+        try:
+            from forge_ai.core.sandbox.windows_appcontainer import (
+                WindowsSandboxError,
+                run as run_windows_appcontainer,
+            )
+            raw = run_windows_appcontainer(
+                argv,
+                workspace=workspace,
+                timeout_seconds=policy.timeout_seconds,
+                cpu_seconds=policy.cpu_seconds,
+                memory_bytes=policy.memory_bytes,
+                max_processes=policy.max_processes,
+                max_file_bytes=policy.max_file_bytes,
+                max_output_bytes=policy.max_output_bytes,
+                env_override=env_override if env_override is not None else _child_env(policy, workspace),
+            )
+        except WindowsSandboxError as exc:
+            raise SandboxUnavailable(f"Windows AppContainer backend failed closed: {exc}") from exc
+        return SandboxResult(
+            ok=(not bool(raw["timed_out"]) and raw["exit_code"] == 0),
+            exit_code=raw["exit_code"],
+            stdout=str(raw["stdout"]),
+            stderr=str(raw["stderr"]),
+            timed_out=bool(raw["timed_out"]),
+            backend=str(raw["backend"]),
+            duration_seconds=float(raw["duration_seconds"]),
+        )
+
     prefix: list[str] | None = _unshare_command() if backend else None
     if backend is None or prefix is None:
         if not policy_only_allowed():
@@ -353,12 +405,6 @@ def run_in_sandbox(
     started = time.monotonic()
     timed_out = False
 
-    # `resource` / `preexec_fn` are POSIX-only. Windows has no OS sandbox
-    # backend yet, so the default path already fails closed above. An explicit
-    # policy-only opt-in may still run static-policy-checked commands for CI or
-    # diagnostics; in that weaker mode we must not crash merely by importing or
-    # passing POSIX-only subprocess hooks. Evidence continues to name that mode
-    # `policy-only`, never OS isolation.
     posix_limits = resource is not None and os.name == "posix"
     preexec = _limits(policy) if posix_limits else None
 
