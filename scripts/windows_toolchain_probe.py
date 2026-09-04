@@ -392,11 +392,13 @@ def _toolchain_script(
     python: Path,
     dart: Path,
     result_file: Path,
+    appcontainer_local: Path,
 ) -> str:
     w = _ps_quote(str(workspace))
     py = _ps_quote(str(python))
     dart_exe = _ps_quote(str(dart))
     result = _ps_quote(str(result_file))
+    appcontainer_local_text = _ps_quote(str(appcontainer_local))
 
     return rf"""
 $ErrorActionPreference = 'Continue'
@@ -416,19 +418,23 @@ try {{
 
 $privateHome = Join-Path '{w}' '.sandbox-home'
 $privateRoaming = Join-Path $privateHome 'AppData\Roaming'
-$privateLocal = Join-Path $privateHome 'AppData\Local'
-$privateTmp = Join-Path '{w}' '.sandbox-tmp'
+$appContainerLocal = '{appcontainer_local_text}'
+$appContainerTemp = Join-Path $appContainerLocal 'Temp'
 New-Item -ItemType Directory -Force -Path $privateRoaming | Out-Null
-New-Item -ItemType Directory -Force -Path $privateLocal | Out-Null
-New-Item -ItemType Directory -Force -Path $privateTmp | Out-Null
+New-Item -ItemType Directory -Force -Path $appContainerTemp | Out-Null
 
 $env:HOME = $privateHome
 $env:USERPROFILE = $privateHome
 $env:APPDATA = $privateRoaming
-$env:LOCALAPPDATA = $privateLocal
-$env:TEMP = $privateTmp
-$env:TMP = $privateTmp
-$env:TMPDIR = $privateTmp
+
+# Keep Windows' AppContainer-specific LOCALAPPDATA/TEMP contract intact for
+# nested native launches. The earlier physical probe showed that replacing these
+# with ordinary user/workspace paths can make CreateProcess fail before the
+# child toolchain even starts.
+$env:LOCALAPPDATA = $appContainerLocal
+$env:TEMP = $appContainerTemp
+$env:TMP = $appContainerTemp
+$env:TMPDIR = $appContainerTemp
 $env:PYTHONNOUSERSITE = '1'
 $env:PYTHONSAFEPATH = '1'
 $env:PYTHONPATH = '{w}'
@@ -614,7 +620,13 @@ def main() -> int:
             job_memory=8 * 1024 * 1024 * 1024,
         )
 
-        script = _toolchain_script(ctx.workspace, python, dart, result_file)
+        script = _toolchain_script(
+            ctx.workspace,
+            python,
+            dart,
+            result_file,
+            ctx.appcontainer_local,
+        )
         started = time.monotonic()
         pi = ctx._start(script, job)
         wait, exit_code = resource_probe._wait_exit(pi, 180_000)
