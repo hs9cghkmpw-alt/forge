@@ -218,6 +218,19 @@ def _toolchain_script(
     return rf"""
 $ErrorActionPreference = 'Continue'
 
+# Do not rely on PowerShell's provider current location inside AppContainer.
+# On the physical Windows 10 Home probe, relative redirection unexpectedly
+# resolved to D:\ even though CreateProcessW received the workspace as its
+# current directory.  Production Forge launches toolchains directly, but this
+# probe uses PowerShell as an orchestration shell, so bind every path explicitly.
+$workspace = '{w}'
+try {{
+  Set-Location -LiteralPath $workspace
+}} catch {{
+  # Absolute command/log paths below remain authoritative even if the provider
+  # refuses to adopt the AppContainer workspace as its shell location.
+}}
+
 $privateHome = Join-Path '{w}' '.sandbox-home'
 $privateRoaming = Join-Path $privateHome 'AppData\Roaming'
 $privateLocal = Join-Path $privateHome 'AppData\Local'
@@ -251,22 +264,35 @@ $probe = [ordered]@{{
   dart_runtime = $false
 }}
 
-& '{py}' test_extension.py *> python-test.log
+$pyTest = Join-Path $workspace 'test_extension.py'
+$pyProbe = Join-Path $workspace 'runtime_probe.py'
+$dartTest = Join-Path $workspace 'capability_test.dart'
+$dartImpl = Join-Path $workspace 'capability_impl.dart'
+$dartProbe = Join-Path $workspace 'probe.dart'
+
+$pyTestLog = Join-Path $workspace 'python-test.log'
+$pyBuildLog = Join-Path $workspace 'python-build.log'
+$pyRuntimeLog = Join-Path $workspace 'python-runtime.log'
+$dartTestLog = Join-Path $workspace 'dart-test.log'
+$dartAnalyzeLog = Join-Path $workspace 'dart-analyze.log'
+$dartRuntimeLog = Join-Path $workspace 'dart-runtime.log'
+
+& '{py}' $pyTest *> $pyTestLog
 $probe.python_test = ($LASTEXITCODE -eq 0)
 
-& '{py}' -m compileall -q . *> python-build.log
+& '{py}' -m compileall -q $workspace *> $pyBuildLog
 $probe.python_build = ($LASTEXITCODE -eq 0)
 
-& '{py}' runtime_probe.py *> python-runtime.log
+& '{py}' $pyProbe *> $pyRuntimeLog
 $probe.python_runtime = ($LASTEXITCODE -eq 0)
 
-& '{dart_exe}' run capability_test.dart *> dart-test.log
+& '{dart_exe}' run $dartTest *> $dartTestLog
 $probe.dart_test = ($LASTEXITCODE -eq 0)
 
-& '{dart_exe}' analyze capability_impl.dart capability_test.dart probe.dart *> dart-analyze.log
+& '{dart_exe}' analyze $dartImpl $dartTest $dartProbe *> $dartAnalyzeLog
 $probe.dart_analyze = ($LASTEXITCODE -eq 0)
 
-& '{dart_exe}' run probe.dart *> dart-runtime.log
+& '{dart_exe}' run $dartProbe *> $dartRuntimeLog
 $probe.dart_runtime = ($LASTEXITCODE -eq 0)
 
 $probe | ConvertTo-Json -Compress | Set-Content -LiteralPath '{result}' -Encoding UTF8
