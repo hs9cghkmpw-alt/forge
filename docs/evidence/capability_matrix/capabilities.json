@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-09-03",
+  "generated_at": "2026-09-04",
   "source_of_truth": "docs/reports/FORGE-ZERO-BUDGET-ZERO-GAP-STRATEGY-20260902.md §2.5",
   "total_capabilities": 121,
   "status_vocabulary": [
@@ -263,7 +263,7 @@
         "implementation_cost": 3,
         "evidence_cost": 3,
         "risk": "medium",
-        "priority_score": 2.0
+        "priority_score": 2
       },
       "human_evidence_required": false
     },
@@ -668,7 +668,7 @@
         "implementation_cost": 3,
         "evidence_cost": 3,
         "risk": "medium",
-        "priority_score": 2.0
+        "priority_score": 2
       },
       "human_evidence_required": false
     },
@@ -1292,7 +1292,7 @@
         "closing_evidence": "Network/File/Process/Secret escape 0件",
         "hard_gate": true
       },
-      "zero_budget_approach": "2層。Policy層（静的preflight・実行ファイル固定・env scrub、build_time_sandbox）+ OS層（network/PID namespace・rlimit・timeout、core/sandbox）。追加費用 0",
+      "zero_budget_approach": "Policy層（静的preflight・実行ファイル固定・env scrub）+ OS層。Linuxは namespace + rlimit、Windowsは AppContainer + Job Object。追加費用 0",
       "implementation_status": "PARTIAL",
       "evidence_status": "HARD_GATE_PARTIAL",
       "implementation_evidence": [
@@ -1300,7 +1300,9 @@
         "forge_ai/core/sandbox/policy.py",
         "forge_ai/core/orchestration/build_time_sandbox.py",
         "forge_ai/tests/test_sandbox_escape_corpus.py",
-        "forge_ai/core/orchestration/build_time_workspace.py"
+        "forge_ai/core/orchestration/build_time_workspace.py",
+        "forge_ai/core/sandbox/windows_appcontainer.py",
+        "docs/evidence/windows/WINDOWS-HOME-PC-BASELINE-20260904.md"
       ],
       "measured": {
         "episodes": 0,
@@ -1308,9 +1310,11 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "**OS 層は Linux のみ。** Windows / macOS backend は未実装で、その環境では実行を拒否する（fail closed）。namespace を作れない環境（GitHub Actions runner が該当。2026-09-04 実測）では `FORGE_SANDBOX_ALLOW_POLICY_ONLY=1` を明示した場合に限り Policy 層だけで走り、Evidence へ `sandbox_backend=\"policy-only\"` と残る——**OS 層を通ったことにはならない**。root 実行では RLIMIT_NPROC が効かない（PID namespace で隔離はする）",
-      "blocking_tech_debt": [],
-      "next_proof": "Windows backend の実装と、Windows 上での escape corpus 全遮断",
+      "remaining_gap": "Linux と Windows 10 Home の OS sandbox は本番経路へ配線済み。Windows は policy-only 無効の実機 production validation で escape corpus / Self-Extension / backend regression が全 PASS。macOS backend は未実装で、その環境では fail closed。Target Contract が OS 別境界を要求するため全体 status はまだ PARTIAL。",
+      "blocking_tech_debt": [
+        "TD117"
+      ],
+      "next_proof": "macOS backend の実装と、macOS 実機での escape corpus / real toolchain / Self-Extension 全遮断・完走",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
@@ -1367,7 +1371,7 @@
         "implementation_cost": 3,
         "evidence_cost": 3,
         "risk": "high",
-        "priority_score": 4.0
+        "priority_score": 4
       },
       "human_evidence_required": false
     },
@@ -1452,7 +1456,7 @@
         "implementation_cost": 3,
         "evidence_cost": 3,
         "risk": "medium",
-        "priority_score": 2.0
+        "priority_score": 2
       },
       "human_evidence_required": false
     },
@@ -1574,7 +1578,7 @@
         "implementation_cost": 3,
         "evidence_cost": 3,
         "risk": "medium",
-        "priority_score": 2.0
+        "priority_score": 2
       },
       "human_evidence_required": false
     },
@@ -2049,7 +2053,7 @@
         "implementation_cost": 3,
         "evidence_cost": 3,
         "risk": "medium",
-        "priority_score": 2.0
+        "priority_score": 2
       }
     },
     {
@@ -3695,7 +3699,7 @@
         "closing_evidence": "OS別escape corpus全遮断",
         "hard_gate": true
       },
-      "zero_budget_approach": "EXT-08 と同じ Sandbox。OS 別 escape corpus を Linux から埋める",
+      "zero_budget_approach": "Policy層（静的preflight・実行ファイル固定・env scrub）+ OS層。Linuxは namespace + rlimit、Windowsは AppContainer + Job Object。追加費用 0",
       "implementation_status": "PARTIAL",
       "evidence_status": "HARD_GATE_PARTIAL",
       "implementation_evidence": [
@@ -3703,7 +3707,9 @@
         "forge_ai/core/sandbox/policy.py",
         "forge_ai/core/orchestration/build_time_sandbox.py",
         "forge_ai/tests/test_sandbox_escape_corpus.py",
-        "forge_ai/core/orchestration/build_time_workspace.py"
+        "forge_ai/core/orchestration/build_time_workspace.py",
+        "forge_ai/core/sandbox/windows_appcontainer.py",
+        "docs/evidence/windows/WINDOWS-HOME-PC-BASELINE-20260904.md"
       ],
       "measured": {
         "episodes": 0,
@@ -3711,9 +3717,11 @@
         "success_rate": null,
         "wilson_lower_bound_95": null
       },
-      "remaining_gap": "**OS 層は Linux のみ。** Windows / macOS backend は未実装で、その環境では実行を拒否する（fail closed）。namespace を作れない環境（GitHub Actions runner が該当。2026-09-04 実測）では `FORGE_SANDBOX_ALLOW_POLICY_ONLY=1` を明示した場合に限り Policy 層だけで走り、Evidence へ `sandbox_backend=\"policy-only\"` と残る——**OS 層を通ったことにはならない**。root 実行では RLIMIT_NPROC が効かない（PID namespace で隔離はする）",
-      "blocking_tech_debt": [],
-      "next_proof": "Windows / macOS の escape corpus",
+      "remaining_gap": "Linux と Windows 10 Home の OS sandbox は本番経路へ配線済み。Windows は policy-only 無効の実機 production validation で escape corpus / Self-Extension / backend regression が全 PASS。macOS backend は未実装で、その環境では fail closed。Target Contract が OS 別境界を要求するため全体 status はまだ PARTIAL。",
+      "blocking_tech_debt": [
+        "TD117"
+      ],
+      "next_proof": "macOS backend の実装と、macOS 実機での escape corpus / real toolchain / Self-Extension 全遮断・完走",
       "evidence_reuse": {
         "episode_families": [],
         "shared_with": []
@@ -3768,7 +3776,7 @@
         "implementation_cost": 5,
         "evidence_cost": 3,
         "risk": "high",
-        "priority_score": 6.0
+        "priority_score": 6
       }
     },
     {
@@ -3852,7 +3860,7 @@
         "implementation_cost": 3,
         "evidence_cost": 3,
         "risk": "high",
-        "priority_score": 4.0
+        "priority_score": 4
       },
       "human_evidence_required": false
     },
@@ -4601,7 +4609,7 @@
         "implementation_cost": 3,
         "evidence_cost": 3,
         "risk": "medium",
-        "priority_score": 2.0
+        "priority_score": 2
       }
     },
     {
