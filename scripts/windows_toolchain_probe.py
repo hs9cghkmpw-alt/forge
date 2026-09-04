@@ -471,6 +471,14 @@ $probe = [ordered]@{{
   dart_test = $false
   dart_analyze = $false
   dart_runtime = $false
+
+  # AppContainer-safe Dart route. The ordinary dartdev commands above are kept
+  # as diagnostics because current Dart calls Platform.resolvedExecutable,
+  # which canonicalizes via GetFinalPathNameByHandle(VOLUME_NAME_DOS) and can
+  # fail inside AppContainer even when the executable/file itself is readable.
+  dart_vm_test = $false
+  dart_vm_build = $false
+  dart_vm_runtime = $false
   exit_codes = [ordered]@{{}}
   errors = @()
 }}
@@ -489,6 +497,10 @@ $pyRuntimeLog = Join-Path $workspace 'python-runtime.log'
 $dartTestLog = Join-Path $workspace 'dart-test.log'
 $dartAnalyzeLog = Join-Path $workspace 'dart-analyze.log'
 $dartRuntimeLog = Join-Path $workspace 'dart-runtime.log'
+$dartVmTestLog = Join-Path $workspace 'dart-vm-test.log'
+$dartVmBuildLog = Join-Path $workspace 'dart-vm-build.log'
+$dartVmRuntimeLog = Join-Path $workspace 'dart-vm-runtime.log'
+$dartKernel = Join-Path $workspace 'capability-test.dill'
 
 function Invoke-ProbeCommand(
   [string]$Name,
@@ -523,11 +535,18 @@ $probe.dart_test = Invoke-ProbeCommand 'dart-test' '{dart_exe}' @('run',$dartTes
 $probe.dart_analyze = Invoke-ProbeCommand 'dart-analyze' '{dart_exe}' @('analyze',$dartImpl,$dartTest,$dartProbe) $dartAnalyzeLog
 $probe.dart_runtime = Invoke-ProbeCommand 'dart-runtime' '{dart_exe}' @('run',$dartProbe) $dartRuntimeLog
 
+# Bypass dartdev but keep the same Dart VM / frontend compiler. This is the
+# candidate production route for AppContainer: execute generated Dart directly
+# and force a kernel compilation as the build/type-checking gate.
+$probe.dart_vm_test = Invoke-ProbeCommand 'dart-vm-test' '{dart_exe}' @('--disable-dart-dev',$dartTest) $dartVmTestLog
+$probe.dart_vm_build = Invoke-ProbeCommand 'dart-vm-build' '{dart_exe}' @('--disable-dart-dev','--snapshot-kind=kernel',"--snapshot=$dartKernel",$dartTest) $dartVmBuildLog
+$probe.dart_vm_runtime = Invoke-ProbeCommand 'dart-vm-runtime' '{dart_exe}' @('--disable-dart-dev',$dartProbe) $dartVmRuntimeLog
+
 $probe | ConvertTo-Json -Compress | Set-Content -LiteralPath '{result}' -Encoding UTF8
 if ($probe.python_visible -and $probe.dart_visible -and
     $probe.python_smoke -and $probe.dart_smoke -and
     $probe.python_test -and $probe.python_build -and $probe.python_runtime -and
-    $probe.dart_test -and $probe.dart_analyze -and $probe.dart_runtime -and
+    $probe.dart_vm_test -and $probe.dart_vm_build -and $probe.dart_vm_runtime -and
     $probe.host_secret_absent) {{
   exit 0
 }}
@@ -671,6 +690,9 @@ def main() -> int:
                 "dart-test.log",
                 "dart-analyze.log",
                 "dart-runtime.log",
+                "dart-vm-test.log",
+                "dart-vm-build.log",
+                "dart-vm-runtime.log",
             ):
                 path = ctx.workspace / name
                 if path.is_file():
@@ -693,6 +715,9 @@ def main() -> int:
             "dart-test.log",
             "dart-analyze.log",
             "dart-runtime.log",
+            "dart-vm-test.log",
+            "dart-vm-build.log",
+            "dart-vm-runtime.log",
         ):
             path = ctx.workspace / name
             if path.is_file():
@@ -710,17 +735,29 @@ def main() -> int:
             "python_test",
             "python_build",
             "python_runtime",
-            "dart_test",
-            "dart_analyze",
-            "dart_runtime",
+            "dart_vm_test",
+            "dart_vm_build",
+            "dart_vm_runtime",
         )
+        result["dartdev_cli_compatible"] = all(
+            assertions.get(name) is True
+            for name in ("dart_test", "dart_analyze", "dart_runtime")
+        )
+        result["appcontainer_safe_dart_route"] = all(
+            assertions.get(name) is True
+            for name in ("dart_vm_test", "dart_vm_build", "dart_vm_runtime")
+        )
+
         failed = [name for name in required if assertions.get(name) is not True]
-        if exit_code != 0 or failed or not direct_smoke_ok:
+        # The PowerShell orchestrator intentionally still exits 7 when dartdev
+        # itself fails, so do not use its aggregate exit code as the Stage-4
+        # verdict. The per-command evidence above is authoritative here.
+        if failed or not direct_smoke_ok:
             pieces: list[str] = []
             if failed:
                 pieces.append(", ".join(failed))
             if exit_code != 0:
-                pieces.append(f"orchestrator_exit={exit_code}")
+                pieces.append(f"orchestrator_exit={exit_code} (diagnostic only)")
             if not direct_smoke_ok:
                 pieces.append("direct_smoke")
             raise RuntimeError("toolchain assertions failed: " + "; ".join(pieces))
