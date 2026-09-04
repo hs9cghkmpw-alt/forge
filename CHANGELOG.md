@@ -1,3 +1,35 @@
+# 2026-09-04 — Windows 10 Home Sandbox production validation ALL PASS
+
+CEO の実 Windows 10 Home PC で、Windows Self-Extension Sandbox の本番統合を
+`FORGE_SANDBOX_ALLOW_POLICY_ONLY` **無効**のまま一括検証し、全段 PASS。
+
+```text
+PASS  production escape corpus
+PASS  TD110 physical probes
+PASS  targeted Self-Extension regressions
+PASS  full forge_ai Self-Extension suite
+PASS  backend regression
+Working tree clean: True
+TD110 production validation: ALL PASS
+```
+
+- 検証 commit: `7f8e000ce53165512c66132018a888c560c61ca4`
+- 本番 backend: `windows-appcontainer+job`
+- AppContainer + Job Object を本番 `runner.py` に配線
+- Network/DNS deny、secret/env scrub、workspace境界、CPU/memory/process/
+  wall-clock/file-growth/output 上限を production escape corpus で確認
+- 実 Python test/build/runtime が AppContainer 内で PASS
+- Dart は `dartvm.exe + package:` route で test/build/runtime が PASS
+- 以前 Windows で落ちていた Self-Extension 系回帰が PASS
+- full `forge_ai` suite と backend regression が PASS
+- **TD110 Windows 部分を解消**
+- macOS backend 未実装は **TD117** へ分離
+- EXT-08 / SEC-04 は OS別 Target Contract のため、macOS が残る間は
+  `PARTIAL` / `HARD_GATE_PARTIAL` を維持
+
+Evidence:
+`docs/evidence/windows/WINDOWS-HOME-PC-BASELINE-20260904.md`
+
 # 2026-09-04 — CI 緑が Sandbox の証明になっていなかった
 
 `import platform` の書き忘れが **CI 緑のまま HEAD へ入っていた**
