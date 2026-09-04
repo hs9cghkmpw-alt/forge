@@ -41,6 +41,7 @@ if platform.system() != "Windows":
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
 userenv = ctypes.WinDLL("userenv", use_last_error=True)
+ole32 = ctypes.OleDLL("ole32")
 
 DWORD = wintypes.DWORD
 WORD = wintypes.WORD
@@ -179,6 +180,15 @@ userenv.CreateAppContainerProfile.restype = HRESULT
 userenv.DeleteAppContainerProfile.argtypes = [wintypes.LPCWSTR]
 userenv.DeleteAppContainerProfile.restype = HRESULT
 
+userenv.GetAppContainerFolderPath.argtypes = [
+    wintypes.LPCWSTR,
+    ctypes.POINTER(wintypes.LPWSTR),
+]
+userenv.GetAppContainerFolderPath.restype = HRESULT
+
+ole32.CoTaskMemFree.argtypes = [LPVOID]
+ole32.CoTaskMemFree.restype = None
+
 advapi32.ConvertSidToStringSidW.argtypes = [PSID, ctypes.POINTER(wintypes.LPWSTR)]
 advapi32.ConvertSidToStringSidW.restype = BOOL
 
@@ -290,9 +300,14 @@ def _grant_workspace(workspace: Path, sid_text: str) -> None:
         )
 
 
-def _minimal_environment(workspace: Path) -> ctypes.Array:
+def _minimal_environment(
+    workspace: Path,
+    appcontainer_local_appdata: Path,
+) -> ctypes.Array:
     system_root = os.environ["SystemRoot"]
     workspace_text = str(workspace)
+    appcontainer_local_text = str(appcontainer_local_appdata)
+    appcontainer_temp_text = str(appcontainer_local_appdata / "Temp")
 
     # CreateProcessW does not propagate the per-drive current-directory entries
     # (for example "=C:=C:\\path") when the caller supplies a custom environment
@@ -305,6 +320,11 @@ def _minimal_environment(workspace: Path) -> ctypes.Array:
         (f"={drive}", workspace_text),
         ("ComSpec", os.path.join(system_root, "System32", "cmd.exe")),
         ("FORGE_PROBE_VISIBLE", "yes"),
+        # AppContainer launches have their own per-container LOCALAPPDATA/TEMP/TMP.
+        # Microsoft documents these as part of the AppContainer profile contract.
+        # Omitting LOCALAPPDATA caused CreateProcessW to fail with ERROR_ENVVAR_NOT_FOUND
+        # on the fresh Windows 10 Home TD110 probe.
+        ("LOCALAPPDATA", appcontainer_local_text),
         (
             "PATH",
             os.path.join(system_root, "System32")
@@ -312,8 +332,8 @@ def _minimal_environment(workspace: Path) -> ctypes.Array:
             + os.path.join(system_root, "System32", "WindowsPowerShell", "v1.0"),
         ),
         ("SystemRoot", system_root),
-        ("TEMP", workspace_text),
-        ("TMP", workspace_text),
+        ("TEMP", appcontainer_temp_text),
+        ("TMP", appcontainer_temp_text),
         ("WINDIR", system_root),
     ]
 
@@ -450,6 +470,28 @@ def main() -> int:
 
         sid_text = _sid_string(sid)
         result["appcontainer_sid"] = sid_text
+
+        container_path_ptr = wintypes.LPWSTR()
+        hr = int(
+            userenv.GetAppContainerFolderPath(
+                sid_text,
+                ctypes.byref(container_path_ptr),
+            )
+        )
+        if _hresult_failed(hr):
+            raise RuntimeError(
+                "GetAppContainerFolderPath failed: "
+                f"HRESULT=0x{hr & 0xFFFFFFFF:08X}"
+            )
+        try:
+            appcontainer_local_appdata = Path(container_path_ptr.value)
+        finally:
+            ole32.CoTaskMemFree(ctypes.cast(container_path_ptr, LPVOID))
+
+        appcontainer_temp = appcontainer_local_appdata / "Temp"
+        appcontainer_temp.mkdir(parents=True, exist_ok=True)
+        result["appcontainer_local_appdata"] = str(appcontainer_local_appdata)
+
         _grant_workspace(workspace, sid_text)
         result["workspace_acl_granted"] = True
 
@@ -528,7 +570,10 @@ def main() -> int:
         si = STARTUPINFOEXW()
         si.StartupInfo.cb = ctypes.sizeof(si)
         si.lpAttributeList = attr_list
-        env_block = _minimal_environment(workspace)
+        env_block = _minimal_environment(
+            workspace,
+            appcontainer_local_appdata,
+        )
 
         if not kernel32.CreateProcessW(
             powershell,
