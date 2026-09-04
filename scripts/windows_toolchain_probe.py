@@ -56,44 +56,54 @@ def _run_icacls(args: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _grant_read_execute(path: Path, sid_text: str) -> None:
+def _grant_read_execute(path: Path, sid_text: str, *, recursive: bool) -> None:
     if not path.exists():
         raise RuntimeError(f"toolchain path does not exist: {path}")
-    completed = _run_icacls(
-        [
-            str(path),
-            "/grant",
-            f"*{sid_text}:(OI)(CI)RX",
-            "/T",
-            "/C",
-            "/Q",
-        ]
-    )
+
+    args = [
+        str(path),
+        "/grant",
+        f"*{sid_text}:(OI)(CI)RX" if recursive else f"*{sid_text}:RX",
+    ]
+    if recursive:
+        args.extend(["/T", "/C"])
+    args.append("/Q")
+
+    completed = _run_icacls(args)
     if completed.returncode != 0:
         raise RuntimeError(
             "icacls RX grant failed: "
-            f"path={path} exit={completed.returncode} "
+            f"path={path} recursive={recursive} exit={completed.returncode} "
             f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
         )
 
 
-def _remove_sid_acl(path: Path, sid_text: str) -> None:
-    completed = _run_icacls(
-        [
-            str(path),
-            "/remove",
-            f"*{sid_text}",
-            "/T",
-            "/C",
-            "/Q",
-        ]
-    )
+def _remove_sid_acl(path: Path, sid_text: str, *, recursive: bool) -> None:
+    args = [str(path), "/remove", f"*{sid_text}"]
+    if recursive:
+        args.extend(["/T", "/C"])
+    args.append("/Q")
+
+    completed = _run_icacls(args)
     if completed.returncode != 0:
         raise RuntimeError(
             "icacls SID cleanup failed: "
-            f"path={path} exit={completed.returncode} "
+            f"path={path} recursive={recursive} exit={completed.returncode} "
             f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
         )
+
+
+def _ancestor_directories(path: Path) -> tuple[Path, ...]:
+    """Return non-volume-root ancestors needed to traverse to *path*."""
+    resolved = path.resolve()
+    anchor = Path(resolved.anchor)
+    ancestors: list[Path] = []
+    current = resolved.parent
+    while current != anchor and current != current.parent:
+        ancestors.append(current)
+        current = current.parent
+    ancestors.reverse()
+    return tuple(ancestors)
 
 
 def _venv_python() -> tuple[Path, Path]:
@@ -256,12 +266,17 @@ $probe = [ordered]@{{
   host_secret_absent = [string]::IsNullOrEmpty($env:OPENAI_API_KEY) -and
                        [string]::IsNullOrEmpty($env:GEMINI_API_KEY) -and
                        [string]::IsNullOrEmpty($env:ANTHROPIC_API_KEY)
+  python_visible = Test-Path -LiteralPath '{py}'
+  dart_visible = Test-Path -LiteralPath '{dart_exe}'
+  python_smoke = $false
+  dart_smoke = $false
   python_test = $false
   python_build = $false
   python_runtime = $false
   dart_test = $false
   dart_analyze = $false
   dart_runtime = $false
+  errors = @()
 }}
 
 $pyTest = Join-Path $workspace 'test_extension.py'
@@ -270,6 +285,8 @@ $dartTest = Join-Path $workspace 'capability_test.dart'
 $dartImpl = Join-Path $workspace 'capability_impl.dart'
 $dartProbe = Join-Path $workspace 'probe.dart'
 
+$pySmokeLog = Join-Path $workspace 'python-smoke.log'
+$dartSmokeLog = Join-Path $workspace 'dart-smoke.log'
 $pyTestLog = Join-Path $workspace 'python-test.log'
 $pyBuildLog = Join-Path $workspace 'python-build.log'
 $pyRuntimeLog = Join-Path $workspace 'python-runtime.log'
@@ -277,26 +294,31 @@ $dartTestLog = Join-Path $workspace 'dart-test.log'
 $dartAnalyzeLog = Join-Path $workspace 'dart-analyze.log'
 $dartRuntimeLog = Join-Path $workspace 'dart-runtime.log'
 
-& '{py}' $pyTest *> $pyTestLog
-$probe.python_test = ($LASTEXITCODE -eq 0)
+function Invoke-ProbeCommand([string]$Name, [scriptblock]$Command, [string]$LogPath) {{
+  try {{
+    & $Command *> $LogPath
+    return ($LASTEXITCODE -eq 0)
+  }} catch {{
+    $message = "$($Name): $($_.Exception.GetType().FullName): $($_.Exception.Message)"
+    $probe.errors += $message
+    $message | Out-File -LiteralPath $LogPath -Encoding UTF8 -Append
+    return $false
+  }}
+}}
 
-& '{py}' -m compileall -q $workspace *> $pyBuildLog
-$probe.python_build = ($LASTEXITCODE -eq 0)
-
-& '{py}' $pyProbe *> $pyRuntimeLog
-$probe.python_runtime = ($LASTEXITCODE -eq 0)
-
-& '{dart_exe}' run $dartTest *> $dartTestLog
-$probe.dart_test = ($LASTEXITCODE -eq 0)
-
-& '{dart_exe}' analyze $dartImpl $dartTest $dartProbe *> $dartAnalyzeLog
-$probe.dart_analyze = ($LASTEXITCODE -eq 0)
-
-& '{dart_exe}' run $dartProbe *> $dartRuntimeLog
-$probe.dart_runtime = ($LASTEXITCODE -eq 0)
+$probe.python_smoke = Invoke-ProbeCommand 'python-smoke' {{ & '{py}' --version }} $pySmokeLog
+$probe.dart_smoke = Invoke-ProbeCommand 'dart-smoke' {{ & '{dart_exe}' --version }} $dartSmokeLog
+$probe.python_test = Invoke-ProbeCommand 'python-test' {{ & '{py}' $pyTest }} $pyTestLog
+$probe.python_build = Invoke-ProbeCommand 'python-build' {{ & '{py}' -m compileall -q $workspace }} $pyBuildLog
+$probe.python_runtime = Invoke-ProbeCommand 'python-runtime' {{ & '{py}' $pyProbe }} $pyRuntimeLog
+$probe.dart_test = Invoke-ProbeCommand 'dart-test' {{ & '{dart_exe}' run $dartTest }} $dartTestLog
+$probe.dart_analyze = Invoke-ProbeCommand 'dart-analyze' {{ & '{dart_exe}' analyze $dartImpl $dartTest $dartProbe }} $dartAnalyzeLog
+$probe.dart_runtime = Invoke-ProbeCommand 'dart-runtime' {{ & '{dart_exe}' run $dartProbe }} $dartRuntimeLog
 
 $probe | ConvertTo-Json -Compress | Set-Content -LiteralPath '{result}' -Encoding UTF8
-if ($probe.python_test -and $probe.python_build -and $probe.python_runtime -and
+if ($probe.python_visible -and $probe.dart_visible -and
+    $probe.python_smoke -and $probe.dart_smoke -and
+    $probe.python_test -and $probe.python_build -and $probe.python_runtime -and
     $probe.dart_test -and $probe.dart_analyze -and $probe.dart_runtime -and
     $probe.host_secret_absent) {{
   exit 0
@@ -307,7 +329,8 @@ exit 7
 
 def main() -> int:
     ctx = None
-    granted: list[Path] = []
+    granted_recursive: list[Path] = []
+    granted_ancestors: list[Path] = []
     result: dict[str, object] = {
         "ok": False,
         "platform": platform.platform(),
@@ -339,14 +362,29 @@ def main() -> int:
         _write_fixtures(ctx.workspace)
         result_file = ctx.workspace / "toolchain-result.json"
 
-        # Grant the ephemeral AppContainer SID only read/execute to the installed
-        # toolchain files.  The generated workspace already has explicit modify.
-        for root in (REPO_ROOT / ".venv", python_home, dart_sdk):
-            resolved = root.resolve()
-            if resolved in granted:
-                continue
-            _grant_read_execute(resolved, ctx.sid_text)
-            granted.append(resolved)
+        # Grant read/execute to toolchain trees and non-inheriting traversal
+        # rights to their ancestors. Sibling project/source files do not inherit.
+        toolchain_roots = tuple(
+            dict.fromkeys(
+                root.resolve()
+                for root in (REPO_ROOT / ".venv", python_home, dart_sdk)
+            )
+        )
+        ancestor_set = {
+            ancestor
+            for root in toolchain_roots
+            for ancestor in _ancestor_directories(root)
+        }
+        for ancestor in sorted(ancestor_set, key=lambda item: len(item.parts)):
+            _grant_read_execute(ancestor, ctx.sid_text, recursive=False)
+            granted_ancestors.append(ancestor)
+
+        for resolved in toolchain_roots:
+            _grant_read_execute(resolved, ctx.sid_text, recursive=True)
+            granted_recursive.append(resolved)
+
+        result["acl_ancestor_grants"] = [str(p) for p in granted_ancestors]
+        result["acl_toolchain_grants"] = [str(p) for p in granted_recursive]
 
         job = ctx._new_job(
             flags=(
@@ -381,6 +419,8 @@ def main() -> int:
         if not result_file.is_file():
             logs = {}
             for name in (
+                "python-smoke.log",
+                "dart-smoke.log",
                 "python-test.log",
                 "python-build.log",
                 "python-runtime.log",
@@ -399,6 +439,8 @@ def main() -> int:
 
         logs = {}
         for name in (
+            "python-smoke.log",
+            "dart-smoke.log",
             "python-test.log",
             "python-build.log",
             "python-runtime.log",
@@ -413,6 +455,10 @@ def main() -> int:
 
         required = (
             "host_secret_absent",
+            "python_visible",
+            "dart_visible",
+            "python_smoke",
+            "dart_smoke",
             "python_test",
             "python_build",
             "python_runtime",
@@ -435,9 +481,14 @@ def main() -> int:
     finally:
         cleanup_errors: list[str] = []
         if ctx is not None:
-            for root in reversed(granted):
+            for root in reversed(granted_recursive):
                 try:
-                    _remove_sid_acl(root, ctx.sid_text)
+                    _remove_sid_acl(root, ctx.sid_text, recursive=True)
+                except Exception as exc:
+                    cleanup_errors.append(str(exc))
+            for ancestor in reversed(granted_ancestors):
+                try:
+                    _remove_sid_acl(ancestor, ctx.sid_text, recursive=False)
                 except Exception as exc:
                     cleanup_errors.append(str(exc))
             try:
