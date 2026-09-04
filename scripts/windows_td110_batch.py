@@ -35,6 +35,23 @@ STEPS = (
 )
 
 
+def _strip_powershell_progress_clixml(value: str) -> str:
+    """Drop only PowerShell progress-stream CLIXML noise from captured stderr."""
+    kept: list[str] = []
+    for line in value.splitlines():
+        stripped = line.strip()
+        if stripped == "#< CLIXML":
+            continue
+        if (
+            stripped.startswith("<Objs Version=")
+            and "powershell.com/powershell/2004/04" in stripped
+        ):
+            continue
+        kept.append(line)
+    suffix = "\n" if value.endswith("\n") and kept else ""
+    return "\n".join(kept) + suffix
+
+
 def _run_step(name: str, script_name: str, run_dir: Path) -> StepResult:
     script = REPO / "scripts" / script_name
     log = run_dir / f"{name}.log"
@@ -50,10 +67,11 @@ def _run_step(name: str, script_name: str, run_dir: Path) -> StepResult:
         check=False,
     )
     output = (completed.stdout or "")
-    if completed.stderr:
+    stderr = _strip_powershell_progress_clixml(completed.stderr or "")
+    if stderr:
         if output and not output.endswith("\n"):
             output += "\n"
-        output += completed.stderr
+        output += stderr
 
     log.write_text(output, encoding="utf-8")
     if output:
