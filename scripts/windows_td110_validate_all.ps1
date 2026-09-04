@@ -8,6 +8,32 @@ Set-Location $Repo
 Write-Host ""
 Write-Host "=== Forge TD110 final Windows batch ===" -ForegroundColor Cyan
 
+# This validation never shuts Windows down or restarts it.
+# RAM values are diagnostic only. An 8 GB machine often reports about 7.9 GB
+# because of hardware reservation; that must not be treated as "insufficient".
+try {
+    $Computer = Get-CimInstance Win32_ComputerSystem
+    $OS = Get-CimInstance Win32_OperatingSystem
+    $TotalRamGB = [math]::Round($Computer.TotalPhysicalMemory / 1GB, 2)
+    $FreeRamGB = [math]::Round(($OS.FreePhysicalMemory * 1KB) / 1GB, 2)
+    $PageFiles = @(Get-CimInstance Win32_PageFileUsage -ErrorAction SilentlyContinue)
+    $PageFileGB = if ($PageFiles.Count -gt 0) {
+        [math]::Round((($PageFiles | Measure-Object -Property AllocatedBaseSize -Sum).Sum) / 1024, 2)
+    } else {
+        0
+    }
+
+    Write-Host "RAM installed : $TotalRamGB GB"
+    Write-Host "RAM free      : $FreeRamGB GB"
+    Write-Host "Page file     : $PageFileGB GB"
+
+    if ($FreeRamGB -lt 1.5) {
+        Write-Host "WARNING: free RAM is low. The test will continue; closing heavy apps may improve stability." -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "WARNING: RAM/page-file diagnostics failed; validation will continue." -ForegroundColor Yellow
+}
+
 $Dirty = git status --porcelain
 if ($LASTEXITCODE -ne 0) {
     Write-Host "git status failed." -ForegroundColor Red
