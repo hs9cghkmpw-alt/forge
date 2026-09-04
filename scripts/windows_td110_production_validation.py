@@ -84,13 +84,11 @@ def main() -> int:
     env["PYTHONUTF8"] = "1"
 
     foundation_steps = (
+        # Production integration is the fastest-changing layer. Run its escape
+        # corpus first so a regression fails in ~minutes without re-spending the
+        # stable physical-probe batch first.
         Step(
-            "01 TD110 physical probes",
-            (str(python), str(REPO / "scripts" / "windows_td110_batch.py")),
-            REPO,
-        ),
-        Step(
-            "02 production escape corpus",
+            "01 production escape corpus",
             (
                 str(python),
                 "-m",
@@ -102,6 +100,11 @@ def main() -> int:
                 "test_sandbox_escape_corpus.py",
                 "-v",
             ),
+            REPO,
+        ),
+        Step(
+            "02 TD110 physical probes",
+            (str(python), str(REPO / "scripts" / "windows_td110_batch.py")),
             REPO,
         ),
     )
