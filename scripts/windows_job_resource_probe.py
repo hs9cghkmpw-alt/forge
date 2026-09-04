@@ -268,6 +268,7 @@ def main() -> int:
     }
 
     try:
+        result["stage"] = "context:init"
         ctx = Context()
         result["moniker"] = ctx.moniker
         result["appcontainer_sid"] = ctx.sid_text
@@ -275,6 +276,7 @@ def main() -> int:
         assertions: dict[str, bool] = {}
 
         # 1) CPU time: write a marker first, then burn CPU. Job time should end it.
+        result["stage"] = "cpu:create-job"
         cpu_started = ctx.workspace / "cpu-started.txt"
         cpu_script = (
             f"Set-Content -LiteralPath '{cpu_started}' -Value started; "
@@ -284,7 +286,9 @@ def main() -> int:
             flags=base.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_JOB_TIME,
             job_time_100ns=15_000_000,  # 1.5 seconds of user-mode CPU time
         )
+        result["stage"] = "cpu:start-process"
         cpu_pi = ctx._start(cpu_script, cpu_job)
+        result["stage"] = "cpu:wait"
         cpu_t0 = time.monotonic()
         cpu_wait, _ = _wait_exit(cpu_pi, 10_000)
         cpu_elapsed = time.monotonic() - cpu_t0
@@ -294,10 +298,12 @@ def main() -> int:
             and cpu_elapsed < 8.0
         )
         result["cpu_elapsed_seconds"] = round(cpu_elapsed, 3)
+        result["stage"] = "cpu:cleanup"
         _close_pi(cpu_pi)
         base.kernel32.CloseHandle(cpu_job)
 
         # 2) Memory: bounded PowerShell repeatedly allocates 64 MiB chunks.
+        result["stage"] = "memory:create-job"
         mem_started = ctx.workspace / "memory-started.txt"
         mem_blocked = ctx.workspace / "memory-blocked.txt"
         mem_script = f"""
@@ -321,7 +327,9 @@ try {{
             process_memory=256 * 1024 * 1024,
             job_memory=320 * 1024 * 1024,
         )
+        result["stage"] = "memory:start-process"
         mem_pi = ctx._start(mem_script, mem_job)
+        result["stage"] = "memory:wait"
         mem_t0 = time.monotonic()
         mem_wait, mem_code = _wait_exit(mem_pi, 12_000)
         mem_elapsed = time.monotonic() - mem_t0
@@ -333,10 +341,12 @@ try {{
         )
         result["memory_elapsed_seconds"] = round(mem_elapsed, 3)
         result["memory_exit_code"] = mem_code
+        result["stage"] = "memory:cleanup"
         _close_pi(mem_pi)
         base.kernel32.CloseHandle(mem_job)
 
         # 3) Active-process limit: parent + at most one live child.
+        result["stage"] = "process-limit:create-job"
         proc_result = ctx.workspace / "process-count.txt"
         proc_script = f"""
 $alive = @()
@@ -357,7 +367,9 @@ foreach ($p in $alive) {{ try {{ Stop-Process -Id $p.Id -Force }} catch {{}} }}
             ),
             active_process_limit=2,
         )
+        result["stage"] = "process-limit:start-process"
         proc_pi = ctx._start(proc_script, proc_job)
+        result["stage"] = "process-limit:wait"
         proc_wait, proc_code = _wait_exit(proc_pi, 15_000)
         count = int(proc_result.read_text(encoding="utf-16").strip()) if proc_result.is_file() else 999
         assertions["active_process_limit_enforced"] = (
@@ -366,17 +378,21 @@ foreach ($p in $alive) {{ try {{ Stop-Process -Id $p.Id -Force }} catch {{}} }}
             and count <= 1
         )
         result["max_live_children_observed"] = count
+        result["stage"] = "process-limit:cleanup"
         _close_pi(proc_pi)
         base.kernel32.CloseHandle(proc_job)
 
         # 4) Wall clock: host must be able to terminate the entire job.
+        result["stage"] = "wall-clock:create-job"
         wall_started = ctx.workspace / "wall-started.txt"
         wall_script = (
             f"Set-Content -LiteralPath '{wall_started}' -Value started; "
             "Start-Sleep -Seconds 30"
         )
         wall_job = ctx._new_job(flags=base.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
+        result["stage"] = "wall-clock:start-process"
         wall_pi = ctx._start(wall_script, wall_job)
+        result["stage"] = "wall-clock:wait"
         wall_wait, _ = _wait_exit(wall_pi, 2_000)
         terminated = False
         if wall_wait == base.WAIT_TIMEOUT:
@@ -391,10 +407,12 @@ foreach ($p in $alive) {{ try {{ Stop-Process -Id $p.Id -Force }} catch {{}} }}
             and wall_wait2 == base.WAIT_OBJECT_0
         )
         result["wall_clock_exit_code"] = wall_code2
+        result["stage"] = "wall-clock:cleanup"
         _close_pi(wall_pi)
         base.kernel32.CloseHandle(wall_job)
 
         # 5) KILL_ON_JOB_CLOSE: descendant remains alive after parent exits,
+        result["stage"] = "kill-on-close:create-job"
         # then closing the job handle must terminate that descendant.
         pid_file = ctx.workspace / "surviving-child.pid"
         child_script = f"""
@@ -403,9 +421,12 @@ Set-Content -LiteralPath '{pid_file}' -Value $p.Id
 exit 0
 """
         child_job = ctx._new_job(flags=base.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
+        result["stage"] = "kill-on-close:start-process"
         parent_pi = ctx._start(child_script, child_job)
+        result["stage"] = "kill-on-close:wait-parent"
         parent_wait, parent_code = _wait_exit(parent_pi, 10_000)
         child_pid = int(pid_file.read_text(encoding="utf-16").strip()) if pid_file.is_file() else 0
+        result["stage"] = "kill-on-close:open-child"
         child_handle = (
             base.kernel32.OpenProcess(SYNCHRONIZE, False, child_pid)
             if child_pid
@@ -415,7 +436,9 @@ exit 0
             child_handle
             and base.kernel32.WaitForSingleObject(child_handle, 0) == base.WAIT_TIMEOUT
         )
+        result["stage"] = "kill-on-close:close-job"
         base.kernel32.CloseHandle(child_job)
+        result["stage"] = "kill-on-close:wait-child"
         child_died_after_close = bool(
             child_handle
             and base.kernel32.WaitForSingleObject(child_handle, 5_000) == base.WAIT_OBJECT_0
@@ -431,12 +454,14 @@ exit 0
             base.kernel32.CloseHandle(child_handle)
         _close_pi(parent_pi)
 
+        result["stage"] = "final:assertions"
         result["assertions"] = assertions
         failed = [name for name, value in assertions.items() if value is not True]
         if failed:
             raise RuntimeError("resource assertions failed: " + ", ".join(failed))
 
         result["ok"] = True
+        result["stage"] = "complete"
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
 
