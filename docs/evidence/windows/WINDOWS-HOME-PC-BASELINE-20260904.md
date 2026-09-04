@@ -134,3 +134,57 @@ Minimum proof requirements before closing TD110:
 8. evidence names the exact Windows backend used
 9. removing each isolation control makes the corresponding guard-break test fail
 10. Self-Extension generate → verify → promote → install → reuse succeeds on Windows only after those gates pass
+
+
+## TD110 Stage 2 real-Windows isolation boundary probe
+
+Physical Windows 10 Home execution of:
+
+```powershell
+py -3.12 scripts\windows_appcontainer_isolation_probe.py
+```
+
+at commit `28eb0c68803c0819f66fd567c17fdfacb28fd83f` returned `ok: true`.
+
+Observed OS-backed facts:
+
+```text
+profile_created          = true
+appcontainer_token       = true
+workspace_acl_granted    = true
+job_created              = true
+job_assigned             = true
+process_resumed          = true
+process_exit_code         = 0
+
+inside_write              = true
+outside_read_blocked      = true
+network_blocked           = true
+host_secret_absent        = true
+minimal_env               = true
+child_spawned             = true
+```
+
+The AppContainer LocalAppData path was resolved by Windows through
+`GetAppContainerFolderPath`, rather than guessed.
+
+This closes an important uncertainty: **Windows 10 Home on the actual distribution
+target can enforce the core AppContainer boundary while a Job Object is attached
+before execution begins.**
+
+It still does **not** close TD110.  Remaining proof includes resource limits
+(CPU / memory / wall-clock), child-process cleanup, real Python/Dart/Flutter
+toolchain execution, mutation/guard-break tests, production runner wiring, and
+the full Self-Extension generate → verify → promote → install → reuse path.
+
+### Probe defect found and corrected
+
+The first Stage 2 attempts failed at `CreateProcessW` with Win32 error 203
+(`ERROR_ENVVAR_NOT_FOUND`).  The AppContainer profile itself was healthy.
+
+The defect was in the probe's custom minimal environment: AppContainer launch on
+this Windows 10 machine required the profile-specific `LOCALAPPDATA` and
+`TEMP`/`TMP` paths.  The probe now obtains the profile path from Windows and
+constructs the child environment from that path.  This is relevant to the
+production backend: **AppContainer environment paths must be resolved from the OS,
+not inferred from the host user's normal environment.**
