@@ -1,0 +1,35 @@
+name: AI Workers
+on:
+  issue_comment:
+    types: [created]
+permissions: {contents: write, pull-requests: write, issues: write, actions: read, id-token: write}
+jobs:
+  claude:
+    if: github.event.issue.pull_request == null && startsWith(github.event.comment.body, '/ai claude') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          trigger_phrase: /ai claude
+          branch_prefix: claude/
+          additional_permissions: |
+            actions: read
+          claude_args: |
+            --max-turns 40
+            --append-system-prompt "Managed Forge worker. Read the Issue, AGENTS.md/CLAUDE.md, Forge Constitution/Product Direction, current SoT/HANDOFF and newest AI-HANDOFF first. Follow scope exactly. Never write directly to the default branch; use focused branch/PR. Run required tests/CI evidence. Never merge/approve/close, expose secrets, weaken gates, or infer unexecuted checks as PASS. Leave complete AI-HANDOFF before stopping."
+  codex:
+    if: github.event.issue.pull_request == null && startsWith(github.event.comment.body, '/ai codex') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    permissions: {contents: read, issues: write, actions: read}
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: :workspace
+          output-file: codex-final.md
+          prompt: "Strictly and independently review Forge Issue #${{ github.event.issue.number }}. Read Issue/comments, AGENTS/CLAUDE, Constitution/Product Direction, SoT/HANDOFF, exact change evidence and tests. Classify Critical/Major/Minor/Suggestion; Critical/Major=FAIL. Detect fake evidence, weakened gates and architectural regression. Never merge/approve/close or infer unexecuted PASS. State exact reviewed SHA/ref, unverified items, verdict and next owner."
+      - env: {GH_TOKEN: "${{ github.token }}"}
+        run: gh issue comment "${{ github.event.issue.number }}" --body-file codex-final.md
