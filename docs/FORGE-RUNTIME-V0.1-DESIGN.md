@@ -1,8 +1,9 @@
 # Forge Runtime v0.1 Design
 
-**Status:** DESIGN DRAFT — IMPLEMENTATION NOT STARTED  
+**Status:** DESIGN APPROVED FOR IMPLEMENTATION  
 **Date:** 2026-09-15  
 **Predecessor:** Forge Core v0.1  
+**Review:** `docs/FORGE-RUNTIME-V0.1-DESIGN-REVIEW.md` — PASS WITH BOUNDARY TIGHTENING
 
 ## 1. Purpose
 
@@ -79,6 +80,17 @@ Core must not depend upward on Runtime.
 
 The Runtime consumes the public Core contract. It must not reach into Core implementation details.
 
+The Runtime must call Core through a narrow invocation port:
+
+```text
+CoreInvoker
+    invoke(state, operation)
+          ↓
+    Core Result + Evidence
+```
+
+The first Python implementation may adapt the existing `forge_core` implementation behind this port. The Runtime contract must not depend on its internal module structure.
+
 ### Runtime may provide
 
 - a valid Core `State` input
@@ -87,7 +99,7 @@ The Runtime consumes the public Core contract. It must not reach into Core imple
 - invocation identity
 - lifecycle information
 - controlled resource access outside Core
-- scheduling decisions
+- scheduling decisions in future versions
 - result/evidence transport
 
 ### Runtime must not provide implicitly
@@ -122,9 +134,8 @@ If such information is needed, Runtime must represent it as an explicit boundary
 - admission of execution requests
 - execution context
 - capability boundaries
-- sequencing of operations
+- sequencing of operations in future versions
 - controlled resource access
-- cancellation/lifecycle state
 - result/evidence propagation
 - Runtime-level errors
 - isolation between executions
@@ -161,7 +172,7 @@ RuntimeRequest
 Runtime admission
   |
   v
-Core validation/execution
+Core invocation port
   |
   v
 RuntimeResult
@@ -171,7 +182,7 @@ RuntimeResult
   +-- propagated evidence
 ```
 
-Runtime v0.1 should not invent a general-purpose workflow engine. One invocation of one Core operation is the smallest useful unit.
+Runtime v0.1 must not invent a general-purpose workflow engine. One invocation of one Core operation is the smallest useful unit.
 
 ## 6. Lifecycle
 
@@ -187,17 +198,25 @@ EXECUTING
 COMPLETED
 ```
 
-Failure/cancellation paths must be explicit:
+Admission failure is represented explicitly:
 
 ```text
 CREATED → REJECTED
-ADMITTED → CANCELLED
+```
+
+Execution failure is represented explicitly:
+
+```text
 EXECUTING → FAILED
 ```
 
-The lifecycle state must be represented as data rather than inferred from logs or exception text.
+`CANCELLED` is reserved for a future explicit cancellation mechanism and is not implemented by v0.1.
+
+Lifecycle state must be represented as data rather than inferred from logs or exception text.
 
 A Runtime lifecycle state must never be confused with Core domain state.
+
+Lifecycle transitions must be centralized and validated. The executor must not mutate lifecycle state through scattered assignments or booleans.
 
 ## 7. Capability Model
 
@@ -213,7 +232,7 @@ Examples for future versions:
 - device I/O
 - process/service interaction
 
-v0.1 should define the boundary but implement only the minimum capability set required by the first invocation slice.
+v0.1 defines the capability boundary but does not need to implement environmental capabilities. Capability declarations must nevertheless exist as explicit, immutable data so future authority cannot be silently introduced.
 
 Critical rule:
 
@@ -294,6 +313,8 @@ Errors concerning invocation/lifecycle/environment, for example:
 - RUNTIME_INVARIANT_VIOLATION
 
 Runtime must preserve the original Core error rather than rewriting it into an opaque Runtime error.
+
+`INVOCATION_CANCELLED` remains reserved for a future cancellation mechanism and is not an executable v0.1 transition.
 
 Conceptually:
 
@@ -408,9 +429,10 @@ Proposed shape:
 forge_runtime/
 ├── __init__.py
 ├── request.py       # Runtime invocation request
-├── lifecycle.py     # invocation lifecycle state
-├── context.py       # explicit runtime context/capabilities
+├── lifecycle.py     # invocation lifecycle state + transition validation
+├── context.py       # explicit immutable runtime context/capabilities
 ├── result.py        # Runtime result and error propagation
+├── core_port.py     # narrow Core invocation boundary
 ├── executor.py      # orchestration only
 ├── errors.py        # Runtime errors
 └── tests/
@@ -427,15 +449,17 @@ The Runtime implementation must follow the Forge code-quality rules.
 Additional Runtime-specific rules:
 
 1. Lifecycle state must not be encoded as scattered booleans.
-2. Capability checks must not be duplicated throughout execution code.
-3. Runtime errors must not be represented by parsing exception strings.
-4. Core execution must be called through one explicit boundary.
-5. Resource adapters must not modify Core internals.
-6. No global singleton runtime state.
-7. No operation-ID branching inside the Runtime executor.
-8. No UI/HTTP/database imports in Core-facing modules.
-9. Each module has one clear responsibility.
-10. Tests must be able to run without network access.
+2. Lifecycle transitions must be centralized.
+3. Capability checks must not be duplicated throughout execution code.
+4. Runtime errors must not be represented by parsing exception strings.
+5. Core execution must be called through one explicit boundary.
+6. Resource adapters must not modify Core internals.
+7. No global singleton runtime state.
+8. No operation-ID branching inside the Runtime executor.
+9. No UI/HTTP/database imports in Core-facing modules.
+10. Each module has one clear responsibility.
+11. Tests must be able to run without network access.
+12. Capability declarations are immutable during an invocation.
 
 ## 18. v0.1 Scope
 
@@ -448,7 +472,7 @@ Admission
     ↓
 Lifecycle: CREATED → ADMITTED → EXECUTING
     ↓
-Core invocation
+Core invocation port
     ↓
 Lifecycle: COMPLETED / FAILED
     ↓
@@ -460,7 +484,9 @@ It should demonstrate:
 - explicit invocation identity
 - explicit initial Core state
 - explicit Core operation
-- lifecycle state
+- immutable capability declaration
+- centralized lifecycle transitions
+- narrow Core invocation port
 - Core result propagation
 - Core error preservation
 - Runtime error separation
@@ -468,7 +494,7 @@ It should demonstrate:
 - deterministic tests
 - no network/database/UI/AI dependency
 
-Do not implement scheduling, persistence, networking, plugin systems, or a general workflow engine in v0.1 unless a testable requirement proves they are necessary for this slice.
+Do not implement scheduling, persistence, networking, plugin systems, cancellation, or a general workflow engine in v0.1 unless a testable requirement proves they are necessary for this slice.
 
 ## 19. Quality Gate Before Runtime Expansion
 
@@ -490,21 +516,8 @@ Runtime v0.1 must not expand until it demonstrates:
 
 ## 20. Review Decision
 
-This document is a design baseline, not permission to add every future Runtime feature.
+The design review approved this baseline with the boundary tightenings recorded in `docs/FORGE-RUNTIME-V0.1-DESIGN-REVIEW.md`.
 
-Implementation must begin with the smallest executable slice in Section 18.
+Implementation may now begin with the smallest executable slice in Section 18.
 
-Before implementation, this design must pass a strict review for:
-
-- architecture
-- responsibility boundaries
-- determinism
-- security/isolation
-- maintainability
-- extensibility
-- testability
-- future Forge Language compatibility
-- future Forge OS compatibility
-- migration away from bootstrap technologies
-
-Only after that review should `forge_runtime/` be created.
+No additional Runtime features should be introduced until its quality gate passes.
