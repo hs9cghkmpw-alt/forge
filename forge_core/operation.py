@@ -1,7 +1,7 @@
-﻿"""Forge Core Operation.
+"""Forge Core Operation.
 
 Coreが実行対象として受け取る構造化操作。
-自然言語AIUIDBHTTPOSには依存しない。
+自然言語、AI、UI、DB、HTTP、OSには依存しない。
 """
 
 from __future__ import annotations
@@ -13,9 +13,18 @@ from typing import Mapping
 from forge_core.value import Value
 
 
+# v0.1でCoreが正式に理解する操作ID。
+# 操作が増える段階では、ここを汎用Registryへ置き換える。
+SUPPORTED_OPERATION_IDS = frozenset({"set_value"})
+
+
 @dataclass(frozen=True)
 class Operation:
-    """Core実行対象となる不変の操作定義。"""
+    """Core実行対象となる不変の操作定義。
+
+    v0.1の `set_value` は既存targetの値を置換する。
+    targetの新規作成はこの操作の意味に含めない。
+    """
 
     operation_id: str
     target: str

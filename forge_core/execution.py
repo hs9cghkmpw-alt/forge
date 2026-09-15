@@ -1,4 +1,4 @@
-﻿"""Forge Core execution.
+"""Forge Core execution.
 
 Validation済みOperationをStateへ原子的に適用する。
 """
@@ -76,7 +76,7 @@ class ExecutionResult:
                 "validation_passed",
                 "candidate_state_created",
                 "target_present",
-                "state_transition_observed",
+                "state_result_observed",
             ),
         )
 
@@ -101,19 +101,6 @@ def execute(state: State, operation: Operation) -> ExecutionResult:
             validation_passed=False,
         )
 
-    if operation.operation_id != "set_value":
-        return ExecutionResult.failure(
-            original_state=state,
-            operation=operation,
-            errors=(
-                CoreError(
-                    code="INVALID_OPERATION",
-                    message=f"unsupported operation: {operation.operation_id}",
-                ),
-            ),
-            validation_passed=True,
-        )
-
     value = operation.argument("value")
 
     if value is None:
@@ -122,8 +109,8 @@ def execute(state: State, operation: Operation) -> ExecutionResult:
             operation=operation,
             errors=(
                 CoreError(
-                    code="INVALID_VALUE",
-                    message="set_value requires a value argument",
+                    code="INTERNAL_INVARIANT_VIOLATION",
+                    message="validated set_value is missing its value argument",
                 ),
             ),
             validation_passed=True,

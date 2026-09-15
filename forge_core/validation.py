@@ -1,4 +1,4 @@
-﻿"""Forge Core validation.
+"""Forge Core validation.
 
 Operationを実行する前の検証結果を表現する。
 実行そのものは担当しない。
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from forge_core.errors import CoreError
-from forge_core.operation import Operation
+from forge_core.operation import SUPPORTED_OPERATION_IDS, Operation
 from forge_core.state import State
 
 
@@ -45,19 +45,36 @@ class ValidationResult:
 
 
 def validate_operation(state: State, operation: Operation) -> ValidationResult:
-    """Core v0.1の基本的なOperation検証を行う。
+    """Core v0.1のOperation契約を決定論的に検証する。
 
-    Operation自身の構造検証はOperation生成時に完了しているため、
-    ここでは実行対象として最低限必要な状態上の条件を確認する。
+    検証は実行を行わない。Operation ID、target、必須引数など、
+    実行に必要な条件だけを確認する。
     """
 
     errors: list[CoreError] = []
+
+    if operation.operation_id not in SUPPORTED_OPERATION_IDS:
+        errors.append(
+            CoreError(
+                code="INVALID_OPERATION",
+                message=f"unsupported operation: {operation.operation_id}",
+            )
+        )
+        return ValidationResult.failure(errors)
 
     if not state.contains(operation.target):
         errors.append(
             CoreError(
                 code="NOT_FOUND",
                 message=f"target not found: {operation.target}",
+            )
+        )
+
+    if operation.operation_id == "set_value" and not operation.has_argument("value"):
+        errors.append(
+            CoreError(
+                code="INVALID_VALUE",
+                message="set_value requires a value argument",
             )
         )
 
